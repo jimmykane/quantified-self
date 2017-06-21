@@ -1,0 +1,11 @@
+<agm-map class="" style="height: 300px; width: 100%;"
+         [zoom]="12"
+         [fitBounds]=""
+         [latitude]="activities[0].getStartPoint().getPosition().latitudeDegrees"
+         [longitude]="activities[0].getStartPoint().getPosition().longitudeDegrees">
+  <agm-polyline *ngFor="let activity of activities; let i = index;" [strokeColor]="getActivityColor(i.toString())">
+    <agm-polyline-point *ngFor="let point of activity.getPoints(); let i = index;"
+                        [latitude]="point.getPosition().latitudeDegrees"
+                        [longitude]="point.getPosition().longitudeDegrees"></agm-polyline-point>
+  </agm-polyline>
+</agm-map>

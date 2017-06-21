@@ -1,0 +1,26 @@
+<div class="list-group">
+  <a class="list-group-item list-group-item-action"
+     [class.active]="!selectedEvent"
+     [routerLink]="['/dashboard']">All</a>
+  <a class="list-group-item list-group-item-action fade-in"
+     *ngFor="let event of events; let i = index;"
+     [routerLink]="['/dashboard']"
+     [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
+     [queryParams]="{ eventID: event.getID() }">
+    <div class="d-flex w-100 justify-content-between">
+      <p class="mb-1">{{ event.getName() }}</p>
+      <small>{{ event.getFirstActivity().getStartDate() | amTimeAgo }}</small>
+    </div>
+    <div class="d-flex w-100 justify-content-between">
+      <div>
+        <p class="small mb-1">Distance: {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km</p>
+        <p class="small mb-1">Duration: {{ event.getDurationInSeconds() | amDuration:'seconds' }}</p>
+      </div>
+      <p>
+      <span class="btn btn-sm btn-outline-primary"
+            *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"
+            (click)="mergeEvents($event, event)">Merge</span>
+      </p>
+    </div>
+  </a>
+</div>

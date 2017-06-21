@@ -1,0 +1,15 @@
+<h1>
+  {{title}}
+</h1>
+
+
+<div class="jumbotron">
+
+  <div>
+    <p>You can select multiple .tcx and .gpx files</p>
+    <input type="file"
+           accept=".gpx, .tcx, .json"
+           multiple (change)="openFile($event)">
+  </div>
+
+</div>

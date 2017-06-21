@@ -1,0 +1,33 @@
+<div class="table-responsive">
+  <table class="table table-striped">
+    <thead>
+    <tr>
+      <th>Date</th>
+      <th>Activity Type</th>
+      <th>Distance</th>
+      <th>Duration</th>
+      <th>Avg Speed</th>
+      <th>Avg Pace</th>
+      <th>Creator(s)</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr app-event-activity-table-row
+        [attr.data-index]="i"
+        *ngFor="let activity of event.getActivities(); index as index; first as isFirst; last as isLast; count as count;"
+        [index]="index"
+        [isFirst]="isFirst"
+        [isLast]="isLast"
+        [count]="count"
+        [activity]="activity"></tr>
+    <tr *ngIf="event.getActivities().length > 1">
+      <td colspan="6"></td>
+      <td >
+        <div class="d-flex w-100 justify-content-between">
+          <span class="btn btn-sm btn-outline-primary" (click)="mergeAllActivities(event)">Merge Activities</span>
+        </div>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</div>

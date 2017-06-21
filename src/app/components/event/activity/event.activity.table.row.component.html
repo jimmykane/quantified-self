@@ -1,0 +1,7 @@
+  <td class="text-center">{{ activity.getStartDate().toISOString() | date:'short' }}</td>
+  <td class="text-center">{{ activity.getType() || '?' }}</td>
+  <td class="text-center">{{ (activity.getDistanceInMeters()/1000).toFixed(1) }} km</td>
+  <td class="text-center">{{ activity.getDurationInSeconds() | amDuration:'seconds' }}</td>
+  <td class="text-center">{{ ((activity.getDistanceInMeters() / 1000) / (activity.getDurationInSeconds() / 60 / 60) || 0).toFixed(1) }} km/h</td>
+  <td class="text-center">{{ (activity.getDurationInSeconds()*1000) / (activity.getDistanceInMeters()/1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} min/km</td>
+  <td class="text-center"><span *ngFor="let creator of activity.getCreators()">{{ creator.getName() }}</span></td>
