@@ -21,7 +21,7 @@ export class UploadComponent {
     for (let index = 0; index < input.files.length; index++) {
       const fileReader = new FileReader;
       fileReader.onload = () => {
-        if (['tcx, gpx'].indexOf(input.files[index].name.split('.').pop()) > -1) {
+        if (['tcx', 'gpx'].indexOf(input.files[index].name.split('.').pop()) > -1) {
           this.eventService
             .createEventFromXMLString(fileReader.result)
             .then((event: EventInterface) => {
