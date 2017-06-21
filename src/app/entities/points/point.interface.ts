@@ -10,7 +10,7 @@ export interface PointInterface extends SerializableClassInterface {
   getDate(): Date;
 
   addData(data: DataInterface);
-  getData(): Map<string, DataInterface>;
+  getData(): Map<string, DataInterface[]>;
 
   getPosition(): DataPositionInterface;
 }

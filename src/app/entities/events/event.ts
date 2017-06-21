@@ -64,9 +64,8 @@ export class Event extends IDClass implements EventInterface {
 
   getData(): Map<string, DataInterface[]> {
     return this.getPoints().reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-      point.getData().forEach((data: DataInterface, key: string) => {
-        const dataArray = dataMap.get(key) || [];
-        dataArray.push(data);
+      point.getData().forEach((data: DataInterface[], key: string) => {
+        dataMap.set(key, [...dataMap.get(key) || [], ...data]);
       });
       return dataMap;
     }, new Map<string, DataInterface[]>());

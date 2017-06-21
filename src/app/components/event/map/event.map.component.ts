@@ -22,4 +22,8 @@ export class EventMapComponent {
     return seedColor(seed).toHex();
   }
 
+ngAfterViewInit() {
+    debugger
+    console.log(this.agmMap); }
+
 }
