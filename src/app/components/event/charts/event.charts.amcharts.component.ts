@@ -66,6 +66,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           minorGridEnabled: true,
         },
         chartScrollbar: {
+          hideResizeGrips: true,
+          graphType: 'smoothedLine',
           graph: DataHeartRate.name,
           gridAlpha: 0,
           color: '#888888',
@@ -110,14 +112,12 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         this.chart.addListener('rendered', () => {
           this.chart.zoomOut();
           this.chart.invalidateSize();
-
         });
 
         this.chart.addListener('init', () => {
           // debugger;
         });
         this.chart.addListener('dataUpdated', () => {
-          // debugger;
         });
         // debugger;
       });
