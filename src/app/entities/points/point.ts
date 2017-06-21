@@ -10,7 +10,7 @@ export class Point implements PointInterface {
   private activity: ActivityInterface;
   private date: Date;
   private position: DataPositionInterface;
-  private data: Map<string, DataInterface[]> = new Map<string, DataInterface[]>();
+  private data: Map<string, DataInterface> = new Map<string, DataInterface>();
 
 
   constructor(activity: ActivityInterface, date: Date) {
@@ -28,14 +28,10 @@ export class Point implements PointInterface {
   }
 
   addData(data: DataInterface) {
-    const dataArray = this.getData().get(data.constructor.name) || [];
-    if (!dataArray.length) {
-      this.getData().set(data.constructor.name, dataArray);
-    }
-    dataArray.push(data);
+    this.getData().set(data.constructor.name, data);
   }
 
-  getData(): Map<string, DataInterface[]> {
+  getData(): Map<string, DataInterface> {
     return this.data;
   }
 
@@ -43,23 +39,20 @@ export class Point implements PointInterface {
     const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.name);
     const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.name);
     this.position = {
-      latitudeDegrees: Number(dataLatitudeDegrees[0].getValue()),
-      longitudeDegrees: Number(dataLongitudeDegrees[0].getValue())
+      latitudeDegrees: Number(dataLatitudeDegrees.getValue()),
+      longitudeDegrees: Number(dataLongitudeDegrees.getValue())
     };
     return this.position;
   }
 
   toJSON(): any {
-    let dataArray = [];
-    this.getData().forEach((value, key, map) => {
-      dataArray = [...dataArray, ...value];
+    const dataArray = [];
+    this.getData().forEach((data: DataInterface, key: string, map) => {
+      dataArray.push(data.toJSON());
     });
     return {
       date: this.getDate(),
-      data: dataArray.reduce((jsonDataArray: any[], data: DataInterface) => {
-        jsonDataArray.push(data.toJSON());
-        return jsonDataArray;
-      }, [])
+      data: dataArray
     };
   }
 }
