@@ -83,6 +83,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           usePeriod: 'WW'
         },
         chartCursor: {
+          valueZoomable: true,
           categoryBalloonDateFormat: 'JJ:NN:SS',
           cursorAlpha: 0,
           valueLineEnabled: true,

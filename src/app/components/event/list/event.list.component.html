@@ -8,7 +8,7 @@
      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
      [queryParams]="{ eventID: event.getID() }">
     <div class="d-flex w-100 justify-content-between">
-      <p class="mb-1">{{ event.getName() }}</p>
+      <p class="mb-1 text-truncate">{{ event.getName() }}</p>
       <small>{{ event.getFirstActivity().getStartDate() | amTimeAgo }}</small>
     </div>
     <div class="d-flex w-100 justify-content-between">

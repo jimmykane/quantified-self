@@ -14,7 +14,7 @@
 
 <ng-template #eventsBlock>
     <div class="row">
-      <app-event-list class="col-md-4 sidebar-offcanvas" [events]='events' [selectedEvent]="selectedEvent"></app-event-list>
-      <app-event class="col-md-8 fade-in" *ngIf="selectedEvent" [event]="selectedEvent"></app-event>
+      <app-event-list class="col-md-3 sidebar-offcanvas" [events]='events' [selectedEvent]="selectedEvent"></app-event-list>
+      <app-event class="col-md-9 fade-in" *ngIf="selectedEvent" [event]="selectedEvent"></app-event>
     </div>
 </ng-template>
