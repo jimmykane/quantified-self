@@ -138,7 +138,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface, currentIndex) => {
         const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
         dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
-          [data.constructor.name]: Number(data.getValue()).toFixed(1)
+          [data.constructor.name]: data.getValue()
         }));
         return dataAccumulator;
       }, dataMap);
@@ -172,6 +172,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         position: valueAxes.length % 2 === 0 ? 'left' : 'right',
         offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
         gridThickness: 0.09,
+        precision: 0,
       });
       valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
     });
