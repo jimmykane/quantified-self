@@ -3,8 +3,8 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 
 export interface DataInterface extends SerializableClassInterface {
   getPoint(): PointInterface;
-  setValue(value: string);
-  getValue(): string;
+  setValue(value: string|number);
+  getValue(): number;
   setUnit(unit: string);
   getUnit(): string;
 }

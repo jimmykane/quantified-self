@@ -8,34 +8,24 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 import {DataInterface} from '../data/data.interface';
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
-
   getEvent(): EventInterface;
-
   setType(type: string);
   getType(): string;
-
   getStartDate(): Date;
   getEndDate(): Date;
-
   getDurationInSeconds(): number;
-
   addCreator(creator: CreatorInterface);
   getCreators(): CreatorInterface[];
-
   addPoint(point: PointInterface);
   getPoints(): PointInterface[];
   getData(): Map<string, DataInterface[]>;
-
   getDataByType(dataType: string): DataInterface[];
-
+  getDataTypeAverage(dataType: string): number;
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
-
   addLap(lap: LapInterface);
   getLaps(): LapInterface[];
-
   getDistanceInMeters(): number;
   getLapsDistanceInMeters(): number;
-
   sortPointsByDate(): void;
 }

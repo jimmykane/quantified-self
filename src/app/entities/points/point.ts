@@ -43,6 +43,12 @@ export class Point implements PointInterface {
     return this.getData().get(dataType);
   }
 
+  getDataTypeAverage(dataType: string): number {
+    return this.getDataByType(dataType).reduce((average: number, data, currentIndex, array) => {
+        return average + data.getValue() / array.length
+      }, 0);
+  }
+
   getPosition(): DataPositionInterface {
     const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.name);
     const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.name);

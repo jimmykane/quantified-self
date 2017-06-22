@@ -99,16 +99,16 @@ export class EventExporterTCX implements EventExporterInterface {
         for (const data of point.getData()) {
           if (data instanceof DataAltitude) {
             const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
-            altitudeElement.textContent = data.getValue();
+            altitudeElement.textContent = data.getValue().toString();
             pointElement.appendChild(altitudeElement);
           } else if (data instanceof DataCadence) {
             const cadenceElement = document.createElementNS(null, 'Cadence');
-            cadenceElement.textContent = data.getValue();
+            cadenceElement.textContent = data.getValue().toString();
             pointElement.appendChild(cadenceElement);
           } else if (data instanceof DataHeartRate) {
             const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
             const heartRateValueElement = document.createElementNS(null, 'Value');
-            heartRateValueElement.textContent = data.getValue();
+            heartRateValueElement.textContent = data.getValue().toString();
             heartRateElement.appendChild(heartRateValueElement);
             pointElement.appendChild(heartRateElement);
           } else if (data instanceof DataSpeed) {
@@ -117,7 +117,7 @@ export class EventExporterTCX implements EventExporterInterface {
             extensionsElement.appendChild(tpxElement);
             const speedElement = document.createElementNS(null, 'Speed');
             tpxElement.appendChild(speedElement);
-            speedElement.textContent = data.getValue();
+            speedElement.textContent = data.getValue().toString();
             pointElement.appendChild(extensionsElement);
           }
         }

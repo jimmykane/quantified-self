@@ -4,7 +4,7 @@ import {PointInterface} from '../points/point.interface';
 export class Data implements DataInterface {
 
   private point: PointInterface;
-  private value: string;
+  private value: number;
   protected unit: string;
 
   constructor(point: PointInterface, value: string) {
@@ -17,11 +17,11 @@ export class Data implements DataInterface {
     return this.point;
   }
 
-  setValue(value: string) {
-    this.value = value;
+  setValue(value: string|number) {
+    this.value = Number(value);
   }
 
-  getValue(): string {
+  getValue(): number {
     return this.value;
   }
 

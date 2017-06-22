@@ -73,6 +73,12 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.getData().get(dataType);
   }
 
+  getDataTypeAverage(dataType: string): number {
+    return this.getDataByType(dataType).reduce((average: number, data, currentIndex, array) => {
+        return average + data.getValue() / array.length
+      }, 0);
+  }
+
   getStartPoint(): PointInterface {
     return this.getPoints()[0];
   }
