@@ -1,7 +1,7 @@
-import {Component, Input, OnInit, ViewChild} from '@angular/core';
+import {Component, Input, ViewChild} from '@angular/core';
 import seedColor from 'seed-color';
 import {ActivityInterface} from '../../../entities/activities/activity.interface';
-import {AgmMap, GoogleMapsAPIWrapper, LatLng, LatLngBounds} from "@agm/core";
+import {AgmMap, GoogleMapsAPIWrapper} from "@agm/core";
 
 
 @Component({
@@ -22,8 +22,7 @@ export class EventMapComponent {
     return seedColor(seed).toHex();
   }
 
-ngAfterViewInit() {
-    debugger
-    console.log(this.agmMap); }
-
+  ngAfterViewInit() {
+    console.log(this.agmMap);
+  }
 }

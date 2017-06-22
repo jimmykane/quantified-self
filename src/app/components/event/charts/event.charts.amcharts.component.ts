@@ -1,6 +1,5 @@
 import {
-  AfterContentInit,
-  ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit, ViewChild,
+  ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {DataInterface} from '../../../entities/data/data.interface';
 import {DataLatitudeDegrees} from '../../../entities/data/data.latitude-degrees';
@@ -8,7 +7,6 @@ import {DataLongitudeDegrees} from '../../../entities/data/data.longitude-degree
 import seedColor from 'seed-color';
 import {EventInterface} from '../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
-import {debug} from 'util';
 import {DataHeartRate} from '../../../entities/data/data.heart-rate';
 
 @Component({
