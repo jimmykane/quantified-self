@@ -94,6 +94,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     });
   }
 
+  // @todo remove the update if not needed
   private updateChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
