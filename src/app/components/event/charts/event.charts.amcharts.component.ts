@@ -160,6 +160,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   private getValueAxes(): any[] {
     const valueAxes = [];
+    let leftIndex = 0;
+    let rightIndex = 0;
     this.event.getData().forEach((dataArray: DataInterface[], key: string, map) => {
       if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(key) > -1) {
         return;
@@ -170,9 +172,10 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         axisThickness: 1,
         axisAlpha: 1,
         position: valueAxes.length % 2 === 0 ? 'left' : 'right',
-        offset: valueAxes.length && valueAxes.length % 2 === 0 ? (valueAxes.length - 1) / 2 * 80 : 0,
+        offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
         gridThickness: 0.09,
       });
+      valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
     });
     return valueAxes;
   }
