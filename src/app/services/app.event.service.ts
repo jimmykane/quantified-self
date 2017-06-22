@@ -28,6 +28,7 @@ export class EventService {
   }
 
   constructor(private localStorageService: LocalStorageService) {
+    this.localStorageService.setNameSpace('event.service');
     // Fetch existing events
     this.getInitialData();
   }

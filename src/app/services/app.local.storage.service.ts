@@ -6,12 +6,18 @@ import * as LZString from 'lz-string';
 @Injectable()
 export class LocalStorageService implements StorageServiceInterface {
 
-  private localStorageNameSpace = 'eventStorage.';
+  private nameSpace: string;
+
+  constructor() {}
+
+  setNameSpace(nameSpace) {
+    this.nameSpace = nameSpace;
+  }
 
   setItem(key: string, data: string): Promise<boolean> {
     return new Promise((resolve, reject) => {
       localStorage.setItem(
-        this.localStorageNameSpace + key,
+        this.nameSpace + key,
         LZString.compress(data)
       );
       resolve(true);
@@ -21,7 +27,7 @@ export class LocalStorageService implements StorageServiceInterface {
   getItem(key: string): Promise<string> {
     return new Promise((resolve, reject) => {
       try {
-        resolve(LZString.decompress(localStorage.getItem(this.localStorageNameSpace + key)));
+        resolve(LZString.decompress(localStorage.getItem(this.nameSpace + key)));
       } catch (Error) {
         // If not able to decode remove from storage
         console.error('Could not decode entry from local storage ' + key);
@@ -32,7 +38,7 @@ export class LocalStorageService implements StorageServiceInterface {
   }
 
   removeItem(key: string):  Promise<void> {
-    return Promise.resolve(localStorage.removeItem(this.localStorageNameSpace + key));
+    return Promise.resolve(localStorage.removeItem(this.nameSpace + key));
   }
 
   getAllItems(): Promise<string[]> {
@@ -56,8 +62,8 @@ export class LocalStorageService implements StorageServiceInterface {
     const localStorageKeys = [];
     Object.keys(localStorage).map((localStorageKey) => {
       // If not in the correct namespace move on
-      if (localStorageKey.startsWith(this.localStorageNameSpace)) {
-        localStorageKeys.push(localStorageKey.slice(this.localStorageNameSpace.length));
+      if (localStorageKey.startsWith(this.nameSpace)) {
+        localStorageKeys.push(localStorageKey.slice(this.nameSpace.length));
       }
     });
     return localStorageKeys;
