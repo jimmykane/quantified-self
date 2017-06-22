@@ -6,8 +6,11 @@
       <th class="text-center">Activity Type</th>
       <th class="text-center">Distance</th>
       <th class="text-center">Duration</th>
-      <th class="text-center">Avg Speed</th>
-      <th class="text-center">Avg Pace</th>
+      <th class="text-center">Speed</th>
+      <th class="text-center">Pace</th>
+      <th class="text-center" *ngIf="event.getDataByType('DataHeartRate')">Heart rate</th>
+      <th class="text-center" *ngIf="event.getDataByType('DataCadence')">Cadence</th>
+      <th class="text-center" *ngIf="event.getDataByType('DataTemperature')">Temperature</th>
       <th class="text-center">Creator(s)</th>
     </tr>
     </thead>
