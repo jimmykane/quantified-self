@@ -28,18 +28,22 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   ngOnChanges(): void {
     console.log('OnChanges');
     this.createChart().then(() => {
-      this.updateChart();
+      //this.updateChart();
     });
   }
 
   private createChart(): Promise<any> {
     return new Promise((resolve, reject) => {
+      const t0 = performance.now();
       if (this.chart) {
         this.AmCharts.destroyChart(this.chart);
       }
       this.chart = this.AmCharts.makeChart('chartdiv', {
         type: 'serial',
         theme: 'light',
+        graphs: this.getGraphs(),
+        valueAxes: this.getValueAxes(),
+        dataProvider: this.getData(),
         startDuration: 1,
         startEffect: 'easeInSine',
         sequencedAnimation: false,
@@ -90,11 +94,12 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           fullWidth: true
         },
       });
+      const t1 = performance.now();
+      console.log('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
       resolve(true);
     });
   }
 
-  // @todo remove the update if not needed
   private updateChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
@@ -120,7 +125,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         // debugger;
       });
       const t1 = performance.now();
-      console.log('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
+      console.log('Updated chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
       resolve(true);
     });
 
