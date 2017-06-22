@@ -1,9 +1,7 @@
 <h3>{{ event.getName() }}</h3>
-<hr/>
-<app-event-map [activities]="event.getActivities()"></app-event-map>
 <app-event-activity-table [event]="event"></app-event-activity-table>
+<app-event-map [activities]="event.getActivities()"></app-event-map>
 <hr/>
 <app-event-charts-am [event]="event"></app-event-charts-am>
 <hr/>
 <app-event-actions [event]="event"></app-event-actions>
-<hr/>

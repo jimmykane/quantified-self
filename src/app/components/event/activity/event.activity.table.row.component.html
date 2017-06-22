@@ -8,4 +8,3 @@
   <td class="text-center" *ngIf="activity.getDataByType('DataPower')">{{ activity.getDataTypeAverage('DataPower').toFixed(0) }}</td>
   <td class="text-center" *ngIf="activity.getDataByType('DataCadence')">{{ activity.getDataTypeAverage('DataCadence').toFixed(0) }}</td>
   <td class="text-center" *ngIf="activity.getDataByType('DataTemperature')">{{ activity.getDataTypeAverage('DataTemperature').toFixed(0) }}</td>
-  <td class="text-center"><span *ngFor="let creator of activity.getCreators()">{{ creator.getName() }}</span></td>

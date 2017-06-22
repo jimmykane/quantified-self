@@ -2,17 +2,16 @@
   <table class="table table-striped">
     <thead>
     <tr>
-      <th class="text-center">Date</th>
-      <th class="text-center">Activity Type</th>
-      <th class="text-center">Distance</th>
-      <th class="text-center">Duration</th>
-      <th class="text-center">Speed</th>
-      <th class="text-center">Pace</th>
-      <th class="text-center" *ngIf="event.getDataByType('DataHeartRate')">Heart Rate</th>
-      <th class="text-center" *ngIf="event.getDataByType('DataPower')">Power</th>
-      <th class="text-center" *ngIf="event.getDataByType('DataCadence')">Cadence</th>
-      <th class="text-center" *ngIf="event.getDataByType('DataTemperature')">Temperature</th>
-      <th class="text-center">Creator(s)</th>
+      <th class="text-center"><h6>Date</h6></th>
+      <th class="text-center"><h6>Type</h6></th>
+      <th class="text-center"><h6>Distance</h6></th>
+      <th class="text-center"><h6>Duration</h6></th>
+      <th class="text-center"><h6>Speed</h6></th>
+      <th class="text-center"><h6>Pace</h6></th>
+      <th class="text-center text-truncate" *ngIf="event.getDataByType('DataHeartRate')"><h6> Rate</h6></th>
+      <th class="text-center" *ngIf="event.getDataByType('DataPower')"><h6>Power</h6></th>
+      <th class="text-center" *ngIf="event.getDataByType('DataCadence')"><h6>Cadence</h6></th>
+      <th class="text-center text-truncate" *ngIf="event.getDataByType('DataTemperature')"><h6>Temperature</h6></th>
     </tr>
     </thead>
     <tbody>
