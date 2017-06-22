@@ -49,9 +49,10 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         sequencedAnimation: false,
         categoryField: 'date',
         legend: {
+          align: 'center',
           useGraphSettings: true,
-          autoMargins: false,
-          marginTop: 10,
+          autoMargins: true,
+          marginTop: 0,
         },
         synchronizeGrid: true,
         categoryAxis: {
@@ -60,7 +61,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           axisColor: '#DADADA',
           gridThickness: 0.1,
           offset: 0,
-          labelOffset: 10,
+          labelOffset: 0,
           minorGridEnabled: true,
         },
         chartScrollbar: {
@@ -80,7 +81,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           graphLineColor: '#c2c2c2',
           selectedGraphLineColor: '#888888',
           selectedGraphLineAlpha: 1,
-          usePeriod: 'WW'
+          usePeriod: 'WW',
+          offset: 10
         },
         chartCursor: {
           valueZoomable: true,
