@@ -13,6 +13,7 @@ import {DataSeaLevelPressure} from '../../../data/data.sea-level-pressure';
 import {DataTemperature} from '../../../data/data.temperature';
 import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
+import {DataPower} from '../../../data/data.power';
 
 export class EventImporterJSON {
 
@@ -74,6 +75,10 @@ export class EventImporterJSON {
             }
             case 'DataVerticalSpeed': {
               new DataVerticalSpeed(point, dataObject.value);
+              break;
+            }
+            case 'DataPower': {
+              new DataPower(point, dataObject.value);
               break;
             }
           }

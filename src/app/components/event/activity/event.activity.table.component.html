@@ -8,7 +8,8 @@
       <th class="text-center">Duration</th>
       <th class="text-center">Speed</th>
       <th class="text-center">Pace</th>
-      <th class="text-center" *ngIf="event.getDataByType('DataHeartRate')">Heart rate</th>
+      <th class="text-center" *ngIf="event.getDataByType('DataHeartRate')">Heart Rate</th>
+      <th class="text-center" *ngIf="event.getDataByType('DataPower')">Power</th>
       <th class="text-center" *ngIf="event.getDataByType('DataCadence')">Cadence</th>
       <th class="text-center" *ngIf="event.getDataByType('DataTemperature')">Temperature</th>
       <th class="text-center">Creator(s)</th>
