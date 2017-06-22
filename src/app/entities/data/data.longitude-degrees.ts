@@ -1,2 +1,2 @@
-import {Data} from './data';
-export class DataLongitudeDegrees extends Data {}
+import {DataLatitudeDegrees} from "./data.latitude-degrees";
+export class DataLongitudeDegrees extends DataLatitudeDegrees {}

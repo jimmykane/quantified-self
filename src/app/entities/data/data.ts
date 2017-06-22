@@ -1,4 +1,3 @@
-import {Point} from '../points/point';
 import {DataInterface} from './data.interface';
 import {PointInterface} from '../points/point.interface';
 
@@ -6,6 +5,7 @@ export class Data implements DataInterface {
 
   private point: PointInterface;
   private value: string;
+  protected unit: string;
 
   constructor(point: PointInterface, value: string) {
     this.point = point;
@@ -23,6 +23,14 @@ export class Data implements DataInterface {
 
   getValue(): string {
     return this.value;
+  }
+
+  setUnit(unit: string) {
+    this.unit = unit;
+  }
+
+  getUnit(): string {
+    return this.unit;
   }
 
   // @todo add correct type
