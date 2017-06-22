@@ -108,16 +108,17 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         this.chart.valueAxes = this.getValueAxes();
         this.chart.dataProvider = this.getData();
 
-        if (!this.chart.events.rendered.length) {
-          // Change whatever properties you want, add event listeners, etc.
-          this.chart.addListener('rendered', () => {
-            this.chart.zoomOut();
-            this.chart.invalidateSize();
-            const t1 = performance.now();
-            console.log('Chart rendered ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
-          });
-        }
+        // Change whatever properties you want, add event listeners, etc.
+        this.chart.addListener('rendered', () => {
+          this.chart.zoomOut();
+          this.chart.invalidateSize();
+        });
 
+        this.chart.addListener('init', () => {
+          // debugger;
+        });
+        this.chart.addListener('dataUpdated', () => {
+        });
         // debugger;
       });
       const t1 = performance.now();
