@@ -8,11 +8,14 @@ export class LocalStorageService implements StorageServiceInterface {
 
   private localStorageNameSpace = 'eventStorage.';
 
-  setItem(key: string, data: string) {
-    localStorage.setItem(
-      this.localStorageNameSpace + key,
-      LZString.compress(data)
-    );
+  setItem(key: string, data: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      localStorage.setItem(
+        this.localStorageNameSpace + key,
+        LZString.compress(data)
+      );
+      resolve(true);
+    });
   }
 
   getItem(key: string): Promise<string> {

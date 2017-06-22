@@ -24,10 +24,9 @@ export class UploadComponent {
         if (['tcx', 'gpx'].indexOf(input.files[index].name.split('.').pop()) > -1) {
           this.eventService
             .createEventFromXMLString(fileReader.result)
-            .then((event: EventInterface) => {
-              event.setName(input.files[index].name);
-              this.eventService.addEvent(event);
-              this.localStorageService.setItem(event.getID(), JSON.stringify(event));
+            .then((newEvent: EventInterface) => {
+              newEvent.setName(input.files[index].name);
+              this.eventService.addEvent(newEvent);
             })
             .catch((error) => {
               console.error('Could not load event from file' + input.files[index].name, error);
@@ -35,10 +34,9 @@ export class UploadComponent {
         } else {
           this.eventService
             .createEventFromJSONSMLString(fileReader.result)
-            .then((event: EventInterface) => {
-              event.setName(input.files[index].name);
-              this.eventService.addEvent(event);
-              this.localStorageService.setItem(event.getID(), JSON.stringify(event));
+            .then((newEvent: EventInterface) => {
+              newEvent.setName(input.files[index].name);
+              this.eventService.addEvent(newEvent);
             })
             .catch((error) => {
               console.error('Could not load event from file' + input.files[index].name, error);

@@ -43,7 +43,9 @@ export class EventService {
   }
 
   public addEvent(event: EventInterface) {
-    this.events.next(this.events.getValue().push(event));
+    this.localStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) =>{
+        this.events.next(this.events.getValue().push(event));
+    });
   }
 
   public addEvents(events: EventInterface[]) {
