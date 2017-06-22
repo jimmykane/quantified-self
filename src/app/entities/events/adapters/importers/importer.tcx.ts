@@ -10,6 +10,7 @@ import {DataSpeed} from '../../../data/data.speed';
 import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
+import {DataPower} from '../../../data/data.power';
 
 export class EventImporterTCX {
 
@@ -78,6 +79,10 @@ export class EventImporterTCX {
                     }
                     case 'RunCadence': {
                       new DataCadence(point, dataExtensionElement.textContent);
+                      break;
+                    }
+                    case 'Watts': {
+                      new DataPower(point, dataExtensionElement.textContent);
                       break;
                     }
                   }

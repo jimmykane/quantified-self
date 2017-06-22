@@ -13,6 +13,7 @@ import {DataSeaLevelPressure} from '../../../data/data.sea-level-pressure';
 import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
+import {DataPower} from "../../../data/data.power";
 
 export class EventImporterGPX {
   static getFromXML(xml: Document, id?: string): EventInterface {
@@ -68,6 +69,10 @@ export class EventImporterGPX {
             }
             case 'gpxdata:verticalSpeed': {
               new DataVerticalSpeed(point, dataElement.textContent);
+              break;
+            }
+            case 'gpxdata:power': {
+              new DataPower(point, dataElement.textContent);
               break;
             }
             case 'gpxtpx:TrackPointExtension': {
