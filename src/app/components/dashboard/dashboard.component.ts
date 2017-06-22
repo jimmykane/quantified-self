@@ -32,7 +32,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   ngOnInit() {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-      this.parametersEventID = params.eventID;
+      this.parametersEventID = params['eventID'];
       this.findSelectedEvent();
     });
 
