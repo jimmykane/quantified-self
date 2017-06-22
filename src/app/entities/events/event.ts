@@ -71,6 +71,10 @@ export class Event extends IDClass implements EventInterface {
     }, new Map<string, DataInterface[]>());
   }
 
+  getDataByType(dataType: string): DataInterface[] {
+    return this.getData().get(dataType);
+  }
+
   getDistanceInMeters(): number {
     return this.getActivities().reduce((distanceInMeters: number, activity: ActivityInterface) => {
       return distanceInMeters + activity.getDistanceInMeters();

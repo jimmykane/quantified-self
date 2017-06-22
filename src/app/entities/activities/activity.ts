@@ -69,6 +69,10 @@ export class Activity extends IDClass implements ActivityInterface {
     }, new Map<string, DataInterface[]>());
   }
 
+  getDataByType(dataType: string): DataInterface[] {
+    return this.getData().get(dataType);
+  }
+
   getStartPoint(): PointInterface {
     return this.getPoints()[0];
   }

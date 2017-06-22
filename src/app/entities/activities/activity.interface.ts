@@ -26,6 +26,8 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getPoints(): PointInterface[];
   getData(): Map<string, DataInterface[]>;
 
+  getDataByType(dataType: string): DataInterface[];
+
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
 
