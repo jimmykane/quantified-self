@@ -7,6 +7,14 @@ import {DataLongitudeDegrees} from '../../../entities/data/data.longitude-degree
 import seedColor from 'seed-color';
 import {EventInterface} from '../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
+import {DataHeartRate} from "../../../entities/data/data.heart-rate";
+import {DataCadence} from "../../../entities/data/data.cadence";
+import {DataAltitude} from "../../../entities/data/data.altitude";
+import {DataSpeed} from "../../../entities/data/data.speed";
+import {DataTemperature} from "../../../entities/data/data.temperature";
+import {DataPower} from "../../../entities/data/data.power";
+import {DataVerticalSpeed} from "../../../entities/data/data.verticalspeed";
+import {DataSeaLevelPressure} from "../../../entities/data/data.sea-level-pressure";
 
 @Component({
   selector: 'app-event-charts-am',
@@ -53,6 +61,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           useGraphSettings: true,
           autoMargins: true,
           marginTop: 0,
+          valueText: '[[value]]'
         },
         synchronizeGrid: true,
         categoryAxis: {
@@ -144,7 +153,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface, currentIndex) => {
         const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
         dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
-          [data.constructor.name]: data.getValue()
+          [data.constructor.name]: data.getValue().toFixed(1)
         }));
         return dataAccumulator;
       }, dataMap);
@@ -187,7 +196,17 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   private genColor(key: string) {
     // @todo remove this crappy lib
-    return seedColor(key.slice(0)).toHex();
+    switch (key) {
+      case DataHeartRate.name: return '#ff3f07';
+      case DataAltitude.name: return '#3d9339';
+      case DataCadence.name: return '#5b6979';
+      case DataSpeed.name: return '#2261bf';
+      case DataVerticalSpeed.name: return '#d38e2e';
+      case DataTemperature.name: return '#407677';
+      case DataPower.name: return '#d38e2e';
+      case DataSeaLevelPressure.name: return '#b0d8cf';
+    }
+    return seedColor(key).toHex();
   }
 
   private getGraphs(): any[] {
@@ -205,7 +224,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         title: key,
         valueField: key,
         balloonText: key + '<br><b><span style=\'font-size:14px;\'>[[value]]</span></b>',
-        fillAlphas: 0.05,
+        fillAlphas: 0.1,
         bulletSize: 3,
         lineThickness: 1.2,
         useLineColorForBulletBorder: true,
