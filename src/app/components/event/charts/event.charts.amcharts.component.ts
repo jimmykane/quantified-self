@@ -1,5 +1,5 @@
 import {
-  ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {DataInterface} from '../../../entities/data/data.interface';
 import {DataLatitudeDegrees} from '../../../entities/data/data.latitude-degrees';
@@ -7,11 +7,11 @@ import {DataLongitudeDegrees} from '../../../entities/data/data.longitude-degree
 import seedColor from 'seed-color';
 import {EventInterface} from '../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
-import {DataHeartRate} from '../../../entities/data/data.heart-rate';
 
 @Component({
   selector: 'app-event-charts-am',
   templateUrl: './event.charts.amcharts.component.html',
+  // changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
@@ -23,20 +23,13 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    console.log('OnInit');
-    if (this.chart) {
-      return;
-    }
-    this.createChart().then(() => {
-      this.updateChart();
-    });
   }
 
   ngOnChanges(): void {
     console.log('OnChanges');
-    if (this.chart) {
+    this.createChart().then(() => {
       this.updateChart();
-    }
+    });
   }
 
   private createChart(): Promise<any> {
@@ -67,7 +60,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         chartScrollbar: {
           hideResizeGrips: true,
           graphType: 'smoothedLine',
-          graph: DataHeartRate.name,
+          graph: this.getGraphs()[0].id,
           gridAlpha: 0,
           color: '#888888',
           scrollbarHeight: 55,
@@ -101,7 +94,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   private updateChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
-
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.graphs = this.getGraphs();
@@ -112,6 +104,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         this.chart.addListener('rendered', () => {
           this.chart.zoomOut();
           this.chart.invalidateSize();
+          const t1 = performance.now();
+          console.log('Chart rendered after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
         });
 
         this.chart.addListener('init', () => {
@@ -123,7 +117,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       });
       const t1 = performance.now();
       console.log('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
-
       resolve(true);
     });
 
