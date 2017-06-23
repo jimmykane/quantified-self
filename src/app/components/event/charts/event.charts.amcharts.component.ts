@@ -56,7 +56,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         startEffect: 'elastic',
         sequencedAnimation: false,
         categoryField: 'date',
-        processTimeout: 1,
+        //processTimeout: 1,
         processCount: 10,
         legend: {
           align: 'center',
@@ -146,13 +146,14 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     const dataMap = new Map<string, any>();
     const graphData = [];
+    let dataCount = 0;
     this.event.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-
       if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(key) > -1) {
         return;
       }
 
       dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface, currentIndex) => {
+        dataCount++;
         const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
         dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
           [data.constructor.name]: data.getValue().toFixed(1)
@@ -169,7 +170,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     });
 
     const t1 = performance.now();
-    console.log('Formatted data after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
+    console.log('Formatted ' + dataCount + ' data after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
     return graphData;
   }
 
