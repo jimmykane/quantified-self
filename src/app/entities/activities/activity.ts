@@ -107,12 +107,6 @@ export class Activity extends IDClass implements ActivityInterface {
     return lapDistance;
   }
 
-  sortPointsByDate(): void {
-    this.getPoints().sort((pointA: PointInterface, pointB: PointInterface) => {
-      return pointA.getDate().getTime() - pointB.getDate().getTime();
-    });
-  }
-
   toJSON(): any {
     return {
       id: this.getID(),

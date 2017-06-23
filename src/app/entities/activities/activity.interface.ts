@@ -27,5 +27,4 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getLaps(): LapInterface[];
   getDistanceInMeters(): number;
   getLapsDistanceInMeters(): number;
-  sortPointsByDate(): void;
 }
