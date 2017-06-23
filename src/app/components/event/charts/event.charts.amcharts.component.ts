@@ -7,14 +7,14 @@ import {DataLongitudeDegrees} from '../../../entities/data/data.longitude-degree
 import seedColor from 'seed-color';
 import {EventInterface} from '../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
-import {DataHeartRate} from "../../../entities/data/data.heart-rate";
-import {DataCadence} from "../../../entities/data/data.cadence";
-import {DataAltitude} from "../../../entities/data/data.altitude";
-import {DataSpeed} from "../../../entities/data/data.speed";
-import {DataTemperature} from "../../../entities/data/data.temperature";
-import {DataPower} from "../../../entities/data/data.power";
-import {DataVerticalSpeed} from "../../../entities/data/data.verticalspeed";
-import {DataSeaLevelPressure} from "../../../entities/data/data.sea-level-pressure";
+import {DataHeartRate} from '../../../entities/data/data.heart-rate';
+import {DataCadence} from '../../../entities/data/data.cadence';
+import {DataAltitude} from '../../../entities/data/data.altitude';
+import {DataSpeed} from '../../../entities/data/data.speed';
+import {DataTemperature} from '../../../entities/data/data.temperature';
+import {DataPower} from '../../../entities/data/data.power';
+import {DataVerticalSpeed} from '../../../entities/data/data.verticalspeed';
+import {DataSeaLevelPressure} from '../../../entities/data/data.sea-level-pressure';
 
 @Component({
   selector: 'app-event-charts-am',
