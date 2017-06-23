@@ -51,7 +51,6 @@ export class EventImporterSML {
       });
       return lap
     }, {});
-    debugger;
     return laps;
   }
 }
