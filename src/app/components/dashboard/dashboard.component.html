@@ -1,7 +1,3 @@
-<h1>
-  {{title}}
-</h1>
-
 <div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
 
 <ng-template #uploadBlock>
@@ -13,8 +9,20 @@
 </ng-template>
 
 <ng-template #eventsBlock>
-    <div class="row">
-      <app-event-list class="col-md-3 sidebar-offcanvas" [events]='events' [selectedEvent]="selectedEvent"></app-event-list>
-      <app-event class="col-md-9 fade-in" *ngIf="selectedEvent" [event]="selectedEvent"></app-event>
+  <div class="row">
+
+    <div class="col-md-3 ">
+      <h1>
+        {{title}}
+      </h1>
+
+      <app-event-list
+        class="sidebar-offcanvas"
+        [events]='events'
+        [selectedEvent]="selectedEvent">
+      </app-event-list>
     </div>
+
+    <app-event class="col-md-9 fade-in" *ngIf="selectedEvent" [event]="selectedEvent"></app-event>
+  </div>
 </ng-template>
