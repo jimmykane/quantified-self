@@ -77,6 +77,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         },
         chartScrollbar: {
           hideResizeGrips: true,
+          autoGridCount: true,
           graphType: 'line',
           graph: this.getGraphs()[0].id,
           gridAlpha: 0,
@@ -235,11 +236,11 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         minDistance: dataArray.length / 1000,
         negativeLineColor: this.genColor(key + 'negativeLineColor'),
         type: 'line',
+        hidden: graphs.length > 0
       });
     });
     return graphs;
   }
-
 
   ngOnDestroy() {
     this.AmCharts.destroyChart(this.chart);
