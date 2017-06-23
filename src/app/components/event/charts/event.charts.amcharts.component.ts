@@ -105,6 +105,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           valueLineAlpha: 0.5,
           fullWidth: true
         },
+        creditsPosition: 'bottom-right'
       });
       const t1 = performance.now();
       console.log('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
@@ -191,7 +192,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         position: valueAxes.length % 2 === 0 ? 'left' : 'right',
         offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
         gridThickness: 0.09,
-        precision: 0,
       });
       valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
     });
