@@ -45,14 +45,16 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   private createChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
+      const graphs = this.getGraphs();
+      const valueAxes = this.getValueAxes();
       if (this.chart) {
         this.AmCharts.destroyChart(this.chart);
       }
       this.chart = this.AmCharts.makeChart('chartdiv', {
         type: 'serial',
         theme: 'light',
-        graphs: this.getGraphs(),
-        valueAxes: this.getValueAxes(),
+        graphs: graphs,
+        valueAxes: valueAxes,
         startDuration: 1,
         startEffect: 'elastic',
         sequencedAnimation: false,
@@ -79,7 +81,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           hideResizeGrips: true,
           autoGridCount: true,
           graphType: 'line',
-          graph: this.getGraphs()[0].id,
+          graph: graphs[0].id,
           gridAlpha: 0,
           color: '#888888',
           scrollbarHeight: 55,
@@ -125,16 +127,13 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       // @todo should depend on chart width
       step = step || Math.round(this.getData(startDate, endDate).length / 500); // @todo check round and make width dynamic
       const data = this.getData(startDate, endDate, step); // I only need the length @todo
-      debugger;
 
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = data;
-        debugger;
 
 
-        if (!this.chart.events.rendered) {
-          debugger;
+        if (!this.chart.events.rendered.length) {
           this.chart.addListener('rendered', () => {
             // this.chart.zoomOut();
             // this.chart.invalidateSize();
@@ -144,64 +143,76 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           });
         }
 
-        this.chart.addListener('init', () => {
-          console.log('Chart initialized after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
+        if (!this.chart.events.init.length) {
+          this.chart.addListener('init', () => {
+            console.log('Chart initialized after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
 
-        this.chart.addListener('dataUpdated', () => {
-          console.log('Chart data updated after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
+        if (!this.chart.events.dataUpdated.length) {
+          this.chart.addListener('dataUpdated', () => {
+            console.log('Chart data updated after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
 
-        this.chart.addListener('resized', () => {
-          console.log('Chart resized after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
+        if (!this.chart.events.resized.length) {
+          this.chart.addListener('resized', () => {
+            console.log('Chart resized after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
 
-        this.chart.addListener('zoomed', (event) => {
-          console.log('Chart zoomed after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-          if (!this.waitingForFirstZoom) {
-            debugger;
-            this.updateChart(event.startDate, event.endDate);
-            // @todo maybe needs first zoom.
-            return;
-          }
-          this.waitingForFirstZoom = false;
-        });
+        if (!this.chart.events.zoomed.length) {
+          this.chart.addListener('zoomed', (event) => {
+            console.log('Chart zoomed after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+            if (!this.waitingForFirstZoom) {
+              debugger;
+              this.updateChart(event.startDate, event.endDate);
+              // @todo maybe needs first zoom.
+              return;
+            }
+            this.waitingForFirstZoom = false;
+          });
+        }
 
-        this.chart.addListener('buildStarted', () => {
-          console.log('Chart build started after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
+        if (!this.chart.events.buildStarted.length) {
+          this.chart.addListener('buildStarted', () => {
+            console.log('Chart build started after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
 
-        this.chart.addListener('changed', () => {
-          console.log('Chart changed after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
-
-        this.chart.addListener('drawn', () => {
-          console.log('Chart drawn after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
-
-        this.chart.addListener('drawn', () => {
-          console.log('Chart data updated after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
+        if (!this.chart.events.changed.length) {
+          this.chart.addListener('changed', () => {
+            console.log('Chart changed after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
+        if (!this.chart.events.drawn.length) {
+          this.chart.addListener('drawn', () => {
+            console.log('Chart drawn after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
 
         // debugger;
       });
-      console.log('Updated chart after ' + (performance.now() - t0) + ' milliseconds or ' + (performance.now() - t0) / 1000 + ' seconds');
+
+      console.log('Updated chart after ' +
+        (performance.now() - t0) + ' milliseconds or ' +
+        (performance.now() - t0) / 1000 + ' seconds'
+      );
+
       resolve(true);
     });
 
@@ -240,6 +251,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private getValueAxes(): any[] {
+    const t0 = performance.now();
     const valueAxes = [];
     let leftIndex = 0;
     let rightIndex = 0;
@@ -258,6 +270,10 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       });
       valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
     });
+    console.log('Got valueAxes after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
     return valueAxes;
   }
 
@@ -277,6 +293,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private getGraphs(): any[] {
+    const t0 = performance.now();
     const graphs = [];
     this.event.getData().forEach((dataArray: DataInterface[], key: string, map) => {
       if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(key) > -1) {
@@ -296,12 +313,15 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         useLineColorForBulletBorder: true,
         bulletBorderAlpha: 1,
         bulletColor: '#FFFFFF',
-        minDistance: dataArray.length / 1000,
         negativeLineColor: this.genColor(key + 'negativeLineColor'),
         type: 'line',
         hidden: graphs.length > 0
       });
     });
+    console.log('Got valueAxes after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
     return graphs;
   }
 
