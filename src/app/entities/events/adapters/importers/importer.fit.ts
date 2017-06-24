@@ -32,6 +32,8 @@ export class EventImporterFIT {
       easyFitParser.parse(jsonString, (error, data: any) => {
         debugger;
         const event = new Event();
+        let recordCount = 0;
+        let dataCount = 0;
         for (const session of data.activity.sessions) {
           const activity = new Activity(event);
           activity.setType(session.sport);
@@ -44,6 +46,7 @@ export class EventImporterFIT {
             lap.setStartDate(sessionLap.start_time);
             lap.setEndDate(sessionLap.timestamp);
             for (const lapRecord of sessionLap.records) {
+              recordCount++;
               const point = new Point(new Date(lapRecord.timestamp));
               point.setActivity(activity);
                // Hack for strange Suunto data
@@ -51,12 +54,15 @@ export class EventImporterFIT {
                 if (lapRecord.position_lat && lapRecord.position_long) {
                   new DataLatitudeDegrees(point, lapRecord.position_lat);
                   new DataLongitudeDegrees(point, lapRecord.position_long);
+                  dataCount++;
+                  dataCount++;
                   continue;
                 }
               }
               Object.keys(lapRecord).forEach((key) => {
+                dataCount++;
                 switch (key) {
-                  case 'altitude': { return new DataAltitude(point, Number(lapRecord[key]) / 100); }
+                  case 'altitude': { return new DataAltitude(point, Number(lapRecord[key]) - 1000); }
                   case 'position_lat': { return new DataLatitudeDegrees(point, lapRecord[key]); }
                   case 'position_long': { return new DataLongitudeDegrees(point, lapRecord[key]); }
                   case 'cadence': { return new DataCadence(point, lapRecord[key]); }
@@ -69,6 +75,7 @@ export class EventImporterFIT {
             }
           }
         }
+        console.log('Imported ' + recordCount + ' records with ' + dataCount + ' of data');
         resolve(event);
       });
 
