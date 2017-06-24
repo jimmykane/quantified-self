@@ -19,7 +19,7 @@ import {DataSeaLevelPressure} from '../../../entities/data/data.sea-level-pressu
 @Component({
   selector: 'app-event-charts-am',
   templateUrl: './event.charts.amcharts.component.html',
-  // changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
@@ -36,9 +36,19 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnChanges(): void {
+    const t0 = performance.now();
     console.log('OnChanges');
     this.createChart().then(() => {
-      this.updateChart();
+      console.log('Chart create promise completed after ' +
+        (performance.now() - t0) + ' milliseconds or ' +
+        (performance.now() - t0) / 1000 + ' seconds'
+      );
+      this.updateChart().then(() => {
+        console.log('Chart update promise completed after ' +
+          (performance.now() - t0) + ' milliseconds or ' +
+          (performance.now() - t0) / 1000 + ' seconds'
+        );
+      });
     });
   }
 
@@ -139,7 +149,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
             // this.chart.invalidateSize();
             console.log('Chart rendered after ' +
               (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
+              (performance.now() - t0) / 1000 + ' seconds'
+            );
           });
         }
 
@@ -147,7 +158,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           this.chart.addListener('init', () => {
             console.log('Chart initialized after ' +
               (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
+              (performance.now() - t0) / 1000 + ' seconds'
+            );
           });
         }
 
@@ -155,7 +167,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           this.chart.addListener('dataUpdated', () => {
             console.log('Chart data updated after ' +
               (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
+              (performance.now() - t0) / 1000 + ' seconds'
+            );
           });
         }
 
@@ -163,7 +176,8 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           this.chart.addListener('resized', () => {
             console.log('Chart resized after ' +
               (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
+              (performance.now() - t0) / 1000 + ' seconds'
+            );
           });
         }
 
@@ -318,7 +332,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         hidden: graphs.length > 0
       });
     });
-    console.log('Got valueAxes after ' +
+    console.log('Got graphs after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
