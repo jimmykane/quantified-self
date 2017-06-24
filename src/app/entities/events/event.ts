@@ -56,14 +56,14 @@ export class Event extends IDClass implements EventInterface {
     });
   }
 
-  getPoints(): PointInterface[] {
+  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
     return this.getActivities().reduce((points: PointInterface[], activity: ActivityInterface) => {
-      return [...points, ...activity.getPoints()];
+      return [...points, ...activity.getPoints(startDate, endDate, step)];
     }, []);
   }
 
-  getData(): Map<string, DataInterface[]> {
-    return this.getPoints().reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+  getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]> {
+    return this.getPoints(startDate, endDate, step).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
       point.getData().forEach((data: DataInterface[], key: string) => {
         dataMap.set(key, [...dataMap.get(key) || [], ...data]);
       });

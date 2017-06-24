@@ -61,16 +61,32 @@ export class Activity extends IDClass implements ActivityInterface {
     this.points.set(point.getDate().toISOString(), point);
   }
 
-  getPoints(): PointInterface[] {
+  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
     const points = [];
+    let index = -1;
     this.points.forEach((point: PointInterface, date: string, map) => {
-      points.push(point);
+      index++;
+      let canBeAdded = true;
+      // @todo check inclusions
+      if (step && index % step !== 0) {
+        canBeAdded = false;
+      }
+      if (startDate && startDate > point.getDate()) {
+        canBeAdded = false;
+      }
+      if (endDate && endDate < point.getDate()) {
+        canBeAdded = false;
+      }
+
+      if (canBeAdded) {
+        points.push(point);
+      }
     });
     return points;
   }
 
-  getData(): Map<string, DataInterface[]> {
-    return this.getPoints().reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+  getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]> {
+    return this.getPoints(startDate, endDate, step).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
       point.getData().forEach((data: DataInterface[], key: string) => {
         dataMap.set(key, [...dataMap.get(key) || [], ...data]);
       });

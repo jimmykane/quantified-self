@@ -14,8 +14,8 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getActivities(): ActivityInterface[];
   getFirstActivity(): ActivityInterface;
   getLastActivity(): ActivityInterface;
-  getPoints(): PointInterface[];
-  getData(): Map<string, DataInterface[]>;
+  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
+  getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]>;
   getDataByType(dataType: string): DataInterface[];
   getDistanceInMeters(): number;
   getDurationInSeconds(): number;
