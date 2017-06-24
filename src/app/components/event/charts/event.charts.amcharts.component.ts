@@ -146,7 +146,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   private getData(): any[] {
     const t0 = performance.now();
-    const dataMap = new Map<Date, any>();
+    const dataMap = new Map<string, any>();
     const graphData = [];
     let dataCount = 0;
     this.event.getData().forEach((dataArray: DataInterface[], dataType: string) => {
@@ -154,10 +154,10 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         return;
       }
 
-      dataArray.reduce((dataAccumulator: Map<Date, any>, data: DataInterface, currentIndex) => {
+      dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface, currentIndex) => {
         dataCount++;
-        const dateData = dataAccumulator.get(data.getPoint().getDate()) || {};
-        dataAccumulator.set(data.getPoint().getDate(), Object.assign(dateData, {
+        const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
+        dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
           [data.constructor.name]: data.getValue().toFixed(1)
         }));
         return dataAccumulator;
@@ -165,7 +165,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
     });
 
-    dataMap.forEach((value: number, key: Date) => {
+    dataMap.forEach((value: number, key: string) => {
       graphData.push(Object.assign({
         date: key
       }, value));
