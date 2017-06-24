@@ -9,16 +9,16 @@ export class DistanceVincenty implements DistanceAdapterInterface {
     const excludeFirstPointsArray = points.slice(1);
     let pointA = points[0];
     for (const pointB of excludeFirstPointsArray) {
-      if (!pointA.getPosition() || !pointB.getPosition()){
+      if (!pointA.getPosition() || !pointB.getPosition()) {
         continue;
       }
       const pointAPositionAsDecimal: PositionAsDecimal = {
-      longitude: pointA.getPosition().longitudeDegrees,
-      latitude: pointA.getPosition().latitudeDegrees,
+        longitude: pointA.getPosition().longitudeDegrees,
+        latitude: pointA.getPosition().latitudeDegrees,
       };
       const pointBPositionAsDecimal: PositionAsDecimal = {
-      longitude: pointB.getPosition().longitudeDegrees,
-      latitude: pointB.getPosition().latitudeDegrees,
+        longitude: pointB.getPosition().longitudeDegrees,
+        latitude: pointB.getPosition().latitudeDegrees,
       };
       distance += GeoLib.getDistance(pointAPositionAsDecimal, pointBPositionAsDecimal);
       pointA = pointB;
