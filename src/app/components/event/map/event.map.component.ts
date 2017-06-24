@@ -2,6 +2,8 @@ import {Component, Input, ViewChild} from '@angular/core';
 import seedColor from 'seed-color';
 import {ActivityInterface} from '../../../entities/activities/activity.interface';
 import {AgmMap, GoogleMapsAPIWrapper} from "@agm/core";
+import {PointInterface} from "../../../entities/points/point.interface";
+import {EventInterface} from "../../../entities/events/event.interface";
 
 
 @Component({
@@ -11,10 +13,19 @@ import {AgmMap, GoogleMapsAPIWrapper} from "@agm/core";
   providers: [GoogleMapsAPIWrapper]
 })
 export class EventMapComponent {
-  @Input() activities: ActivityInterface[];
+  @Input() event: EventInterface[];
   @ViewChild(AgmMap) agmMap;
 
   constructor() {
+  }
+
+  getPointsWithPosition(activity: ActivityInterface): PointInterface[] {
+    return activity.getPoints().reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
+      if (point.getPosition()) {
+        pointsWithPosition.push(point);
+      }
+      return pointsWithPosition;
+    }, []);
   }
 
 
