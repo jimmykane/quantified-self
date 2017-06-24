@@ -27,6 +27,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
 
   private chart: any;
+  private waitingForFirstZoom = true;
 
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
   }
@@ -112,21 +113,36 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     });
   }
 
-  private updateChart(): Promise<any> {
+  private updateChart(startDate?: Date, endDate?: Date, step?: number, prevStep?: number): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
+
+      this.waitingForFirstZoom = true;
+
+
+      startDate = startDate || this.event.getFirstActivity().getStartDate();
+      endDate = endDate || this.event.getLastActivity().getEndDate();
+      // @todo should depend on chart width
+      step = step || Math.round(this.getData(startDate, endDate).length / 500); // @todo check round and make width dynamic
+      const data = this.getData(startDate, endDate, step); // I only need the length @todo
+      debugger;
+
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
-        this.chart.dataProvider = this.getData();
-        const chart = this.chart;
-        // Change whatever properties you want, add event listeners, etc.
-        this.chart.addListener('rendered', () => {
-          // this.chart.zoomOut();
-          // this.chart.invalidateSize();
-          console.log('Chart rendered after ' +
-            (performance.now() - t0) + ' milliseconds or ' +
-            (performance.now() - t0) / 1000 + ' seconds');
-        });
+        this.chart.dataProvider = data;
+        debugger;
+
+
+        if (!this.chart.events.rendered) {
+          debugger;
+          this.chart.addListener('rendered', () => {
+            // this.chart.zoomOut();
+            // this.chart.invalidateSize();
+            console.log('Chart rendered after ' +
+              (performance.now() - t0) + ' milliseconds or ' +
+              (performance.now() - t0) / 1000 + ' seconds');
+          });
+        }
 
         this.chart.addListener('init', () => {
           console.log('Chart initialized after ' +
@@ -146,10 +162,17 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
             (performance.now() - t0) / 1000 + ' seconds');
         });
 
-        this.chart.addListener('zoomed', () => {
+        this.chart.addListener('zoomed', (event) => {
           console.log('Chart zoomed after ' +
             (performance.now() - t0) + ' milliseconds or ' +
             (performance.now() - t0) / 1000 + ' seconds');
+          if (!this.waitingForFirstZoom) {
+            debugger;
+            this.updateChart(event.startDate, event.endDate);
+            // @todo maybe needs first zoom.
+            return;
+          }
+          this.waitingForFirstZoom = false;
         });
 
         this.chart.addListener('buildStarted', () => {
