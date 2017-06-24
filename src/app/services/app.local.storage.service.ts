@@ -8,7 +8,8 @@ export class LocalStorageService implements StorageServiceInterface {
 
   private nameSpace: string;
 
-  constructor() {}
+  constructor() {
+  }
 
   setNameSpace(nameSpace) {
     this.nameSpace = nameSpace;
@@ -26,8 +27,14 @@ export class LocalStorageService implements StorageServiceInterface {
 
   getItem(key: string): Promise<string> {
     return new Promise((resolve, reject) => {
+      const t0 = performance.now();
       try {
-        resolve(LZString.decompress(localStorage.getItem(this.nameSpace + key)));
+        const decrypted = LZString.decompress(localStorage.getItem(this.nameSpace + key));
+        console.log('Decrypted after ' +
+          (performance.now() - t0) + ' milliseconds or ' +
+          (performance.now() - t0) / 1000 + ' seconds'
+        );
+        resolve(decrypted);
       } catch (Error) {
         // If not able to decode remove from storage
         console.error('Could not decode entry from local storage ' + key);
@@ -37,7 +44,7 @@ export class LocalStorageService implements StorageServiceInterface {
     });
   }
 
-  removeItem(key: string):  Promise<void> {
+  removeItem(key: string): Promise<void> {
     return Promise.resolve(localStorage.removeItem(this.nameSpace + key));
   }
 
@@ -70,7 +77,7 @@ export class LocalStorageService implements StorageServiceInterface {
   }
 
   removeAllItems() {
-    for (const key of this.getAllKeys()){
+    for (const key of this.getAllKeys()) {
       this.removeItem(key);
     }
   }
