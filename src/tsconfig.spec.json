@@ -3,8 +3,9 @@
   "compilerOptions": {
     "outDir": "../out-tsc/spec",
     "module": "commonjs",
-    "target": "es5",
+    "target": "es7",
     "baseUrl": "",
+    "lib": ["es7", "dom", "es2017.object", "es2016.array.include"],
     "types": [
       "jasmine",
       "node"

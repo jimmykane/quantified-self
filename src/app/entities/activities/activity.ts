@@ -53,6 +53,7 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   addPoint(point: PointInterface) {
+    // @todo add point by date collision detection or make it a map
     this.points.push(point);
   }
 

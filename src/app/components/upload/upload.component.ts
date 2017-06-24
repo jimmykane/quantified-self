@@ -26,27 +26,36 @@ export class UploadComponent {
             .createEventFromXMLString(fileReader.result)
             .then((newEvent: EventInterface) => {
               newEvent.setName(input.files[index].name);
-              this.eventService.addEvent(newEvent);
+              this.eventService.saveEvent(newEvent);
             })
             .catch((error) => {
               console.error('Could not load event from file' + input.files[index].name, error);
             });
-        } else {
-          this.eventService
-            .createEventFromJSONSMLString(fileReader.result)
-            .then((newEvent: EventInterface) => {
-              newEvent.setName(input.files[index].name);
-              this.eventService.addEvent(newEvent);
-            })
-            .catch((error) => {
-              console.error('Could not load event from file' + input.files[index].name, error);
-            });
+        } else if (input.files[index].name.split('.').pop() === 'fit') {
+          this.readAsBinary(input.files[index]);
         }
-
       };
       // Read it
       fileReader.readAsText(input.files[index]);
     }
     this.router.navigate(['dashboard']);
+  }
+
+  // @todo refactor
+  private readAsBinary(file: File) {
+    const fileReader = new FileReader;
+    fileReader.onloadend = (ev: ProgressEvent) => {
+      this.eventService
+        .createEventFromJSONFITString(fileReader.result)
+        .then((newEvent: EventInterface) => {
+          newEvent.setName(file.name);
+          this.eventService.saveEvent(newEvent);
+        })
+        .catch((error) => {
+          console.error('Could not load event from file' + file.name, error);
+        });
+    };
+    fileReader.readAsArrayBuffer(file);
+
   }
 }

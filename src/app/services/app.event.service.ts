@@ -11,6 +11,7 @@ import {Activity} from '../entities/activities/activity';
 import {EventInterface} from '../entities/events/event.interface';
 import {EventImporterJSON} from '../entities/events/adapters/importers/importer.json';
 import {EventImporterSML} from "../entities/events/adapters/importers/importer.sml";
+import {EventImporterFIT} from "../entities/events/adapters/importers/importer.fit";
 
 @Injectable()
 export class EventService {
@@ -43,7 +44,7 @@ export class EventService {
     }
   }
 
-  public addEvent(event: EventInterface) {
+  public saveEvent(event: EventInterface) {
     this.localStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) =>{
         this.events.next(this.events.getValue().push(event));
     });
@@ -51,7 +52,7 @@ export class EventService {
 
   public addEvents(events: EventInterface[]) {
     for (const event of events) {
-      this.addEvent(event);
+      this.saveEvent(event);
     }
   }
 
@@ -78,6 +79,13 @@ export class EventService {
       return resolve(EventImporterSML.getFromJSONString(data));
     });
   }
+  public createEventFromJSONFITString(data: string): Promise<EventInterface> {
+    return new Promise((resolve, reject) => {
+      return resolve(EventImporterFIT.getFromJSONString(data));
+    });
+  }
+
+
 
   public createEventFromXMLString(data: string): Promise<EventInterface> {
     return new Promise((resolve, reject) => {

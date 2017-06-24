@@ -18,7 +18,7 @@ export class EventListComponent {
   mergeEvents($event, event: EventInterface) {
     $event.stopPropagation();
     this.eventService.mergeEvents([this.selectedEvent, event]).then((event: EventInterface) => {
-      this.eventService.addEvent(event);
+      this.eventService.saveEvent(event);
       this.router.navigate(['/dashboard'], { queryParams: { eventID: event.getID() } });
     });
     return false;

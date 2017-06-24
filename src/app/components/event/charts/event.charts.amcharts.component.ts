@@ -170,7 +170,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         date: key
       }, value));
     });
-
+    debugger;
     const t1 = performance.now();
     console.log('Formatted ' + dataCount + ' data after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
     return graphData;

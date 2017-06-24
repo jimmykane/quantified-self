@@ -38,7 +38,8 @@ export class EventImporterJSON {
         lap.setTriggerMethod(lapObject.triggerMethod);
       }
       for (const pointObject of activityObject.points){
-        const point = new Point(activity, new Date(pointObject.date));
+        const point = new Point(new Date(pointObject.date));
+        point.setActivity(activity);
         for (const dataObject of pointObject.data){
           switch (dataObject.type) {
             case 'DataAltitude': {

@@ -13,10 +13,13 @@ export class Point implements PointInterface {
   private data: Map<string, DataInterface[]> = new Map<string, DataInterface[]>();
 
 
-  constructor(activity: ActivityInterface, date: Date) {
+  constructor(date: Date) {
     this.date = date;
+  }
+
+  setActivity(activity: ActivityInterface) {
     this.activity = activity;
-    this.activity.addPoint(this);
+    this.getActivity().addPoint(this); // @todo check for conflicts
   }
 
   getActivity(): ActivityInterface {

@@ -5,6 +5,7 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 
 export interface PointInterface extends SerializableClassInterface {
   getActivity(): ActivityInterface;
+  setActivity(activity: ActivityInterface)
   getDate(): Date;
   addData(data: DataInterface);
   getData(): Map<string, DataInterface[]>;

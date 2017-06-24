@@ -40,7 +40,8 @@ export class EventImporterGPX {
 
     // Get the points
     for (const pointElement of <any>xml.getElementsByTagName('trkpt')) {
-      const point = new Point(activity, new Date(pointElement.getElementsByTagName('time')[0].textContent));
+      const point = new Point(new Date(pointElement.getElementsByTagName('time')[0].textContent));
+      point.setActivity(activity);
       new DataLatitudeDegrees(point, pointElement.getAttribute('lat'));
       new DataLongitudeDegrees(point, pointElement.getAttribute('lon'));
       // Go over the extensions

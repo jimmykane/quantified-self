@@ -50,7 +50,8 @@ export class EventImporterTCX {
 
         // Go over the points and append them to the track
         for (const pointElement of <any>lapElement.getElementsByTagName('Trackpoint')) {
-          const point = new Point(activity, new Date(pointElement.getElementsByTagName('Time')[0].textContent));
+          const point = new Point(new Date(pointElement.getElementsByTagName('Time')[0].textContent));
+          point.setActivity(activity);
           for (const dataElement of <any>pointElement.children) {
             switch (dataElement.tagName) {
               case 'Position': {
