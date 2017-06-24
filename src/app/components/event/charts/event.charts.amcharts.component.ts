@@ -55,6 +55,10 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   private createChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
+      console.log('Chart Create started after ' +
+        (performance.now() - t0) + ' milliseconds or ' +
+        (performance.now() - t0) / 1000 + ' seconds'
+      );
       const graphs = this.getGraphs();
       const valueAxes = this.getValueAxes();
       if (this.chart) {
