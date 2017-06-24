@@ -56,8 +56,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         startEffect: 'elastic',
         sequencedAnimation: false,
         categoryField: 'date',
-        //processTimeout: 1,
-        //processCount: 10,
+        processCount: 1000,
         legend: {
           align: 'center',
           useGraphSettings: true,
@@ -120,12 +119,13 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = this.getData();
         const chart = this.chart;
-        debugger;
         // Change whatever properties you want, add event listeners, etc.
         this.chart.addListener('rendered', () => {
           // this.chart.zoomOut();
           // this.chart.invalidateSize();
-          console.log('Chart rendered after ' + (performance.now() - t0) + ' milliseconds or ' + (performance.now() - t0) / 1000 + ' seconds');
+          console.log('Chart rendered after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
         });
 
         this.chart.addListener('init', () => {
