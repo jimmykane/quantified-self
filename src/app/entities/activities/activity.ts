@@ -12,7 +12,7 @@ export class Activity extends IDClass implements ActivityInterface {
   private type: string;
   private creators: CreatorInterface[] = [];
   private laps: LapInterface[] = [];
-  private points: PointInterface[] = [];
+  private points: Map<Date, PointInterface> = new Map<Date, PointInterface>();
 
   constructor(event: EventInterface) {
     super();
@@ -53,12 +53,24 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   addPoint(point: PointInterface) {
-    // @todo add point by date collision detection or make it a map
-    this.points.push(point);
+    const existingPoint = this.points.get(point.getDate());
+    if (existingPoint) {
+      console.warn('Point collision detected for date: ' + point.getDate().toISOString());
+      existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+        dataArray.forEach((data: DataInterface) => {
+          point.addData(data);
+        });
+      });
+    }
+    this.points.set(point.getDate(), point);
   }
 
   getPoints(): PointInterface[] {
-    return this.points;
+    const points = [];
+    this.points.forEach((point: PointInterface, date: Date, map) => {
+      points.push(point);
+    });
+    return points;
   }
 
   getData(): Map<string, DataInterface[]> {
