@@ -28,7 +28,6 @@
     "@ng-bootstrap/ng-bootstrap": "^1.0.0-alpha.26",
     "@types/geolib": "^2.0.2",
     "@types/lz-string": "^1.3.32",
-    "@types/xml2js": "0.0.33",
     "amcharts3": "github:amcharts/amcharts3",
     "angular2-moment": "^1.4.0",
     "bootstrap": "^4.0.0-alpha.6",
@@ -44,7 +43,6 @@
     "seed-color": "^2.0.1",
     "typescript": "^2.4.0",
     "uuid": "^3.1.0",
-    "xml2js": "^0.4.17",
     "zone.js": "^0.8.12"
   },
   "devDependencies": {
