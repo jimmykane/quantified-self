@@ -25,6 +25,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 
+
   private chart: any;
 
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
@@ -36,7 +37,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   ngOnChanges(): void {
     console.log('OnChanges');
     this.createChart().then(() => {
-      //this.updateChart();
+      this.updateChart();
     });
   }
 
@@ -51,13 +52,12 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         theme: 'light',
         graphs: this.getGraphs(),
         valueAxes: this.getValueAxes(),
-        dataProvider: this.getData(),
         startDuration: 1,
         startEffect: 'elastic',
         sequencedAnimation: false,
         categoryField: 'date',
         //processTimeout: 1,
-        processCount: 10,
+        //processCount: 10,
         legend: {
           align: 'center',
           useGraphSettings: true,
@@ -118,38 +118,78 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       const t0 = performance.now();
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
-        this.chart.graphs = this.getGraphs();
-        this.chart.valueAxes = this.getValueAxes();
         this.chart.dataProvider = this.getData();
-
+        const chart = this.chart;
+        debugger;
         // Change whatever properties you want, add event listeners, etc.
         this.chart.addListener('rendered', () => {
-          this.chart.zoomOut();
-          this.chart.invalidateSize();
-          const t1 = performance.now();
-          console.log('Chart rendered after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
+          // this.chart.zoomOut();
+          // this.chart.invalidateSize();
+          console.log('Chart rendered after ' + (performance.now() - t0) + ' milliseconds or ' + (performance.now() - t0) / 1000 + ' seconds');
         });
 
         this.chart.addListener('init', () => {
-          // debugger;
+          console.log('Chart initialized after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
         });
+
         this.chart.addListener('dataUpdated', () => {
+          console.log('Chart data updated after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
         });
+
+        this.chart.addListener('resized', () => {
+          console.log('Chart resized after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
+        });
+
+        this.chart.addListener('zoomed', () => {
+          console.log('Chart zoomed after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
+        });
+
+        this.chart.addListener('buildStarted', () => {
+          console.log('Chart build started after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
+        });
+
+        this.chart.addListener('changed', () => {
+          console.log('Chart changed after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
+        });
+
+        this.chart.addListener('drawn', () => {
+          console.log('Chart drawn after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
+        });
+
+        this.chart.addListener('drawn', () => {
+          console.log('Chart data updated after ' +
+            (performance.now() - t0) + ' milliseconds or ' +
+            (performance.now() - t0) / 1000 + ' seconds');
+        });
+
         // debugger;
       });
-      const t1 = performance.now();
-      console.log('Updated chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
+      console.log('Updated chart after ' + (performance.now() - t0) + ' milliseconds or ' + (performance.now() - t0) / 1000 + ' seconds');
       resolve(true);
     });
 
   }
 
-  private getData(): any[] {
+  private getData(startDate?: Date, endDate?: Date, step?: number): any[] {
     const t0 = performance.now();
     const dataMap = new Map<string, any>();
     const graphData = [];
     let dataCount = 0;
-    this.event.getData().forEach((dataArray: DataInterface[], dataType: string) => {
+    this.event.getData(startDate, endDate, step).forEach((dataArray: DataInterface[], dataType: string) => {
       if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataType) > -1) {
         return;
       }
