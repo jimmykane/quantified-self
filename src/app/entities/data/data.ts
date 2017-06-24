@@ -7,7 +7,7 @@ export class Data implements DataInterface {
   private value: number;
   protected unit: string;
 
-  constructor(point: PointInterface, value: string) {
+  constructor(point: PointInterface, value: string|number) {
     this.point = point;
     this.point.addData(this);
     this.setValue(value);
