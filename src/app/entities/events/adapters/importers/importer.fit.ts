@@ -14,7 +14,6 @@ import {DataTemperature} from '../../../data/data.temperature';
 import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
 import EasyFit from 'easy-fit';
-import {PointInterface} from "../../../points/point.interface";
 
 export class EventImporterFIT {
 
@@ -31,20 +30,19 @@ export class EventImporterFIT {
       });
 
       easyFitParser.parse(jsonString, (error, data: any) => {
-        debugger;
         const event = new Event();
-        for (const session of data.activity.sessions){
+        for (const session of data.activity.sessions) {
           const activity = new Activity(event);
           activity.setType(session.sport);
-          for (const sessionLap of session.laps){
+          for (const sessionLap of session.laps) {
             const lap = new Lap(activity);
             lap.setStartDate(sessionLap.start_time);
             lap.setEndDate(sessionLap.timestamp);
-            for (const lapRecord of sessionLap.records){
+            for (const lapRecord of sessionLap.records) {
               const point = new Point(new Date(lapRecord.timestamp));
               point.setActivity(activity);
               Object.keys(lapRecord).forEach((key) => {
-                switch (key){
+                switch (key) {
                   case 'altitude': { return new DataAltitude(point, lapRecord[key]); }
                   case 'position_lat': { return new DataLatitudeDegrees(point, lapRecord[key]); }
                   case 'position_long': { return new DataLongitudeDegrees(point, lapRecord[key]); }
@@ -53,15 +51,11 @@ export class EventImporterFIT {
                   case 'vertical_speed': { return new DataVerticalSpeed(point, lapRecord[key]); }
                   case 'speed': { return new DataSpeed(point, lapRecord[key]); }
                   case 'temperature': { return new DataTemperature(point, lapRecord[key]); }
-                  case 'position_lat': { return new DataAltitude(point, lapRecord[key]); }
                 }
               });
-
             }
           }
         }
-
-        debugger;
         resolve(event);
       });
 
