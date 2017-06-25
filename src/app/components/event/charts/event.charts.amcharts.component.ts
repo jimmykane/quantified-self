@@ -355,13 +355,13 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     // @todo remove this crappy lib
     switch (key) {
       case DataHeartRate.name: return '#ff3f07';
-      case DataAltitude.name: return '#3d9339';
+      case DataAltitude.name: return '#4ab255';
       case DataCadence.name: return '#5b6979';
       case DataSpeed.name: return '#2261bf';
-      case DataVerticalSpeed.name: return '#d38e2e';
-      case DataTemperature.name: return '#407677';
-      case DataPower.name: return '#d38e2e';
-      case DataSeaLevelPressure.name: return '#b0d8cf';
+      case DataVerticalSpeed.name: return '#add3c3';
+      case DataTemperature.name: return '#a5a567';
+      case DataPower.name: return '#d39031';
+      case DataSeaLevelPressure.name: return '#889bc8';
     }
     return seedColor(key).toHex();
   }
