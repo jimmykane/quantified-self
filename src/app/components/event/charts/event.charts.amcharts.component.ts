@@ -25,13 +25,10 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 
-  private allData: Map<string, DataInterface[]>;
+  private dataMap: Map<string, DataInterface[]>;
   private dataLength = 0;
   private categories = [];
-  private divWidth = 1000;
   private chart: any;
-  private isFirstZoom = true;
-  private canUpdate = true;
 
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
   }
@@ -43,9 +40,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     console.log('OnChanges');
 
-    this.allData = this.event.getData();
-    this.isFirstZoom = true;
-    this.canUpdate = true;
+    this.dataMap = this.event.getData();
 
     this.createChart().then(() => {
       console.log('Chart create promise completed after ' +
@@ -143,13 +138,9 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   private updateChart(startDate?: Date, endDate?: Date, step?: number, prevStep?: number): Promise<any> {
     return new Promise((resolve, reject) => {
-      if (!this.canUpdate){
-        reject(false);
-      }
       const t0 = performance.now();
-
       // @todo should depend on chart width and cache
-      step = step || this.getStep(startDate, endDate, step);
+      step = step;
       const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate, step)); // I only need the length @todo
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
@@ -196,16 +187,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
             console.log('Chart zoomed after ' +
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds');
-            if (this.canUpdate && !this.isFirstZoom) {
-              this.updateChart(void 0, void 0, 0).then(()=>{
-                this.canUpdate = false;
-              }).catch(() => {
-                console.error('could not update chart');
-                this.isFirstZoom = true;
-              });
-              return
-            }
-            this.isFirstZoom = false;
           });
         }
 
@@ -247,7 +228,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private getAllData(): Map<string, DataInterface[]> {
-    return this.allData || this.event.getData();
+    return this.dataMap || this.event.getData();
   }
 
   private getAllCategoryTypes(): any[] {
@@ -257,20 +238,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       });
     }
     return this.categories;
-  }
-
-  private getStep(startDate: Date, endDate: Date, step): number {
-    if (step === 0) {
-      return void 0;
-    }
-    if (!startDate || !endDate) {
-      return Math.round(this.getAllDataLength() / this.divWidth);
-    }
-    let dataSliceCount = 0;
-    this.event.getData(startDate, endDate).forEach((dataArray, category, eventData) => {
-      dataSliceCount += dataArray.length;
-    });
-    return Math.round(dataSliceCount / this.divWidth);
   }
 
   private getAllDataLength(): number {
