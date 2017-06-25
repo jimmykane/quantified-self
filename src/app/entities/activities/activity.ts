@@ -95,7 +95,7 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   getDataByType(dataType: string): DataInterface[] {
-    return this.getData().get(dataType);
+    return this.getData().get(dataType) || [];
   }
 
   getDataTypeAverage(dataType: string): number {
