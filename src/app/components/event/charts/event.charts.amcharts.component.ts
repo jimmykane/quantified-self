@@ -25,7 +25,9 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 
-
+  private allData: Map<string, DataInterface[]>;
+  private dataLength = 0;
+  private categories = [];
   private chart: any;
   private waitingForFirstZoom = true;
 
@@ -38,6 +40,9 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   ngOnChanges(): void {
     const t0 = performance.now();
     console.log('OnChanges');
+
+    this.allData = this.event.getData();
+
     this.createChart().then(() => {
       console.log('Chart create promise completed after ' +
         (performance.now() - t0) + ' milliseconds or ' +
@@ -52,18 +57,21 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     });
   }
 
-  private createChart(): Promise<any> {
+  private createChart() {
+    const graphs = this.getGraphs();
+    const valueAxes = this.getValueAxes();
+
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
       console.log('Chart Create started after ' +
         (performance.now() - t0) + ' milliseconds or ' +
         (performance.now() - t0) / 1000 + ' seconds'
       );
-      const graphs = this.getGraphs();
-      const valueAxes = this.getValueAxes();
+      // Destroy existing chart
       if (this.chart) {
         this.AmCharts.destroyChart(this.chart);
       }
+      // Create a fresh one
       this.chart = this.AmCharts.makeChart('chartdiv', {
         type: 'serial',
         theme: 'light',
@@ -135,22 +143,16 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
       this.waitingForFirstZoom = true;
 
-
-      startDate = startDate || this.event.getFirstActivity().getStartDate();
-      endDate = endDate || this.event.getLastActivity().getEndDate();
-      // @todo should depend on chart width
-      step = step || Math.round(this.getData(startDate, endDate).length / 500); // @todo check round and make width dynamic
-      const data = this.getData(startDate, endDate, step); // I only need the length @todo
+      // @todo should depend on chart width and cache
+      step = step || Math.round(this.getAllDataLength() / 500);
+      const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate, step)); // I only need the length @todo
 
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
-        this.chart.dataProvider = data;
-
+        this.chart.dataProvider = dataProvider;
 
         if (!this.chart.events.rendered.length) {
           this.chart.addListener('rendered', () => {
-            // this.chart.zoomOut();
-            // this.chart.invalidateSize();
             console.log('Chart rendered after ' +
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds'
@@ -191,8 +193,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds');
             if (!this.waitingForFirstZoom) {
-              debugger;
-              this.updateChart(event.startDate, event.endDate);
+              this.updateChart(event.startDate, event.endDate, null);
               // @todo maybe needs first zoom.
               return;
             }
@@ -215,6 +216,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
               (performance.now() - t0) / 1000 + ' seconds');
           });
         }
+
         if (!this.chart.events.drawn.length) {
           this.chart.addListener('drawn', () => {
             console.log('Chart drawn after ' +
@@ -236,10 +238,50 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   }
 
-  private getData(startDate?: Date, endDate?: Date, step?: number): any[] {
+  private getAllData() {
+    return this.allData || this.event.getData();
+  }
+
+  private getAllCategoryTypes(): any[] {
+    if (!this.categories.length) {
+      this.getAllData().forEach((dataArray, category, eventData) => {
+        this.categories.push(category);
+      });
+    }
+    return this.categories;
+  }
+
+
+  private getAllDataLength(): number {
+    if (this.dataLength < 1) {
+      this.getAllData().forEach((dataArray, category, eventData) => {
+        this.dataLength += dataArray.length;
+      });
+    }
+    return this.dataLength;
+  }
+
+  private getDataProvider(dataMap: Map<string, any>): any[] {
+    const t0 = performance.now();
+    const dataProvider = [];
+    let categoryCount = 0;
+    dataMap.forEach((value: number, key: string) => {
+      categoryCount++;
+      dataProvider.push(Object.assign({
+        date: key
+      }, value));
+    });
+
+    const t1 = performance.now();
+    console.log('Flatten ' + categoryCount + ' categories of data after ' +
+      (t1 - t0) + ' milliseconds or ' +
+      (t1 - t0) / 1000 + ' seconds');
+    return dataProvider;
+  }
+
+  private getDataMapSlice(startDate?: Date, endDate?: Date, step?: number) {
     const t0 = performance.now();
     const dataMap = new Map<string, any>();
-    const graphData = [];
     let dataCount = 0;
     this.event.getData(startDate, endDate, step).forEach((dataArray: DataInterface[], dataType: string) => {
       if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataType) > -1) {
@@ -256,16 +298,9 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       }, dataMap);
 
     });
-
-    dataMap.forEach((value: number, key: string) => {
-      graphData.push(Object.assign({
-        date: key
-      }, value));
-    });
-
     const t1 = performance.now();
-    console.log('Formatted ' + dataCount + ' data after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
-    return graphData;
+    console.log('Grouped ' + dataCount + ' data after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
+    return dataMap;
   }
 
   private getValueAxes(): any[] {
@@ -273,13 +308,13 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     const valueAxes = [];
     let leftIndex = 0;
     let rightIndex = 0;
-    this.event.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(key) > -1) {
+    this.getAllCategoryTypes().forEach((dataCategory) => {
+      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataCategory) > -1) {
         return;
       }
       valueAxes.push({
-        id: key,
-        axisColor: this.genColor(key),
+        id: dataCategory,
+        axisColor: this.genColor(dataCategory),
         axisThickness: 1,
         axisAlpha: 1,
         position: valueAxes.length % 2 === 0 ? 'left' : 'right',
@@ -295,7 +330,40 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     return valueAxes;
   }
 
-  private genColor(key: string) {
+  private getGraphs(): any[] {
+    const t0 = performance.now();
+    const graphs = [];
+    this.getAllCategoryTypes().forEach((dataCategory: string) => {
+      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataCategory) > -1) {
+        return;
+      }
+      graphs.push({
+        id: dataCategory,
+        valueAxis: dataCategory,
+        lineColor: this.genColor(dataCategory),
+        bulletBorderThickness: 3,
+        hideBulletsCount: 1,
+        title: dataCategory,
+        valueField: dataCategory,
+        balloonText: dataCategory + '<br><b><span>[[value]]</span></b>',
+        fillAlphas: 0.1,
+        lineThickness: 1.4,
+        useLineColorForBulletBorder: true,
+        bulletBorderAlpha: 1,
+        bulletColor: '#FFFFFF',
+        negativeLineColor: this.genColor(dataCategory + 'negativeLineColor'),
+        type: 'line',
+        hidden: graphs.length > 0
+      });
+    });
+    console.log('Got graphs after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return graphs;
+  }
+
+   private genColor(key: string) {
     // @todo remove this crappy lib
     switch (key) {
       case DataHeartRate.name: return '#ff3f07';
@@ -308,39 +376,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       case DataSeaLevelPressure.name: return '#b0d8cf';
     }
     return seedColor(key).toHex();
-  }
-
-  private getGraphs(): any[] {
-    const t0 = performance.now();
-    const graphs = [];
-    this.event.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(key) > -1) {
-        return;
-      }
-      graphs.push({
-        id: key,
-        valueAxis: key,
-        lineColor: this.genColor(key),
-        bulletBorderThickness: 3,
-        hideBulletsCount: 1,
-        title: key,
-        valueField: key,
-        balloonText: key + '<br><b><span>[[value]]</span></b>',
-        fillAlphas: 0.1,
-        lineThickness: 1.4,
-        useLineColorForBulletBorder: true,
-        bulletBorderAlpha: 1,
-        bulletColor: '#FFFFFF',
-        negativeLineColor: this.genColor(key + 'negativeLineColor'),
-        type: 'line',
-        hidden: graphs.length > 0
-      });
-    });
-    console.log('Got graphs after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return graphs;
   }
 
   ngOnDestroy() {

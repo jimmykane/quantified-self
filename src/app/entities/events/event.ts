@@ -63,6 +63,7 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]> {
+    console.log('get data');
     return this.getPoints(startDate, endDate, step).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
       point.getData().forEach((data: DataInterface[], key: string) => {
         dataMap.set(key, [...dataMap.get(key) || [], ...data]);
