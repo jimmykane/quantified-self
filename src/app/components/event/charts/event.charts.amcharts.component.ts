@@ -58,7 +58,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   private createChart() {
     const graphs = this.getGraphs();
-    const valueAxes = this.getValueAxes();
+    // const valueAxes = this.getValueAxes();
 
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
@@ -75,7 +75,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         type: 'serial',
         theme: 'light',
         graphs: graphs,
-        valueAxes: valueAxes,
+        // valueAxes: valueAxes,
         startDuration: 1,
         startEffect: 'elastic',
         sequencedAnimation: false,
