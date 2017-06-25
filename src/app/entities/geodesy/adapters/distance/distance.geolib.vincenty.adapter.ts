@@ -5,6 +5,7 @@ import {PointInterface} from '../../../points/point.interface';
 
 export class DistanceVincenty implements DistanceAdapterInterface {
   getDistance(points: PointInterface[]): number {
+    const t0 = performance.now();
     let distance = 0;
     const excludeFirstPointsArray = points.slice(1);
     let pointA = points[0];
@@ -23,6 +24,10 @@ export class DistanceVincenty implements DistanceAdapterInterface {
       distance += GeoLib.getDistance(pointAPositionAsDecimal, pointBPositionAsDecimal);
       pointA = pointB;
     }
+    console.log('Distance Calculated after  ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
     return distance;
   }
 }
