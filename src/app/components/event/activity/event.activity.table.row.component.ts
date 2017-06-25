@@ -1,4 +1,4 @@
-import {Component, Input, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input, OnInit} from '@angular/core';
 import {ActivityInterface} from "../../../entities/activities/activity.interface";
 
 
@@ -6,7 +6,9 @@ import {ActivityInterface} from "../../../entities/activities/activity.interface
   selector: '[app-event-activity-table-row]',
   templateUrl: './event.activity.table.row.component.html',
   styleUrls: ['./event.activity.table.row.component.css'],
-  providers: []
+  providers: [],
+  changeDetection: ChangeDetectionStrategy.OnPush
+
 })
 export class EventActivityTableRowComponent {
   @Input() activity: ActivityInterface;

@@ -1,16 +1,18 @@
-import {Component, Input, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input, ViewChild} from '@angular/core';
 import seedColor from 'seed-color';
 import {ActivityInterface} from '../../../entities/activities/activity.interface';
-import {AgmMap, GoogleMapsAPIWrapper} from "@agm/core";
-import {PointInterface} from "../../../entities/points/point.interface";
-import {EventInterface} from "../../../entities/events/event.interface";
+import {AgmMap, GoogleMapsAPIWrapper} from '@agm/core';
+import {PointInterface} from '../../../entities/points/point.interface';
+import {EventInterface} from '../../../entities/events/event.interface';
 
 
 @Component({
   selector: 'app-event-map',
   templateUrl: './event.map.component.html',
   styleUrls: ['./event.map.component.css'],
-  providers: [GoogleMapsAPIWrapper]
+  providers: [GoogleMapsAPIWrapper],
+  changeDetection: ChangeDetectionStrategy.OnPush
+
 })
 export class EventMapComponent {
   @Input() event: EventInterface[];
