@@ -28,6 +28,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   private allData: Map<string, DataInterface[]>;
   private dataLength = 0;
   private categories = [];
+  private divWidth = 1000;
   private chart: any;
   private waitingForFirstZoom = true;
 
@@ -144,9 +145,9 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       this.waitingForFirstZoom = true;
 
       // @todo should depend on chart width and cache
-      step = step || Math.round(this.getAllDataLength() / 500);
+      step = step || this.getStep(startDate, endDate);
       const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate, step)); // I only need the length @todo
-
+      debugger;
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
@@ -193,7 +194,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds');
             if (!this.waitingForFirstZoom) {
-              this.updateChart(event.startDate, event.endDate, null);
+              this.updateChart(event.startDate, event.endDate);
               // @todo maybe needs first zoom.
               return;
             }
@@ -238,7 +239,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   }
 
-  private getAllData() {
+  private getAllData(): Map<string, DataInterface[]> {
     return this.allData || this.event.getData();
   }
 
@@ -251,6 +252,16 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     return this.categories;
   }
 
+  private getStep(startDate: Date, endDate: Date): number {
+    if (!startDate || !endDate) {
+      return Math.round(this.getAllDataLength() / this.divWidth);
+    }
+    let dataSliceCount = 0;
+    this.event.getData(startDate, endDate).forEach((dataArray, category, eventData) => {
+      dataSliceCount += dataArray.length;
+    });
+    return Math.round(dataSliceCount / this.divWidth);
+  }
 
   private getAllDataLength(): number {
     if (this.dataLength < 1) {
