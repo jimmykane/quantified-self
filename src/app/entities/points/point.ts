@@ -47,7 +47,7 @@ export class Point implements PointInterface {
   }
 
   getDataTypeAverage(dataType: string): number {
-    return this.getDataByType(dataType).reduce((average: number, data, currentIndex, array) => {
+    return (this.getDataByType(dataType) || []).reduce((average: number, data, currentIndex, array) => {
         return average + data.getValue() / array.length
       }, 0);
   }
