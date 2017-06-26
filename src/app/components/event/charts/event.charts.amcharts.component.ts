@@ -41,6 +41,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     console.log('OnChanges');
 
     this.dataMap = this.event.getData();
+    this.categories = [];
 
     this.createChart().then(() => {
       console.log('Chart create promise completed after ' +
@@ -232,7 +233,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private getAllCategoryTypes(): any[] {
-    if (!this.categories.length) {
+    if (this.categories.length < 1) {
       this.getAllData().forEach((dataArray, category, eventData) => {
         this.categories.push(category);
       });
