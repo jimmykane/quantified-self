@@ -40,7 +40,7 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.getEndPoint().getDate();
   }
 
-  getDurationInSeconds (): number {
+  getDurationInSeconds(): number {
     return (+this.getEndDate() - +this.getStartDate()) / 1000;
   }
 
@@ -99,9 +99,15 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   getDataTypeAverage(dataType: string): number {
-    return this.getDataByType(dataType).reduce((average: number, data, currentIndex, array) => {
-        return average + data.getValue() / array.length
-      }, 0);
+    const t0 = performance.now();
+    const averageForDataType = this.getDataByType(dataType).reduce((average: number, data, currentIndex, array) => {
+      return average + data.getValue() / array.length
+    }, 0);
+    console.log('Calculated average for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return averageForDataType;
   }
 
   getStartPoint(): PointInterface {
@@ -121,12 +127,18 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   getDistanceInMeters(): number {
-    return this.getEvent().getGeodesyAdapter().getDistance(this.getPoints());
+    const t0 = performance.now();
+    const distance = this.getEvent().getGeodesyAdapter().getDistance(this.getPoints());
+    console.log('Calculated distance for activity after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return distance;
   }
 
   getLapsDistanceInMeters(): number {
     let lapDistance = 0;
-    for (const lap of this.getLaps()){
+    for (const lap of this.getLaps()) {
       lapDistance += lap.getDistanceInMeters();
     }
     return lapDistance;
