@@ -1,4 +1,4 @@
-import {Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {EventService} from '../../../services/app.event.service';
 import {Router} from '@angular/router';
 import {EventInterface} from '../../../entities/events/event.interface';
@@ -8,6 +8,8 @@ import {EventInterface} from '../../../entities/events/event.interface';
   selector: 'app-event-list',
   templateUrl: './event.list.component.html',
   styleUrls: ['./event.list.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
+
 })
 export class EventListComponent {
   @Input() events: EventInterface[];

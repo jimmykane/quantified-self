@@ -1,4 +1,4 @@
-import {Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {FileService} from '../../../services/app.file.service';
 import {EventService} from '../../../services/app.event.service';
 import {EventExporterTCX} from '../../../entities/events/adapters/exporters/exporter.tcx';
@@ -9,7 +9,9 @@ import {Router} from '@angular/router';
   selector: 'app-event-actions',
   templateUrl: './event.actions.component.html',
   styleUrls: ['./event.actions.component.css'],
-  providers: []
+  providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush
+
 })
 export class EventActionsComponent {
   @Input() event: EventInterface;
