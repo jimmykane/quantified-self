@@ -5,11 +5,13 @@ import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
+import {LapInterface} from "../laps/lap.interface";
 
 export class Event extends IDClass implements EventInterface {
 
   private name: string;
   private activities: ActivityInterface[] = [];
+  private laps: LapInterface[] = [];
   private geodesyAdapter: GeodesyAdapterInterface;
 
   constructor(geodesyAdapter?: GeodesyAdapterInterface) {
@@ -54,6 +56,14 @@ export class Event extends IDClass implements EventInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
       return activityA.getStartDate() < activityB.getStartDate() ? activityB : activityA ;
     });
+  }
+
+  addLap(lap: LapInterface) {
+    this.laps.push(lap);
+  }
+
+  getLaps(): LapInterface[] {
+    return this.laps;
   }
 
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
@@ -113,7 +123,12 @@ export class Event extends IDClass implements EventInterface {
       activities: this.getActivities().reduce((jsonActivitiesArray: any[], activity: ActivityInterface) => {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;
+      }, []),
+      laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
+        jsonLapsArray.push(lap.toJSON());
+        return jsonLapsArray;
       }, [])
+
     };
   }
 }

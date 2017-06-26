@@ -23,7 +23,6 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getDataTypeAverage(dataType: string): number;
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
-  addLap(lap: LapInterface);
   getLaps(): LapInterface[];
   getDistanceInMeters(): number;
   getLapsDistanceInMeters(): number;

@@ -33,7 +33,7 @@ export class EventImporterTCX {
 
       // Setup the laps
       for (const lapElement of <any>activityElement.getElementsByTagName('Lap')) {
-        const lap = new Lap(activity);
+        const lap = new Lap(event);
         lap.setStartDate(new Date(lapElement.getAttribute('StartTime')));
         lap.setEndDate(
           new Date(lap.getStartDate().getTime() + 1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent))

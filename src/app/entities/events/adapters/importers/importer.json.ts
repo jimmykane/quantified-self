@@ -22,25 +22,28 @@ export class EventImporterJSON {
     const event = new Event();
     event.setID(eventObject.id);
     event.setName(eventObject.name);
-    for (const activityObject of eventObject.activities){
+
+    for (const lapObject of eventObject.laps) {
+      const lap = new Lap(event);
+      lap.setStartDate(new Date(lapObject.startDate));
+      lap.setEndDate(new Date(lapObject.endDate));
+      lap.setCalories(lapObject.calories);
+      lap.setIntensity(lapObject.intensity);
+      lap.setTriggerMethod(lapObject.triggerMethod);
+    }
+
+    for (const activityObject of eventObject.activities) {
       const activity = new Activity(event);
       activity.setType(activityObject.type);
-      for (const creatorObject of activityObject.creators){
+      for (const creatorObject of activityObject.creators) {
         const creator = new Creator(activity);
         creator.setName(creatorObject.name);
       }
-      for (const lapObject of activityObject.laps) {
-        const lap = new Lap(activity);
-        lap.setStartDate(new Date(lapObject.startDate));
-        lap.setEndDate(new Date(lapObject.endDate));
-        lap.setCalories(lapObject.calories);
-        lap.setIntensity(lapObject.intensity);
-        lap.setTriggerMethod(lapObject.triggerMethod);
-      }
-      for (const pointObject of activityObject.points){
+
+      for (const pointObject of activityObject.points) {
         const point = new Point(new Date(pointObject.date));
         point.setActivity(activity);
-        for (const dataObject of pointObject.data){
+        for (const dataObject of pointObject.data) {
           switch (dataObject.type) {
             case 'DataAltitude': {
               new DataAltitude(point, dataObject.value);

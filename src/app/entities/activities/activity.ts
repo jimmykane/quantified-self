@@ -11,7 +11,6 @@ export class Activity extends IDClass implements ActivityInterface {
   private event: EventInterface;
   private type: string;
   private creators: CreatorInterface[] = [];
-  private laps: LapInterface[] = [];
   private points: Map<string, PointInterface> = new Map<string, PointInterface>();
 
   constructor(event: EventInterface) {
@@ -139,12 +138,14 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.getPoints()[this.getPoints().length - 1];
   }
 
-  addLap(lap: LapInterface) {
-    this.laps.push(lap);
-  }
-
   getLaps(): LapInterface[] {
-    return this.laps;
+    const laps: LapInterface[] = [];
+    for (const lap of this.event.getLaps()) {
+      if (lap.getStartDate().getTime() >= this.getStartDate().getTime() && lap.getEndDate().getTime() < this.getEndDate().getTime()) {
+        laps.push(lap);
+      }
+    }
+    return laps;
   }
 
   getDistanceInMeters(): number {
@@ -172,10 +173,6 @@ export class Activity extends IDClass implements ActivityInterface {
       creators: this.getCreators().reduce((jsonCreatorsArray: any[], creator: CreatorInterface) => {
         jsonCreatorsArray.push(creator.toJSON());
         return jsonCreatorsArray;
-      }, []),
-      laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
-        jsonLapsArray.push(lap.toJSON());
-        return jsonLapsArray;
       }, []),
       points: this.getPoints().reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());

@@ -1,10 +1,10 @@
-import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
+import {EventInterface} from '../events/event.interface';
 
 export interface LapInterface extends SerializableClassInterface {
 
-  getActivity(): ActivityInterface;
+  getEvent(): EventInterface;
 
   getPoints(): PointInterface[];
 

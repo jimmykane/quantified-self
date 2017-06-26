@@ -42,7 +42,7 @@ export class EventImporterFIT {
           creator.setName(data.file_id.manufacturer);
 
           for (const sessionLap of session.laps) {
-            const lap = new Lap(activity);
+            const lap = new Lap(event);
             lap.setStartDate(sessionLap.start_time);
             lap.setEndDate(sessionLap.timestamp);
             for (const lapRecord of sessionLap.records) {
