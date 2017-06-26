@@ -86,23 +86,30 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]> {
-     const t0 = performance.now();
-     const data = this.getPoints(startDate, endDate, step).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-      point.getData().forEach((pointData: DataInterface[], key: string) => {
-        dataMap.set(key, [...dataMap.get(key) || [], ...pointData]);
-      });
-      return dataMap;
-    }, new Map<string, DataInterface[]>());
-      console.log('Retrieved all data after ' +
+    const t0 = performance.now();
+    const data = this.getPoints(startDate, endDate, step)
+      .reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+        point.getData().forEach((pointData: DataInterface[], key: string) => {
+          dataMap.set(key, [...dataMap.get(key) || [], ...pointData]);
+        });
+        return dataMap;
+      }, new Map<string, DataInterface[]>());
+    console.log('Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
-     return data;
+    return data;
   }
 
-  getDataByType(dataType: string): DataInterface[] {
+  getDataByType(dataType?: string, startDate?: Date, endDate?: Date, step?: number): DataInterface[] {
     const t0 = performance.now();
-    const data = this.getData().get(dataType) || [];
+    const data = this.getPoints(startDate, endDate, step)
+      .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
+        point.getDataByType(dataType).forEach((pointData: DataInterface) => {
+          dataArray.push(pointData);
+        });
+        return dataArray;
+      },  []);
     console.log('Retrieved data for  ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
