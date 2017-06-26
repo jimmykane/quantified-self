@@ -94,7 +94,7 @@ export class Activity extends IDClass implements ActivityInterface {
         });
         return dataMap;
       }, new Map<string, DataInterface[]>());
-    console.log('Retrieved all data after ' +
+    console.log('Activity: Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -110,7 +110,7 @@ export class Activity extends IDClass implements ActivityInterface {
         });
         return dataArray;
       },  []);
-    console.log('Retrieved data for  ' + dataType + ' after ' +
+    console.log('Activity: Retrieved data for  ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -124,7 +124,7 @@ export class Activity extends IDClass implements ActivityInterface {
     this.getPoints().forEach((point) => {
       averageForDataType += point.getDataTypeAverage(dataType)
     });
-    console.log('Calculated average for ' + dataType + ' after ' +
+    console.log('Activity: Calculated average for ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );

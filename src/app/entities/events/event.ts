@@ -63,17 +63,35 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]> {
-    console.log('get data');
-    return this.getPoints(startDate, endDate, step).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-      point.getData().forEach((data: DataInterface[], key: string) => {
-        dataMap.set(key, [...dataMap.get(key) || [], ...data]);
-      });
-      return dataMap;
-    }, new Map<string, DataInterface[]>());
+    const t0 = performance.now();
+    const data = this.getPoints(startDate, endDate, step)
+      .reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+        point.getData().forEach((pointData: DataInterface[], key: string) => {
+          dataMap.set(key, [...dataMap.get(key) || [], ...pointData]);
+        });
+        return dataMap;
+      }, new Map<string, DataInterface[]>());
+    console.log('Event: Retrieved all data after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return data;
   }
 
-  getDataByType(dataType: string): DataInterface[] {
-    return this.getData().get(dataType);
+  getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number): DataInterface[] {
+    const t0 = performance.now();
+    const data = this.getPoints(startDate, endDate, step)
+      .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
+        point.getDataByType(dataType).forEach((pointData: DataInterface) => {
+          dataArray.push(pointData);
+        });
+        return dataArray;
+      },  []);
+    console.log('Event: Retrieved data for  ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return data;
   }
 
   getDistanceInMeters(): number {
