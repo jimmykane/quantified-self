@@ -24,7 +24,6 @@ export class Lap implements LapInterface {
   getPoints(): PointInterface[] {
     const lapPoints: PointInterface[] = [];
     for (const point of this.event.getPoints()) {
-      // Attention, some points in TCX do not follow this rule and seem to loose
       if (point.getDate().getTime() >= this.getStartDate().getTime() && point.getDate().getTime() < this.getEndDate().getTime()) {
         lapPoints.push(point);
       }
