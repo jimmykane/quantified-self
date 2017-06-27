@@ -84,6 +84,15 @@ export class Activity extends IDClass implements ActivityInterface {
     return points;
   }
 
+  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
+    return this.getPoints(startDate, endDate, step).reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
+      if (point.getPosition()) {
+        pointsWithPosition.push(point);
+      }
+      return pointsWithPosition;
+    }, []);
+  }
+
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]> {
     const t0 = performance.now();
     const data = this.getPoints(startDate, endDate, step)
