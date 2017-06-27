@@ -18,7 +18,6 @@ import {LocalStorageService} from './services/app.local.storage.service';
 import {EventActionsComponent} from 'app/components/event/actions/event.actions.component';
 import {MomentModule} from 'angular2-moment';
 import {ChartsModule} from 'ng2-charts';
-import {EventChartsChartJSComponent} from './components/event/charts/event.charts.chartjs.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventAmChartsComponent} from './components/event/charts/event.charts.amcharts.component';
@@ -46,7 +45,6 @@ import {EventAmChartsComponent} from './components/event/charts/event.charts.amc
     EventActivityTableRowComponent,
     EventActionsComponent,
     EventListComponent,
-    EventChartsChartJSComponent,
     EventAmChartsComponent,
     AboutComponent
   ],
