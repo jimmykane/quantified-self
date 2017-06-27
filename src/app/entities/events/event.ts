@@ -69,7 +69,7 @@ export class Event extends IDClass implements EventInterface {
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
     const t0 = performance.now();
     const points =  this.getActivities().reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
-      return [...points, ...activity.getPoints(startDate, endDate, step)];
+      return [...pointsArray, ...activity.getPoints(startDate, endDate, step)];
     }, []);
     console.log('Event: Retrieved all points after ' +
       (performance.now() - t0) + ' milliseconds or ' +
@@ -82,8 +82,14 @@ export class Event extends IDClass implements EventInterface {
     const t0 = performance.now();
     const data = this.getPoints(startDate, endDate, step)
       .reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-        point.getData().forEach((pointData: DataInterface[], key: string) => {
-          dataMap.set(key, [...dataMap.get(key) || [], ...pointData]);
+        point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
+          const existingDataArray = dataMap.get(key) || [];
+          if (!existingDataArray.length) {
+            dataMap.set(key, existingDataArray);
+          }
+          pointDataArray.forEach((pointData) => {
+            existingDataArray.push(pointData )
+          });
         });
         return dataMap;
       }, new Map<string, DataInterface[]>());

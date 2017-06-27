@@ -88,8 +88,14 @@ export class Activity extends IDClass implements ActivityInterface {
     const t0 = performance.now();
     const data = this.getPoints(startDate, endDate, step)
       .reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-        point.getData().forEach((pointData: DataInterface[], key: string) => {
-          dataMap.set(key, [...dataMap.get(key) || [], ...pointData]);
+        point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
+          const existingDataArray = dataMap.get(key) || [];
+          if (!existingDataArray.length) {
+            dataMap.set(key, existingDataArray);
+          }
+          pointDataArray.forEach((pointData) => {
+            existingDataArray.push(pointData)
+          });
         });
         return dataMap;
       }, new Map<string, DataInterface[]>());
