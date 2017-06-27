@@ -10,7 +10,7 @@ import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {EventComponent} from './components/event/event.component';
 import {AboutComponent} from './components/about/about.component';
-import {EventActivityTableComponent} from './components/event/activity/event.activity.table.component';
+import {EventActivitiesTableComponent} from './components/event/activity/event.activity.table.component';
 import {EventActivityTableRowComponent} from './components/event/activity/event.activity.table.row.component';
 import {EventMapComponent} from 'app/components/event/map/event.map.component';
 import {EventListComponent} from './components/event/list/event.list.component';
@@ -21,6 +21,8 @@ import {ChartsModule} from 'ng2-charts';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventAmChartsComponent} from './components/event/charts/event.charts.amcharts.component';
+import {EventLapsTableComponent} from "./components/event/laps/event.laps.table.component";
+import {EventLapTableRowComponent} from "./components/event/laps/event.laps.table.row.component";
 
 @NgModule({
   imports: [
@@ -41,10 +43,12 @@ import {EventAmChartsComponent} from './components/event/charts/event.charts.amc
     UploadComponent,
     EventComponent,
     EventMapComponent,
-    EventActivityTableComponent,
+    EventActivitiesTableComponent,
     EventActivityTableRowComponent,
     EventActionsComponent,
     EventListComponent,
+    EventLapsTableComponent,
+    EventLapTableRowComponent,
     EventAmChartsComponent,
     AboutComponent
   ],
