@@ -26,7 +26,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   @Input() event: EventInterface;
 
   private dataMap: Map<string, DataInterface[]>;
-  private dataLength = 0;
   private categories = [];
   private chart: any;
 
@@ -38,10 +37,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   ngOnChanges(): void {
     const t0 = performance.now();
-    console.log('OnChanges');
-
-    this.dataMap = this.event.getData();
-    this.categories = [];
 
     this.createChart().then(() => {
       console.log('Chart create promise completed after ' +
@@ -58,6 +53,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private createChart() {
+    this.categories = [];
     const graphs = this.getGraphs();
     // const valueAxes = this.getValueAxes();
 
@@ -140,8 +136,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   private updateChart(startDate?: Date, endDate?: Date, step?: number, prevStep?: number): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
-      // @todo should depend on chart width and cache
-      step = step;
+
       const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate, step)); // I only need the length @todo
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
@@ -239,15 +234,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       });
     }
     return this.categories;
-  }
-
-  private getAllDataLength(): number {
-    if (this.dataLength < 1) {
-      this.getAllData().forEach((dataArray, category, eventData) => {
-        this.dataLength += dataArray.length;
-      });
-    }
-    return this.dataLength;
   }
 
   private getDataProvider(dataMap: Map<string, any>): any[] {
