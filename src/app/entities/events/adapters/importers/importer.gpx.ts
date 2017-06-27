@@ -50,6 +50,9 @@ export class EventImporterGPX {
       point.setActivity(activity);
       new DataLatitudeDegrees(point, pointElement.getAttribute('lat'));
       new DataLongitudeDegrees(point, pointElement.getAttribute('lon'));
+      if (pointElement.getElementsByTagName('ele')[0]) {
+        new DataAltitude(point, pointElement.getElementsByTagName('ele')[0].textContent);
+      }
       // Go over the extensions
       if (pointElement.getElementsByTagName('extensions')[0]) {
         for (const dataElement of <any>pointElement.getElementsByTagName('extensions')[0].children) {
@@ -86,7 +89,15 @@ export class EventImporterGPX {
               for (const dataExtensionElement of <any>dataElement.children) {
                 switch (dataExtensionElement.tagName) {
                   case 'gpxtpx:hr': {
-                    new DataHeartRate(point, dataElement.textContent);
+                    new DataHeartRate(point, dataExtensionElement.textContent);
+                    break;
+                  }
+                  case 'gpxtpx:cad': {
+                    new DataCadence(point, dataExtensionElement.textContent);
+                    break;
+                  }
+                  case 'gpxtpx:atemp': {
+                    new DataTemperature(point, dataExtensionElement.textContent);
                     break;
                   }
                 }
