@@ -326,7 +326,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         useLineColorForBulletBorder: true,
         bulletBorderAlpha: 1,
         bulletColor: '#FFFFFF',
-        negativeLineColor: this.genColor(dataCategory + 'negativeLineColor'),
         type: 'line',
         hidden: graphs.length > 0
       });
