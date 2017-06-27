@@ -22,13 +22,11 @@ export class Lap implements LapInterface {
   }
 
   getPoints(): PointInterface[] {
-    const lapPoints: PointInterface[] = [];
-    for (const point of this.event.getPoints()) {
-      if (point.getDate().getTime() >= this.getStartDate().getTime() && point.getDate().getTime() < this.getEndDate().getTime()) {
-        lapPoints.push(point);
-      }
-    }
-    return lapPoints;
+    return this.getEvent().getPoints(this.getStartDate(), this.getEndDate());
+  }
+
+  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
+    return this.getEvent().getPointsWithPosition(startDate, endDate, step);
   }
 
   setStartDate(date: Date) {
@@ -48,7 +46,7 @@ export class Lap implements LapInterface {
   }
 
   getDistanceInMeters(): number {
-    return this.getEvent().getGeodesyAdapter().getDistance(this.getPoints());
+    return this.getEvent().getGeodesyAdapter().getDistance(this.getPointsWithPosition());
   }
 
   getTotalTimeInSeconds(): number {

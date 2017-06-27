@@ -165,7 +165,7 @@ export class Activity extends IDClass implements ActivityInterface {
 
   getDistanceInMeters(): number {
     const t0 = performance.now();
-    const distance = this.getEvent().getGeodesyAdapter().getDistance(this.getPoints());
+    const distance = this.getEvent().getGeodesyAdapter().getDistance(this.getPointsWithPosition());
     console.log('Calculated distance for activity after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'

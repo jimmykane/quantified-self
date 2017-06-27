@@ -7,6 +7,8 @@ export interface LapInterface extends SerializableClassInterface {
   getEvent(): EventInterface;
 
   getPoints(): PointInterface[];
+  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
+
 
   setStartDate(date: Date);
   getStartDate(): Date;

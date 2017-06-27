@@ -4,15 +4,12 @@ import {DistanceAdapterInterface} from './distance.adapter.interface';
 import {PointInterface} from '../../../points/point.interface';
 
 export class DistanceVincenty implements DistanceAdapterInterface {
-  getDistance(points: PointInterface[]): number {
+  getDistance(points: PointInterface[], accuracyInMeters?: number): number {
     const t0 = performance.now();
     let distance = 0;
     const excludeFirstPointsArray = points.slice(1);
     let pointA = points[0];
     for (const pointB of excludeFirstPointsArray) {
-      if (!pointA.getPosition() || !pointB.getPosition()) {
-        continue;
-      }
       const pointAPositionAsDecimal: PositionAsDecimal = {
         longitude: pointA.getPosition().longitudeDegrees,
         latitude: pointA.getPosition().latitudeDegrees,
@@ -21,10 +18,10 @@ export class DistanceVincenty implements DistanceAdapterInterface {
         longitude: pointB.getPosition().longitudeDegrees,
         latitude: pointB.getPosition().latitudeDegrees,
       };
-      distance += GeoLib.getDistance(pointAPositionAsDecimal, pointBPositionAsDecimal);
+      distance += GeoLib.getDistance(pointAPositionAsDecimal, pointBPositionAsDecimal, accuracyInMeters);
       pointA = pointB;
     }
-    console.log('Distance Calculated after  ' +
+    console.log('Distance Vincenty Calculated after  ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
