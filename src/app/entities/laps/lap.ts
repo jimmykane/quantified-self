@@ -26,6 +26,8 @@ export class Lap implements LapInterface {
   }
 
   getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
+    startDate = startDate || this.getStartDate();
+    endDate = endDate || this.getEndDate();
     return this.getEvent().getPointsWithPosition(startDate, endDate, step);
   }
 
