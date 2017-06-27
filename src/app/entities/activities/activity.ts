@@ -158,14 +158,6 @@ export class Activity extends IDClass implements ActivityInterface {
     return distance;
   }
 
-  getLapsDistanceInMeters(): number {
-    let lapDistance = 0;
-    for (const lap of this.getLaps()) {
-      lapDistance += lap.getDistanceInMeters();
-    }
-    return lapDistance;
-  }
-
   toJSON(): any {
     return {
       id: this.getID(),

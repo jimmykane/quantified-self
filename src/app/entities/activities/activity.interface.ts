@@ -25,5 +25,4 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getEndPoint(): PointInterface;
   getLaps(): LapInterface[];
   getDistanceInMeters(): number;
-  getLapsDistanceInMeters(): number;
 }
