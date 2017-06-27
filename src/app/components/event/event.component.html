@@ -1,7 +1,7 @@
 <h3>{{ event.getName() }}</h3>
+<hr/>
 <app-event-map [event]="event"></app-event-map>
-<hr/>
 <app-event-activities-table [event]="event"></app-event-activities-table>
-<app-event-charts-am [event]="event"></app-event-charts-am>
-<app-event-laps-table [event]="event"></app-event-laps-table>
 <hr/>
+<app-event-charts-am [event]="event"></app-event-charts-am>
+<app-event-laps-table [event]="event" *ngIf="event.getLaps().length"></app-event-laps-table>
