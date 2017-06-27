@@ -23,14 +23,14 @@
         [isLast]="isLast"
         [count]="count"
         [activity]="activity"></tr>
-    <tr *ngIf="event.getActivities().length > 1">
-      <td colspan="6"></td>
-      <td >
-        <div class="d-flex w-100 justify-content-between">
-          <span class="btn btn-sm btn-outline-primary" (click)="mergeAllActivities(event)">Merge Activities</span>
-        </div>
-      </td>
-    </tr>
     </tbody>
   </table>
+</div>
+
+<div *ngIf="event.getActivities().length > 1">
+  <hr/>
+  <button
+    class="btn btn-sm btn-outline-primary"
+    (click)="mergeAllActivities(event)">Merge Activities
+  </button>
 </div>
