@@ -28,6 +28,12 @@ export class EventImporterGPX {
     const creator = new Creator(activity);
     creator.setName(xml.getElementsByTagName('gpx')[0].getAttribute('creator'));
     for (const lapElement of <any>xml.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'lap')) {
+      // If the lap does not have any elapsed time or distance dont add it
+      if (Number(
+          lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'elapsedTime')[0].textContent
+        ) === 0) {
+        continue;
+      }
       const lap = new Lap(event);
       lap.setStartDate(new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent));
       lap.setEndDate(

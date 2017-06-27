@@ -33,6 +33,10 @@ export class EventImporterTCX {
 
       // Setup the laps
       for (const lapElement of <any>activityElement.getElementsByTagName('Lap')) {
+        // If the lap does not have any elapsed time or distance dont add it
+        if (Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent) === 0) {
+          continue;
+        }
         const lap = new Lap(event);
         lap.setStartDate(new Date(lapElement.getAttribute('StartTime')));
         lap.setEndDate(
