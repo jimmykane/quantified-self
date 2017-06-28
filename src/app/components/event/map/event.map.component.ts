@@ -1,6 +1,5 @@
 import {ChangeDetectionStrategy, Component, Input, ViewChild} from '@angular/core';
 import seedColor from 'seed-color';
-import {ActivityInterface} from '../../../entities/activities/activity.interface';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../entities/points/point.interface';
 import {EventInterface} from '../../../entities/events/event.interface';
@@ -23,6 +22,9 @@ export class EventMapComponent {
 
   fitBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.event.getPointsWithPosition();
+    if (!pointsWithPosition.length) {
+      return;
+    }
     const mostEast = pointsWithPosition.reduce((acc: PointInterface, point: PointInterface) => {
       return (acc.getPosition().longitudeDegrees < point.getPosition().longitudeDegrees) ? point : acc;
     });
