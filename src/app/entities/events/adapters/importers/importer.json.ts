@@ -14,6 +14,10 @@ import {DataTemperature} from '../../../data/data.temperature';
 import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
 import {DataPower} from '../../../data/data.power';
+import {DataRespirationRate} from "../../../data/data.respiration-rate";
+import {DataEHPE} from "../../../data/data.ehpe";
+import {DataAbsolutePressure} from "../../../data/data.absolute-pressure";
+import {DataGPSAltitude} from "../../../data/data.gps-altitude";
 
 export class EventImporterJSON {
 
@@ -44,9 +48,26 @@ export class EventImporterJSON {
         const point = new Point(new Date(pointObject.date));
         point.setActivity(activity);
         for (const dataObject of pointObject.data) {
+          // @todo make this dynamic
           switch (dataObject.type) {
             case 'DataAltitude': {
               new DataAltitude(point, dataObject.value);
+              break;
+            }
+            case 'DataGPSAltitude': {
+              new DataGPSAltitude(point, dataObject.value);
+              break;
+            }
+            case 'DataRespirationRate': {
+              new DataRespirationRate(point, dataObject.value);
+              break;
+            }
+            case 'DataEHPE': {
+              new DataEHPE(point, dataObject.value);
+              break;
+            }
+            case 'DataAbsolutePressure': {
+              new DataAbsolutePressure(point, dataObject.value);
               break;
             }
             case 'DataCadence': {

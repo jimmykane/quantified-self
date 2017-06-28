@@ -13,16 +13,113 @@ import {DataSeaLevelPressure} from '../../../data/data.sea-level-pressure';
 import {DataTemperature} from '../../../data/data.temperature';
 import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
+import {DataRespirationRate} from '../../../data/data.respiration-rate';
+import {PointInterface} from '../../../points/point.interface';
+import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
+import {DataPower} from '../../../data/data.power';
+import {DataEHPE} from '../../../data/data.ehpe';
+import {DataGPSAltitude} from '../../../data/data.gps-altitude';
 
 export class EventImporterSML {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
 
     const event = new Event();
+    const activity = new Activity(event);
 
 
     const laps = this.getLapsArray(jsonString);
-    throw ('Not Implemented');
+    for (const lap of laps) {
+      const eventLap = new Lap(event);
+      eventLap.setStartDate(lap.startDate);
+      eventLap.setEndDate(lap.endDate);
+    }
+
+    JSON.parse(jsonString)['Samples'].forEach((jsonSampleEntry) => {
+      const date = new Date(jsonSampleEntry['TimeISO8601']);
+      const suuntoSML = JSON.parse(jsonSampleEntry['Attributes'])['suunto/sml'];
+
+      if (suuntoSML['R-R'] && suuntoSML['R-R']['Data']) {
+        const point = new Point(date);
+        point.setActivity(activity);
+        new DataRespirationRate(point, suuntoSML['R-R']['Data']);
+        return;
+      }
+
+      if (suuntoSML['Sample'] && !suuntoSML['Sample']['Events']) {
+        const point = new Point(date);
+        point.setActivity(activity);
+        Object.keys(suuntoSML['Sample']).forEach((key) => {
+          if (!suuntoSML['Sample'][key]) {
+            return;
+          }
+          switch (key) {
+            case 'EHPE': {
+              new DataEHPE(point, Number(suuntoSML['Sample'][key]));
+              break;
+            }
+            case 'Latitude': {
+              new DataLatitudeDegrees(point, Number(suuntoSML['Sample'][key]) * 100);
+              break;
+            }
+            case 'Longitude': {
+              new DataLongitudeDegrees(point, Number(suuntoSML['Sample'][key]) * 100);
+              break;
+            }
+            case 'AbsPressure': {
+              new DataAbsolutePressure(point, Number(suuntoSML['Sample'][key]) / 1000);
+              break;
+            }
+            case 'Altitude': {
+              new DataAltitude(point, suuntoSML['Sample'][key]);
+              break;
+
+            }
+            case 'GPSAltitude': {
+              new DataGPSAltitude(point, suuntoSML['Sample'][key]);
+              break;
+
+            }
+            case 'Cadence': {
+              new DataCadence(point, suuntoSML['Sample'][key]);
+              break;
+
+            }
+            case 'HR': {
+              new DataHeartRate(point, suuntoSML['Sample'][key]);
+              break;
+
+            }
+            case 'Power': {
+              new DataPower(point, suuntoSML['Sample'][key]);
+              break;
+
+            }
+            case 'SeaLevelPressure': {
+              new DataSeaLevelPressure(point, Number(suuntoSML['Sample'][key]) / 1000);
+              break;
+
+            }
+            case 'Speed': {
+              new DataSpeed(point, suuntoSML['Sample'][key]);
+              break;
+
+            }
+            case 'Temperature': {
+              new DataTemperature(point, suuntoSML['Sample'][key] - 273.15); // convert to celsius from kelvin
+              break;
+
+            }
+            case 'VerticalSpeed': {
+              new DataVerticalSpeed(point, suuntoSML['Sample'][key]);
+              break;
+            }
+          }
+        });
+      }
+    });
+    debugger;
+    return event;
   }
 
   private static getLapsArray(jsonString): any[] {
