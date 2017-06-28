@@ -33,6 +33,16 @@ export class UploadComponent {
             });
         } else if (input.files[index].name.split('.').pop() === 'fit') {
           this.readAsBinary(input.files[index]);
+        } else if (input.files[index].name.split('.').pop() === 'json') {
+          this.eventService
+            .createEventFromJSONSMLString(fileReader.result)
+            .then((newEvent: EventInterface) => {
+              newEvent.setName(input.files[index].name);
+              this.eventService.saveEvent(newEvent);
+            })
+            .catch((error) => {
+              console.error('Could not load event from file' + input.files[index].name, error);
+            });
         }
       };
       // Read it
