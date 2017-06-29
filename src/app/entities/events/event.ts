@@ -6,6 +6,8 @@ import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
+import { Log, Level } from 'ng2-logger'
+
 
 export class Event extends IDClass implements EventInterface {
 
@@ -13,6 +15,7 @@ export class Event extends IDClass implements EventInterface {
   private activities: ActivityInterface[] = [];
   private laps: LapInterface[] = [];
   private geodesyAdapter: GeodesyAdapterInterface;
+  private log = Log.create('Event');
 
   constructor(geodesyAdapter?: GeodesyAdapterInterface) {
     super();
@@ -28,7 +31,7 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getName() {
-    console.log('event name');
+    this.log.d('event name');
     return this.name;
   }
 
@@ -71,7 +74,7 @@ export class Event extends IDClass implements EventInterface {
     const points =  (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return [...pointsArray, ...activity.getPoints(startDate, endDate, step)];
     }, []);
-    console.log('Event: Retrieved all points after ' +
+    this.log.d('Retrieved all points after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -102,7 +105,7 @@ export class Event extends IDClass implements EventInterface {
         });
         return dataMap;
       }, new Map<string, DataInterface[]>());
-    console.log('Event: Retrieved all data after ' +
+    this.log.d('Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -118,7 +121,7 @@ export class Event extends IDClass implements EventInterface {
         });
         return dataArray;
       },  []);
-    console.log('Event: Retrieved data for  ' + dataType + ' after ' +
+    this.log.d('Retrieved data for  ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -136,7 +139,7 @@ export class Event extends IDClass implements EventInterface {
       count++;
       return average;
     }, 0);
-    console.log('Activity: Calculated average for ' + dataType + ' after ' +
+    this.log.d('Activity: Calculated average for ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
