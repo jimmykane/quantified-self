@@ -19,7 +19,7 @@ export class Point implements PointInterface {
 
   setActivity(activity: ActivityInterface) {
     this.activity = activity;
-    this.getActivity().addPoint(this); // @todo check for conflicts
+    this.getActivity().addPoint(this);
   }
 
   getActivity(): ActivityInterface {
@@ -47,7 +47,10 @@ export class Point implements PointInterface {
   }
 
   getDataTypeAverage(dataType: string): number {
-    return (this.getDataByType(dataType) || []).reduce((average: number, data, currentIndex, array) => {
+    if (!this.getDataByType(dataType)) {
+      return void 0;
+    }
+    return (this.getDataByType(dataType)).reduce((average: number, data, currentIndex, array) => {
         return average + data.getValue() / array.length
       }, 0);
   }
@@ -55,7 +58,7 @@ export class Point implements PointInterface {
   getPosition(): DataPositionInterface {
     const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.name);
     const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.name);
-    if (!dataLongitudeDegrees || !dataLatitudeDegrees){
+    if (!dataLongitudeDegrees || !dataLatitudeDegrees) {
       return;
     }
     this.position = {
