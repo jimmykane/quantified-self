@@ -1,10 +1,10 @@
   <td class="text-center">{{ activity.getStartDate().toISOString() | date:'short' }}</td>
   <td class="text-center">{{ activity.getType() || '?' }}</td>
-  <td class="text-center">{{ (event.getDistanceInMeters({activity:activity}) / 1000).toFixed(1) }} km</td>
+  <td class="text-center">{{ (event.getDistanceInMeters({activities:[activity]}) / 1000).toFixed(1) }} km</td>
   <td class="text-center">{{ activity.getDurationInSeconds() | amDuration:'seconds' }}</td>
-  <td class="text-center">{{ ((event.getDistanceInMeters({activity:activity}) / 1000) / (activity.getDurationInSeconds() / 60 / 60) || 0).toFixed(1) }} km/h</td>
-  <td class="text-center">{{ (activity.getDurationInSeconds() * 1000) / (event.getDistanceInMeters({activity:activity}) / 1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} min/km</td>
-  <td class="text-center">{{ activity.getDataTypeAverage('DataHeartRate').toFixed(0) }}</td>
-  <td class="text-center">{{ activity.getDataTypeAverage('DataPower').toFixed(0) }}</td>
-  <td class="text-center">{{ activity.getDataTypeAverage('DataCadence').toFixed(0) }}</td>
-  <td class="text-center">{{ activity.getDataTypeAverage('DataTemperature').toFixed(0) }}</td>
+  <td class="text-center">{{ ((event.getDistanceInMeters({activities:[activity]}) / 1000) / (activity.getDurationInSeconds() / 60 / 60) || 0).toFixed(1) }} km/h</td>
+  <td class="text-center">{{ (activity.getDurationInSeconds() * 1000) / (event.getDistanceInMeters({activities:[activity]}) / 1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} min/km</td>
+  <td class="text-center">{{ event.getDataTypeAverage({dataType:'DataHeartRate', activities:[activity]}).toFixed(0) }}</td>
+  <td class="text-center">{{ event.getDataTypeAverage('DataPower').toFixed(0) }}</td>
+  <td class="text-center">{{ event.getDataTypeAverage('DataCadence').toFixed(0) }}</td>
+  <td class="text-center">{{ event.getDataTypeAverage('DataTemperature').toFixed(0) }}</td>

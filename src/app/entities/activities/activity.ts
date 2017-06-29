@@ -47,8 +47,12 @@ export class Activity extends IDClass implements ActivityInterface {
   addPoint(point: PointInterface) {
     const existingPoint = this.points.get(point.getDate().toISOString());
     if (existingPoint) {
-      // Noop here for now @todo solve this
-      return;
+      console.warn('Point collision detected for date: ' + point.getDate().toISOString());
+      existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+        dataArray.forEach((data: DataInterface) => {
+          point.addData(data);
+        });
+      });
     }
     this.points.set(point.getDate().toISOString(), point);
   }
@@ -75,24 +79,6 @@ export class Activity extends IDClass implements ActivityInterface {
       }
     });
     return points;
-  }
-
-  getDataTypeAverage(dataType: string, startDate?: Date, endDate?: Date, step?: number): number {
-    const t0 = performance.now();
-    let count = 1;
-    const averageForDataType = this.getPoints(startDate, endDate, step).reduce((average: number, point: PointInterface) => {
-      if (!point.getDataTypeAverage(dataType)) {
-        return average;
-      }
-      average += point.getDataTypeAverage(dataType);
-      count++;
-      return average;
-    }, 0);
-    console.log('Activity: Calculated average for ' + dataType + ' after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return averageForDataType / count;
   }
 
   getStartPoint(): PointInterface {

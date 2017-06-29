@@ -109,9 +109,9 @@ export class Event extends IDClass implements EventInterface {
     return data;
   }
 
-  getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number): DataInterface[] {
+  getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): DataInterface[] {
     const t0 = performance.now();
-    const data = this.getPoints(startDate, endDate, step)
+    const data = this.getPoints(startDate, endDate, step, activities)
       .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
         point.getDataByType(dataType).forEach((pointData: DataInterface) => {
           dataArray.push(pointData);
@@ -125,8 +125,26 @@ export class Event extends IDClass implements EventInterface {
     return data;
   }
 
-  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number): number {
-    return this.getGeodesyAdapter().getDistance(this.getPointsWithPosition(startDate, endDate, step));
+  getDataTypeAverage(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number {
+    const t0 = performance.now();
+    let count = 1;
+    const averageForDataType = this.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
+      if (!point.getDataTypeAverage(dataType)) {
+        return average;
+      }
+      average += point.getDataTypeAverage(dataType);
+      count++;
+      return average;
+    }, 0);
+    console.log('Activity: Calculated average for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return averageForDataType / count;
+  }
+
+  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number {
+    return this.getGeodesyAdapter().getDistance(this.getPointsWithPosition(startDate, endDate, step, activities));
   }
 
   getTotalDurationInSeconds(): number {

@@ -18,10 +18,11 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getLastActivity(): ActivityInterface;
   getLaps(): LapInterface[];
   addLap(lap: Lap);
-  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
+  getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
   getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]>;
   getDataByType(dataType: string): DataInterface[];
+  getDataTypeAverage(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number;
   getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number): number;
   getTotalDurationInSeconds(): number;
 }
