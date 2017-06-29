@@ -50,7 +50,7 @@ export class EventImporterSML {
         const point = new Point(date);
         point.setActivity(activity);
         Object.keys(suuntoSML['Sample']).forEach((key) => {
-          if (!suuntoSML['Sample'][key]) {
+          if (suuntoSML['Sample'][key] === null) {
             return;
           }
           switch (key) {
