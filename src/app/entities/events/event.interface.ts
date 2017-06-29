@@ -19,7 +19,7 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getLaps(): LapInterface[];
   addLap(lap: Lap);
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
+  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]>;
   getDataByType(dataType: string): DataInterface[];
   getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number): number;

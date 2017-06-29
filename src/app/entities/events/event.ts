@@ -78,8 +78,8 @@ export class Event extends IDClass implements EventInterface {
     return points;
   }
 
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
-    return this.getPoints(startDate, endDate, step).reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
+  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
+    return this.getPoints(startDate, endDate, step, activities).reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
       if (point.getPosition()) {
         pointsWithPosition.push(point);
       }
