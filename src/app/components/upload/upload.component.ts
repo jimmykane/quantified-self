@@ -25,7 +25,7 @@ export class UploadComponent {
           this.eventService
             .createEventFromXMLString(fileReader.result)
             .then((newEvent: EventInterface) => {
-              newEvent.setName(input.files[index].name);
+              newEvent.setName(input.files[index].name.split('.')[0].slice(0, 30));
               this.eventService.saveEvent(newEvent);
             })
             .catch((error) => {
