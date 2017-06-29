@@ -17,7 +17,6 @@ import {EventInterface} from '../../entities/events/event.interface';
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
-  public title = 'Dashboard';
   public events: List<EventInterface> = List([]);
   public selectedEvent: EventInterface;
 
