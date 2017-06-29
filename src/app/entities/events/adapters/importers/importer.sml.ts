@@ -59,11 +59,11 @@ export class EventImporterSML {
               break;
             }
             case 'Latitude': {
-              new DataLatitudeDegrees(point, Number(suuntoSML['Sample'][key]) * 100);
+              new DataLatitudeDegrees(point, Number(suuntoSML['Sample'][key]) * (180 / Math.PI));
               break;
             }
             case 'Longitude': {
-              new DataLongitudeDegrees(point, Number(suuntoSML['Sample'][key]) * 100);
+              new DataLongitudeDegrees(point, Number(suuntoSML['Sample'][key]) * (180 / Math.PI));
               break;
             }
             case 'AbsPressure': {
