@@ -131,18 +131,22 @@ export class Activity extends IDClass implements ActivityInterface {
     return data;
   }
 
-  getDataTypeAverage(dataType: string): number {
+  getDataTypeAverage(dataType: string, startDate?: Date, endDate?: Date, step?: number): number {
     const t0 = performance.now();
-    let averageForDataType = 0;
-
-    this.getPoints().forEach((point) => {
-      averageForDataType += point.getDataTypeAverage(dataType)
-    });
+    let count = 1;
+    const averageForDataType = this.getPoints(startDate, endDate, step).reduce((average: number, point: PointInterface) => {
+      if (!point.getDataTypeAverage(dataType)) {
+        return average;
+      }
+      average += point.getDataTypeAverage(dataType);
+      count++;
+      return average;
+    }, 0);
     console.log('Activity: Calculated average for ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
-    return averageForDataType / this.getPoints().length;
+    return averageForDataType / count;
   }
 
   getStartPoint(): PointInterface {
