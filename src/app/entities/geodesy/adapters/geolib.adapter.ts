@@ -12,7 +12,7 @@ export class GeoLibAdapter implements GeodesyAdapterInterface {
     this.distanceAdapter = useSimpleDistance ? new DistanceSimple() : new DistanceVincenty();
   }
 
-  getDistance(points: PointInterface[]): number {
-    return this.distanceAdapter.getDistance(points);
+  getDistance(points: PointInterface[], accuracyInMeters?: number, precision?: number): number {
+    return this.distanceAdapter.getDistance(points, accuracyInMeters, precision);
   }
 }
