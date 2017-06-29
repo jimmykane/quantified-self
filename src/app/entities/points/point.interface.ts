@@ -4,8 +4,6 @@ import {DataPositionInterface} from '../data/data.position.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 
 export interface PointInterface extends SerializableClassInterface {
-  getActivity(): ActivityInterface;
-  setActivity(activity: ActivityInterface)
   getDate(): Date;
   addData(data: DataInterface);
   getData(): Map<string, DataInterface[]>;

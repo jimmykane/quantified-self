@@ -41,14 +41,14 @@ export class EventImporterSML {
 
       if (suuntoSML['R-R'] && suuntoSML['R-R']['Data']) {
         const point = new Point(date);
-        point.setActivity(activity);
+        activity.addPoint(point);
         new DataRespirationRate(point, suuntoSML['R-R']['Data']);
         return;
       }
 
       if (suuntoSML['Sample'] && !suuntoSML['Sample']['Events']) {
         const point = new Point(date);
-        point.setActivity(activity);
+        activity.addPoint(point);
         Object.keys(suuntoSML['Sample']).forEach((key) => {
           if (suuntoSML['Sample'][key] === null) {
             return;

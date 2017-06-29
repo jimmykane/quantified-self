@@ -46,7 +46,7 @@ export class EventImporterJSON {
 
       for (const pointObject of activityObject.points) {
         const point = new Point(new Date(pointObject.date));
-        point.setActivity(activity);
+        activity.addPoint(point);
         for (const dataObject of pointObject.data) {
           // @todo make this dynamic
           switch (dataObject.type) {

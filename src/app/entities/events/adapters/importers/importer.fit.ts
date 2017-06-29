@@ -51,7 +51,7 @@ export class EventImporterFIT {
             for (const lapRecord of sessionLap.records) {
               recordCount++;
               const point = new Point(new Date(lapRecord.timestamp));
-              point.setActivity(activity);
+              activity.addPoint(point);
                // Hack for strange Suunto data
               if (creator.getName() === 'suunto') {
                 if (lapRecord.position_lat && lapRecord.position_long) {

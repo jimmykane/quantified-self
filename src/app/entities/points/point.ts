@@ -17,15 +17,6 @@ export class Point implements PointInterface {
     this.date = date;
   }
 
-  setActivity(activity: ActivityInterface) {
-    this.activity = activity;
-    this.getActivity().addPoint(this);
-  }
-
-  getActivity(): ActivityInterface {
-    return this.activity;
-  }
-
   getDate(): Date {
     return this.date;
   }
