@@ -44,6 +44,7 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.creators;
   }
 
+  // @todo should do short or somehow
   addPoint(point: PointInterface) {
     const existingPoint = this.points.get(point.getDate().toISOString());
     if (existingPoint) {
