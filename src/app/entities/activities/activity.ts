@@ -5,12 +5,15 @@ import {PointInterface} from '../points/point.interface';
 import {EventInterface} from '../events/event.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from "../data/data.interface";
+import {Log} from "ng2-logger";
 
 export class Activity extends IDClass implements ActivityInterface {
 
   private type: string;
   private creators: CreatorInterface[] = [];
   private points: Map<string, PointInterface> = new Map<string, PointInterface>();
+  private logger = Log.create(this.constructor.name);
+
 
   constructor() {
     super();
@@ -48,7 +51,7 @@ export class Activity extends IDClass implements ActivityInterface {
   addPoint(point: PointInterface) {
     const existingPoint = this.points.get(point.getDate().toISOString());
     if (existingPoint) {
-      console.warn('Point collision detected for date: ' + point.getDate().toISOString());
+      this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString());
       existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
         dataArray.forEach((data: DataInterface) => {
           point.addData(data);

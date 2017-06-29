@@ -15,7 +15,7 @@ export class Event extends IDClass implements EventInterface {
   private activities: ActivityInterface[] = [];
   private laps: LapInterface[] = [];
   private geodesyAdapter: GeodesyAdapterInterface;
-  private log = Log.create('Event');
+  private logger = Log.create(this.constructor.name);
 
   constructor(geodesyAdapter?: GeodesyAdapterInterface) {
     super();
@@ -31,7 +31,7 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getName() {
-    this.log.d('event name');
+    this.logger.d('event name');
     return this.name;
   }
 
@@ -74,7 +74,7 @@ export class Event extends IDClass implements EventInterface {
     const points =  (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return [...pointsArray, ...activity.getPoints(startDate, endDate, step)];
     }, []);
-    this.log.d('Retrieved all points after ' +
+    this.logger.d('Retrieved all points after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -105,7 +105,7 @@ export class Event extends IDClass implements EventInterface {
         });
         return dataMap;
       }, new Map<string, DataInterface[]>());
-    this.log.d('Retrieved all data after ' +
+    this.logger.d('Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -121,7 +121,7 @@ export class Event extends IDClass implements EventInterface {
         });
         return dataArray;
       },  []);
-    this.log.d('Retrieved data for  ' + dataType + ' after ' +
+    this.logger.d('Retrieved data for  ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
@@ -139,7 +139,7 @@ export class Event extends IDClass implements EventInterface {
       count++;
       return average;
     }, 0);
-    this.log.d('Activity: Calculated average for ' + dataType + ' after ' +
+    this.logger.d('Activity: Calculated average for ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );

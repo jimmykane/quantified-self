@@ -3,6 +3,7 @@ import seedColor from 'seed-color';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../entities/points/point.interface';
 import {EventInterface} from '../../../entities/events/event.interface';
+import {Log} from "ng2-logger";
 
 
 @Component({
@@ -16,6 +17,8 @@ import {EventInterface} from '../../../entities/events/event.interface';
 export class EventMapComponent {
   @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
+  private logger = Log.create(this.constructor.name);
+
 
   constructor() {
   }
@@ -51,6 +54,6 @@ export class EventMapComponent {
   }
 
   ngAfterViewInit() {
-    console.log(this.agmMap);
+    this.logger.d(this.agmMap);
   }
 }

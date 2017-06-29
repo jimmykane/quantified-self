@@ -1,12 +1,14 @@
 import {Injectable} from '@angular/core';
 import {StorageServiceInterface} from './app.storage.service.interface';
 import * as LZString from 'lz-string';
+import {Log} from "ng2-logger";
 
 
 @Injectable()
 export class LocalStorageService implements StorageServiceInterface {
 
   private nameSpace: string;
+  private logger = Log.create(this.constructor.name);
 
   constructor() {
   }
@@ -30,7 +32,7 @@ export class LocalStorageService implements StorageServiceInterface {
       const t0 = performance.now();
       try {
         const decrypted = LZString.decompress(localStorage.getItem(this.nameSpace + key));
-        console.log('Decrypted after ' +
+        this.logger.d('Decrypted after ' +
           (performance.now() - t0) + ' milliseconds or ' +
           (performance.now() - t0) / 1000 + ' seconds'
         );
