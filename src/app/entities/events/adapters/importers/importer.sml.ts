@@ -86,7 +86,7 @@ export class EventImporterSML {
 
             }
             case 'HR': {
-              new DataHeartRate(point, suuntoSML['Sample'][key]);
+              new DataHeartRate(point, suuntoSML['Sample'][key] * 50);
               break;
 
             }
