@@ -17,7 +17,6 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getCreators(): CreatorInterface[];
   addPoint(point: PointInterface);
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
-  getDataByType(dataType?: string, startDate?: Date, endDate?: Date, step?: number): DataInterface[];
   getDataTypeAverage(dataType: string): number;
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;

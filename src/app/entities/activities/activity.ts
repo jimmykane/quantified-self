@@ -77,22 +77,6 @@ export class Activity extends IDClass implements ActivityInterface {
     return points;
   }
 
-  getDataByType(dataType?: string, startDate?: Date, endDate?: Date, step?: number): DataInterface[] {
-    const t0 = performance.now();
-    const data = this.getPoints(startDate, endDate, step)
-      .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
-        point.getDataByType(dataType).forEach((pointData: DataInterface) => {
-          dataArray.push(pointData);
-        });
-        return dataArray;
-      },  []);
-    console.log('Activity: Retrieved data for  ' + dataType + ' after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return data;
-  }
-
   getDataTypeAverage(dataType: string, startDate?: Date, endDate?: Date, step?: number): number {
     const t0 = performance.now();
     let count = 1;
