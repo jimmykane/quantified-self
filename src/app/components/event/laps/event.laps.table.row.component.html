@@ -1,4 +1,4 @@
-<td class="text-center">{{ index }}</td>
+<td class="text-center">{{ index+1 }}</td>
 <td class="text-center">{{ lap.getStartDate() | date:'mediumTime' }}</td>
 <td class="text-center">{{ lap.getEndDate() | date:'mediumTime' }}</td>
 <td class="text-center">{{ (lap.getDistanceInMeters()/1000).toFixed(1) }} km</td>
