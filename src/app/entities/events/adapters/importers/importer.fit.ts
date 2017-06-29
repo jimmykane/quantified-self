@@ -30,13 +30,13 @@ export class EventImporterFIT {
       });
 
       easyFitParser.parse(jsonString, (error, data: any) => {
-        debugger;
         const event = new Event();
         let recordCount = 0;
         let dataCount = 0;
         for (const session of data.activity.sessions) {
-          const activity = new Activity(event);
+          const activity = new Activity();
           activity.setType(session.sport);
+          event.addActivity(activity);
 
           const creator = new Creator(activity);
           creator.setName(data.file_id.manufacturer);

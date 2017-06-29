@@ -36,8 +36,9 @@ export class EventImporterJSON {
     }
 
     for (const activityObject of eventObject.activities) {
-      const activity = new Activity(event);
+      const activity = new Activity();
       activity.setType(activityObject.type);
+      event.addActivity(activity);
       for (const creatorObject of activityObject.creators) {
         const creator = new Creator(activity);
         creator.setName(creatorObject.name);

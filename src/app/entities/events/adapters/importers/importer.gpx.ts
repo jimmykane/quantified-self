@@ -21,7 +21,8 @@ export class EventImporterGPX {
     event.setID(id || event.getID());
 
     // Create an activity
-    const activity = new Activity(event);
+    const activity = new Activity();
+    event.addActivity(activity);
     activity.setID(xml.getElementsByTagName('name')[0].textContent);
 
     // Create a creator

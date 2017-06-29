@@ -1,5 +1,6 @@
 import {ChangeDetectionStrategy, Component, Input, OnInit} from '@angular/core';
-import {ActivityInterface} from "../../../entities/activities/activity.interface";
+import {ActivityInterface} from '../../../entities/activities/activity.interface';
+import {EventInterface} from '../../../entities/events/event.interface';
 
 
 @Component({
@@ -12,6 +13,7 @@ import {ActivityInterface} from "../../../entities/activities/activity.interface
 })
 export class EventActivityTableRowComponent {
   @Input() activity: ActivityInterface;
+  @Input() event: EventInterface;
   @Input() index: number;
   @Input() isFirst: boolean;
   @Input() isLast: boolean;

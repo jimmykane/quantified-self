@@ -23,8 +23,9 @@ export class EventImporterTCX {
 
     // Iterate over activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
-      const activity = new Activity(event);
+      const activity = new Activity();
       activity.setType(activityElement.getAttribute('Sport'));
+      event.addActivity(activity);
 
       // Setup the creators
       for (const creatorElement of <any>activityElement.getElementsByTagName('Creator')) {

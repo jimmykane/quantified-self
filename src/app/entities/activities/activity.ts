@@ -8,19 +8,12 @@ import {DataInterface} from "../data/data.interface";
 
 export class Activity extends IDClass implements ActivityInterface {
 
-  private event: EventInterface;
   private type: string;
   private creators: CreatorInterface[] = [];
   private points: Map<string, PointInterface> = new Map<string, PointInterface>();
 
-  constructor(event: EventInterface) {
+  constructor() {
     super();
-    this.event = event;
-    this.event.addActivity(this);
-  }
-
-  getEvent(): EventInterface {
-    return this.event;
   }
 
   setType(type: string) {
@@ -155,26 +148,6 @@ export class Activity extends IDClass implements ActivityInterface {
 
   getEndPoint(): PointInterface {
     return this.getPoints()[this.getPoints().length - 1];
-  }
-
-  getLaps(): LapInterface[] {
-    const laps: LapInterface[] = [];
-    for (const lap of this.event.getLaps()) {
-      if (lap.getStartDate().getTime() >= this.getStartDate().getTime() && lap.getEndDate().getTime() < this.getEndDate().getTime()) {
-        laps.push(lap);
-      }
-    }
-    return laps;
-  }
-
-  getDistanceInMeters(): number {
-    const t0 = performance.now();
-    const distance = this.getEvent().getGeodesyAdapter().getDistance(this.getPointsWithPosition());
-    console.log('Calculated distance for activity after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return distance;
   }
 
   toJSON(): any {

@@ -5,7 +5,7 @@ import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
-import {LapInterface} from "../laps/lap.interface";
+import {LapInterface} from '../laps/lap.interface';
 
 export class Event extends IDClass implements EventInterface {
 
@@ -66,9 +66,9 @@ export class Event extends IDClass implements EventInterface {
     return this.laps;
   }
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
+  getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
     const t0 = performance.now();
-    const points =  this.getActivities().reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
+    const points =  (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return [...pointsArray, ...activity.getPoints(startDate, endDate, step)];
     }, []);
     console.log('Event: Retrieved all points after ' +

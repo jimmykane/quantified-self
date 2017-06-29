@@ -25,7 +25,8 @@ export class EventImporterSML {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
 
     const event = new Event();
-    const activity = new Activity(event);
+    const activity = new Activity();
+    event.addActivity(activity);
 
 
     const laps = this.getLapsArray(jsonString);

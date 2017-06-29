@@ -135,7 +135,8 @@ export class EventService {
       for (let i = activities.length; i--; ) {
         event.removeActivity(activities[i]);
       }
-      const newActivity = new Activity(event);
+      const newActivity = new Activity();
+      event.addActivity(newActivity);
       for (const point of pointsCopy) {
         newActivity.addPoint(point);
       }
