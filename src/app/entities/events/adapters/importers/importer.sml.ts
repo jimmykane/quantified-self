@@ -81,7 +81,7 @@ export class EventImporterSML {
 
             }
             case 'Cadence': {
-              new DataCadence(point, suuntoSML['Sample'][key]);
+              new DataCadence(point, suuntoSML['Sample'][key] * 50);
               break;
 
             }
