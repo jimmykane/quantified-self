@@ -11,6 +11,7 @@ import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from '../../../data/data.power';
+import {debug} from "util";
 
 export class EventImporterTCX {
 
@@ -37,11 +38,15 @@ export class EventImporterTCX {
         if (Math.round(Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)) === 0) {
           continue;
         }
-        const lap = new Lap(event);
-        lap.setStartDate(new Date(lapElement.getAttribute('StartTime')));
-        lap.setEndDate(
-          new Date(lap.getStartDate().getTime() + 1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent))
-        );
+
+        const lap = new Lap(
+          new Date(lapElement.getAttribute('StartTime')),
+          new Date(
+            (new Date(lapElement.getAttribute('StartTime'))).getTime() +
+            1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
+        ));
+        event.addLap(lap);
+
         if (lapElement.getElementsByTagName('Calories')[0]) {
           lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));
         }

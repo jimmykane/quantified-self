@@ -43,12 +43,11 @@ export class EventImporterFIT {
 
           for (const sessionLap of session.laps) {
             // If the lap does not have any elapsed time or distance dont add it
-            if (Math.round(Number(sessionLap.timestamp)) === 0){
+            if (sessionLap.start_time.getTime() - sessionLap.timestamp.getTime() === 0) {
               continue;
             }
-            const lap = new Lap(event);
-            lap.setStartDate(sessionLap.start_time);
-            lap.setEndDate(sessionLap.timestamp);
+            const lap = new Lap(sessionLap.start_time, sessionLap.timestamp);
+            event.addLap(lap);
             for (const lapRecord of sessionLap.records) {
               recordCount++;
               const point = new Point(new Date(lapRecord.timestamp));

@@ -125,13 +125,11 @@ export class Event extends IDClass implements EventInterface {
     return data;
   }
 
-  getDistanceInMeters(): number {
-    return this.getActivities().reduce((distanceInMeters: number, activity: ActivityInterface) => {
-      return distanceInMeters + activity.getDistanceInMeters();
-    }, 0);
+  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number): number {
+    return this.getGeodesyAdapter().getDistance(this.getPointsWithPosition(startDate, endDate, step));
   }
 
-  getDurationInSeconds(): number {
+  getTotalDurationInSeconds(): number {
     return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
       return durationInSeconds + activity.getDurationInSeconds();
     }, 0);

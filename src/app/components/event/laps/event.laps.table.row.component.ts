@@ -1,5 +1,6 @@
-import {ChangeDetectionStrategy, Component, Input, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {LapInterface} from '../../../entities/laps/lap.interface';
+import {EventInterface} from '../../../entities/events/event.interface';
 
 @Component({
   selector: '[app-event-lap-table-row]',
@@ -9,6 +10,7 @@ import {LapInterface} from '../../../entities/laps/lap.interface';
 })
 
 export class EventLapTableRowComponent {
+  @Input() event: EventInterface;
   @Input() lap: LapInterface;
   @Input() index: number;
   @Input() isFirst: boolean;

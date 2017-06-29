@@ -1,6 +1,4 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {Event} from '../../../entities/events/event';
-import {EventService} from '../../../services/app.event.service';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {EventInterface} from '../../../entities/events/event.interface';
 
 @Component({
@@ -11,6 +9,7 @@ import {EventInterface} from '../../../entities/events/event.interface';
   changeDetection: ChangeDetectionStrategy.OnPush
 
 })
+
 export class EventLapsTableComponent {
   @Input() event: EventInterface;
 }

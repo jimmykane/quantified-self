@@ -12,27 +12,17 @@ export class Lap implements LapInterface {
   private intensity: string;
   private triggerMethod: string;
 
-  constructor(event: EventInterface) {
-    this.event = event;
-    this.event.addLap(this);
+  constructor(startDate: Date, endDate: Date) {
+    this.setStartDate(startDate).setEndDate(endDate);
   }
 
   getEvent(): EventInterface {
     return this.event;
   }
 
-  getPoints(): PointInterface[] {
-    return this.getEvent().getPoints(this.getStartDate(), this.getEndDate());
-  }
-
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
-    startDate = startDate || this.getStartDate();
-    endDate = endDate || this.getEndDate();
-    return this.getEvent().getPointsWithPosition(startDate, endDate, step);
-  }
-
   setStartDate(date: Date) {
     this.startDate = date;
+    return this;
   }
 
   getStartDate(): Date {
@@ -41,14 +31,11 @@ export class Lap implements LapInterface {
 
   setEndDate(date: Date) {
     this.endDate = date;
+    return this;
   }
 
   getEndDate(): Date {
     return this.endDate;
-  }
-
-  getDistanceInMeters(): number {
-    return this.getEvent().getGeodesyAdapter().getDistance(this.getPointsWithPosition());
   }
 
   getTotalTimeInSeconds(): number {
@@ -57,6 +44,7 @@ export class Lap implements LapInterface {
 
   setCalories(calories: number) {
     this.calories = calories;
+    return this;
   }
 
   getCalories(): number {
@@ -65,6 +53,7 @@ export class Lap implements LapInterface {
 
   setIntensity(intensity: string) {
     this.intensity = intensity;
+    return this;
   }
 
   getIntensity(): string {
@@ -73,6 +62,7 @@ export class Lap implements LapInterface {
 
   setTriggerMethod(triggerMethod: string) {
     this.triggerMethod = triggerMethod;
+    return this;
   }
 
   getTriggerMethod(): string {

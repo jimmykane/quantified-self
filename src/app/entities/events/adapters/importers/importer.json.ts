@@ -28,12 +28,11 @@ export class EventImporterJSON {
     event.setName(eventObject.name);
 
     for (const lapObject of eventObject.laps) {
-      const lap = new Lap(event);
-      lap.setStartDate(new Date(lapObject.startDate));
-      lap.setEndDate(new Date(lapObject.endDate));
+      const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
       lap.setCalories(lapObject.calories);
       lap.setIntensity(lapObject.intensity);
       lap.setTriggerMethod(lapObject.triggerMethod);
+      event.addLap(lap);
     }
 
     for (const activityObject of eventObject.activities) {

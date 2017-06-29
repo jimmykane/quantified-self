@@ -1,4 +1,3 @@
-import {PointInterface} from '../points/point.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {EventInterface} from '../events/event.interface';
 
@@ -6,17 +5,11 @@ export interface LapInterface extends SerializableClassInterface {
 
   getEvent(): EventInterface;
 
-  getPoints(): PointInterface[];
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
-
-
   setStartDate(date: Date);
   getStartDate(): Date;
 
   setEndDate(date: Date);
   getEndDate(): Date;
-
-  getDistanceInMeters(): number;
 
   getTotalTimeInSeconds(): number;
 

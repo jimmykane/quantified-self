@@ -34,14 +34,15 @@ export class EventImporterGPX {
         )) === 0) {
         continue;
       }
-      const lap = new Lap(event);
-      lap.setStartDate(new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent));
-      lap.setEndDate(
+
+      const lap = new Lap(
+        new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent),
         new Date(
-          lap.getStartDate().getTime() + 1000 *
-          Number(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'elapsedTime')[0].textContent)
-        )
-      );
+          (new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent)).getTime() +
+          1000 * Number(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'elapsedTime')[0].textContent)
+      ));
+
+      event.addLap(lap);
     }
 
     // Get the points

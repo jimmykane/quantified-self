@@ -14,7 +14,7 @@
     <div class="d-flex w-100 justify-content-between">
       <div>
         <p class="small mb-1">Distance: {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km</p>
-        <p class="small mb-1">Duration: {{ event.getDurationInSeconds() | amDuration:'seconds' }}</p>
+        <p class="small mb-1">Duration: {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</p>
       </div>
       <p>
       <span class="btn btn-sm btn-outline-primary"
