@@ -49,7 +49,7 @@ export class Event extends IDClass implements EventInterface {
   getFirstActivity(): ActivityInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
       return activityA.getStartDate() < activityB.getStartDate() ? activityA : activityB ;
-    }, this.getActivities()[0]);
+    });
   }
 
   getLastActivity(): ActivityInterface {
