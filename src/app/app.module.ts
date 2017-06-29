@@ -17,12 +17,11 @@ import {EventListComponent} from './components/event/list/event.list.component';
 import {LocalStorageService} from './services/app.local.storage.service';
 import {EventActionsComponent} from 'app/components/event/actions/event.actions.component';
 import {MomentModule} from 'angular2-moment';
-import {ChartsModule} from 'ng2-charts';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventAmChartsComponent} from './components/event/charts/event.charts.amcharts.component';
-import {EventLapsTableComponent} from "./components/event/laps/event.laps.table.component";
-import {EventLapTableRowComponent} from "./components/event/laps/event.laps.table.row.component";
+import {EventLapsTableComponent} from './components/event/laps/event.laps.table.component';
+import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
 
 @NgModule({
   imports: [
@@ -34,7 +33,6 @@ import {EventLapTableRowComponent} from "./components/event/laps/event.laps.tabl
       apiKey: 'AIzaSyCt6rJsrVVHOSmr2oPcl2bmJ3XQmktOU3E'
     }),
     MomentModule,
-    ChartsModule,
     AmChartsModule
   ],
   declarations: [
