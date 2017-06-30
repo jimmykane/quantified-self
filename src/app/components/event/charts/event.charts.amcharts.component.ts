@@ -58,6 +58,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
   private createChart() {
     this.categories = [];
+    this.dataMap = void 0;
     const graphs = this.getGraphs();
     // const valueAxes = this.getValueAxes();
 
@@ -244,21 +245,19 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
   private getDataProvider(dataMap: Map<string, any>): any[] {
     const t0 = performance.now();
     const dataProvider = [];
-    let categoryCount = 0;
     dataMap.forEach((value: number, key: string) => {
-      categoryCount++;
       dataProvider.push(Object.assign({
         date: new Date(key)
       }, value));
     });
 
-    // @todo move this logic to activity
+    // @todo move this logic to activity or importer
     dataProvider.sort((dataA: any, dataB: any) => {
       return dataA.date.getTime() - dataB.date.getTime();
     });
 
     const t1 = performance.now();
-    this.logger.d('Flatten ' + categoryCount + ' categories of data after ' +
+    this.logger.d('Flatten ' + [...dataMap.keys()].length + ' points after ' +
       (t1 - t0) + ' milliseconds or ' +
       (t1 - t0) / 1000 + ' seconds');
     return dataProvider;
