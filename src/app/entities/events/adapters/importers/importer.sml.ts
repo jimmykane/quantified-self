@@ -44,7 +44,7 @@ export class EventImporterSML {
         activity.addPoint(point);
         new DataRespirationRate(point, suuntoSML['R-R']['Data'].split(',').reduce((acc, data, i, array) => {
           return acc + Number(data.trim()) / array.length
-        }));
+        }, 0));
         return;
       }
 
