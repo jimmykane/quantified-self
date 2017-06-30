@@ -19,25 +19,30 @@
       </app-event-list>
     </div>
 
-    <div class="pl-4 pr-4 col-md-5 mb-4">
-      <app-event-map-card
-        class="fade-in"
-        *ngIf="selectedEvent"
-        [event]="selectedEvent">
-      </app-event-map-card>
-    </div>
+    <div class="col-md-9 mb-4">
+      <div class="row">
 
-    <div class="pl-4 pr-2 col-md-4 mb-4">
-      <app-event-activities-card
-        class="fade-in"
-        *ngIf="selectedEvent"
-        [event]="selectedEvent">
-      </app-event-activities-card>
-       <app-event-laps-card
-        class="fade-in"
-        *ngIf="selectedEvent"
-        [event]="selectedEvent">
-      </app-event-laps-card>
+        <div class="pl-4 pr-2 col-md-7">
+          <app-event-map-card
+            class="fade-in"
+            *ngIf="selectedEvent"
+            [event]="selectedEvent">
+          </app-event-map-card>
+        </div>
+
+        <div class="pr-4 col-md-5">
+          <app-event-activities-card
+            class="fade-in"
+            *ngIf="selectedEvent"
+            [event]="selectedEvent">
+          </app-event-activities-card>
+          <app-event-laps-card
+            class="fade-in"
+            *ngIf="selectedEvent"
+            [event]="selectedEvent">
+          </app-event-laps-card>
+        </div>
+      </div>
     </div>
 
     <div class="pl-4 pr-4 col-md-12 mb-4">
