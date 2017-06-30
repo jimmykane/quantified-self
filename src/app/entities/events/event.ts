@@ -6,7 +6,7 @@ import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
-import { Log, Level } from 'ng2-logger'
+import {Log, Level} from 'ng2-logger'
 
 
 export class Event extends IDClass implements EventInterface {
@@ -51,13 +51,13 @@ export class Event extends IDClass implements EventInterface {
 
   getFirstActivity(): ActivityInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
-      return activityA.getStartDate() < activityB.getStartDate() ? activityA : activityB ;
+      return activityA.getStartDate() < activityB.getStartDate() ? activityA : activityB;
     });
   }
 
   getLastActivity(): ActivityInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
-      return activityA.getStartDate() < activityB.getStartDate() ? activityB : activityA ;
+      return activityA.getStartDate() < activityB.getStartDate() ? activityB : activityA;
     });
   }
 
@@ -71,7 +71,7 @@ export class Event extends IDClass implements EventInterface {
 
   getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
     const t0 = performance.now();
-    const points =  (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
+    const points = (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return [...pointsArray, ...activity.getPoints(startDate, endDate, step)];
     }, []);
     this.logger.d('Retrieved all points after ' +
@@ -100,7 +100,7 @@ export class Event extends IDClass implements EventInterface {
             dataMap.set(key, existingDataArray);
           }
           pointDataArray.forEach((pointData) => {
-            existingDataArray.push(pointData )
+            existingDataArray.push(pointData)
           });
         });
         return dataMap;
@@ -120,7 +120,7 @@ export class Event extends IDClass implements EventInterface {
           dataArray.push(pointData);
         });
         return dataArray;
-      },  []);
+      }, []);
     this.logger.d('Retrieved data for  ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
