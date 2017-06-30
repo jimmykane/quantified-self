@@ -22,6 +22,7 @@ import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventAmChartsComponent} from './components/event/charts/event.charts.amcharts.component';
 import {EventLapsTableComponent} from './components/event/laps/event.laps.table.component';
 import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
+import {MdCardModule} from '@angular/material';
 
 @NgModule({
   imports: [
@@ -32,6 +33,7 @@ import {EventLapTableRowComponent} from './components/event/laps/event.laps.tabl
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyCt6rJsrVVHOSmr2oPcl2bmJ3XQmktOU3E'
     }),
+    MdCardModule,
     MomentModule,
     AmChartsModule
   ],
