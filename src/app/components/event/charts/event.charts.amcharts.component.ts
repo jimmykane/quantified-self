@@ -214,7 +214,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           });
         }
 
-        // debugger;
       });
 
       this.logger.d('Updated chart after ' +
@@ -224,10 +223,12 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
       resolve(true);
     });
-
   }
 
   private getAllData(): Map<string, DataInterface[]> {
+    if (!this.dataMap) {
+      this.dataMap = this.event.getData();
+    }
     return this.dataMap || this.event.getData();
   }
 
@@ -267,7 +268,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     const dataMap = new Map<string, any>();
     let dataCount = 0;
-    this.event.getData(startDate, endDate, step).forEach((dataArray: DataInterface[], dataType: string) => {
+    this.getAllData().forEach((dataArray: DataInterface[], dataType: string) => {
       if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataType) > -1) {
         return;
       }
