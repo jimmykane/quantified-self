@@ -80,7 +80,6 @@ export class EventExporterTCX implements EventExporterInterface {
       lapElement.appendChild(trackElement);
 
       // Go over the points
-      debugger;
       for (const point of activity.getPoints()) {
         const pointElement = document.createElementNS(null, 'Trackpoint');
         trackElement.appendChild(pointElement);
