@@ -62,7 +62,7 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   removePoint(point: PointInterface) {
-    throw ('Not implemented');
+    this.points.delete(point.getDate().toISOString());
   }
 
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
