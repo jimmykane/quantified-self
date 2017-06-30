@@ -23,6 +23,6 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]>;
   getDataByType(dataType: string): DataInterface[];
   getDataTypeAverage(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number;
-  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number): number;
+  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number;
   getTotalDurationInSeconds(): number;
 }
