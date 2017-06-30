@@ -6,6 +6,7 @@ import {DataHeartRate} from '../../../data/data.heart-rate';
 import {DataSpeed} from '../../../data/data.speed';
 import {Lap} from '../../../laps/lap';
 import {EventInterface} from "../../event.interface";
+import {DataInterface} from "../../../data/data.interface";
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -71,7 +72,7 @@ export class EventExporterTCX implements EventExporterInterface {
       lapElement.appendChild(totalTimeInSecondsElement);
 
       const distanceInMetersElement = document.createElementNS(null, 'DistanceMeters');
-      distanceInMetersElement.textContent = activity.getDistanceInMeters().toString();
+      distanceInMetersElement.textContent = event.getDistanceInMeters(void 0, void 0, void 0, [activity]).toString();
       lapElement.appendChild(distanceInMetersElement);
 
       activityElement.appendChild(lapElement);
@@ -79,6 +80,7 @@ export class EventExporterTCX implements EventExporterInterface {
       lapElement.appendChild(trackElement);
 
       // Go over the points
+      debugger;
       for (const point of activity.getPoints()) {
         const pointElement = document.createElementNS(null, 'Trackpoint');
         trackElement.appendChild(pointElement);
@@ -86,41 +88,45 @@ export class EventExporterTCX implements EventExporterInterface {
         timeElement.textContent = point.getDate().toISOString();
         pointElement.appendChild(timeElement);
 
-        const positionElement = document.createElementNS(null, 'Position');
-        const positionLatitudeDegreesElement = document.createElementNS(null, 'LatitudeDegrees');
-        positionLatitudeDegreesElement.textContent = point.getPosition().latitudeDegrees.toString();
-        const positionLongitudeDegreesElement = document.createElementNS(null, 'LongitudeDegrees');
-        positionLongitudeDegreesElement.textContent = point.getPosition().longitudeDegrees.toString();
-        positionElement.appendChild(positionLatitudeDegreesElement);
-        positionElement.appendChild(positionLongitudeDegreesElement);
-        pointElement.appendChild(positionElement);
+        if (point.getPosition()) {
+          const positionElement = document.createElementNS(null, 'Position');
+          const positionLatitudeDegreesElement = document.createElementNS(null, 'LatitudeDegrees');
+          positionLatitudeDegreesElement.textContent = point.getPosition().latitudeDegrees.toString();
+          const positionLongitudeDegreesElement = document.createElementNS(null, 'LongitudeDegrees');
+          positionLongitudeDegreesElement.textContent = point.getPosition().longitudeDegrees.toString();
+          positionElement.appendChild(positionLatitudeDegreesElement);
+          positionElement.appendChild(positionLongitudeDegreesElement);
+          pointElement.appendChild(positionElement);
+        }
 
         // Go over the Data
-        for (const data of point.getData()) {
-          if (data instanceof DataAltitude) {
-            const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
-            altitudeElement.textContent = data.getValue().toString();
-            pointElement.appendChild(altitudeElement);
-          } else if (data instanceof DataCadence) {
-            const cadenceElement = document.createElementNS(null, 'Cadence');
-            cadenceElement.textContent = data.getValue().toString();
-            pointElement.appendChild(cadenceElement);
-          } else if (data instanceof DataHeartRate) {
-            const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
-            const heartRateValueElement = document.createElementNS(null, 'Value');
-            heartRateValueElement.textContent = data.getValue().toString();
-            heartRateElement.appendChild(heartRateValueElement);
-            pointElement.appendChild(heartRateElement);
-          } else if (data instanceof DataSpeed) {
-            const extensionsElement = document.createElementNS(null, 'Extensions');
-            const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
-            extensionsElement.appendChild(tpxElement);
-            const speedElement = document.createElementNS(null, 'Speed');
-            tpxElement.appendChild(speedElement);
-            speedElement.textContent = data.getValue().toString();
-            pointElement.appendChild(extensionsElement);
-          }
-        }
+        point.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+          dataArray.forEach((data: DataInterface) => {
+            if (data instanceof DataAltitude) {
+              const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
+              altitudeElement.textContent = data.getValue().toString();
+              pointElement.appendChild(altitudeElement);
+            } else if (data instanceof DataCadence) {
+              const cadenceElement = document.createElementNS(null, 'Cadence');
+              cadenceElement.textContent = data.getValue().toString();
+              pointElement.appendChild(cadenceElement);
+            } else if (data instanceof DataHeartRate) {
+              const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
+              const heartRateValueElement = document.createElementNS(null, 'Value');
+              heartRateValueElement.textContent = data.getValue().toString();
+              heartRateElement.appendChild(heartRateValueElement);
+              pointElement.appendChild(heartRateElement);
+            } else if (data instanceof DataSpeed) {
+              const extensionsElement = document.createElementNS(null, 'Extensions');
+              const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
+              extensionsElement.appendChild(tpxElement);
+              const speedElement = document.createElementNS(null, 'Speed');
+              tpxElement.appendChild(speedElement);
+              speedElement.textContent = data.getValue().toString();
+              pointElement.appendChild(extensionsElement);
+            }
+          })
+        })
       }
     }
     return '<?xml version="1.0" encoding="UTF-8"?>' + this.xmlSerializer.serializeToString(xmlDocument);
