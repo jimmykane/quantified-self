@@ -23,6 +23,7 @@ import {EventAmChartsComponent} from './components/event/charts/event.charts.amc
 import {EventLapsTableComponent} from './components/event/laps/event.laps.table.component';
 import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
 import {MdCardModule} from '@angular/material';
+import 'hammerjs';
 
 @NgModule({
   imports: [
