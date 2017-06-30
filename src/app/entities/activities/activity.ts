@@ -61,6 +61,10 @@ export class Activity extends IDClass implements ActivityInterface {
     this.points.set(point.getDate().toISOString(), point);
   }
 
+  removePoint(point: PointInterface) {
+    throw ('Not implemented');
+  }
+
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
     const points = [];
     let index = -1;
