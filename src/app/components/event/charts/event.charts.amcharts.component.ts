@@ -335,7 +335,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         bulletBorderAlpha: 1,
         bulletColor: '#FFFFFF',
         type: 'line',
-        hidden: graphs.length > 0
+        hidden: graphs.length > 3
       });
     });
     this.logger.d('Got graphs after ' +
