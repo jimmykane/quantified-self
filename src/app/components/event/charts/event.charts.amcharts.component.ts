@@ -112,7 +112,6 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
           selectedBackgroundAlpha: 0.1,
           selectedBackgroundColor: '#888888',
           graphFillAlpha: 0,
-          // 'autoGridCount': true,
           selectedGraphFillAlpha: 0,
           graphLineAlpha: 0.2,
           graphLineColor: '#c2c2c2',
