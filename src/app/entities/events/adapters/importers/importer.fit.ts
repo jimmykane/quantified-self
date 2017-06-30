@@ -43,7 +43,7 @@ export class EventImporterFIT {
 
           for (const sessionLap of session.laps) {
             // If the lap does not have any elapsed time or distance dont add it
-            if (sessionLap.start_time.getTime() - sessionLap.timestamp.getTime() === 0) {
+            if (+sessionLap.start_time - +sessionLap.timestamp === 0) {
               continue;
             }
             const lap = new Lap(sessionLap.start_time, sessionLap.timestamp);

@@ -39,7 +39,7 @@ export class Lap implements LapInterface {
   }
 
   getTotalTimeInSeconds(): number {
-    return (this.getEndDate().getTime() - this.getStartDate().getTime()) / 1000;
+    return (+this.getEndDate() - +this.getStartDate()) / 1000;
   }
 
   setCalories(calories: number) {

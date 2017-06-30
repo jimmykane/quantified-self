@@ -39,7 +39,7 @@ export class EventImporterGPX {
       const lap = new Lap(
         new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent),
         new Date(
-          (new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent)).getTime() +
+          +(new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent)) +
           1000 * Number(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'elapsedTime')[0].textContent)
       ));
 

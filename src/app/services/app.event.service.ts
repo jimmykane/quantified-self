@@ -109,7 +109,7 @@ export class EventService {
       // First sort the events by first point date
       events.sort((eventA: EventInterface, eventB: EventInterface) => {
         // Let it fail with exception for now
-        return eventA.getFirstActivity().getStartDate().getTime() - eventB.getFirstActivity().getStartDate().getTime();
+        return +eventA.getFirstActivity().getStartDate() - +eventB.getFirstActivity().getStartDate();
       });
       const mergeEvent = new Event();
       mergeEvent.setName((new Date()).toISOString());

@@ -43,7 +43,7 @@ export class EventImporterTCX {
         const lap = new Lap(
           new Date(lapElement.getAttribute('StartTime')),
           new Date(
-            (new Date(lapElement.getAttribute('StartTime'))).getTime() +
+            +(new Date(lapElement.getAttribute('StartTime'))) +
             1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
         ));
         event.addLap(lap);

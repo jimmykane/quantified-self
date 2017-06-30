@@ -252,7 +252,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
 
     // @todo move this logic to activity or importer
     dataProvider.sort((dataA: any, dataB: any) => {
-      return dataA.date.getTime() - dataB.date.getTime();
+      return +dataA.date - +dataB.date;
     });
 
     const t1 = performance.now();
@@ -271,7 +271,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
         return;
       }
 
-      dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface, currentIndex) => {
+      dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface) => {
         dataCount++;
         const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
         dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
