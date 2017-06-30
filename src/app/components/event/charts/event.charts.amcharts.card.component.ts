@@ -19,11 +19,11 @@ import { Log, Level } from 'ng2-logger'
 
 
 @Component({
-  selector: 'app-event-charts-am',
-  templateUrl: './event.charts.amcharts.component.html',
+  selector: 'app-event-charts-am-card',
+  templateUrl: './event.charts.amcharts.card.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
+export class EventAmChartsCardComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 

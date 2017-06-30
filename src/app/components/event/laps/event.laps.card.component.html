@@ -1,0 +1,32 @@
+<md-card class="mb-4">
+  <md-card-header>
+    <md-card-title>Laps</md-card-title>
+    <md-card-subtitle></md-card-subtitle>
+  </md-card-header>
+
+  <md-card-content>
+    <div class="table-responsive">
+      <table class="table table-striped">
+        <thead>
+        <tr>
+          <th class="text-center"><h6>#</h6></th>
+          <th class="text-center"><h6>Start Time</h6></th>
+          <th class="text-center"><h6>End Time</h6></th>
+          <th class="text-center"><h6>Distance</h6></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr app-event-lap-table-row
+            [attr.data-index]="i"
+            *ngFor="let lap of event.getLaps(); index as index; first as isFirst; last as isLast; count as count;"
+            [index]="index"
+            [isFirst]="isFirst"
+            [isLast]="isLast"
+            [count]="count"
+            [event]="event"
+            [lap]="lap"></tr>
+        </tbody>
+      </table>
+    </div>
+  </md-card-content>
+</md-card>

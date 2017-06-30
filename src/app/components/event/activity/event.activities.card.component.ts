@@ -5,20 +5,17 @@ import {EventInterface} from '../../../entities/events/event.interface';
 
 
 @Component({
-  selector: 'app-event-activities-table',
-  templateUrl: './event.activity.table.component.html',
-  styleUrls: ['./event.activity.table.component.css'],
+  selector: 'app-event-activities-card',
+  templateUrl: './event.activities.card.component.html',
+  styleUrls: ['./event.activities.card.component.css'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush
-
 })
-export class EventActivitiesTableComponent implements OnChanges {
+
+export class EventActivitiesCardComponent {
   @Input() event: EventInterface;
 
-
   constructor(private eventService: EventService) {}
-
-  ngOnChanges() {}
 
   mergeAllActivities(event: Event) {
     this.eventService.mergeAllEventActivities(event);

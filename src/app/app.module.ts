@@ -8,19 +8,18 @@ import {UploadComponent} from './components/upload/upload.component';
 import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
-import {EventComponent} from './components/event/event.component';
 import {AboutComponent} from './components/about/about.component';
-import {EventActivitiesTableComponent} from './components/event/activity/event.activity.table.component';
+import {EventActivitiesCardComponent} from './components/event/activity/event.activities.card.component';
 import {EventActivityTableRowComponent} from './components/event/activity/event.activity.table.row.component';
-import {EventMapComponent} from 'app/components/event/map/event.map.component';
+import {EventMapCardComponent} from 'app/components/event/map/event.map.card.component';
 import {EventListComponent} from './components/event/list/event.list.component';
 import {LocalStorageService} from './services/app.local.storage.service';
 import {EventActionsComponent} from 'app/components/event/actions/event.actions.component';
 import {MomentModule} from 'angular2-moment';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
-import {EventAmChartsComponent} from './components/event/charts/event.charts.amcharts.component';
-import {EventLapsTableComponent} from './components/event/laps/event.laps.table.component';
+import {EventAmChartsCardComponent} from './components/event/charts/event.charts.amcharts.card.component';
+import {EventLapsCardComponent} from './components/event/laps/event.laps.card.component';
 import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
 import {MdButtonModule, MdCardModule, MdCommonModule, MdIconModule} from '@angular/material';
 import 'hammerjs';
@@ -45,15 +44,14 @@ import 'hammerjs';
     AppComponent,
     DashboardComponent,
     UploadComponent,
-    EventComponent,
-    EventMapComponent,
-    EventActivitiesTableComponent,
+    EventMapCardComponent,
+    EventActivitiesCardComponent,
     EventActivityTableRowComponent,
     EventActionsComponent,
     EventListComponent,
-    EventLapsTableComponent,
+    EventLapsCardComponent,
     EventLapTableRowComponent,
-    EventAmChartsComponent,
+    EventAmChartsCardComponent,
     AboutComponent
   ],
   providers: [LocalStorageService, EventService],
