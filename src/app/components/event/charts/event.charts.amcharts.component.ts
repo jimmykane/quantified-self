@@ -251,6 +251,11 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
       }, value));
     });
 
+    // @todo move this logic to activity
+    dataProvider.sort((dataA: any, dataB: any) => {
+      return dataA.date.getTime() - dataB.date.getTime();
+    });
+
     const t1 = performance.now();
     this.logger.d('Flatten ' + categoryCount + ' categories of data after ' +
       (t1 - t0) + ' milliseconds or ' +
