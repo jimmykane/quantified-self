@@ -21,11 +21,12 @@ export class UploadComponent {
     for (let index = 0; index < input.files.length; index++) {
       const fileReader = new FileReader;
       fileReader.onload = () => {
+        const name = input.files[index].name.split('.')[0].slice(0, 10);
         if (['tcx', 'gpx'].indexOf(input.files[index].name.split('.').pop()) > -1) {
           this.eventService
             .createEventFromXMLString(fileReader.result)
             .then((newEvent: EventInterface) => {
-              newEvent.setName(input.files[index].name.split('.')[0].slice(0, 30));
+              newEvent.setName(name);
               this.eventService.saveEvent(newEvent);
             })
             .catch((error) => {
@@ -37,7 +38,7 @@ export class UploadComponent {
           this.eventService
             .createEventFromJSONSMLString(fileReader.result)
             .then((newEvent: EventInterface) => {
-              newEvent.setName(input.files[index].name);
+              newEvent.setName(name);
               this.eventService.saveEvent(newEvent);
             })
             .catch((error) => {
@@ -58,7 +59,7 @@ export class UploadComponent {
       this.eventService
         .createEventFromJSONFITString(fileReader.result)
         .then((newEvent: EventInterface) => {
-          newEvent.setName(file.name);
+          newEvent.setName(file.name.split('.')[0].slice(0, 10));
           this.eventService.saveEvent(newEvent);
         })
         .catch((error) => {

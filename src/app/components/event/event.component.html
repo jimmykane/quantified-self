@@ -4,9 +4,9 @@
     <!--<div md-card-avatar class="example-header-image"></div>-->
     <md-card-title>{{ event.getName() }}</md-card-title>
     <md-card-subtitle>
-      <p class="small mb-1">Distance: {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km</p>
-      <p class="small mb-1">Duration: {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</p>
-      <p class="small mb-1">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
+      <p class="mb-1">Distance: {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km</p>
+      <p class="mb-1">Duration: {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</p>
+      <p class="mb-1">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
     </md-card-subtitle>
   </md-card-header>
 
