@@ -247,7 +247,7 @@ export class EventAmChartsComponent implements OnChanges, OnInit, OnDestroy {
     dataMap.forEach((value: number, key: string) => {
       categoryCount++;
       dataProvider.push(Object.assign({
-        date: key
+        date: new Date(key)
       }, value));
     });
 
