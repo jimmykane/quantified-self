@@ -50,7 +50,6 @@ export class EventImporterSML {
 
       if (suuntoSML['Sample'] && !suuntoSML['Sample']['Events']) {
         const point = new Point(date);
-        activity.addPoint(point); // @todo dont add if not any data
         Object.keys(suuntoSML['Sample']).forEach((key) => {
           if (suuntoSML['Sample'][key] === null) {
             return;
@@ -118,6 +117,11 @@ export class EventImporterSML {
             }
           }
         });
+
+        if ([...point.getData().keys()].length){
+          activity.addPoint(point);
+        }
+
       }
     });
     debugger;
