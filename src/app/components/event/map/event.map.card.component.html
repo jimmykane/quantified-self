@@ -1,7 +1,11 @@
 <md-card>
   <md-card-header>
     <!--<div md-card-avatar class="example-header-image"></div>-->
-    <md-card-title><h6 class="text-truncate">{{ event.getName() }}</h6></md-card-title>
+    <md-card-title>
+      <span class="h6 text-truncate">{{ event.getName() }}</span>
+    </md-card-title>
+    <app-event-actions-menu [event]="event" align="end"></app-event-actions-menu>
+
     <md-card-subtitle>
       <h4 class="mb-1">Distance: {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km</h4>
       <p class="mb-1">Duration: {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</p>
@@ -10,24 +14,18 @@
   </md-card-header>
 
   <md-card-content>
-
     <agm-map
       style="height: 350px; width: 100%;"
       [fitBounds]="fitBounds()">
-
       <agm-polyline
         *ngFor="let activity of event.getActivities(); let i = index;"
         [strokeColor]="getActivityColor(i.toString())">
-
         <agm-polyline-point
           *ngFor="let point of event.getPointsWithPosition({activities: [activity]})"
           [latitude]="point.getPosition().latitudeDegrees"
           [longitude]="point.getPosition().longitudeDegrees">
         </agm-polyline-point>
-
       </agm-polyline>
     </agm-map>
-
   </md-card-content>
-  <app-event-actions [event]="event"></app-event-actions>
 </md-card>

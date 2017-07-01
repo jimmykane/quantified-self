@@ -6,9 +6,9 @@ import {EventInterface} from '../../../entities/events/event.interface';
 import {Router} from '@angular/router';
 
 @Component({
-  selector: 'app-event-actions',
-  templateUrl: './event.actions.component.html',
-  styleUrls: ['./event.actions.component.css'],
+  selector: 'app-event-actions-menu',
+  templateUrl: './event.actions.menu.component.html',
+  styleUrls: ['./event.actions.menu.component.css'],
   providers: [],
     changeDetection: ChangeDetectionStrategy.OnPush
 

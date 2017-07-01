@@ -14,14 +14,14 @@ import {EventActivityTableRowComponent} from './components/event/activity/event.
 import {EventMapCardComponent} from 'app/components/event/map/event.map.card.component';
 import {EventListComponent} from './components/event/list/event.list.component';
 import {LocalStorageService} from './services/app.local.storage.service';
-import {EventActionsComponent} from 'app/components/event/actions/event.actions.component';
+import {EventActionsComponent} from 'app/components/event/actions/event.actions.menu.component';
 import {MomentModule} from 'angular2-moment';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventAmChartsCardComponent} from './components/event/charts/event.charts.amcharts.card.component';
 import {EventLapsCardComponent} from './components/event/laps/event.laps.card.component';
 import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
-import {MdButtonModule, MdCardModule, MdCommonModule, MdIconModule} from '@angular/material';
+import {MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule} from '@angular/material';
 import 'hammerjs';
 
 @NgModule({
@@ -37,6 +37,7 @@ import 'hammerjs';
     MdCardModule,
     MdIconModule,
     MdCommonModule,
+    MdMenuModule,
     MomentModule,
     AmChartsModule
   ],

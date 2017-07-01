@@ -1,0 +1,13 @@
+<button md-icon-button [mdMenuTriggerFor]="menu">
+  <md-icon>more_vert</md-icon>
+</button>
+<md-menu #menu="mdMenu">
+  <button md-menu-item (click)="downloadEventAsTCX(event)">
+    <md-icon>download app</md-icon>
+    <span>Download as TCX</span>
+  </button>
+  <button md-menu-item (click)="deleteEvent(event)">
+    <md-icon>delete forever</md-icon>
+    <span>Delete</span>
+  </button>
+</md-menu>
