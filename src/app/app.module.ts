@@ -18,7 +18,7 @@ import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/
 import {MomentModule} from 'angular2-moment';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
-import {EventAmChartsCardComponent} from './components/cards/charts/event.charts.amcharts.card.component';
+import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
@@ -60,7 +60,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
     EventListComponent,
     EventCardLapsComponent,
     EventLapTableRowComponent,
-    EventAmChartsCardComponent,
+    EventCardChartComponent,
     AboutComponent
   ],
   providers: [LocalStorageService, EventService],

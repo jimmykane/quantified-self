@@ -19,7 +19,6 @@ export class EventCardMapComponent {
   @ViewChild(AgmMap) agmMap;
   private logger = Log.create(this.constructor.name);
 
-
   constructor() {
   }
 

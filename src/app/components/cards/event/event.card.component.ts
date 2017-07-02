@@ -11,4 +11,9 @@ import {EventInterface} from '../../../entities/events/event.interface';
 
 export class EventCardComponent {
   @Input() event: EventInterface;
+  selectedTabIndex;
+
+  selectedTabIndexChange(index) {
+    this.selectedTabIndex = index;
+  }
 }

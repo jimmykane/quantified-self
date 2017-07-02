@@ -1,29 +1,29 @@
 import {
   ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
-import {DataInterface} from '../../../entities/data/data.interface';
-import {DataLatitudeDegrees} from '../../../entities/data/data.latitude-degrees';
-import {DataLongitudeDegrees} from '../../../entities/data/data.longitude-degrees';
+import {DataInterface} from '../../../../entities/data/data.interface';
+import {DataLatitudeDegrees} from '../../../../entities/data/data.latitude-degrees';
+import {DataLongitudeDegrees} from '../../../../entities/data/data.longitude-degrees';
 import seedColor from 'seed-color';
-import {EventInterface} from '../../../entities/events/event.interface';
+import {EventInterface} from '../../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
-import {DataHeartRate} from '../../../entities/data/data.heart-rate';
-import {DataCadence} from '../../../entities/data/data.cadence';
-import {DataAltitude} from '../../../entities/data/data.altitude';
-import {DataSpeed} from '../../../entities/data/data.speed';
-import {DataTemperature} from '../../../entities/data/data.temperature';
-import {DataPower} from '../../../entities/data/data.power';
-import {DataVerticalSpeed} from '../../../entities/data/data.verticalspeed';
-import {DataSeaLevelPressure} from '../../../entities/data/data.sea-level-pressure';
-import { Log, Level } from 'ng2-logger'
+import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
+import {DataCadence} from '../../../../entities/data/data.cadence';
+import {DataAltitude} from '../../../../entities/data/data.altitude';
+import {DataSpeed} from '../../../../entities/data/data.speed';
+import {DataTemperature} from '../../../../entities/data/data.temperature';
+import {DataPower} from '../../../../entities/data/data.power';
+import {DataVerticalSpeed} from '../../../../entities/data/data.verticalspeed';
+import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pressure';
+import {Log, Level} from 'ng2-logger'
 
 
 @Component({
-  selector: 'app-event-charts-am-card',
-  templateUrl: './event.charts.amcharts.card.component.html',
+  selector: 'app-event-card-chart',
+  templateUrl: './event.card.chart.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class EventAmChartsCardComponent implements OnChanges, OnInit, OnDestroy {
+export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 
@@ -77,6 +77,12 @@ export class EventAmChartsCardComponent implements OnChanges, OnInit, OnDestroy 
         type: 'serial',
         theme: 'light',
         graphs: graphs,
+        // autoTransform: false,
+        // autoResize: false,
+        // autoDisplay: false,
+        // responsive: {
+        //   enabled: false
+        // },
         // valueAxes: valueAxes,
         startDuration: 1,
         startEffect: 'elastic',
@@ -345,17 +351,25 @@ export class EventAmChartsCardComponent implements OnChanges, OnInit, OnDestroy 
     return graphs;
   }
 
-   private genColor(key: string) {
+  private genColor(key: string) {
     // @todo remove this crappy lib
     switch (key) {
-      case DataHeartRate.name: return '#ff3f07';
-      case DataAltitude.name: return '#4ab255';
-      case DataCadence.name: return '#5b6979';
-      case DataSpeed.name: return '#2261bf';
-      case DataVerticalSpeed.name: return '#add3c3';
-      case DataTemperature.name: return '#a5a567';
-      case DataPower.name: return '#d39031';
-      case DataSeaLevelPressure.name: return '#889bc8';
+      case DataHeartRate.name:
+        return '#ff3f07';
+      case DataAltitude.name:
+        return '#4ab255';
+      case DataCadence.name:
+        return '#5b6979';
+      case DataSpeed.name:
+        return '#2261bf';
+      case DataVerticalSpeed.name:
+        return '#add3c3';
+      case DataTemperature.name:
+        return '#a5a567';
+      case DataPower.name:
+        return '#d39031';
+      case DataSeaLevelPressure.name:
+        return '#889bc8';
     }
     return seedColor(key).toHex();
   }

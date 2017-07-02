@@ -19,20 +19,12 @@
       </app-event-list>
     </div>
 
-      <div class="pl-4 pr-4 pb-4 col-md-9">
-        <app-event-card
-          class="fade-in"
-          *ngIf="selectedEvent"
-          [event]="selectedEvent">
-        </app-event-card>
-      </div>
-
-    <div class="pl-4 pr-4 col-md-12 mb-4">
-      <app-event-charts-am-card
+    <div class="pl-4 pr-4 pb-4 col-md-9">
+      <app-event-card
         class="fade-in"
         *ngIf="selectedEvent"
         [event]="selectedEvent">
-      </app-event-charts-am-card>
+      </app-event-card>
     </div>
 
   </div>
