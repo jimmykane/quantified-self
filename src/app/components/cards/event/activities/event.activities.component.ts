@@ -1,13 +1,13 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {Event} from '../../../entities/events/event';
-import {EventService} from '../../../services/app.event.service';
-import {EventInterface} from '../../../entities/events/event.interface';
+import {Event} from '../../../../entities/events/event';
+import {EventService} from '../../../../services/app.event.service';
+import {EventInterface} from '../../../../entities/events/event.interface';
 
 
 @Component({
-  selector: 'app-event-activities-card',
-  templateUrl: './event.activities.card.component.html',
-  styleUrls: ['./event.activities.card.component.css'],
+  selector: 'app-event-activities',
+  templateUrl: './event.activities.component.html',
+  styleUrls: ['./event.activities.component.css'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush
 })

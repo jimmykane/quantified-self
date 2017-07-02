@@ -250,7 +250,7 @@ export class EventAmChartsCardComponent implements OnChanges, OnInit, OnDestroy 
       }, value));
     });
 
-    // @todo move this logic to activity or importer
+    // @todo move this logic to activities or importer
     dataProvider.sort((dataA: any, dataB: any) => {
       return +dataA.date - +dataB.date;
     });

@@ -9,21 +9,22 @@ import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
-import {EventActivitiesCardComponent} from './components/event/activity/event.activities.card.component';
-import {EventActivityTableRowComponent} from './components/event/activity/event.activity.table.row.component';
-import {EventMapComponent} from 'app/components/event/map/event.map.component';
-import {EventListComponent} from './components/event/list/event.list.component';
+import {EventActivitiesCardComponent} from './components/cards/event/activities/event.activities.component';
+import {EventActivityTableRowComponent} from './components/cards/event/activities/event.activity.table.row.component';
+import {EventCardMapComponent} from 'app/components/cards/event/map/event.card.map.component';
+import {EventListComponent} from './components/list/event.list.component';
 import {LocalStorageService} from './services/app.local.storage.service';
-import {EventActionsComponent} from 'app/components/event/actions/event.actions.menu.component';
+import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
 import {MomentModule} from 'angular2-moment';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
-import {EventAmChartsCardComponent} from './components/event/charts/event.charts.amcharts.card.component';
-import {EventLapsCardComponent} from './components/event/laps/event.laps.card.component';
-import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
+import {EventAmChartsCardComponent} from './components/cards/charts/event.charts.amcharts.card.component';
+import {EventLapsCardComponent} from './components/cards/laps/event.laps.card.component';
+import {EventLapTableRowComponent} from './components/cards/laps/event.laps.table.row.component';
 import {MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule} from '@angular/material';
 import 'hammerjs';
-import {EventDetailsCardComponent} from './components/event/details/event.details.card.component';
+import {EventCardComponent} from './components/cards/event/event.card.component';
+import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 
 @NgModule({
   imports: [
@@ -46,11 +47,12 @@ import {EventDetailsCardComponent} from './components/event/details/event.detail
     AppComponent,
     DashboardComponent,
     UploadComponent,
-    EventDetailsCardComponent,
-    EventMapComponent,
+    EventCardComponent,
+    EventCardMapComponent,
+    EventCardStatsComponent,
     EventActivitiesCardComponent,
     EventActivityTableRowComponent,
-    EventActionsComponent,
+    EventCardActionsMenuComponent,
     EventListComponent,
     EventLapsCardComponent,
     EventLapTableRowComponent,

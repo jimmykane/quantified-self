@@ -37,7 +37,7 @@ export class EventExporterTCX implements EventExporterInterface {
       const activitiesElement = document.createElementNS(null, 'Activities');
       trainingCenterDatabaseElement.appendChild(activitiesElement);
 
-      // Create the activity element
+      // Create the activities element
       const activityElement = document.createElementNS(null, 'Activity');
       activitiesElement.appendChild(activityElement);
 
@@ -49,7 +49,7 @@ export class EventExporterTCX implements EventExporterInterface {
       idElement.textContent = activity.getStartDate().toISOString();
       activityElement.appendChild(idElement);
 
-      // Go over the creators of this activity
+      // Go over the creators of this activities
       for (const creator of activity.getCreators()) {
 
         // Create the element
@@ -58,7 +58,7 @@ export class EventExporterTCX implements EventExporterInterface {
         nameElement.textContent = creator.getName();
         creatorElement.appendChild(nameElement);
 
-        // Add it to the activity
+        // Add it to the activities
         activityElement.appendChild(creatorElement);
       }
 

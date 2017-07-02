@@ -23,19 +23,14 @@
       <div class="row">
 
         <div class="pl-4 pr-2 col-md-7">
-          <app-event-details-card
+          <app-event-card
             class="fade-in"
             *ngIf="selectedEvent"
             [event]="selectedEvent">
-          </app-event-details-card>
+          </app-event-card>
         </div>
 
         <div class="pr-4 col-md-5">
-          <app-event-activities-card
-            class="fade-in"
-            *ngIf="selectedEvent"
-            [event]="selectedEvent">
-          </app-event-activities-card>
           <app-event-laps-card
             class="fade-in"
             *ngIf="selectedEvent"

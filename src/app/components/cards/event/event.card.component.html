@@ -4,7 +4,7 @@
     <md-card-title>
       <span class="mat-h1 text-truncate">{{ event.getName() }}</span>
     </md-card-title>
-    <app-event-actions-menu [event]="event" align="end"></app-event-actions-menu>
+    <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
 
     <md-card-subtitle>
       <p class="mb-1 mat-h2">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
@@ -13,9 +13,13 @@
     </md-card-subtitle>
   </md-card-header>
 
-  <app-event-map [event]="event"></app-event-map>
+  <app-event-card-map [event]="event"></app-event-card-map>
 
   <md-card-content>
+
+    <app-event-card-stats
+      [event]="event">
+    </app-event-card-stats>
 
   </md-card-content>
 </md-card>

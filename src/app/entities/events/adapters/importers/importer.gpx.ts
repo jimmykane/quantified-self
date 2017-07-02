@@ -20,7 +20,7 @@ export class EventImporterGPX {
     const event = new Event();
     event.setID(id || event.getID());
 
-    // Create an activity
+    // Create an activities
     const activity = new Activity();
     event.addActivity(activity);
     activity.setID(xml.getElementsByTagName('name')[0].textContent);

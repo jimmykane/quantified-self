@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {EventService} from '../../../services/app.event.service';
+import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {EventInterface} from '../../../entities/events/event.interface';
+import {EventInterface} from '../../entities/events/event.interface';
 
 
 @Component({

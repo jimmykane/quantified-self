@@ -1,20 +1,20 @@
 import {ChangeDetectionStrategy, Component, Input, ViewChild} from '@angular/core';
 import seedColor from 'seed-color';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral} from '@agm/core';
-import {PointInterface} from '../../../entities/points/point.interface';
-import {EventInterface} from '../../../entities/events/event.interface';
+import {PointInterface} from '../../../../entities/points/point.interface';
+import {EventInterface} from '../../../../entities/events/event.interface';
 import {Log} from "ng2-logger";
 
 
 @Component({
-  selector: 'app-event-map',
-  templateUrl: './event.map.component.html',
-  styleUrls: ['./event.map.component.css'],
+  selector: 'app-event-card-map',
+  templateUrl: './event.card.map.component.html',
+  styleUrls: ['./event.card.map.component.css'],
   providers: [GoogleMapsAPIWrapper],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventMapComponent {
+export class EventCardMapComponent {
   @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
   private logger = Log.create(this.constructor.name);

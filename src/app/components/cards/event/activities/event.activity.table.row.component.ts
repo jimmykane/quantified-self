@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, Component, Input, OnInit} from '@angular/core';
-import {ActivityInterface} from '../../../entities/activities/activity.interface';
-import {EventInterface} from '../../../entities/events/event.interface';
+import {ActivityInterface} from '../../../../entities/activities/activity.interface';
+import {EventInterface} from '../../../../entities/events/event.interface';
 
 
 @Component({
