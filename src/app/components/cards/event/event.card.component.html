@@ -17,9 +17,22 @@
 
   <md-card-content>
 
-    <app-event-card-stats
-      [event]="event">
-    </app-event-card-stats>
+    <md-tab-group>
+      <md-tab label="Stats">
+        <app-event-card-stats
+          [event]="event">
+        </app-event-card-stats>
+      </md-tab>
+      <md-tab label="Activities">
+        <app-event-activities [event]="event">
+        </app-event-activities>
+      </md-tab>
+      <md-tab label="Laps">
+        <app-event-card-laps [event]="event">
+        </app-event-card-laps>
+      </md-tab>
+    </md-tab-group>
+
 
   </md-card-content>
 </md-card>

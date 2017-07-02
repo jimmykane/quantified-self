@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {LapInterface} from '../../../entities/laps/lap.interface';
-import {EventInterface} from '../../../entities/events/event.interface';
+import {LapInterface} from '../../../../entities/laps/lap.interface';
+import {EventInterface} from '../../../../entities/events/event.interface';
 
 @Component({
   selector: '[app-event-lap-table-row]',
