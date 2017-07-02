@@ -7,14 +7,14 @@ import {Log} from "ng2-logger";
 
 
 @Component({
-  selector: 'app-event-map-card',
-  templateUrl: './event.map.card.component.html',
-  styleUrls: ['./event.map.card.component.css'],
+  selector: 'app-event-map',
+  templateUrl: './event.map.component.html',
+  styleUrls: ['./event.map.component.css'],
   providers: [GoogleMapsAPIWrapper],
   changeDetection: ChangeDetectionStrategy.OnPush
-
 })
-export class EventMapCardComponent {
+
+export class EventMapComponent {
   @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
   private logger = Log.create(this.constructor.name);

@@ -11,7 +11,7 @@ import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
 import {EventActivitiesCardComponent} from './components/event/activity/event.activities.card.component';
 import {EventActivityTableRowComponent} from './components/event/activity/event.activity.table.row.component';
-import {EventMapCardComponent} from 'app/components/event/map/event.map.card.component';
+import {EventMapComponent} from 'app/components/event/map/event.map.component';
 import {EventListComponent} from './components/event/list/event.list.component';
 import {LocalStorageService} from './services/app.local.storage.service';
 import {EventActionsComponent} from 'app/components/event/actions/event.actions.menu.component';
@@ -23,6 +23,7 @@ import {EventLapsCardComponent} from './components/event/laps/event.laps.card.co
 import {EventLapTableRowComponent} from './components/event/laps/event.laps.table.row.component';
 import {MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule} from '@angular/material';
 import 'hammerjs';
+import {EventDetailsCardComponent} from './components/event/details/event.details.card.component';
 
 @NgModule({
   imports: [
@@ -45,7 +46,8 @@ import 'hammerjs';
     AppComponent,
     DashboardComponent,
     UploadComponent,
-    EventMapCardComponent,
+    EventDetailsCardComponent,
+    EventMapComponent,
     EventActivitiesCardComponent,
     EventActivityTableRowComponent,
     EventActionsComponent,
