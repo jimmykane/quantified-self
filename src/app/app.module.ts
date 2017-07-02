@@ -12,7 +12,6 @@ import {AboutComponent} from './components/about/about.component';
 import {EventActivitiesCardComponent} from './components/cards/event/activities/event.activities.component';
 import {EventActivityTableRowComponent} from './components/cards/event/activities/event.activity.table.row.component';
 import {EventCardMapComponent} from 'app/components/cards/event/map/event.card.map.component';
-import {EventListComponent} from './components/list/event.list.component';
 import {LocalStorageService} from './services/app.local.storage.service';
 import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
 import {MomentModule} from 'angular2-moment';
@@ -22,7 +21,7 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
-  MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule,
+  MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule, MdSidenavModule,
   MdTabsModule
 } from '@angular/material';
 import 'hammerjs';
@@ -44,6 +43,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
     MdCommonModule,
     MdMenuModule,
     MdTabsModule,
+    MdSidenavModule,
     MomentModule,
     AmChartsModule
   ],
@@ -57,7 +57,6 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
     EventActivitiesCardComponent,
     EventActivityTableRowComponent,
     EventCardActionsMenuComponent,
-    EventListComponent,
     EventCardLapsComponent,
     EventLapTableRowComponent,
     EventCardChartComponent,

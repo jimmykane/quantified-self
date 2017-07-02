@@ -28,6 +28,15 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     // this.changeDetectorRef.detach();
   }
 
+  mergeEvents($event, event: EventInterface) {
+    $event.stopPropagation();
+    this.eventService.mergeEvents([this.selectedEvent, event]).then((event: EventInterface) => {
+      this.eventService.saveEvent(event);
+      // this.router.navigate(['/dashboard'], { queryParams: { eventID: event.getID() } });
+    });
+    return false;
+  }
+
   ngOnInit() {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {

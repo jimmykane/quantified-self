@@ -1,31 +1,49 @@
-<div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
+<md-sidenav-container style="height: 100vh;">
+  <md-sidenav #sidenav>
+    <md-list>
+      <div class="p-4" style="min-width: 300px;">
+        <p md-header>Events</p>
+        <md-divider></md-divider>
+        <md-list-item *ngFor="let event of events; let i = index;">
+          <button md-button
+                  [routerLink]="['/dashboard']"
+                  [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
+                  [queryParams]="{ eventID: event.getID() }">
+            <md-icon md-list-icon>layers</md-icon>
+            {{ event.getName() }}
+            <!--<button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"-->
+            <!--(click)="mergeEvents($event, event)">Merge-->
+            <!--</button>-->
+          </button>
+          <br/>
+        </md-list-item>
+      </div>
+    </md-list>
+  </md-sidenav>
 
-<ng-template #uploadBlock>
-  <div class="jumbotron">
-    <p>
-      There are no events loaded. <a routerLink="/upload">Go upload some</a>
-    </p>
-  </div>
-</ng-template>
+  <div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
 
-<ng-template #eventsBlock>
-  <div class="row">
-
-    <div class="col-md-3">
-      <app-event-list
-        class="sidebar-offcanvas"
-        [events]='events'
-        [selectedEvent]="selectedEvent">
-      </app-event-list>
+  <ng-template #uploadBlock>
+    <div class="pt-4 pl-4 pr-4">
+      <div class="jumbotron">
+        <p>
+          There are no events loaded. <a routerLink="/upload">Go upload some</a>
+        </p>
+      </div>
     </div>
+  </ng-template>
 
-    <div class="pl-4 pr-4 pb-4 col-md-9">
+  <ng-template #eventsBlock>
+    <div class="pt-4 pl-4 pr-4 pb-4">
       <app-event-card
-        class="fade-in"
         *ngIf="selectedEvent"
         [event]="selectedEvent">
       </app-event-card>
     </div>
+  </ng-template>
 
-  </div>
-</ng-template>
+
+</md-sidenav-container>
+<button type="button" class="sideNavOpenButton" md-fab (click)="sidenav.toggle()">
+  <md-icon>list</md-icon>
+</button>
