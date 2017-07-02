@@ -8,8 +8,9 @@
 
     <md-card-subtitle>
       <p class="mb-1 mat-h2">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
-      <span class="mat-h3">Distance: {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km</span>
-      <p class="mb-1 mat-h4">Duration: {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</p>
+      <span class="mat-h3">
+        {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
+      </span>
     </md-card-subtitle>
   </md-card-header>
 
