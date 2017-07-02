@@ -16,6 +16,7 @@
   <md-card-content>
     <agm-map
       style="height: 350px; width: 100%;"
+      [fullscreenControl]="true"
       [fitBounds]="fitBounds()">
       <agm-polyline
         *ngFor="let activity of event.getActivities(); let i = index;"
