@@ -1,7 +1,7 @@
 <md-sidenav-container>
   <md-sidenav #sidenav>
     <md-toolbar>
-      <span>Events</span>
+      <span>Event List</span>
       <md-toolbar-row *ngFor="let event of events; let i = index;">
         <span [routerLink]="['/dashboard']"
               [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
