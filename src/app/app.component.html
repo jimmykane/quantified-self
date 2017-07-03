@@ -1,13 +1,25 @@
-<md-toolbar color="primary">
-  <span>{{title}}</span>
-  <span class="spacer"></span>
-  <span routerLink="/dashboard" routerLinkActive="active">Dashboard</span>
-  <span class="spacer"></span>
+<nav md-tab-nav-bar>
 
-  <span routerLink="/upload" routerLinkActive="active">Upload</span>
-  <span class="spacer"></span>
+  <a md-tab-link
+     routerLink="/"
+     routerLinkActive #root="routerLinkActive"
+     [active]="root.isActive">{{ title }}</a>
 
-  <span routerLink="/about" routerLinkActive="active">About</span>
-</md-toolbar>
+  <a md-tab-link
+     routerLink="/dashboard"
+     routerLinkActive #dashboard="routerLinkActive"
+     [active]="dashboard.isActive">Dashboard</a>
+
+  <a md-tab-link
+     routerLink="/upload"
+     routerLinkActive #upload="routerLinkActive"
+     [active]="upload.isActive">Upload</a>
+
+  <a md-tab-link
+     routerLink="/about"
+     routerLinkActive #about="routerLinkActive"
+     [active]="about.isActive">About</a>
+
+</nav>
 
 <router-outlet></router-outlet>
