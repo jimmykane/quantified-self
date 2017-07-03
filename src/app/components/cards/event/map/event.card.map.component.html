@@ -1,14 +1,29 @@
-<agm-map
-  style="height: 40vh; width: 100%;"
-  [fullscreenControl]="true"
-  [fitBounds]="fitBounds()">
-  <agm-polyline
-    *ngFor="let activity of event.getActivities(); let i = index;"
-    [strokeColor]="getActivityColor(i.toString())">
-    <agm-polyline-point
-      *ngFor="let point of event.getPointsWithPosition({activities: [activity]})"
-      [latitude]="point.getPosition().latitudeDegrees"
-      [longitude]="point.getPosition().longitudeDegrees">
-    </agm-polyline-point>
-  </agm-polyline>
-</agm-map>
+<md-grid-list cols="2" rowHeight="1:1">
+  <md-grid-tile>
+    <agm-map
+      style="height: 100%; width: 100%;"
+      [fullscreenControl]="true"
+      [fitBounds]="fitBounds()">
+      <agm-polyline
+        *ngFor="let activity of event.getActivities(); let i = index;"
+        [strokeColor]="getActivityColor(i.toString())">
+        <agm-polyline-point
+          *ngFor="let point of event.getPointsWithPosition({activities: [activity]})"
+          [latitude]="point.getPosition().latitudeDegrees"
+          [longitude]="point.getPosition().longitudeDegrees">
+        </agm-polyline-point>
+      </agm-polyline>
+    </agm-map>
+  </md-grid-tile>
+  <md-grid-tile>
+    <md-list>
+      <md-list-item>
+        <md-icon md-list-icon>folder</md-icon>
+        <h4 md-line>City</h4>
+        <p md-line> Elevation </p>
+      </md-list-item>
+      <md-list-item>Item 2</md-list-item>
+      <md-list-item>Item 3</md-list-item>
+    </md-list>
+  </md-grid-tile>
+</md-grid-list>

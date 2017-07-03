@@ -20,7 +20,7 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
-  MdButtonModule, MdButtonToggleModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule,
+  MdButtonModule, MdButtonToggleModule, MdCardModule, MdCommonModule, MdGridListModule, MdIconModule, MdMenuModule,
   MdSidenavModule,
   MdTabsModule, MdToolbarModule
 } from '@angular/material';
@@ -46,6 +46,7 @@ import {SideNavComponent} from './components/sidenav/sidenav.component';
     MdTabsModule,
     MdSidenavModule,
     MdToolbarModule,
+    MdGridListModule,
     MomentModule,
     AmChartsModule
   ],
