@@ -1,5 +1,4 @@
 import {NgModule} from '@angular/core';
-import {NgbModule} from '@ng-bootstrap/ng-bootstrap';
 
 import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
@@ -30,7 +29,6 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
 
 @NgModule({
   imports: [
-    NgbModule.forRoot(),
     BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
