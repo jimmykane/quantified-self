@@ -2,15 +2,16 @@
   <md-card-header>
     <!--<div md-card-avatar class="example-header-image"></div>-->
     <md-card-title>
-      <span class="mat-h1 text-truncate">{{ event.getName() }}</span>
+      {{ event.getName() }}
     </md-card-title>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
 
     <md-card-subtitle>
-      <p class="mat-h4">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
-      <span class="mat-h4">
-        {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
-      </span>
+      {{ event.getFirstActivity().getStartDate() | date:'medium' }}
+    </md-card-subtitle>
+    <md-card-subtitle>
+      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in {{ event.getTotalDurationInSeconds() |
+      amDuration:'seconds' }}
     </md-card-subtitle>
   </md-card-header>
 
