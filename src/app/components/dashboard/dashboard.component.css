@@ -2,8 +2,8 @@ md-sidenav-container {
   height: 100vh;
 }
 
-md-toolbar{
-  width: 50vh;
+md-sidenav{
+  width: 30vmax;
 }
 
 .sideNavOpenButton {

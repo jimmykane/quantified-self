@@ -1,27 +1,25 @@
 <md-sidenav-container>
   <md-sidenav #sidenav opened>
-    <md-toolbar>
-      <span class="mat-h1">Event List</span>
-      <md-toolbar-row *ngFor="let event of events; let i = index;">
-        <span class="mat-h3"
-          [routerLink]="['/dashboard']"
-          [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-          [queryParams]="{ eventID: event.getID() }"
-          (click)="sidenav.close()">{{ event.getName() }}</span>
-        <span class="spacer"></span>
-        <button md-button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"
-                (click)="mergeEvents($event, event)">Merge
-        </button>
-      </md-toolbar-row>
-    </md-toolbar>
+    <h4>Event List</h4>
+    <div
+      *ngFor="let event of events; let i = index;"
+      [routerLink]="['/dashboard']"
+      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
+      [queryParams]="{ eventID: event.getID() }"
+      (click)="sidenav.close()">{{ event.getName() }}
+      <span class="spacer"></span>
+      <button md-button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"
+              (click)="mergeEvents($event, event)">Merge
+      </button>
+    </div>
   </md-sidenav>
 
   <div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
 
   <ng-template #uploadBlock>
-        <p>
-          There are no events loaded. <a routerLink="/upload">Go upload some</a>
-        </p>
+    <p>
+      There are no events loaded. <a routerLink="/upload">Go upload some</a>
+    </p>
   </ng-template>
 
   <ng-template #eventsBlock>
