@@ -7,5 +7,5 @@ import { Component } from '@angular/core';
 })
 
 export class AppComponent {
-  public title = 'Event Tools';
+  public title = 'Quantified Self';
 }
