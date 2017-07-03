@@ -7,7 +7,7 @@
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
 
     <md-card-subtitle>
-      <p class="mb-1 mat-h4">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
+      <p class="mat-h4">{{ event.getFirstActivity().getStartDate() | date:'medium' }}</p>
       <span class="mat-h4">
         {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
       </span>

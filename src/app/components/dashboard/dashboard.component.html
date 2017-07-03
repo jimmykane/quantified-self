@@ -19,17 +19,13 @@
   <div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
 
   <ng-template #uploadBlock>
-    <div class="pt-4 pl-4 pr-4">
-      <div class="jumbotron">
         <p>
           There are no events loaded. <a routerLink="/upload">Go upload some</a>
         </p>
-      </div>
-    </div>
   </ng-template>
 
   <ng-template #eventsBlock>
-    <div class="pt-4 pl-4 pr-4 pb-4">
+    <div>
       <app-event-card
         *ngIf="selectedEvent"
         [event]="selectedEvent">
