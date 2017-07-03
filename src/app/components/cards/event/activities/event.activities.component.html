@@ -1,5 +1,5 @@
-<div class="table-responsive ">
-  <table class="table table-striped table-sm">
+<div>
+  <table>
     <thead>
     <tr>
       <th class="text-center"><h6>Date</h6></th>
@@ -8,10 +8,10 @@
       <th class="text-center"><h6>Duration</h6></th>
       <th class="text-center"><h6>Speed</h6></th>
       <th class="text-center"><h6>Pace</h6></th>
-      <th class="text-center text-truncate"><h6>Heart Rate</h6></th>
+      <th class="text-center"><h6>Heart Rate</h6></th>
       <th class="text-center"><h6>Power</h6></th>
       <th class="text-center"><h6>Cadence</h6></th>
-      <th class="text-center text-truncate"><h6>Temperature</h6></th>
+      <th class="text-center"><h6>Temperature</h6></th>
     </tr>
     </thead>
     <tbody>
@@ -31,7 +31,6 @@
 <div *ngIf="event.getActivities().length > 1">
   <hr/>
   <button
-    class="btn btn-sm btn-outline-primary"
     (click)="mergeAllActivities(event)">Merge Activities
   </button>
 </div>
