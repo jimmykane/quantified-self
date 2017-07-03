@@ -1,5 +1,6 @@
 <h4>Event List</h4>
-<div *ngFor="let event of events; let i = index;">
+<div *ngFor="let event of events; let i = index;"
+     [class.background-color-gray]="selectedEvent && event.getID() === selectedEvent.getID()">
   <a md-button
      [routerLink]="['/dashboard']"
      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"

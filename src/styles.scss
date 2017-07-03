@@ -1,4 +1,9 @@
 /* You can add global styles to this file, and also import other style files */
+@import '~@angular/material/theming';
+
+.background-color-gray {
+  background-color: mat-color(mat-palette($mat-grey, A400, A100, A700));
+}
 
 body{
   margin: 0;
