@@ -1,22 +1,13 @@
-<nav class="navbar navbar-toggleable-md navbar-inverse bg-inverse">
-  <button class="navbar-toggler navbar-toggler-right" type="button" data-toggle="collapse" data-target="#navbarCollapse"
-          aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
-    <span class="navbar-toggler-icon"></span>
-  </button>
-  <a class="navbar-brand" href="/">{{title}}</a>
-  <div class="collapse navbar-collapse" id="navbarCollapse">
-    <ul class="navbar-nav mr-auto">
-      <li class="nav-item" routerLinkActive="active">
-        <a class="nav-link" routerLink="/dashboard">Dashboard</a>
-      </li>
-      <li class="nav-item" routerLinkActive="active">
-        <a class="nav-link" routerLink="/upload">Upload</a>
-      </li>
-      <li class="nav-item" routerLinkActive="active">
-        <a class="nav-link" routerLink="/about">About</a>
-      </li>
-    </ul>
-  </div>
-</nav>
+<md-toolbar color="primary">
+  <span>{{title}}</span>
+  <span class="spacer"></span>
+  <span routerLink="/dashboard" routerLinkActive="active">Dashboard</span>
+  <span class="spacer"></span>
 
-  <router-outlet></router-outlet>
+  <span routerLink="/upload" routerLinkActive="active">Upload</span>
+  <span class="spacer"></span>
+
+  <span routerLink="/about" routerLinkActive="active">About</span>
+</md-toolbar>
+
+<router-outlet></router-outlet>
