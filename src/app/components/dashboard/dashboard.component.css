@@ -4,6 +4,7 @@ md-sidenav-container {
 
 md-sidenav{
   width: 30vmax;
+  padding: 1vw;
 }
 
 .sideNavOpenButton {

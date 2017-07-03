@@ -20,7 +20,8 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
-  MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule, MdSidenavModule,
+  MdButtonModule, MdButtonToggleModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule,
+  MdSidenavModule,
   MdTabsModule, MdToolbarModule
 } from '@angular/material';
 import 'hammerjs';
@@ -36,6 +37,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
       apiKey: 'AIzaSyCt6rJsrVVHOSmr2oPcl2bmJ3XQmktOU3E'
     }),
     MdButtonModule,
+    MdButtonToggleModule,
     MdCardModule,
     MdIconModule,
     MdCommonModule,

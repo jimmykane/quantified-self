@@ -1,15 +1,18 @@
 <md-sidenav-container>
   <md-sidenav #sidenav opened>
     <h4>Event List</h4>
-    <div
-      *ngFor="let event of events; let i = index;"
-      [routerLink]="['/dashboard']"
-      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-      [queryParams]="{ eventID: event.getID() }"
-      (click)="sidenav.close()">{{ event.getName() }}
+    <div *ngFor="let event of events; let i = index;">
+      <a md-button
+        [routerLink]="['/dashboard']"
+        [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
+        [queryParams]="{ eventID: event.getID() }"
+        (click)="sidenav.close()">
+        <md-icon>more_horiz</md-icon>
+        {{ event.getName() }}
+      </a>
       <span class="spacer"></span>
       <button md-button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"
-              (click)="mergeEvents($event, event)">Merge
+      (click)="mergeEvents($event, event)">Merge
       </button>
     </div>
   </md-sidenav>
