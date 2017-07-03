@@ -11,7 +11,6 @@ import {EventInterface} from '../../entities/events/event.interface';
 })
 
 export class UploadComponent {
-  public title = 'Upload some TCX or GPX files';
 
   constructor(private eventService: EventService, private localStorageService: LocalStorageService, private router: Router) {
   }

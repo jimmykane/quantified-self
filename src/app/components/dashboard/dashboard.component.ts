@@ -3,7 +3,7 @@ import {
   OnInit
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
-import {ActivatedRoute, Params} from '@angular/router';
+import {ActivatedRoute, Params, Router} from '@angular/router';
 import {List} from 'immutable';
 import {Subscription} from 'rxjs/Subscription';
 import {EventInterface} from '../../entities/events/event.interface';
@@ -24,7 +24,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   private parametersSubscription: Subscription;
   private eventsSubscription: Subscription;
 
-  constructor(private eventService: EventService, private changeDetectorRef: ChangeDetectorRef, private route: ActivatedRoute) {
+  constructor(private eventService: EventService,
+              private changeDetectorRef: ChangeDetectorRef,
+              private route: ActivatedRoute,
+              private router: Router) {
     // this.changeDetectorRef.detach();
   }
 
