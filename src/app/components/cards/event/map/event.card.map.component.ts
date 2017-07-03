@@ -1,9 +1,12 @@
-import {ChangeDetectionStrategy, Component, Input, ViewChild} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, ViewChild} from '@angular/core';
 import seedColor from 'seed-color';
-import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral} from '@agm/core';
+import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral, LatLngLiteral} from '@agm/core';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {Log} from "ng2-logger";
+import {GoogleMap} from "@agm/core/services/google-maps-types";
+
+declare var google: any;
 
 
 @Component({
@@ -11,15 +14,18 @@ import {Log} from "ng2-logger";
   templateUrl: './event.card.map.component.html',
   styleUrls: ['./event.card.map.component.css'],
   providers: [GoogleMapsAPIWrapper],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  // changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class EventCardMapComponent {
   @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
+  city: string;
+  country: string;
+
   private logger = Log.create(this.constructor.name);
 
-  constructor() {
+  constructor(private changeDetectorRef: ChangeDetectorRef, private googleMapsWrapper: GoogleMapsAPIWrapper) {
   }
 
   fitBounds(): LatLngBoundsLiteral {
@@ -52,7 +58,37 @@ export class EventCardMapComponent {
     return seedColor(seed).toHex();
   }
 
-  ngAfterViewInit() {
-    this.logger.d(this.agmMap);
+  ngOnChanges() {
+    this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({
+        'location': {
+          lat: this.event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees,
+          lng: this.event.getFirstActivity().getStartPoint().getPosition().longitudeDegrees
+        }
+      }, this.processReverseGeocodeResults);
+    });
   }
+
+  private processReverseGeocodeResults = (results, status) => {
+    if (status === google.maps.GeocoderStatus.OK) {
+      results[0].address_components.forEach((addressComponent) => {
+        switch (addressComponent.types[0]) {
+          case 'country': {
+            this.country = addressComponent.long_name;
+            break;
+          }
+          case 'locality': {
+            this.city = addressComponent.long_name;
+            break;
+          }
+        }
+      });
+      this.changeDetectorRef.detectChanges();
+    } else {
+      debugger;
+      console.log('Error - ', results, ' & Status - ', status);
+    }
+  }
+
 }
