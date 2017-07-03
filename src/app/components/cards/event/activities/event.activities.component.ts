@@ -18,6 +18,8 @@ export class EventActivitiesCardComponent {
   constructor(private eventService: EventService) {}
 
   mergeAllActivities(event: Event) {
-    this.eventService.mergeAllEventActivities(event);
+    this.eventService.mergeAllEventActivities(event).then((resultEvent) => {
+      this.eventService.saveEvent(resultEvent);
+    });
   }
 }
