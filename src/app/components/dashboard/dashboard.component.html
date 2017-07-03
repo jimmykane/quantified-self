@@ -8,7 +8,8 @@
           <button md-button
                   [routerLink]="['/dashboard']"
                   [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-                  [queryParams]="{ eventID: event.getID() }">
+                  [queryParams]="{ eventID: event.getID() }"
+                  (click)="sidenav.close()">
             <md-icon md-list-icon>layers</md-icon>
             {{ event.getName() }}
             <!--<button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"-->
