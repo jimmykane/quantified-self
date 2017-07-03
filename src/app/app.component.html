@@ -1,25 +1,35 @@
-<nav md-tab-nav-bar>
+<md-sidenav-container>
 
-  <a md-tab-link
-     routerLink="/"
-     routerLinkActive #root="routerLinkActive"
-     [active]="root.isActive">{{ title }}</a>
+  <md-sidenav #sidenav opened mode="side">
+    <app-sidenav></app-sidenav>
+  </md-sidenav>
 
-  <a md-tab-link
-     routerLink="/dashboard"
-     routerLinkActive #dashboard="routerLinkActive"
-     [active]="dashboard.isActive">Dashboard</a>
+  <nav md-tab-nav-bar>
 
-  <a md-tab-link
-     routerLink="/upload"
-     routerLinkActive #upload="routerLinkActive"
-     [active]="upload.isActive">Upload</a>
+    <a md-tab-link (click)="sidenav.toggle()">{{ title }}</a>
 
-  <a md-tab-link
-     routerLink="/about"
-     routerLinkActive #about="routerLinkActive"
-     [active]="about.isActive">About</a>
+    <a md-tab-link
+       routerLink="/dashboard"
+       routerLinkActive #dashboard="routerLinkActive"
+       [active]="dashboard.isActive">Dashboard</a>
 
-</nav>
+    <a md-tab-link
+       routerLink="/upload"
+       routerLinkActive #upload="routerLinkActive"
+       [active]="upload.isActive">Upload</a>
 
-<router-outlet></router-outlet>
+    <a md-tab-link
+       routerLink="/about"
+       routerLinkActive #about="routerLinkActive"
+       [active]="about.isActive">About</a>
+
+  </nav>
+
+  <router-outlet></router-outlet>
+
+
+</md-sidenav-container>
+
+<button type="button" class="sideNavOpenButton" md-fab (click)="sidenav.toggle()">
+  <md-icon>list</md-icon>
+</button>

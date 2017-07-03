@@ -27,6 +27,7 @@ import {
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
+import {SideNavComponent} from './components/sidenav/sidenav.component';
 
 @NgModule({
   imports: [
@@ -50,6 +51,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
   ],
   declarations: [
     AppComponent,
+    SideNavComponent,
     DashboardComponent,
     UploadComponent,
     EventCardComponent,

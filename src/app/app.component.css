@@ -1,0 +1,15 @@
+md-sidenav-container {
+  height: 100vh;
+}
+
+md-sidenav{
+  width: 30vmax;
+  padding: 1vw;
+}
+
+.sideNavOpenButton {
+  position: fixed;
+  bottom: 2vh;
+  right: 2vh;
+}
+

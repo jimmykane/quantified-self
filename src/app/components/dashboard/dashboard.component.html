@@ -1,41 +1,16 @@
-<md-sidenav-container>
-  <md-sidenav #sidenav opened>
-    <h4>Event List</h4>
-    <div *ngFor="let event of events; let i = index;">
-      <a md-button
-        [routerLink]="['/dashboard']"
-        [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-        [queryParams]="{ eventID: event.getID() }"
-        (click)="sidenav.close()">
-        <md-icon>more_horiz</md-icon>
-        {{ event.getName() }}
-      </a>
-      <span class="spacer"></span>
-      <button md-button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"
-      (click)="mergeEvents($event, event)">Merge
-      </button>
-    </div>
-  </md-sidenav>
+<div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
 
-  <div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
+<ng-template #uploadBlock>
+  <p>
+    There are no events loaded. <a routerLink="/upload">Go upload some</a>
+  </p>
+</ng-template>
 
-  <ng-template #uploadBlock>
-    <p>
-      There are no events loaded. <a routerLink="/upload">Go upload some</a>
-    </p>
-  </ng-template>
-
-  <ng-template #eventsBlock>
-    <div>
-      <app-event-card
-        *ngIf="selectedEvent"
-        [event]="selectedEvent">
-      </app-event-card>
-    </div>
-  </ng-template>
-
-
-</md-sidenav-container>
-<button type="button" class="sideNavOpenButton" md-fab (click)="sidenav.toggle()">
-  <md-icon>list</md-icon>
-</button>
+<ng-template #eventsBlock>
+  <div>
+    <app-event-card
+      *ngIf="selectedEvent"
+      [event]="selectedEvent">
+    </app-event-card>
+  </div>
+</ng-template>
