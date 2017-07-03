@@ -71,24 +71,23 @@ export class EventCardMapComponent {
   }
 
   private processReverseGeocodeResults = (results, status) => {
-    if (status === google.maps.GeocoderStatus.OK) {
-      results[0].address_components.forEach((addressComponent) => {
-        switch (addressComponent.types[0]) {
-          case 'country': {
-            this.country = addressComponent.long_name;
-            break;
-          }
-          case 'locality': {
-            this.city = addressComponent.long_name;
-            break;
-          }
-        }
-      });
-      this.changeDetectorRef.detectChanges();
-    } else {
-      debugger;
-      console.log('Error - ', results, ' & Status - ', status);
-    }
-  }
 
+    if (!status === google.maps.GeocoderStatus.OK) {
+      return;
+    }
+
+    results[0].address_components.forEach((addressComponent) => {
+      switch (addressComponent.types[0]) {
+        case 'country': {
+          this.country = addressComponent.long_name;
+          break;
+        }
+        case 'locality': {
+          this.city = addressComponent.long_name;
+          break;
+        }
+      }
+    });
+    this.changeDetectorRef.detectChanges();
+  }
 }
