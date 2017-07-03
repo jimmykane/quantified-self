@@ -1,25 +1,18 @@
-<md-sidenav-container style="height: 100vh;">
+<md-sidenav-container>
   <md-sidenav #sidenav>
-    <md-list>
-      <div class="p-4" style="min-width: 300px;">
-        <p md-header>Events</p>
-        <md-divider></md-divider>
-        <md-list-item *ngFor="let event of events; let i = index;">
-          <button md-button
-                  [routerLink]="['/dashboard']"
-                  [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-                  [queryParams]="{ eventID: event.getID() }"
-                  (click)="sidenav.close()">
-            <md-icon md-list-icon>layers</md-icon>
-            {{ event.getName() }}
-            <!--<button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"-->
-            <!--(click)="mergeEvents($event, event)">Merge-->
-            <!--</button>-->
-          </button>
-          <br/>
-        </md-list-item>
-      </div>
-    </md-list>
+    <md-toolbar>
+      <span>Events</span>
+      <md-toolbar-row *ngFor="let event of events; let i = index;">
+        <span [routerLink]="['/dashboard']"
+              [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
+              [queryParams]="{ eventID: event.getID() }"
+              (click)="sidenav.close()">{{ event.getName() }}</span>
+        <span class="spacer"></span>
+        <button md-button *ngIf="selectedEvent && event.getID() !== selectedEvent.getID()"
+                (click)="mergeEvents($event, event)">Merge
+        </button>
+      </md-toolbar-row>
+    </md-toolbar>
   </md-sidenav>
 
   <div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>

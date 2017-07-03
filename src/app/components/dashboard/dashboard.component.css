@@ -1,3 +1,15 @@
+md-sidenav-container {
+  height: 100vh;
+}
+
+md-toolbar{
+  width: 50vh;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
 .sideNavOpenButton {
   position: fixed;
   bottom: 2vh;

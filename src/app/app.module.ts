@@ -22,7 +22,7 @@ import {EventCardLapsComponent} from './components/cards/event/laps/event.card.l
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
   MdButtonModule, MdCardModule, MdCommonModule, MdIconModule, MdMenuModule, MdSidenavModule,
-  MdTabsModule
+  MdTabsModule, MdToolbarModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -44,6 +44,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
     MdMenuModule,
     MdTabsModule,
     MdSidenavModule,
+    MdToolbarModule,
     MomentModule,
     AmChartsModule
   ],
