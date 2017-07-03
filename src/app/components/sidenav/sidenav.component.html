@@ -1,12 +1,15 @@
-<h4>Event List</h4>
-<div *ngFor="let event of events; let i = index;"
-     [class.background-color-gray]="selectedEvent && event.getID() === selectedEvent.getID()">
-  <a md-button
+<md-toolbar>
+  <h4>Event List</h4>
+</md-toolbar>
+<div >
+  <button md-button
+     *ngFor="let event of events; let i = index;"
+     [class.background-color-gray]="selectedEvent && event.getID() === selectedEvent.getID()"
      [routerLink]="['/dashboard']"
      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
      [queryParams]="{ eventID: event.getID() }">
     <md-icon>more_horiz</md-icon>
     {{ event.getName() }}
-  </a>
+  </button>
 </div>
 
