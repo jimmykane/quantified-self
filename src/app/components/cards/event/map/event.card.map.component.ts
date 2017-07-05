@@ -72,6 +72,7 @@ export class EventCardMapComponent {
   }
 
   ngOnChanges() {
+    // @todo fix this in a proper way. Maybe use native google maps api
     this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({
