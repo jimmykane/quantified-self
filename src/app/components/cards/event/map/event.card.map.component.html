@@ -1,5 +1,5 @@
-<md-grid-list cols="2" rowHeight="1:1">
-  <md-grid-tile>
+<md-grid-list cols="3" rowHeight="2:1">
+  <md-grid-tile colspan="2" rowspan="2">
     <agm-map
       style="height: 100%; width: 100%;"
       [fullscreenControl]="true"
@@ -15,13 +15,12 @@
       </agm-polyline>
     </agm-map>
   </md-grid-tile>
-  <md-grid-tile>
-    <md-list>
-      <md-list-item>
-            <md-icon>location_city</md-icon>
-            <h3> {{ city }}, {{ country }}</h3>
-            <h3> {{ temperature }}C</h3>
-      </md-list-item>
-    </md-list>
+  <md-grid-tile colspan="1" rowspan="1">
+    <md-icon>location_city</md-icon>
+    <h3> {{ city }}, {{ country }}</h3>
+  </md-grid-tile>
+    <md-grid-tile colspan="1" rowspan="1">
+    <md-icon>location_city</md-icon>
+    <h3> {{ city }}, {{ country }}</h3>
   </md-grid-tile>
 </md-grid-list>
