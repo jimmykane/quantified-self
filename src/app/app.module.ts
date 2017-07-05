@@ -28,12 +28,15 @@ import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
+import {WeatherService} from './services/weather/app.weather.service';
+import {HttpModule} from '@angular/http';
 
 @NgModule({
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
+    HttpModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyCt6rJsrVVHOSmr2oPcl2bmJ3XQmktOU3E'
     }),
@@ -66,7 +69,7 @@ import {SideNavComponent} from './components/sidenav/sidenav.component';
     EventCardChartComponent,
     AboutComponent
   ],
-  providers: [LocalStorageService, EventService],
+  providers: [LocalStorageService, EventService, WeatherService],
   bootstrap: [AppComponent]
 })
 

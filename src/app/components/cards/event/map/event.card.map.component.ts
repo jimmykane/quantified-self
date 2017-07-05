@@ -5,6 +5,8 @@ import {PointInterface} from '../../../../entities/points/point.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {Log} from "ng2-logger";
 import {GoogleMap} from "@agm/core/services/google-maps-types";
+import {WeatherService} from "../../../../services/weather/app.weather.service";
+import {Subscription} from "rxjs/Subscription";
 
 declare var google: any;
 
@@ -20,12 +22,18 @@ declare var google: any;
 export class EventCardMapComponent {
   @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
+
   city: string;
   country: string;
+  temperature: string;
 
   private logger = Log.create(this.constructor.name);
+  private weatherSubscription: Subscription;
 
-  constructor(private changeDetectorRef: ChangeDetectorRef, private googleMapsWrapper: GoogleMapsAPIWrapper) {
+
+  constructor(private changeDetectorRef: ChangeDetectorRef,
+              private googleMapsWrapper: GoogleMapsAPIWrapper,
+              private weatherService: WeatherService) {
   }
 
   fitBounds(): LatLngBoundsLiteral {
@@ -58,6 +66,11 @@ export class EventCardMapComponent {
     return seedColor(seed).toHex();
   }
 
+
+  ngOnInit() {
+
+  }
+
   ngOnChanges() {
     this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
       const geocoder = new google.maps.Geocoder();
@@ -67,7 +80,16 @@ export class EventCardMapComponent {
           lng: this.event.getFirstActivity().getStartPoint().getPosition().longitudeDegrees
         }
       }, this.processReverseGeocodeResults);
+
     });
+    if (this.weatherSubscription) {
+      this.weatherSubscription.unsubscribe();
+    }
+    this.weatherSubscription = this.weatherService.getWeatherForEvent(this.event).subscribe((data) => {
+      debugger;
+      this.changeDetectorRef.detectChanges();
+    });
+
   }
 
   private processReverseGeocodeResults = (results, status) => {
@@ -89,5 +111,9 @@ export class EventCardMapComponent {
       }
     });
     this.changeDetectorRef.detectChanges();
+  };
+
+  ngOnDestroy(): void {
+    this.weatherSubscription.unsubscribe();
   }
 }
