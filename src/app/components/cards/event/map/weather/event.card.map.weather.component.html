@@ -1,0 +1,6 @@
+<h2>Weather conditions</h2>
+<p *ngFor="let weatherDataItem of weatherData">
+  <span>{{weatherDataItem.date | date:'shortTime'}}</span>
+  <span  class="mat-h4"> {{weatherDataItem.temperatureInCelsius}}c</span>
+  <span>{{weatherDataItem.conditions }}</span>
+</p>

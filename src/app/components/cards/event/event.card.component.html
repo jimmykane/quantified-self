@@ -10,8 +10,7 @@
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
     </md-card-subtitle>
     <md-card-subtitle>
-      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in {{ event.getTotalDurationInSeconds() |
-      amDuration:'seconds' }}
+      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
     </md-card-subtitle>
   </md-card-header>
 

@@ -30,6 +30,8 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {WeatherService} from './services/weather/app.weather.service';
 import {HttpModule} from '@angular/http';
+import {EventCardMapLocationComponent} from "./components/cards/event/map/location/event.card.map.location.component";
+import {EventCardMapWeatherComponent} from "./components/cards/event/map/weather/event.card.map.weather.component";
 
 @NgModule({
   imports: [
@@ -60,6 +62,8 @@ import {HttpModule} from '@angular/http';
     UploadComponent,
     EventCardComponent,
     EventCardMapComponent,
+    EventCardMapLocationComponent,
+    EventCardMapWeatherComponent,
     EventCardStatsComponent,
     EventActivitiesCardComponent,
     EventActivityTableRowComponent,

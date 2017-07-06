@@ -14,7 +14,7 @@ export class WeatherService {
   constructor(private http: Http) {
   }
 
-  getWeatherForEvent(event: EventInterface): Observable<any> {
+  getWeatherForEvent(event: EventInterface): Observable<WeatherItem[]> {
     return this.http
       .get(this.historyApiUrl
         .replace('{lat}', event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees.toString())
@@ -22,14 +22,15 @@ export class WeatherService {
         .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
         .replace('{apiKey}', this.apiKey))
       .map((response) => {
-        debugger;
         const jsonReply = JSON.parse(response.text());
         return jsonReply.history.observations.reduce((weatherItems: WeatherItem[], observation: any) => {
           if (Number(observation.date.hour) >= event.getFirstActivity().getStartDate().getHours() &&
             Number(observation.date.hour) <= event.getLastActivity().getEndDate().getHours()) {
             if (Number(observation.tempm) !== -9999) {
+              const weatherItemDate =  new Date(event.getFirstActivity().getStartDate().getTime());
+              weatherItemDate.setHours(Number(observation.date.hour));
               weatherItems.push(new WeatherItem(
-                new Date(event.getFirstActivity().getStartDate().setHours(Number(observation.date.hour))),
+                weatherItemDate,
                 observation.conds,
                 Number(observation.tempm))
               )

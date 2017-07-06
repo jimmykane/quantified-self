@@ -16,11 +16,9 @@
     </agm-map>
   </md-grid-tile>
   <md-grid-tile colspan="1" rowspan="1">
-    <md-icon>location_city</md-icon>
-    <h3> {{ city }}, {{ country }}</h3>
+    <app-card-map-location [locationData]="locationData"></app-card-map-location>
   </md-grid-tile>
-    <md-grid-tile colspan="1" rowspan="1">
-    <md-icon>location_city</md-icon>
-    <h3> {{ city }}, {{ country }}</h3>
+  <md-grid-tile colspan="1" rowspan="1">
+    <app-card-map-weather [event]="event"></app-card-map-weather>
   </md-grid-tile>
 </md-grid-list>

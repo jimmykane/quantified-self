@@ -3,10 +3,10 @@ import seedColor from 'seed-color';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral, LatLngLiteral} from '@agm/core';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
-import {Log} from "ng2-logger";
-import {GoogleMap} from "@agm/core/services/google-maps-types";
-import {WeatherService} from "../../../../services/weather/app.weather.service";
-import {Subscription} from "rxjs/Subscription";
+import {Log} from 'ng2-logger';
+import {GoogleMap} from '@agm/core/services/google-maps-types';
+import {WeatherService} from '../../../../services/weather/app.weather.service';
+import {Subscription} from 'rxjs/Subscription';
 
 declare var google: any;
 
@@ -16,24 +16,19 @@ declare var google: any;
   templateUrl: './event.card.map.component.html',
   styleUrls: ['./event.card.map.component.css'],
   providers: [GoogleMapsAPIWrapper],
-  // changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class EventCardMapComponent {
   @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
 
-  city: string;
-  country: string;
-  temperature: string;
+  public locationData: any = {};
 
   private logger = Log.create(this.constructor.name);
-  private weatherSubscription: Subscription;
-
 
   constructor(private changeDetectorRef: ChangeDetectorRef,
-              private googleMapsWrapper: GoogleMapsAPIWrapper,
-              private weatherService: WeatherService) {
+              private googleMapsWrapper: GoogleMapsAPIWrapper) {
   }
 
   fitBounds(): LatLngBoundsLiteral {
@@ -83,14 +78,6 @@ export class EventCardMapComponent {
       }, this.processReverseGeocodeResults);
 
     });
-    if (this.weatherSubscription) {
-      this.weatherSubscription.unsubscribe();
-    }
-    this.weatherSubscription = this.weatherService.getWeatherForEvent(this.event).subscribe((data) => {
-      debugger;
-      this.changeDetectorRef.detectChanges();
-    });
-
   }
 
   private processReverseGeocodeResults = (results, status) => {
@@ -102,19 +89,16 @@ export class EventCardMapComponent {
     results[0].address_components.forEach((addressComponent) => {
       switch (addressComponent.types[0]) {
         case 'country': {
-          this.country = addressComponent.long_name;
+
+          this.locationData.country = addressComponent.long_name;
           break;
         }
         case 'locality': {
-          this.city = addressComponent.long_name;
+          this.locationData.city = addressComponent.long_name;
           break;
         }
       }
     });
     this.changeDetectorRef.detectChanges();
   };
-
-  ngOnDestroy(): void {
-    this.weatherSubscription.unsubscribe();
-  }
 }
