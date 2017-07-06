@@ -1,4 +1,9 @@
-<div>
-  <p>Total time: {{ event.getTotalDurationInSeconds() }}</p>
-  <p>Average Heart Rate: {{ event.getDataTypeAverage('DataHeartRate') }}</p>
-</div>
+<md-grid-list cols="{{dataTypeAverages.length}}">
+  <md-grid-tile *ngFor="let dataTypeAverage of dataTypeAverages">
+    <p>
+      <fa [name]="dataTypeAverage.iconName" [size]="3"></fa>
+      {{ dataTypeAverage.name }}
+      {{ dataTypeAverage.value.toFixed(0) }} {{dataTypeAverage.units}}
+    </p>
+  </md-grid-tile>
+</md-grid-list>
