@@ -15,8 +15,9 @@ import {DataTemperature} from "../../../../entities/data/data.temperature";
 
 export class EventCardStatsComponent implements OnChanges {
   @Input() event: EventInterface;
+  public stats = [];
 
-  public dataTypeAverages = [
+  private dataTypeAverages = [
     {
       name: DataHeartRate.name,
       value: null,
@@ -44,8 +45,22 @@ export class EventCardStatsComponent implements OnChanges {
   ];
 
   ngOnChanges() {
+    this.stats = [...[
+      {
+        name: 'Distance',
+        value: (this.event.getDistanceInMeters() / 1000).toFixed(2),
+        iconName: 'arrows-h',
+        units: 'km'
+      },
+      {
+        name: 'Time',
+        value: (new Date(this.event.getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
+        iconName: 'clock-o',
+        units: ''
+      }
+    ], ...this.dataTypeAverages];
     this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = this.event.getDataTypeAverage(dataTypeAverage.name);
+      dataTypeAverage.value = this.event.getDataTypeAverage(dataTypeAverage.name).toFixed(0);
     });
   }
 }

@@ -1,6 +1,11 @@
-<h2>Weather conditions</h2>
-<p *ngFor="let weatherDataItem of weatherData">
-  <span>{{weatherDataItem.date | date:'shortTime'}}</span>
-  <span  class="mat-h4"> {{weatherDataItem.temperatureInCelsius}}c</span>
-  <span>{{weatherDataItem.conditions }}</span>
-</p>
+<md-list>
+  <h2 md-subheader="">Weather conditions</h2>
+  <md-list-item *ngFor="let weatherDataItem of weatherData">
+    <div md-line>
+      <span class="mat-h4">
+        <fa [name]="'thermometer'" [size]="1"></fa>
+        {{weatherDataItem.temperatureInCelsius}}c, {{weatherDataItem.conditions }} around {{weatherDataItem.date | date:'shortTime'}}</span>
+    </div>
+  </md-list-item>
+</md-list>
+
