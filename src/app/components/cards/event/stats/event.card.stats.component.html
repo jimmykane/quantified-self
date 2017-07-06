@@ -1,9 +1,7 @@
 <md-grid-list cols="{{ dataTypeAverages.length/2 }}" rowHeight="2:1">
   <md-grid-tile *ngFor="let dataTypeAverage of dataTypeAverages">
-    <p>
       <fa [name]="dataTypeAverage.iconName" [size]="2"></fa>
-      {{ dataTypeAverage.name }}
+      <!--{{ dataTypeAverage.name }}-->
       {{ dataTypeAverage.value.toFixed(0) }} {{dataTypeAverage.units}}
-    </p>
   </md-grid-tile>
 </md-grid-list>
