@@ -25,6 +25,7 @@
       "prefix": "app",
       "styles": [
         "../node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
+        "../node_modules/font-awesome/css/font-awesome.css",
         "styles.scss"
       ],
       "scripts": [
@@ -32,6 +33,9 @@
         "../node_modules/amcharts3/amcharts/serial.js",
         "../node_modules/amcharts3/amcharts/themes/light.js",
         "../node_modules/amcharts3/amcharts/plugins/animate/animate.js"
+      ],
+      "addons": [
+        "../node_modules/font-awesome/fonts/*.+(otf|eot|svg|ttf|woff|woff2)"
       ],
       "environmentSource": "environments/environment.ts",
       "environments": {
