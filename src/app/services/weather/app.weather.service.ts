@@ -3,6 +3,8 @@ import {Http} from '@angular/http';
 import {Observable} from 'rxjs/Observable';
 import {EventInterface} from '../../entities/events/event.interface';
 import {WeatherItem} from './app.weather.item';
+import 'rxjs/add/operator/catch';
+import 'rxjs/add/operator/map';
 
 
 @Injectable()
