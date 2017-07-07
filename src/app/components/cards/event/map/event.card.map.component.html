@@ -8,7 +8,7 @@
         *ngFor="let activity of event.getActivities(); let i = index;"
         [strokeColor]="getActivityColor(i.toString())">
         <agm-polyline-point
-          *ngFor="let point of event.getPointsWithPosition(null, null, null [activity])"
+          *ngFor="let point of event.getPointsWithPosition({activities: [activity]})"
           [latitude]="point.getPosition().latitudeDegrees"
           [longitude]="point.getPosition().longitudeDegrees">
         </agm-polyline-point>
