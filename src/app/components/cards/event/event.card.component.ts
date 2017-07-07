@@ -17,11 +17,10 @@ export class EventCardComponent implements OnInit, OnDestroy {
 
   private parametersSubscription: Subscription;
 
-  constructor(private route: ActivatedRoute, private changeDetectorRef: ChangeDetectorRef,
-              private router: Router) {}
+  constructor(private route: ActivatedRoute, private router: Router) {}
 
   selectedTabIndexChange(index) {
-    this.router.navigate(['/dashboard'], { queryParams: { eventID: this.event.getID() ,tabID:index } });
+    this.router.navigate(['/dashboard'], {queryParams: {eventID: this.event.getID(), tabID: index}});
   }
 
   ngOnInit() {
