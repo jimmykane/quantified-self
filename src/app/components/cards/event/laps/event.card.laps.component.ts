@@ -1,5 +1,6 @@
-import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
+import {LapInterface} from "../../../../entities/laps/lap.interface";
 
 @Component({
   selector: 'app-event-card-laps',
@@ -9,8 +10,13 @@ import {EventInterface} from '../../../../entities/events/event.interface';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardLapsComponent {
+export class EventCardLapsComponent implements OnChanges {
   @Input() event: EventInterface;
-  this.lapData: {startDate: Date, endDate: Date, distance: number, }
+  public lapData: {startDate: Date, endDate: Date, distanceInMeters: number, durationInSeconds: number}[] = [];
+  displayedColumns = ['startDate', 'endDate', 'distanceInMeters', 'durationInSeconds'];
 
+  constructor(private changeDetectorRef: ChangeDetectorRef){}
+
+  ngOnChanges() {
+  }
 }
