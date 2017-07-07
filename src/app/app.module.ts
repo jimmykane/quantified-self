@@ -21,7 +21,7 @@ import {EventCardLapsComponent} from './components/cards/event/laps/event.card.l
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
   MdButtonModule, MdButtonToggleModule, MdCardModule, MdCommonModule, MdGridListModule, MdIconModule, MdMenuModule,
-  MdSidenavModule,
+  MdSidenavModule, MdTableModule,
   MdTabsModule, MdToolbarModule
 } from '@angular/material';
 import 'hammerjs';
@@ -53,6 +53,7 @@ import {Angular2FontawesomeModule} from 'angular2-fontawesome';
     MdSidenavModule,
     MdToolbarModule,
     MdGridListModule,
+    MdTableModule,
     MomentModule,
     AmChartsModule,
     Angular2FontawesomeModule,
