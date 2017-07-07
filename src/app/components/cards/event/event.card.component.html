@@ -17,7 +17,7 @@
 
   <md-card-content>
 
-    <md-tab-group [dynamicHeight]="true" (selectedIndexChange)="selectedTabIndexChange($event)">
+    <md-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex" (selectedIndexChange)="selectedTabIndexChange($event)">
       <md-tab label="Map">
           <app-event-card-map
             [event]="event">

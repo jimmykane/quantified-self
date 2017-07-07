@@ -1,5 +1,7 @@
-import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {EventInterface} from '../../../entities/events/event.interface';
+import {Subscription} from "rxjs/Subscription";
+import {ActivatedRoute, Params, Router} from "@angular/router";
 
 
 @Component({
@@ -9,11 +11,27 @@ import {EventInterface} from '../../../entities/events/event.interface';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardComponent {
+export class EventCardComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
   selectedTabIndex;
 
+  private parametersSubscription: Subscription;
+
+  constructor(private route: ActivatedRoute, private changeDetectorRef: ChangeDetectorRef,
+              private router: Router) {}
+
   selectedTabIndexChange(index) {
-    this.selectedTabIndex = index;
+    this.router.navigate(['/dashboard'], { queryParams: { eventID: this.event.getID() ,tabID:index } });
+  }
+
+  ngOnInit() {
+    // Subscribe to route changes
+    this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
+      this.selectedTabIndex = +params['tabID'];
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.parametersSubscription.unsubscribe();
   }
 }
