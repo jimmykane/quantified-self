@@ -18,7 +18,7 @@
   <md-card-content>
 
     <md-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex" (selectedIndexChange)="selectedTabIndexChange($event)">
-      <md-tab label="Map">
+      <md-tab label="Map" *ngIf="event.getPointsWithPosition().length > 0"> <!-- todo check performance on if -->
           <app-event-card-map
             [event]="event" [resize]="selectedTabIndex === 0">
           </app-event-card-map>
@@ -36,7 +36,7 @@
         <app-event-card-chart *ngIf="selectedTabIndex === 3" [event]="event">
         </app-event-card-chart>
       </md-tab>
-      <md-tab label="Laps">
+      <md-tab label="Laps" *ngIf="event.getLaps().length > 0">
         <app-event-card-laps [event]="event">
         </app-event-card-laps>
       </md-tab>

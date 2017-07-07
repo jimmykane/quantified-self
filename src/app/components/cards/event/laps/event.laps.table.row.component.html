@@ -1,4 +1,5 @@
-<td class="text-center">{{ index+1 }}</td>
-<td class="text-center">{{ lap.getStartDate() | date:'mediumTime' }}</td>
-<td class="text-center">{{ lap.getEndDate() | date:'mediumTime' }}</td>
-<td class="text-center">{{ (event.getDistanceInMeters(lap.getStartDate(), lap.getEndDate())/1000).toFixed(1) }} km</td>
+<td><h3>{{ index+1 }}</h3></td>
+<td>{{ (event.getDistanceInMeters(lap.getStartDate(), lap.getEndDate())/1000).toFixed(1) }} km</td>
+<td>{{ lap.getDurationInSeconds() | amDuration:'seconds' }}</td>
+<td>{{ lap.getStartDate() | date:'mediumTime' }}</td>
+<td>{{ lap.getEndDate() | date:'mediumTime' }}</td>
