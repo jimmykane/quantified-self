@@ -1,14 +1,15 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, ViewChild} from '@angular/core';
+import {
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnInit,
+  ViewChild
+} from '@angular/core';
 import seedColor from 'seed-color';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral, LatLngLiteral} from '@agm/core';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {Log} from 'ng2-logger';
 import {GoogleMap} from '@agm/core/services/google-maps-types';
-import {WeatherService} from '../../../../services/weather/app.weather.service';
-import {Subscription} from 'rxjs/Subscription';
 
-declare var google: any;
+declare const google: any;
 
 
 @Component({
@@ -19,19 +20,46 @@ declare var google: any;
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardMapComponent {
+export class EventCardMapComponent implements OnInit, OnChanges {
   @Input() event: EventInterface;
+  @Input() resize: boolean;
   @ViewChild(AgmMap) agmMap;
 
   public locationData: any = {};
 
   private logger = Log.create(this.constructor.name);
 
-  constructor(private changeDetectorRef: ChangeDetectorRef,
-              private googleMapsWrapper: GoogleMapsAPIWrapper) {
+  constructor(private changeDetectorRef: ChangeDetectorRef, private googleMapsWrapper: GoogleMapsAPIWrapper) {
   }
 
-  fitBounds(): LatLngBoundsLiteral {
+  ngOnInit() {
+  }
+
+  ngOnChanges() {
+    if (this.resize) {
+      this.agmMap.triggerResize()
+        .then(() => {
+          this.agmMap._mapsWrapper.getBounds(this.getBounds())
+        });
+    }
+    // @todo fix this in a proper way. Maybe use native google maps api
+    this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({
+        'location': {
+          lat: this.event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees,
+          lng: this.event.getFirstActivity().getStartPoint().getPosition().longitudeDegrees
+        }
+      }, this.processReverseGeocodeResults);
+
+    });
+  }
+
+  getActivityColor(seed: string): string {
+    return seedColor(seed).toHex();
+  }
+
+  getBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.event.getPointsWithPosition();
     if (!pointsWithPosition.length) {
       return;
@@ -57,31 +85,7 @@ export class EventCardMapComponent {
   }
 
 
-  getActivityColor(seed: string): string {
-    return seedColor(seed).toHex();
-  }
-
-
-  ngOnInit() {
-
-  }
-
-  ngOnChanges() {
-    // @todo fix this in a proper way. Maybe use native google maps api
-    this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({
-        'location': {
-          lat: this.event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees,
-          lng: this.event.getFirstActivity().getStartPoint().getPosition().longitudeDegrees
-        }
-      }, this.processReverseGeocodeResults);
-
-    });
-  }
-
   private processReverseGeocodeResults = (results, status) => {
-
     if (!status === google.maps.GeocoderStatus.OK) {
       return;
     }

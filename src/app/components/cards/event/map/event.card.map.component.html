@@ -3,7 +3,7 @@
     <agm-map
       style="height: 100%; width: 100%;"
       [fullscreenControl]="true"
-      [fitBounds]="fitBounds()">
+      [fitBounds]="getBounds()">
       <agm-polyline
         *ngFor="let activity of event.getActivities(); let i = index;"
         [strokeColor]="getActivityColor(i.toString())">

@@ -20,7 +20,7 @@
     <md-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex" (selectedIndexChange)="selectedTabIndexChange($event)">
       <md-tab label="Map">
           <app-event-card-map
-            [event]="event">
+            [event]="event" [resize]="selectedTabIndex === 0">
           </app-event-card-map>
       </md-tab>
       <md-tab label="Stats">
