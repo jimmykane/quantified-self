@@ -38,7 +38,7 @@ export class Lap implements LapInterface {
     return this.endDate;
   }
 
-  getTotalTimeInSeconds(): number {
+  getDurationInSeconds(): number {
     return (+this.getEndDate() - +this.getStartDate()) / 1000;
   }
 

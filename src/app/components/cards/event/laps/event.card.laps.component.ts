@@ -11,4 +11,6 @@ import {EventInterface} from '../../../../entities/events/event.interface';
 
 export class EventCardLapsComponent {
   @Input() event: EventInterface;
+  this.lapData: {startDate: Date, endDate: Date, distance: number, }
+
 }

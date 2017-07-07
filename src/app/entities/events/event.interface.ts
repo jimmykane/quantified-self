@@ -3,9 +3,8 @@ import {GeodesyAdapterInterface} from '../geodesy/adapters/adapter.interface';
 import {PointInterface} from '../points/point.interface';
 import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
-import {DataInterface} from "../data/data.interface";
-import {LapInterface} from "../laps/lap.interface";
-import {Lap} from "../laps/lap";
+import {DataInterface} from '../data/data.interface';
+import {LapInterface} from '../laps/lap.interface';
 
 export interface EventInterface extends IDClassInterface, SerializableClassInterface {
   getGeodesyAdapter(): GeodesyAdapterInterface;
@@ -17,7 +16,7 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getFirstActivity(): ActivityInterface;
   getLastActivity(): ActivityInterface;
   getLaps(): LapInterface[];
-  addLap(lap: Lap);
+  addLap(lap: LapInterface);
   getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
   getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
   getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]>;
