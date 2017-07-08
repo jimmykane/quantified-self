@@ -1,3 +1,5 @@
-table{
-  height: 100%;
+table {
+  width: 100%;
+  padding-top: 2%;
+  overflow: scroll;
 }

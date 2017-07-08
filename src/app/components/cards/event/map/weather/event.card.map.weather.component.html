@@ -3,16 +3,16 @@
   <tbody>
   <tr *ngFor="let weatherDataItem of weatherData">
     <td>
-      {{weatherDataItem.date | date:'shortTime'}}
+      <h3>{{weatherDataItem.date | date:'shortTime'}}</h3>
     </td>
     <td>
-      <fa [name]="'thermometer'" [size]="1"></fa>
+      <h3><fa [name]="'thermometer'" [size]="1"></fa></h3>
     </td>
     <td>
-      {{weatherDataItem.temperatureInCelsius}}c
+      <h3>{{weatherDataItem.temperatureInCelsius}}c</h3>
     </td>
     <td>
-      {{weatherDataItem.conditions }}
+      <h3>{{weatherDataItem.conditions }}</h3>
     </td>
   </tr>
   </tbody>
