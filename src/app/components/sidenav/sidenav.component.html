@@ -7,7 +7,7 @@
      [class.background-color-gray]="selectedEvent && event.getID() === selectedEvent.getID()"
      [routerLink]="['/dashboard']"
      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-     [queryParams]="{ eventID: event.getID() }">
+     [queryParams]="{ eventID: event.getID(), tabIndex: parametersTabIndex }">
     <md-icon>more_horiz</md-icon>
     {{ event.getName() }}
   </button>

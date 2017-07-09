@@ -17,6 +17,7 @@ export class SideNavComponent implements OnInit {
   public selectedEvent: EventInterface;
 
   private parametersEventID: string;
+  private parametersTabIndex: string;
   private parametersSubscription: Subscription;
   private eventsSubscription: Subscription;
 
@@ -28,6 +29,7 @@ export class SideNavComponent implements OnInit {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.parametersEventID = params['eventID'];
+      this.parametersTabIndex = params['tabIndex'];
       this.findSelectedEvent();
     });
 
