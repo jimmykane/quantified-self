@@ -3,6 +3,7 @@ import {EventInterface} from '../../../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {WeatherService} from '../../../../../services/weather/app.weather.service';
 import {WeatherItem} from '../../../../../services/weather/app.weather.item';
+import {Weather} from "../../../../../services/weather/app.weather";
 
 @Component({
   selector: 'app-card-map-weather',
@@ -14,7 +15,7 @@ import {WeatherItem} from '../../../../../services/weather/app.weather.item';
 export class EventCardMapWeatherComponent implements OnChanges, OnDestroy {
   @Input() event: EventInterface;
 
-  weatherData: WeatherItem[] = [];
+  weather: Weather;
 
   private weatherSubscription: Subscription;
 
@@ -25,8 +26,8 @@ export class EventCardMapWeatherComponent implements OnChanges, OnDestroy {
     if (this.weatherSubscription) {
       this.weatherSubscription.unsubscribe();
     }
-    this.weatherSubscription = this.weatherService.getWeatherForEvent(this.event).subscribe((data) => {
-      this.weatherData = data;
+    this.weatherSubscription = this.weatherService.getWeatherForEvent(this.event).subscribe((weather: Weather) => {
+      this.weather = weather;
       this.changeDetectorRef.detectChanges();
     });
   }

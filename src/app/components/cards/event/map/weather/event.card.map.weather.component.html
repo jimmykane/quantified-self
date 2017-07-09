@@ -1,19 +1,15 @@
 <h2 md-subheader="">Weather conditions</h2>
-<table>
-  <tbody>
-  <tr *ngFor="let weatherDataItem of weatherData">
-    <td>
-      <h3>{{weatherDataItem.date | date:'shortTime'}}</h3>
-    </td>
-    <td>
-      <h3><fa [name]="'thermometer'" [size]="1"></fa></h3>
-    </td>
-    <td>
-      <h3>{{weatherDataItem.temperatureInCelsius}}c</h3>
-    </td>
-    <td>
-      <h3>{{weatherDataItem.conditions }}</h3>
-    </td>
-  </tr>
-  </tbody>
-</table>
+<div *ngIf="weather">
+  <div>
+    <fa [name]="'thermometer-empty'" [size]="2"></fa>
+    Min {{ weather.getMinTemperatureInCelsius() }}
+  </div>
+  <div>
+    <fa [name]="'thermometer-half'" [size]="2"></fa>
+    Max {{ weather.getMaxTemperatureInCelsius() }}
+  </div>
+  <div>
+    <fa [name]="'thermometer-full'" [size]="2"></fa>
+    Average {{ weather.getAverageTemperatureInCelsius().toFixed(0) }}
+  </div>
+</div>

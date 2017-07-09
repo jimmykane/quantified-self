@@ -5,6 +5,7 @@ import {EventInterface} from '../../entities/events/event.interface';
 import {WeatherItem} from './app.weather.item';
 import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/map';
+import {Weather} from "./app.weather";
 
 
 @Injectable()
@@ -16,7 +17,7 @@ export class WeatherService {
   constructor(private http: Http) {
   }
 
-  getWeatherForEvent(event: EventInterface): Observable<WeatherItem[]> {
+  getWeatherForEvent(event: EventInterface): Observable<Weather> {
     return this.http
       .get(this.historyApiUrl
         .replace('{lat}', event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees.toString())
@@ -24,7 +25,7 @@ export class WeatherService {
         .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
         .replace('{apiKey}', this.apiKey))
       .map((response) => {
-        return [...JSON.parse(response.text())
+        return new Weather([...JSON.parse(response.text())
           .history.observations.reduce((weatherItems: Map<string, WeatherItem>, observation: any) => {
             if (Number(observation.date.hour) >= event.getFirstActivity().getStartDate().getHours() &&
               Number(observation.date.hour) <= event.getLastActivity().getEndDate().getHours() &&
@@ -38,7 +39,7 @@ export class WeatherService {
               )
             }
             return weatherItems;
-          }, new Map<string, WeatherItem>()).values()];
+          }, new Map<string, WeatherItem>()).values()]);
       })
   }
 }
