@@ -1,3 +1,8 @@
 md-grid-list{
   padding: 2%;
 }
+app-card-map-weather{
+  min-width: 100%;
+  text-align: center;
+}
+

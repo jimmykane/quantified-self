@@ -1,15 +1,17 @@
-<h2 md-subheader="">Weather conditions</h2>
-<div *ngIf="weather">
-  <div>
+<md-grid-list cols="3" rowHeight="3:1" *ngIf="weather">
+  <md-grid-tile colspan="3">
+    <h3>{{ weather.weatherItems[0].conditions }}</h3>
+  </md-grid-tile>
+  <md-grid-tile>
     <fa [name]="'thermometer-empty'" [size]="2"></fa>
     Min {{ weather.getMinTemperatureInCelsius() }}
-  </div>
-  <div>
-    <fa [name]="'thermometer-half'" [size]="2"></fa>
+  </md-grid-tile>
+  <md-grid-tile>
+     <fa [name]="'thermometer-full'" [size]="2"></fa>
     Max {{ weather.getMaxTemperatureInCelsius() }}
-  </div>
-  <div>
-    <fa [name]="'thermometer-full'" [size]="2"></fa>
+  </md-grid-tile>
+  <md-grid-tile>
+     <fa [name]="'thermometer-half'" [size]="2"></fa>
     Average {{ weather.getAverageTemperatureInCelsius().toFixed(0) }}
-  </div>
-</div>
+  </md-grid-tile>
+</md-grid-list>
