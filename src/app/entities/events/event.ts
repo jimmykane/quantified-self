@@ -31,7 +31,6 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getName() {
-    this.logger.d('event name');
     return this.name;
   }
 
