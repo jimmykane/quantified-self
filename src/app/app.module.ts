@@ -8,8 +8,6 @@ import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
-import {EventActivitiesCardComponent} from './components/cards/event/activities/event.activities.component';
-import {EventActivityTableRowComponent} from './components/cards/event/activities/event.activity.table.row.component';
 import {EventCardMapComponent} from 'app/components/cards/event/map/event.card.map.component';
 import {LocalStorageService} from './services/app.local.storage.service';
 import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
@@ -20,7 +18,8 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
-  MdButtonModule, MdButtonToggleModule, MdCardModule, MdCommonModule, MdGridListModule, MdIconModule, MdMenuModule,
+  MdButtonModule, MdButtonToggleModule, MdCardModule, MdChipsModule, MdCommonModule, MdGridListModule, MdIconModule,
+  MdMenuModule,
   MdSidenavModule, MdTableModule,
   MdTabsModule, MdToolbarModule
 } from '@angular/material';
@@ -56,6 +55,7 @@ import {CdkTableModule} from "@angular/cdk";
     MdGridListModule,
     MdTableModule,
     CdkTableModule,
+    MdChipsModule,
     MomentModule,
     AmChartsModule,
     Angular2FontawesomeModule,
@@ -70,8 +70,6 @@ import {CdkTableModule} from "@angular/cdk";
     EventCardMapLocationComponent,
     EventCardMapWeatherComponent,
     EventCardStatsComponent,
-    EventActivitiesCardComponent,
-    EventActivityTableRowComponent,
     EventCardActionsMenuComponent,
     EventCardLapsComponent,
     EventLapTableRowComponent,
