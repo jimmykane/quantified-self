@@ -5,7 +5,7 @@
       {{ event.getName() }}
     </md-card-title>
     <md-card-subtitle>
-      {{ event.getFirstActivity().getStartDate() | date:'medium' }}
+      {{ event.getFirstActivity().getStartDate() | date:'short' }}
     </md-card-subtitle>
     <md-card-subtitle>
       {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in
@@ -23,4 +23,8 @@
       </md-tab>
 
   </md-card-content>
+  <md-card-actions>
+    <a md-button [routerLink]="['/dashboard']"
+     [queryParams]="{ eventID: event.getID() }">Details</a>
+  </md-card-actions>
 </md-card>
