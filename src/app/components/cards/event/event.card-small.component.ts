@@ -13,11 +13,11 @@ import {ActivatedRoute, Params, Router} from '@angular/router';
 
 export class EventCardSmallComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
+  @Input() classActive: boolean;
 
   private parametersSubscription: Subscription;
 
   constructor(private route: ActivatedRoute, private router: Router) {}
-
 
   ngOnInit() {
     // Subscribe to route changes

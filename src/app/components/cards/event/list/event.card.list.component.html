@@ -1,5 +1,5 @@
 <md-grid-list cols="2" rowheight="1:1">
-  <md-grid-tile *ngFor="let event of events" (click)="selectEvent(event)">
-    <app-event-card-small [event]="event"></app-event-card-small>
+  <md-grid-tile *ngFor="let event of events" (click)="clickEventCard(event)">
+    <app-event-card-small [event]="event" [classActive]="eventSelectionMap.get(event)"></app-event-card-small>
   </md-grid-tile>
 </md-grid-list>

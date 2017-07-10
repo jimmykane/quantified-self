@@ -10,13 +10,14 @@ import {EventInterface} from '../../../../entities/events/event.interface';
 })
 
 export class EventCardListComponent implements OnChanges {
-
   @Input() events: EventInterface[];
+
+  public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
   ngOnChanges(): void {
   }
 
-  selectEvent(event: EventInterface) {
-
+  clickEventCard(event: EventInterface) {
+    this.eventSelectionMap.set(event, !this.eventSelectionMap.get(event));
   }
 }
