@@ -1,4 +1,4 @@
-<div *ngIf="events.size > 0; then eventsBlock else uploadBlock"></div>
+<div *ngIf="events.size > 0; then eventBlock else uploadBlock"></div>
 
 <ng-template #uploadBlock>
   <div style="padding: 2vmin;">
@@ -9,9 +9,14 @@
   </div>
 </ng-template>
 
-<ng-template #eventsBlock>
+<ng-template #eventBlock>
+    <div *ngIf="selectedEvent; then eventCardBlock else eventCardListBlock"></div>
+  <ng-template #eventCardBlock>
     <app-event-card
       *ngIf="selectedEvent"
       [event]="selectedEvent">
     </app-event-card>
+  </ng-template>
+    <ng-template #eventCardListBlock>
+    </ng-template>
 </ng-template>
