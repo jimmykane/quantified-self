@@ -15,4 +15,8 @@ export class EventCardListComponent implements OnChanges {
 
   ngOnChanges(): void {
   }
+
+  selectEvent(event: EventInterface) {
+
+  }
 }
