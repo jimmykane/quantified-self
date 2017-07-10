@@ -32,7 +32,8 @@ import {HttpModule} from '@angular/http';
 import {EventCardMapLocationComponent} from './components/cards/event/map/location/event.card.map.location.component';
 import {EventCardMapWeatherComponent} from './components/cards/event/map/weather/event.card.map.weather.component';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
-import {CdkTableModule} from "@angular/cdk";
+import {CdkTableModule} from '@angular/cdk';
+import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
 
 @NgModule({
   imports: [
@@ -66,6 +67,7 @@ import {CdkTableModule} from "@angular/cdk";
     DashboardComponent,
     UploadComponent,
     EventCardComponent,
+    EventCardListComponent,
     EventCardMapComponent,
     EventCardMapLocationComponent,
     EventCardMapWeatherComponent,
