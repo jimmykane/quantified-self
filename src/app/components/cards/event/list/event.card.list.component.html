@@ -1,5 +1,5 @@
-<md-grid-list cols="3">
+<md-grid-list md-cols-sm='1' cols="3">
   <md-grid-tile *ngFor="let event of events">
-
+    <app-event-card-small [event]="event"></app-event-card-small>
   </md-grid-tile>
 </md-grid-list>

@@ -34,6 +34,7 @@ import {EventCardMapWeatherComponent} from './components/cards/event/map/weather
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
+import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
 
 @NgModule({
   imports: [
@@ -76,6 +77,7 @@ import {EventCardListComponent} from './components/cards/event/list/event.card.l
     EventCardLapsComponent,
     EventLapTableRowComponent,
     EventCardChartComponent,
+    EventCardSmallComponent,
     AboutComponent
   ],
   providers: [LocalStorageService, EventService, WeatherService],
