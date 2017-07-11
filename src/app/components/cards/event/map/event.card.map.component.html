@@ -1,5 +1,5 @@
-<md-grid-list cols="5" rowHeight="2:2">
-  <md-grid-tile rowspan="5" colspan="3">
+<md-grid-list cols="6" rowHeight="2:1">
+  <md-grid-tile rowspan="8" colspan="3">
     <agm-map
       style="height: 100%; width: 100%;"
       [fullscreenControl]="true"
@@ -15,13 +15,16 @@
       </agm-polyline>
     </agm-map>
   </md-grid-tile>
-  <md-grid-tile colspan="2" rowspan="1">
+  <md-grid-tile colspan="3" rowspan="1">
     <app-card-map-location [locationData]="locationData"></app-card-map-location>
   </md-grid-tile>
+  <md-grid-tile colspan="3" rowspan="3">
+    <app-card-map-weather [event]="event"></app-card-map-weather>
+  </md-grid-tile>
   <!-- @todo the following belongs else -->
-  <md-grid-tile colspan="2" rowspan="1">
+  <md-grid-tile colspan="1" rowspan="2" *ngFor="let activity of event.getActivities()">
     <md-chip-list>
-      <md-chip *ngFor="let activity of event.getActivities()">
+      <md-chip >
         {{ activity.getType() ? activity.getType() : '?'}}
         {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km
         in
@@ -37,8 +40,5 @@
         </span>
       </md-chip>
     </md-chip-list>
-  </md-grid-tile>
-  <md-grid-tile colspan="2" rowspan="3">
-    <app-card-map-weather [event]="event"></app-card-map-weather>
   </md-grid-tile>
 </md-grid-list>

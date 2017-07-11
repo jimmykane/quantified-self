@@ -1,9 +1,10 @@
-table {
-  width: 100%;
-  padding-top: 2%;
-  overflow: scroll;
-}
-
 fa{
   padding-right: 4%;
+}
+
+md-grid-list{
+  padding: 2%;
+}
+md-list-item{
+  margin: 2%;
 }
