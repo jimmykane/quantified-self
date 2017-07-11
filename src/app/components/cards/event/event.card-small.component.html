@@ -7,20 +7,12 @@
     <md-card-subtitle>
       {{ event.getFirstActivity().getStartDate() | date:'short' }}
     </md-card-subtitle>
-    <md-card-subtitle>
-      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in
-      {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
-    </md-card-subtitle>
+
   </md-card-header>
 
   <md-card-content>
-
-    <md-tab label="Stats">
-      <app-event-card-stats
-        [event]="event">
-      </app-event-card-stats>
-    </md-tab>
-
+    {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in
+    {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
   </md-card-content>
   <md-card-actions>
     <a md-button [routerLink]="['/dashboard']"
