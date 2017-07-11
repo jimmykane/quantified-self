@@ -31,8 +31,8 @@
 
 <div>
 
-<button type="button" class="sideNavOpenButton" *ngFor="let actionButton of actionButtons" md-fab (click)="actionButton.action()">
-  <md-icon>list</md-icon>
+<button type="button" class="fabButtonsVertical" *ngFor="let actionButton of actionButtons" md-fab (click)="actionButton.action()">
+  <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
 </button>
 
 </div>
