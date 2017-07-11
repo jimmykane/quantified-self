@@ -10,8 +10,8 @@ import {Observable} from 'rxjs/Observable';
 import {Activity} from '../entities/activities/activity';
 import {EventInterface} from '../entities/events/event.interface';
 import {EventImporterJSON} from '../entities/events/adapters/importers/importer.json';
-import {EventImporterSML} from "../entities/events/adapters/importers/importer.sml";
-import {EventImporterFIT} from "../entities/events/adapters/importers/importer.fit";
+import {EventImporterSML} from '../entities/events/adapters/importers/importer.sml';
+import {EventImporterFIT} from '../entities/events/adapters/importers/importer.fit';
 
 @Injectable()
 export class EventService {
@@ -45,7 +45,7 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    this.localStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) =>{
+    this.localStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
         this.events.next(this.events.getValue().push(event));
     });
   }

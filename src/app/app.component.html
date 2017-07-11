@@ -29,6 +29,10 @@
 
 </md-sidenav-container>
 
-<button type="button" class="sideNavOpenButton" md-fab (click)="sidenav.toggle()">
+<div>
+
+<button type="button" class="sideNavOpenButton" *ngFor="let actionButton of actionButtons" md-fab (click)="actionButton.action()">
   <md-icon>list</md-icon>
 </button>
+
+</div>

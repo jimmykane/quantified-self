@@ -35,6 +35,7 @@ import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
 import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
+import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 
 @NgModule({
   imports: [
@@ -80,7 +81,7 @@ import {EventCardSmallComponent} from './components/cards/event/event.card-small
     EventCardSmallComponent,
     AboutComponent
   ],
-  providers: [LocalStorageService, EventService, WeatherService],
+  providers: [LocalStorageService, EventService, ActionButtonService, WeatherService],
   bootstrap: [AppComponent]
 })
 
