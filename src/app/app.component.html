@@ -29,10 +29,14 @@
 
 </md-sidenav-container>
 
-<div>
+<div class="fabButtonsVertical">
 
-<button type="button" class="fabButtonsVertical" *ngFor="let actionButton of actionButtons" md-fab (click)="actionButton.action()">
-  <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
-</button>
+  <md-list>
+    <md-list-item *ngFor="let actionButton of actionButtons.reverse()">
+      <button type="button"  md-fab (click)="actionButton.action()">
+        <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
+      </button>
+    </md-list-item>
+  </md-list>
 
 </div>
