@@ -21,24 +21,7 @@
   <md-grid-tile colspan="3" rowspan="3">
     <app-card-map-weather [event]="event"></app-card-map-weather>
   </md-grid-tile>
-  <!-- @todo the following belongs else -->
   <md-grid-tile colspan="3" rowspan="2">
-    <table>
-      <tr *ngFor="let activity of event.getActivities()">
-        {{ activity.getType() ? activity.getType() : '?'}}
-        {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km
-        in
-        {{ activity.getDurationInSeconds() | amDuration:'seconds' }}
-        <span *ngIf="activity.getType() === 'running' || activity.getType() === 'Running'">
-          at
-        {{ (activity.getDurationInSeconds() * 1000) / (event.getDistanceInMeters(null, null, null, [activity]) / 1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} km/h
-
-        </span>
-        <span *ngIf="activity.getType() === 'Biking'">
-          at
-        {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km/h
-        </span>
-      </tr>
-      </table>
+    <app-card-map-activities [activities]="event.getActivities()"></app-card-map-activities>
   </md-grid-tile>
 </md-grid-list>

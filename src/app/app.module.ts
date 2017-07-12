@@ -36,6 +36,7 @@ import {CdkTableModule} from '@angular/cdk';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
 import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
+import {EventCardMapActivitiesComponent} from './components/cards/event/map/activities/event.card.map.activities.component';
 
 @NgModule({
   imports: [
@@ -72,6 +73,7 @@ import {ActionButtonService} from './services/action-buttons/app.action-button.s
     EventCardListComponent,
     EventCardMapComponent,
     EventCardMapLocationComponent,
+    EventCardMapActivitiesComponent,
     EventCardMapWeatherComponent,
     EventCardStatsComponent,
     EventCardActionsMenuComponent,
