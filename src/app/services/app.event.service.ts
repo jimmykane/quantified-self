@@ -128,7 +128,6 @@ export class EventService {
       // Copy the points
       const pointsCopy = Object.create(event.getPoints());
 
-
       // Remove all activities
       const activities = event.getActivities();
       for (let i = activities.length; i--; ) {
