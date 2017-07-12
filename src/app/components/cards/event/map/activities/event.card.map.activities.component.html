@@ -1,5 +1,5 @@
 <table>
-  <tr *ngFor="let activity of activities">
+  <tr *ngFor="let activity of event.getActivities()">
     {{ activity.getType() ? activity.getType() : '?'}}
     {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km
     in

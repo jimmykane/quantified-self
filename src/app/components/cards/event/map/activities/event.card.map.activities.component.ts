@@ -1,9 +1,6 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
-import {MapsAPILoader} from '@agm/core';
-import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
-import {ActivityInterface} from "../../../../../entities/activities/activity.interface";
+import {EventInterface} from "../../../../../entities/events/event.interface";
 
-declare const google: any;
 
 
 @Component({
@@ -14,7 +11,7 @@ declare const google: any;
 })
 
 export class EventCardMapActivitiesComponent implements OnChanges {
-  @Input() activities: ActivityInterface[];
+  @Input() event: EventInterface;
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {
   }
