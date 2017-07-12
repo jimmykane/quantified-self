@@ -32,7 +32,7 @@ export class EventCardActionsMenuComponent {
   mergeAllEventActivities(event: EventInterface) {
     this.eventService.mergeAllEventActivities(event).then((mergedActivitiesEvent: EventInterface) => {
       this.eventService.saveEvent(mergedActivitiesEvent);
-      this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedActivitiesEvent.getID(), tabIndex: 0}});
+      this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedActivitiesEvent.getID()}});
     });
   }
 
