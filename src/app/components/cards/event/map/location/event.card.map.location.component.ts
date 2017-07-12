@@ -22,7 +22,7 @@ export class EventCardMapLocationComponent implements OnChanges {
 
   ngOnChanges() {
     this.mapsAPILoader.load().then(() => {
-      console.log('google script loaded');
+      // @todo cache this and cast to private
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({
         'location': {
