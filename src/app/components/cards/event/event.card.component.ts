@@ -17,7 +17,7 @@ export class EventCardComponent implements OnInit, OnDestroy {
 
   private parametersSubscription: Subscription;
 
-  constructor(private route: ActivatedRoute, private router: Router) {}
+  constructor(private route: ActivatedRoute, private router: Router, private changeDetectorRef: ChangeDetectorRef) {}
 
   selectedTabIndexChange(index) {
     this.router.navigate(['/dashboard'], {queryParams: {eventID: this.event.getID(), tabIndex: index}});

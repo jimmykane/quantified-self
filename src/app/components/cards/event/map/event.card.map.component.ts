@@ -36,11 +36,12 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges() {
+
+    // @todo maybe this can be done in a different way
     if (this.resize) {
-      this.agmMap.triggerResize()
-        .then(() => {
-          this.agmMap._mapsWrapper.getBounds(this.getBounds())
-        });
+      this.agmMap.triggerResize().then(() => {
+        this.agmMap._mapsWrapper.fitBounds(this.getBounds())
+      });
     }
     // @todo fix this in a proper way. Maybe use native google maps api
     this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
