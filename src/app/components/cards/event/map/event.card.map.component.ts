@@ -25,8 +25,6 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   @Input() resize: boolean;
   @ViewChild(AgmMap) agmMap;
 
-  public locationData: any = {};
-
   private logger = Log.create(this.constructor.name);
 
   constructor(private changeDetectorRef: ChangeDetectorRef, private googleMapsWrapper: GoogleMapsAPIWrapper) {
@@ -36,24 +34,12 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges() {
-
     // @todo maybe this can be done in a different way
     if (this.resize) {
       this.agmMap.triggerResize().then(() => {
         this.agmMap._mapsWrapper.fitBounds(this.getBounds())
       });
     }
-    // @todo fix this in a proper way. Maybe use native google maps api
-    this.agmMap._mapsWrapper.getNativeMap().then((map: GoogleMap) => {
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({
-        'location': {
-          lat: this.event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees,
-          lng: this.event.getFirstActivity().getStartPoint().getPosition().longitudeDegrees
-        }
-      }, this.processReverseGeocodeResults);
-
-    });
   }
 
   getActivityColor(seed: string): string {
@@ -84,26 +70,4 @@ export class EventCardMapComponent implements OnInit, OnChanges {
       south: mostSouth.getPosition().latitudeDegrees
     };
   }
-
-
-  private processReverseGeocodeResults = (results, status) => {
-    if (!status === google.maps.GeocoderStatus.OK) {
-      return;
-    }
-
-    results[0].address_components.forEach((addressComponent) => {
-      switch (addressComponent.types[0]) {
-        case 'country': {
-
-          this.locationData.country = addressComponent.long_name;
-          break;
-        }
-        case 'locality': {
-          this.locationData.city = addressComponent.long_name;
-          break;
-        }
-      }
-    });
-    this.changeDetectorRef.detectChanges();
-  };
 }
