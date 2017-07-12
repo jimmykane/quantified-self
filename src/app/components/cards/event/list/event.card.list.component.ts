@@ -1,9 +1,9 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
-import {List} from 'immutable';
 import {ActionButtonService} from '../../../../services/action-buttons/app.action-button.service';
-import {ActionButton} from "../../../../services/action-buttons/app.action-button";
-import {EventService} from "../../../../services/app.event.service";
+import {ActionButton} from '../../../../services/action-buttons/app.action-button';
+import {EventService} from '../../../../services/app.event.service';
+import {Router} from '@angular/router';
 
 
 @Component({
@@ -18,7 +18,7 @@ export class EventCardListComponent implements OnChanges {
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
-  constructor(private eventService: EventService, private actionButtonService: ActionButtonService) {}
+  constructor(private eventService: EventService, private actionButtonService: ActionButtonService, private router: Router) {}
 
   ngOnChanges(): void {
   }
@@ -31,14 +31,14 @@ export class EventCardListComponent implements OnChanges {
         selectedEvents.push(key);
       }
     });
-    if (selectedEvents.length > 1){
+    if (selectedEvents.length > 1) {
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         () => {
-          this.eventService.mergeEvents(selectedEvents).then((event: EventInterface) => {
-            this.eventService.addEvents([event]);
+          this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
+            this.eventService.addEvents([mergedEvent]);
             this.actionButtonService.removeActionButton('mergeEvents');
-            this.eventSelectionMap.clear();
+            this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});
           })
         },
         'material'
