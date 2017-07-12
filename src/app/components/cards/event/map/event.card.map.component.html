@@ -22,9 +22,9 @@
     <app-card-map-weather [event]="event"></app-card-map-weather>
   </md-grid-tile>
   <!-- @todo the following belongs else -->
-  <md-grid-tile colspan="1" rowspan="2" *ngFor="let activity of event.getActivities()">
-    <md-chip-list>
-      <md-chip >
+  <md-grid-tile colspan="3" rowspan="2">
+    <table>
+      <tr *ngFor="let activity of event.getActivities()">
         {{ activity.getType() ? activity.getType() : '?'}}
         {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km
         in
@@ -38,7 +38,7 @@
           at
         {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km/h
         </span>
-      </md-chip>
-    </md-chip-list>
+      </tr>
+      </table>
   </md-grid-tile>
 </md-grid-list>
