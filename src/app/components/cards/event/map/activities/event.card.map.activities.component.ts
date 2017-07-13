@@ -1,5 +1,5 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
-import {EventInterface} from "../../../../../entities/events/event.interface";
+import {EventInterface} from '../../../../../entities/events/event.interface';
 
 
 
