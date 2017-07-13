@@ -1,7 +1,7 @@
-<md-grid-list cols="{{ dataTypeAverages.length/2 }}" rowHeight="4:1">
+<md-grid-list cols="{{ dataTypeAverages.length/2  }}" rowHeight="4:1">
   <md-grid-tile *ngFor="let stat of stats">
-      <fa [name]="stat.iconName" [size]="2"></fa>
-      <!--{{ dataTypeAverage.name }}-->
-      {{ stat.value }} {{stat.units}}
+      <fa [name]="stat.iconName" [size]="2"  *ngIf="stat.iconType === 'fontAwesome'"></fa>
+      <md-icon  *ngIf="stat.iconType === 'material'">{{ stat.iconName }}</md-icon>
+    {{ stat.value }} {{stat.units}}
   </md-grid-tile>
 </md-grid-list>

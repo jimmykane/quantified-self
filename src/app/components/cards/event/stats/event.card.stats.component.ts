@@ -22,25 +22,29 @@ export class EventCardStatsComponent implements OnChanges {
       name: DataHeartRate.name,
       value: null,
       iconName: 'heartbeat',
-      units: 'BPM'
+      units: 'BPM',
+      iconType: 'fontAwesome'
     },
     {
       name: DataCadence.name,
       value: null,
       iconName: 'circle-o-notch',
-      units: 'SPM'
+      units: 'SPM',
+      iconType: 'fontAwesome'
     },
     {
       name: DataTemperature.name,
       value: null,
       iconName: 'thermometer',
-      units: 'Celsius'
+      units: 'Celsius',
+      iconType: 'fontAwesome'
     },
     {
       name: DataPower.name,
       value: null,
       iconName: 'flash',
-      units: 'WATTS'
+      units: 'WATTS',
+      iconType: 'fontAwesome'
     }
   ];
 
@@ -50,13 +54,22 @@ export class EventCardStatsComponent implements OnChanges {
         name: 'Distance',
         value: (this.event.getDistanceInMeters() / 1000).toFixed(2),
         iconName: 'arrows-h',
-        units: 'km'
+        units: 'km',
+        iconType: 'fontAwesome'
       },
       {
         name: 'Time',
         value: (new Date(this.event.getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
         iconName: 'clock-o',
-        units: ''
+        units: '',
+        iconType: 'fontAwesome'
+      },
+      {
+        name: 'Pace',
+        value: (new Date((this.event.getTotalDurationInSeconds() * 1000) / (this.event.getDistanceInMeters() / 1000))).toISOString().substr(14, 5),
+        iconName: 'directions_run',
+        units: 'm/km',
+        iconType: 'material'
       }
     ], ...this.dataTypeAverages];
     this.dataTypeAverages.forEach((dataTypeAverage) => {

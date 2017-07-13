@@ -1,3 +1,9 @@
-fa{
+fa {
+  margin-right: 4%;
+}
+
+md-icon {
+  font-size: 32px;
+  height: 32px;
   margin-right: 4%;
 }
