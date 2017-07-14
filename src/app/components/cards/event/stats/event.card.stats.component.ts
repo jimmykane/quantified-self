@@ -17,7 +17,7 @@ export class EventCardStatsComponent implements OnChanges {
   @Input() event: EventInterface;
   public stats = [];
 
-  private dataTypeAverages = [
+  public dataTypeAverages = [
     {
       name: DataHeartRate.name,
       value: null,
