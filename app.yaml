@@ -1,0 +1,28 @@
+# [START runtime]
+runtime: python27
+threadsafe: yes
+# [END runtime]
+
+# Skip all non dist
+skip_files:
+- ^(?!dist)
+
+handlers:
+
+- url: /favicon.ico
+  static_files: dist/favicon.ico
+  upload: dist/favicon.ico
+
+- url: /(.*\.(gif|png|jpg|css|js|eot|svg|woff2|ttf|woff)(|\.map))$
+  static_files: dist/\1
+  upload: dist/(.*)(|\.map)
+
+# Any other requests are routed to index.html for angular to handle so we don't need hash URLs
+- url: /.*
+  secure: always
+  redirect_http_response_code: 301
+  static_files: dist/index.html
+  upload: dist/index\.html
+  http_headers:
+    Strict-Transport-Security: max-age=31536000; includeSubDomains
+    X-Frame-Options: DENY
