@@ -66,9 +66,17 @@ export class EventCardStatsComponent implements OnChanges {
       },
       {
         name: 'Pace',
-        value: (new Date((this.event.getTotalDurationInSeconds() * 1000) / (this.event.getDistanceInMeters() / 1000))).toISOString().substr(14, 5),
+        value: (new Date((this.event.getTotalDurationInSeconds() * 1000) / (this.event.getDistanceInMeters() / 1000)))
+          .toISOString().substr(14, 5),
         iconName: 'directions_run',
         units: 'm/km',
+        iconType: 'material'
+      },
+      {
+        name: 'Speed',
+        value: ((this.event.getDistanceInMeters() / 1000) / (this.event.getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
+        iconName: 'directions_bike',
+        units: 'km/h',
         iconType: 'material'
       }
     ], ...this.dataTypeAverages];
