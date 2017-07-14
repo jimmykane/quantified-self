@@ -45,7 +45,7 @@ import {EventCardMapActivitiesComponent} from './components/cards/event/map/acti
     AppRoutingModule,
     HttpModule,
     AgmCoreModule.forRoot({
-      apiKey: 'AIzaSyCt6rJsrVVHOSmr2oPcl2bmJ3XQmktOU3E'
+      apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ'
     }),
     MdButtonModule,
     MdButtonToggleModule,
