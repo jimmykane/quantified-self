@@ -14,8 +14,9 @@ declare const google: any;
 
 export class EventCardMapLocationComponent implements OnChanges {
   @Input() position: DataPositionInterface;
-  private country: string;
-  private city: string;
+  public country: string;
+  public city: string;
+  public province: string;
 
   constructor(private changeDetectorRef: ChangeDetectorRef, private mapsAPILoader: MapsAPILoader) {
   }
@@ -47,6 +48,10 @@ export class EventCardMapLocationComponent implements OnChanges {
         }
         case 'locality': {
           this.city = addressComponent.long_name;
+          break;
+        }
+        case 'administrative_area_level_1': {
+          this.province = addressComponent.long_name;
           break;
         }
       }
