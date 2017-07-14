@@ -4,7 +4,6 @@ import {
 import {DataInterface} from '../../../../entities/data/data.interface';
 import {DataLatitudeDegrees} from '../../../../entities/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../../entities/data/data.longitude-degrees';
-import seedColor from 'seed-color';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
 import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
@@ -371,7 +370,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       case DataSeaLevelPressure.name:
         return '#889bc8';
     }
-    return seedColor(key).toHex();
+    return '#' + ('000000' + (Math.random()*0xFFFFFF<<0).toString(16)).slice(-6);
   }
 
   ngOnDestroy() {

@@ -2,12 +2,10 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnInit,
   ViewChild
 } from '@angular/core';
-import seedColor from 'seed-color';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral, LatLngLiteral} from '@agm/core';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {Log} from 'ng2-logger';
-import {GoogleMap} from '@agm/core/services/google-maps-types';
 
 declare const google: any;
 
@@ -43,7 +41,7 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   }
 
   getActivityColor(seed: string): string {
-    return seedColor(seed).toHex();
+    return '#' + ('000000' + (Math.random()*0xFFFFFF<<0).toString(16)).slice(-6);
   }
 
   getBounds(): LatLngBoundsLiteral {
