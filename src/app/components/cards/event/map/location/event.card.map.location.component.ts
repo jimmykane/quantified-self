@@ -35,10 +35,9 @@ export class EventCardMapLocationComponent implements OnChanges {
   }
 
   private processReverseGeocodeResults = (results, status) => {
-    if (!status === google.maps.GeocoderStatus.OK) {
+    if (!status === google.maps.GeocoderStatus.OK || !results[0].address_components) {
       return;
     }
-
     results[0].address_components.forEach((addressComponent) => {
       switch (addressComponent.types[0]) {
         case 'country': {
