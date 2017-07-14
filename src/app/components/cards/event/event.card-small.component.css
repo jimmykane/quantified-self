@@ -1,5 +1,9 @@
-md-card{
+md-card {
   margin: 1%;
+}
+
+md-card:hover {
+  background-color: lightgray;
 }
 
 .selected {
