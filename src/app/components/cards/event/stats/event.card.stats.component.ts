@@ -81,7 +81,7 @@ export class EventCardStatsComponent implements OnChanges {
       }
     ], ...this.dataTypeAverages];
     this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = this.event.getDataTypeAverage(dataTypeAverage.name).toFixed(0);
+      dataTypeAverage.value = Number(this.event.getDataTypeAverage(dataTypeAverage.name).toFixed(0));
     });
   }
 }
