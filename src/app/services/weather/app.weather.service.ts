@@ -11,7 +11,7 @@ import {Weather} from "./app.weather";
 @Injectable()
 export class WeatherService {
 
-  private historyApiUrl = 'http://api.wunderground.com/api/{apiKey}/history_{YYYYMMDD}/q/{lat},{lon}.json';
+  private historyApiUrl = 'https://api.wunderground.com/api/{apiKey}/history_{YYYYMMDD}/q/{lat},{lon}.json';
   private apiKey = 'a6dbe6951244fa18';
 
   constructor(private http: Http) {
