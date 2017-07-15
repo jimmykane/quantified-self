@@ -27,7 +27,6 @@ export class EventCardListComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges(): void {
-    this.gridListColumnCount = this.getColumnsFromWidth((window.innerWidth));
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
