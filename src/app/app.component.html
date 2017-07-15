@@ -31,12 +31,15 @@
 
 <div class="fabButtonsVertical">
 
-  <md-list>
-    <md-list-item *ngFor="let actionButton of actionButtons.reverse()">
-      <button type="button"  md-fab (click)="actionButton.action()">
+  <div class="fabButtonsVertical-container">
+    <ng-container *ngFor="let actionButton of actionButtons; let i = index;">
+      <button *ngIf="i < 1" type="button" md-fab (click)="actionButton.action()">
         <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
       </button>
-    </md-list-item>
-  </md-list>
+      <button *ngIf="i > 0" type="button" md-mini-fab (click)="actionButton.action()">
+        <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
+      </button>
+    </ng-container>
+  </div>
 
 </div>

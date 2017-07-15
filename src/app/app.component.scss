@@ -13,5 +13,20 @@ md-sidenav{
   position: fixed;
   bottom: 2vh;
   right: 2vh;
+  height: 50vh;
 }
+
+.fabButtonsVertical-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.fabButtonsVertical-container button {
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: 2vh;
+  align-content: center;
+}
+
 
