@@ -10,29 +10,43 @@
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
     </md-card-subtitle>
     <md-card-subtitle>
-      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in about {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
+      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in about {{ event.getTotalDurationInSeconds() |
+      amDuration:'seconds' }}
     </md-card-subtitle>
   </md-card-header>
 
 
   <md-card-content>
 
-    <md-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex" (selectedIndexChange)="selectedTabIndexChange($event)">
+    <md-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex"
+                  (selectedIndexChange)="selectedTabIndexChange($event)">
       <md-tab label="Map" *ngIf="event.getPointsWithPosition().length > 0"> <!-- todo check performance on if -->
-          <app-event-card-map
-            [event]="event" [resize]="selectedTabIndex === 0">
-          </app-event-card-map>
+        <ng-template md-tab-label>
+          <md-icon>map</md-icon>
+        </ng-template>
+        <app-event-card-map
+          [event]="event" [resize]="selectedTabIndex === 0">
+        </app-event-card-map>
       </md-tab>
       <md-tab label="Stats">
+        <ng-template md-tab-label>
+          <md-icon>insert_chart</md-icon>
+        </ng-template>
         <app-event-card-stats
           [event]="event">
         </app-event-card-stats>
       </md-tab>
       <md-tab label="Chart">
+        <ng-template md-tab-label>
+          <md-icon>show_chart</md-icon>
+        </ng-template>
         <app-event-card-chart *ngIf="selectedTabIndex === 2" [event]="event">
         </app-event-card-chart>
       </md-tab>
       <md-tab label="Laps" *ngIf="event.getLaps().length > 0">
+        <ng-template md-tab-label>
+          <md-icon>linear_scale</md-icon>
+        </ng-template>
         <app-event-card-laps [event]="event">
         </app-event-card-laps>
       </md-tab>
