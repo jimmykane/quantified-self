@@ -1,4 +1,4 @@
-<md-grid-list cols="{{ dataTypeAverages.length/2  }}" rowHeight="4:1">
+<md-grid-list cols="{{ dataTypeAverages.length/2  }}" rowHeight="5:1">
   <ng-container *ngFor="let stat of stats">
     <md-grid-tile *ngIf="stat.value !== 0">
       <fa [name]="stat.iconName" [size]="2" *ngIf="stat.iconType === 'fontAwesome'"></fa>
