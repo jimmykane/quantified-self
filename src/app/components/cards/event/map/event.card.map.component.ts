@@ -1,14 +1,11 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnInit,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
   ViewChild
 } from '@angular/core';
 import {AgmMap, GoogleMapsAPIWrapper, LatLngBoundsLiteral, LatLngLiteral} from '@agm/core';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {Log} from 'ng2-logger';
-
-declare const google: any;
-
 
 @Component({
   selector: 'app-event-card-map',
@@ -23,12 +20,15 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   @Input() resize: boolean;
   @ViewChild(AgmMap) agmMap;
 
+  public mapCols = 2;
+
   private logger = Log.create(this.constructor.name);
 
-  constructor(private changeDetectorRef: ChangeDetectorRef, private googleMapsWrapper: GoogleMapsAPIWrapper) {
+  constructor(private changeDetectorRef: ChangeDetectorRef) {
   }
 
   ngOnInit() {
+      this.mapCols = (window.innerWidth) > 640 ? 2 : 1;
   }
 
   ngOnChanges() {
@@ -40,8 +40,13 @@ export class EventCardMapComponent implements OnInit, OnChanges {
     }
   }
 
+  @HostListener('window:resize', ['$event.target.innerWidth'])
+  onResize(width) {
+    this.mapCols = width > 640 ? 2 : 1;
+  }
+
   getActivityColor(seed: string): string {
-    return '#' + ('000000' + (Math.random()*0xFFFFFF<<0).toString(16)).slice(-6);
+    return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
 
   getBounds(): LatLngBoundsLiteral {
