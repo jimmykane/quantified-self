@@ -20,7 +20,8 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   @Input() resize: boolean;
   @ViewChild(AgmMap) agmMap;
 
-  public mapCols = 2;
+  public gridListColumnCount = 2;
+  public mapRowSpan = 2;
 
   private logger = Log.create(this.constructor.name);
 
@@ -28,7 +29,8 @@ export class EventCardMapComponent implements OnInit, OnChanges {
   }
 
   ngOnInit() {
-      this.mapCols = (window.innerWidth) > 640 ? 2 : 1;
+      this.gridListColumnCount = (window.innerWidth) > 640 ? 2 : 1;
+      this.mapRowSpan = (window.innerWidth) > 640 ? 2 : 1;
   }
 
   ngOnChanges() {
@@ -42,11 +44,12 @@ export class EventCardMapComponent implements OnInit, OnChanges {
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
   onResize(width) {
-    this.mapCols = width > 640 ? 2 : 1;
+    this.gridListColumnCount = width > 640 ? 2 : 1;
+    this.mapRowSpan = width > 640 ? 2 : 1;
   }
 
-  getActivityColor(seed: string): string {
-    return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
+  getActivityColor(index: number): string {
+    return '#' + Math.floor((Math.abs(Math.sin(index) * 16777215)) % 16777215).toString(16);
   }
 
   getBounds(): LatLngBoundsLiteral {
