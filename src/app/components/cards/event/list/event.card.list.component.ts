@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
+import {ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnInit} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {ActionButtonService} from '../../../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../../../services/action-buttons/app.action-button';
@@ -13,14 +13,26 @@ import {Router} from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardListComponent implements OnChanges {
+export class EventCardListComponent implements OnChanges, OnInit {
   @Input() events: EventInterface[];
+  gridListColumnCount: number;
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
-  constructor(private eventService: EventService, private actionButtonService: ActionButtonService, private router: Router) {}
+  constructor(private eventService: EventService, private actionButtonService: ActionButtonService, private router: Router) {
+  }
+
+  ngOnInit() {
+    this.gridListColumnCount = this.getColumnsFromWidth((window.innerWidth));
+  }
 
   ngOnChanges(): void {
+    this.gridListColumnCount = this.getColumnsFromWidth((window.innerWidth));
+  }
+
+  @HostListener('window:resize', ['$event.target.innerWidth'])
+  onResize(width) {
+    this.gridListColumnCount = this.getColumnsFromWidth(width);
   }
 
   clickEventCard(event: EventInterface) {
@@ -43,8 +55,20 @@ export class EventCardListComponent implements OnChanges {
         },
         'material'
       ))
-    }else {
+    } else {
       this.actionButtonService.removeActionButton('mergeEvents');
+    }
+  }
+
+  private getColumnsFromWidth(width: number): number {
+    if (width < 600) {
+      return 1;
+    } else if (width < 800) {
+      return 2;
+    } else if (width < 1000) {
+      return 3;
+    }else {
+      return 4;
     }
   }
 }
