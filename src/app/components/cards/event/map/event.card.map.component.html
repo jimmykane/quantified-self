@@ -1,7 +1,6 @@
-<md-grid-list cols="2" rowHeight="7:2">
-  <md-grid-tile colspan="1" rowspan="3" >
+<md-grid-list cols="2" rowHeight="3:2">
+  <md-grid-tile colspan="1" rowspan="2" >
     <agm-map
-      style="height: 100%; width: 100%;"
       [fullscreenControl]="true"
       [fitBounds]="getBounds()">
       <agm-polyline
@@ -18,7 +17,7 @@
   <md-grid-tile colspan="1" rowspan="1">
     <app-card-map-location [position]="event.getFirstActivity().getStartPoint().getPosition()"></app-card-map-location>
   </md-grid-tile>
-  <md-grid-tile colspan="1" rowspan="2">
+  <md-grid-tile colspan="1" rowspan="1">
     <app-card-map-weather [event]="event"></app-card-map-weather>
   </md-grid-tile>
 </md-grid-list>
