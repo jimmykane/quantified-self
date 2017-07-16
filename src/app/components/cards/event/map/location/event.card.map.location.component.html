@@ -1,6 +1,6 @@
-<div class="container">
+<div class="container" *ngIf="geoLocationInfo && geoLocationInfo.city">
   <md-icon>place</md-icon>
   <h3>
-    {{ city }}, {{ province }}, {{ country }}
+    {{ geoLocationInfo.city }}, {{ geoLocationInfo.province }}, {{ geoLocationInfo.country }}
   </h3>
 </div>

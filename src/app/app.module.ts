@@ -38,6 +38,7 @@ import {EventCardSmallComponent} from './components/cards/event/event.card-small
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapActivitiesComponent} from './components/cards/event/map/activities/event.card.map.activities.component';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
+import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 
 @NgModule({
   imports: [
@@ -85,7 +86,7 @@ import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.c
     EventCardSmallComponent,
     AboutComponent
   ],
-  providers: [LocalStorageService, EventService, ActionButtonService, WeatherService],
+  providers: [LocalStorageService, EventService, ActionButtonService, WeatherService, GeoLocationInfoService],
   bootstrap: [AppComponent]
 })
 

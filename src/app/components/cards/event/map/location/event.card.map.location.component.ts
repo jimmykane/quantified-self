@@ -1,9 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
-import {MapsAPILoader} from '@agm/core';
 import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
-
-declare const google: any;
-
+import {GeoLocationInfoService} from '../../../../../services/geo-location/app.geo-location-info.service';
+import {GeoLocationInfo} from '../../../../../services/geo-location/app.geo-location-info';
 
 @Component({
   selector: 'app-card-map-location',
@@ -14,48 +12,15 @@ declare const google: any;
 
 export class EventCardMapLocationComponent implements OnChanges {
   @Input() position: DataPositionInterface;
-  public country: string;
-  public city: string;
-  public province: string;
+  public geoLocationInfo: GeoLocationInfo;
 
-  constructor(private changeDetectorRef: ChangeDetectorRef, private mapsAPILoader: MapsAPILoader) {
+  constructor(private changeDetectorRef: ChangeDetectorRef, private geoLocationInfoService: GeoLocationInfoService) {
   }
 
   ngOnChanges() {
-    this.mapsAPILoader.load().then(() => {
-      // @todo cache this and cast to private
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({
-        'location': {
-          lat: this.position.latitudeDegrees,
-          lng: this.position.longitudeDegrees
-        }
-      }, this.processReverseGeocodeResults);
-    });
+    this.geoLocationInfoService.getGeoLocationInfo(this.position).then((geoLocationInfo: GeoLocationInfo) => {
+      this.geoLocationInfo = geoLocationInfo;
+    })
   }
-
-  private processReverseGeocodeResults = (results, status) => {
-    if (!status === google.maps.GeocoderStatus.OK || !results || !results[0]) {
-      return;
-    }
-    results[0].address_components.forEach((addressComponent) => {
-      switch (addressComponent.types[0]) {
-        case 'country': {
-
-          this.country = addressComponent.long_name;
-          break;
-        }
-        case 'locality': {
-          this.city = addressComponent.long_name;
-          break;
-        }
-        case 'administrative_area_level_1': {
-          this.province = addressComponent.long_name;
-          break;
-        }
-      }
-    });
-    this.changeDetectorRef.detectChanges();
-  };
 }
 
