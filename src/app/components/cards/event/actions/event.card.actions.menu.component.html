@@ -8,7 +8,7 @@
   </button>
   <button md-menu-item *ngIf="event.getActivities().length > 1" (click)="mergeAllEventActivities(event)">
     <md-icon>compare_arrows</md-icon>
-    <span>Merge activities</span>
+    <span>Merge {{ event.getActivities().length }} activities</span>
   </button>
   <button md-menu-item (click)="deleteEvent(event)">
     <md-icon>delete forever</md-icon>

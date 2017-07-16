@@ -11,3 +11,7 @@ app-event-card-map-agm {
   width: 100%;
   height: 100%;
 }
+
+md-grid-list{
+  height: 70vh;
+}
