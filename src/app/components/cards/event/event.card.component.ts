@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {EventInterface} from '../../../entities/events/event.interface';
-import {Subscription} from "rxjs/Subscription";
-import {ActivatedRoute, Params, Router} from "@angular/router";
+import {Subscription} from 'rxjs/Subscription';
+import {ActivatedRoute, Params, Router} from '@angular/router';
 
 
 @Component({

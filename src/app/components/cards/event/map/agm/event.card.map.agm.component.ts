@@ -7,7 +7,6 @@ import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
 
 
-
 @Component({
   selector: 'app-event-card-map-agm',
   templateUrl: './event.card.map.agm.component.html',
@@ -16,8 +15,9 @@ import {PointInterface} from '../../../../../entities/points/point.interface';
 })
 
 export class EventCardMapAGMComponent implements OnChanges {
-  @Input() event: EventInterface;
   @ViewChild(AgmMap) agmMap;
+  @Input() event: EventInterface;
+  @Input() resize: boolean;
 
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {
@@ -57,6 +57,13 @@ export class EventCardMapAGMComponent implements OnChanges {
       north: mostNorth.getPosition().latitudeDegrees,
       south: mostSouth.getPosition().latitudeDegrees
     };
+  }
+
+  @HostListener('window:resize', ['$event.target.innerWidth'])
+  onResize(width) {
+    this.agmMap.triggerResize().then(() => {
+      this.agmMap._mapsWrapper.fitBounds(this.getBounds())
+    });
   }
 }
 
