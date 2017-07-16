@@ -9,7 +9,7 @@ import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
 import {EventCardMapComponent} from 'app/components/cards/event/map/event.card.map.component';
-import {LocalStorageService} from './services/app.local.storage.service';
+import {LocalStorageService} from './services/storage/app.local.storage.service';
 import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
 import {MomentModule} from 'angular2-moment';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
@@ -39,6 +39,8 @@ import {ActionButtonService} from './services/action-buttons/app.action-button.s
 import {EventCardMapActivitiesComponent} from './components/cards/event/map/activities/event.card.map.activities.component';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
+import {EventLocalStorageService} from "./services/storage/app.event.local.storage.service";
+import {GeoLocationInfoLocalStorageService} from "./services/storage/app.geoLocationInfo.local.storage.service";
 
 @NgModule({
   imports: [
@@ -86,7 +88,14 @@ import {GeoLocationInfoService} from './services/geo-location/app.geo-location-i
     EventCardSmallComponent,
     AboutComponent
   ],
-  providers: [LocalStorageService, EventService, ActionButtonService, WeatherService, GeoLocationInfoService],
+  providers: [
+    EventLocalStorageService,
+    GeoLocationInfoLocalStorageService,
+    EventService,
+    ActionButtonService,
+    WeatherService,
+    GeoLocationInfoService
+  ],
   bootstrap: [AppComponent]
 })
 

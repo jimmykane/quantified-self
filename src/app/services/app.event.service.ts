@@ -3,7 +3,6 @@ import {Event} from '../entities/events/event';
 import {EventImporterTCX} from '../entities/events/adapters/importers/importer.tcx';
 import {EventExporterTCX} from '../entities/events/adapters/exporters/exporter.tcx';
 import {EventImporterGPX} from '../entities/events/adapters/importers/importer.gpx';
-import {LocalStorageService} from './app.local.storage.service';
 import {BehaviorSubject} from 'rxjs/BehaviorSubject';
 import {List} from 'immutable';
 import {Observable} from 'rxjs/Observable';
@@ -12,6 +11,7 @@ import {EventInterface} from '../entities/events/event.interface';
 import {EventImporterJSON} from '../entities/events/adapters/importers/importer.json';
 import {EventImporterSML} from '../entities/events/adapters/importers/importer.sml';
 import {EventImporterFIT} from '../entities/events/adapters/importers/importer.fit';
+import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 
 @Injectable()
 export class EventService {
@@ -28,14 +28,14 @@ export class EventService {
     });
   }
 
-  constructor(private localStorageService: LocalStorageService) {
+  constructor(private eventLocalStorageService: EventLocalStorageService) {
     // Fetch existing events
     this.getInitialData();
   }
 
   private getInitialData() {
-    for (const localStorageKey of this.localStorageService.getAllKeys()) {
-      this.localStorageService.getItem(localStorageKey).then((localStorageData) => {
+    for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
+      this.eventLocalStorageService.getItem(localStorageKey).then((localStorageData) => {
         this.createEventFromJSONString(localStorageData).then((event: EventInterface) => {
           this.events.next(this.events.getValue().push(event));
         });
@@ -44,7 +44,7 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    this.localStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
+    this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
         this.events.next(this.events.getValue().push(event));
     });
   }
@@ -56,7 +56,7 @@ export class EventService {
   }
 
   public deleteEvent(eventToDelete: EventInterface) {
-    this.localStorageService.removeItem(eventToDelete.getID()).then(() => {
+    this.eventLocalStorageService.removeItem(eventToDelete.getID()).then(() => {
       this.events.next(this.events.getValue().delete(this.events.getValue().findIndex((event: EventInterface) => {
         return eventToDelete.getID() === event.getID();
       })));
