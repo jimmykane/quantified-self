@@ -43,6 +43,7 @@
     "hammerjs": "^2.0.8",
     "immutable": "^3.8.1",
     "lz-string": "^1.4.4",
+    "material-design-icons": "^3.0.1",
     "moment": "^2.18.1",
     "ng2-logger": "^1.0.3",
     "roboto-fontface": "^0.8.0",
