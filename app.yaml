@@ -11,10 +11,10 @@ skip_files:
 handlers:
 
 - url: /favicon.ico
-  static_files: dist/favicon.ico
+  static_files: dist/assets/favicons/favicon.ico
   upload: dist/favicon.ico
 
-- url: /(.*\.(gif|png|jpg|css|js|eot|svg|woff2|ttf|woff)(|\.map))$
+- url: /(.*\.(gif|png|jpg|css|js|eot|svg|woff2|ttf|woff|xml|ico|json|)(|\.map))$
   static_files: dist/\1
   upload: dist/(.*)(|\.map)
 
