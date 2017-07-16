@@ -1,5 +1,7 @@
 md-card {
   margin: 1%;
+  min-height: 175px;
+  width: 200px;
 }
 
 .selected {

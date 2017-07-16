@@ -7,3 +7,7 @@ md-grid-list{
 md-grid-tile{
   margin: 2%;
 }
+app-event-card-small {
+  /*width: 275px;*/
+}
+

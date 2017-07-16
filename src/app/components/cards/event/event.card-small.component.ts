@@ -33,7 +33,8 @@ export class EventCardSmallComponent implements OnInit, OnDestroy {
       .then((geoLocationInfo) => {
         this.geoLocationInfo = geoLocationInfo;
         this.changeDetectorRef.detectChanges();
-      });
+      })
+      .catch(() => {});
   }
 
   ngOnDestroy(): void {
