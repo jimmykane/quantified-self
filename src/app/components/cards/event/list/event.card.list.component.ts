@@ -60,11 +60,11 @@ export class EventCardListComponent implements OnChanges, OnInit {
   }
 
   private getColumnsFromWidth(width: number): number {
-    if (width < 600) {
+    if (width < 700) {
       return 1;
-    } else if (width < 900) {
+    } else if (width < 1000) {
       return 2;
-    } else if (width < 1200) {
+    } else if (width < 1300) {
       return 3;
     }else {
       return 4;

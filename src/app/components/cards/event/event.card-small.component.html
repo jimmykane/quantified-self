@@ -1,7 +1,12 @@
 <md-card [class.selected]="classActive">
   <md-card-header>
     <div md-card-avatar>
-      <md-icon *ngIf="event.getFirstActivity().getType() === 'Running'">map</md-icon>
+      <div class="card-avatar-container">
+        <md-icon>star_border</md-icon>
+        <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'running'" >directions_run</md-icon>
+        <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'biking'" >directions_bike</md-icon>
+        <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'swimming'" >pool</md-icon>
+      </div>
     </div>
     <md-card-title>
       {{ event.getName() }}
@@ -17,7 +22,8 @@
     <span class="mat-body-2">{{ (event.getDistanceInMeters()/1000).toFixed(1) }}</span> km
     in about
     <span class="mat-body-2">{{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
-    <span *ngIf="geoLocationInfo">nearby <span class="mat-body-2">{{ geoLocationInfo.city }}</span>, <span class="mat-body-2">{{ geoLocationInfo.country }}</span>.</span>
+    <span *ngIf="geoLocationInfo">nearby <span class="mat-body-2">{{ geoLocationInfo.city }}</span>, <span
+      class="mat-body-2">{{ geoLocationInfo.country }}</span>.</span>
   </md-card-content>
   <md-card-actions>
     <a md-button [routerLink]="['/dashboard']"
