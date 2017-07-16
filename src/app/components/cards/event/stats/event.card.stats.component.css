@@ -7,3 +7,7 @@ md-icon {
   height: 32px;
   margin-right: 4%;
 }
+
+md-grid-list{
+  height: 70vh;
+}
