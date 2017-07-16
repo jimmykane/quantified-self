@@ -20,6 +20,7 @@ export class EventCardMapLocationComponent implements OnChanges {
   ngOnChanges() {
     this.geoLocationInfoService.getGeoLocationInfo(this.position).then((geoLocationInfo: GeoLocationInfo) => {
       this.geoLocationInfo = geoLocationInfo;
+      this.changeDetectorRef.detectChanges();
     })
   }
 }
