@@ -16,7 +16,7 @@ export class GeoLocationInfoService {
   public getGeoLocationInfo(position: DataPositionInterface): Promise<GeoLocationInfo> {
     return new Promise((resolve, reject) => {
       if (this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(','))) {
-        resolve(this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(',')));
+        return resolve(this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(',')));
       }
       this.mapsAPILoader.load().then(() => {
         (new google.maps.Geocoder()).geocode({
@@ -25,8 +25,8 @@ export class GeoLocationInfoService {
             lng: position.longitudeDegrees
           }
         }, (results, status) => {
-          if (!status === google.maps.GeocoderStatus.OK || !results.length) {
-            reject();
+          if (!status === google.maps.GeocoderStatus.OK || !results || !results.length) {
+            return reject();
           }
           const geoLocationInfo = results[0].address_components.reduce((geoLocationInfoBuilder: GeoLocationInfo, addressComponent) => {
             switch (addressComponent.types[0]) {
@@ -46,7 +46,7 @@ export class GeoLocationInfoService {
             return geoLocationInfoBuilder;
           }, new GeoLocationInfo(position.latitudeDegrees, position.longitudeDegrees));
           this.geoLocationsInfo.set([position.latitudeDegrees, position.longitudeDegrees].join(','), geoLocationInfo);
-          resolve(geoLocationInfo);
+          return resolve(geoLocationInfo);
         });
       });
     });
