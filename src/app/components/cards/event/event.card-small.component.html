@@ -1,6 +1,7 @@
 <md-card [class.selected]="classActive">
   <md-card-header>
     <div md-card-avatar>
+      <md-icon *ngIf="event.getFirstActivity().getType() === 'Running'">map</md-icon>
     </div>
     <md-card-title>
       {{ event.getName() }}
@@ -12,8 +13,9 @@
   </md-card-header>
 
   <md-card-content>
-    {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in about
-    {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
+    <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
+    <span class="mat-body-2">{{ (event.getDistanceInMeters()/1000).toFixed(1) }}</span> km in about
+    <span class="mat-body-2">{{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
   </md-card-content>
   <md-card-actions>
     <a md-button [routerLink]="['/dashboard']"
