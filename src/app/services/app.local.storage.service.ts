@@ -1,20 +1,16 @@
 import {Injectable} from '@angular/core';
 import {StorageServiceInterface} from './app.storage.service.interface';
 import * as LZString from 'lz-string';
-import {Log} from "ng2-logger";
+import {Log} from 'ng2-logger';
 
 
 @Injectable()
 export class LocalStorageService implements StorageServiceInterface {
 
-  private nameSpace: string;
+  private nameSpace = 'event.service';
   private logger = Log.create(this.constructor.name);
 
   constructor() {
-  }
-
-  setNameSpace(nameSpace) {
-    this.nameSpace = nameSpace;
   }
 
   setItem(key: string, data: string): Promise<boolean> {
@@ -32,7 +28,7 @@ export class LocalStorageService implements StorageServiceInterface {
       const t0 = performance.now();
       try {
         const decrypted = LZString.decompress(localStorage.getItem(this.nameSpace + key));
-        this.logger.d('Decrypted after ' +
+        this.logger.d('Decrypted 1 item after ' +
           (performance.now() - t0) + ' milliseconds or ' +
           (performance.now() - t0) / 1000 + ' seconds'
         );
@@ -52,6 +48,7 @@ export class LocalStorageService implements StorageServiceInterface {
 
   getAllItems(): Promise<string[]> {
     return new Promise((resolve, reject) => {
+      const t0 = performance.now();
       const items = [];
       this.getAllKeys().map((localStorageKey) => {
         // Try to decode
@@ -63,6 +60,10 @@ export class LocalStorageService implements StorageServiceInterface {
           localStorage.removeItem(localStorageKey);
         }
       });
+      this.logger.d('Decrypted ' + items.length +  ' items from localStorage after ' +
+          (performance.now() - t0) + ' milliseconds or ' +
+          (performance.now() - t0) / 1000 + ' seconds'
+        );
       resolve(items);
     });
   }

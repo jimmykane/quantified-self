@@ -2,6 +2,7 @@ import {Injectable} from '@angular/core';
 import {DataPositionInterface} from '../../entities/data/data.position.interface';
 import {MapsAPILoader} from '@agm/core';
 import {GeoLocationInfo} from './app.geo-location-info';
+import {LocalStorageService} from '../app.local.storage.service';
 
 declare const google: any;
 
@@ -10,7 +11,8 @@ export class GeoLocationInfoService {
 
   private geoLocationsInfo: Map<string, GeoLocationInfo> = new Map<string, GeoLocationInfo>();
 
-  constructor(private mapsAPILoader: MapsAPILoader) {
+  constructor(private localStorageService: LocalStorageService, private mapsAPILoader: MapsAPILoader) {
+
   }
 
   public getGeoLocationInfo(position: DataPositionInterface): Promise<GeoLocationInfo> {
