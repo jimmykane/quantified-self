@@ -1,0 +1,13 @@
+<agm-map
+  [fullscreenControl]="true"
+  [fitBounds]="getBounds()">
+  <agm-polyline
+    *ngFor="let activity of event.getActivities(); let i = index;"
+    [strokeColor]="getActivityColor(i)">
+    <agm-polyline-point
+      *ngFor="let point of event.getPointsWithPosition(null, null, null, [activity])"
+      [latitude]="point.getPosition().latitudeDegrees"
+      [longitude]="point.getPosition().longitudeDegrees">
+    </agm-polyline-point>
+  </agm-polyline>
+</agm-map>

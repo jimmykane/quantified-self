@@ -37,6 +37,7 @@ import {EventCardListComponent} from './components/cards/event/list/event.card.l
 import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapActivitiesComponent} from './components/cards/event/map/activities/event.card.map.activities.component';
+import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 
 @NgModule({
   imports: [
@@ -72,6 +73,7 @@ import {EventCardMapActivitiesComponent} from './components/cards/event/map/acti
     EventCardComponent,
     EventCardListComponent,
     EventCardMapComponent,
+    EventCardMapAGMComponent,
     EventCardMapLocationComponent,
     EventCardMapActivitiesComponent,
     EventCardMapWeatherComponent,

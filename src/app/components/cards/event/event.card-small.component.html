@@ -1,6 +1,8 @@
 <md-card [class.selected]="classActive">
   <md-card-header>
-    <!--<div md-card-avatar class="example-header-image"></div>-->
+    <div md-card-avatar>
+      <
+    </div>
     <md-card-title>
       {{ event.getName() }}
     </md-card-title>
@@ -11,7 +13,7 @@
   </md-card-header>
 
   <md-card-content>
-    {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in
+    {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in about
     {{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}
   </md-card-content>
   <md-card-actions>

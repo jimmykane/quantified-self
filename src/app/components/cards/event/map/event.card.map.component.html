@@ -3,19 +3,7 @@
     <app-card-map-location [position]="event.getFirstActivity().getStartPoint().getPosition()"></app-card-map-location>
   </md-grid-tile>
   <md-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
-    <agm-map
-      [fullscreenControl]="true"
-      [fitBounds]="getBounds()">
-      <agm-polyline
-        *ngFor="let activity of event.getActivities(); let i = index;"
-        [strokeColor]="getActivityColor(i)">
-        <agm-polyline-point
-          *ngFor="let point of event.getPointsWithPosition(null, null, null, [activity])"
-          [latitude]="point.getPosition().latitudeDegrees"
-          [longitude]="point.getPosition().longitudeDegrees">
-        </agm-polyline-point>
-      </agm-polyline>
-    </agm-map>
+    <app-event-card-map-agm [event]="event"></app-event-card-map-agm>
   </md-grid-tile>
   <md-grid-tile colspan="1" rowspan="1">
     <app-card-map-weather [event]="event"></app-card-map-weather>

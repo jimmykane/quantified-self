@@ -4,7 +4,7 @@ import {EventInterface} from '../../../../../entities/events/event.interface';
 
 
 @Component({
-  selector: 'app-card-map-activities',
+  selector: 'app-event-card-map-activities',
   templateUrl: './event.card.map.activities.component.html',
   styleUrls: ['./event.card.map.activities.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
