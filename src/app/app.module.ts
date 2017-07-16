@@ -89,6 +89,7 @@ import {GeoLocationInfoLocalStorageService} from "./services/storage/app.geoLoca
     AboutComponent
   ],
   providers: [
+    LocalStorageService,
     EventLocalStorageService,
     GeoLocationInfoLocalStorageService,
     EventService,
