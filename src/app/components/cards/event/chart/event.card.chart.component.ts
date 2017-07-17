@@ -351,7 +351,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private genColor(key: string) {
-    // @todo remove this crappy lib
     switch (key) {
       case DataHeartRate.name:
         return '#ff3f07';
