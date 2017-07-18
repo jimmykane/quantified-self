@@ -27,7 +27,7 @@ export class GeoLocationInfoService {
           }
         }, (results, status) => {
           if (!status === google.maps.GeocoderStatus.OK || !results || !results.length) {
-            return reject();
+            return reject(status);
           }
           const geoLocationInfo = results[0].address_components.reduce((geoLocationInfoBuilder: GeoLocationInfo, addressComponent) => {
             switch (addressComponent.types[0]) {
