@@ -4,6 +4,7 @@ import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {GeoLocationInfoService} from "../../../services/geo-location/app.geo-location-info.service";
 import {GeoLocationInfo} from "../../../services/geo-location/app.geo-location-info";
+import {Log, Level} from 'ng2-logger'
 
 
 @Component({
@@ -18,6 +19,7 @@ export class EventCardSmallComponent implements OnInit, OnDestroy {
   @Input() classActive: boolean;
   public geoLocationInfo: GeoLocationInfo;
 
+  private logger = Log.create(this.constructor.name);
   private parametersSubscription: Subscription;
 
   constructor(private changeDetectorRef: ChangeDetectorRef,
@@ -34,7 +36,9 @@ export class EventCardSmallComponent implements OnInit, OnDestroy {
         this.geoLocationInfo = geoLocationInfo;
         this.changeDetectorRef.detectChanges();
       })
-      .catch(() => {});
+      .catch((response) => {
+        this.logger.error('Could not get geoLocation info. ', response.toString());
+      });
   }
 
   ngOnDestroy(): void {

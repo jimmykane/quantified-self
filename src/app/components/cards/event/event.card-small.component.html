@@ -22,8 +22,11 @@
     <span class="mat-body-2">{{ (event.getDistanceInMeters()/1000).toFixed(1) }}</span> km
     in about
     <span class="mat-body-2">{{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
-    <span *ngIf="geoLocationInfo">nearby <span class="mat-body-2">{{ geoLocationInfo.city }}</span>, <span
-      class="mat-body-2">{{ geoLocationInfo.country }}</span>.</span>
+    <span *ngIf="geoLocationInfo">
+      nearby
+      <span class="mat-body-2">{{ geoLocationInfo.city }},</span>
+      <span class="mat-body-2">{{ geoLocationInfo.country }}</span>.
+    </span>
   </md-card-content>
   <md-card-actions>
     <a md-button [routerLink]="['/dashboard']"
