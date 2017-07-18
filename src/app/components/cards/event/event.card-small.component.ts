@@ -29,7 +29,7 @@ export class EventCardSmallComponent implements OnInit, OnDestroy {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
     });
-    this.geoLocationInfoService.getGeoLocationInfo(this.event.getFirstActivity().getStartPoint().getPosition())
+    this.geoLocationInfoService.getGeoLocationInfo(this.event.getPointsWithPosition()[0].getPosition())
       .then((geoLocationInfo) => {
         this.geoLocationInfo = geoLocationInfo;
         this.changeDetectorRef.detectChanges();

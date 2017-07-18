@@ -6,8 +6,7 @@ import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
-import {Log, Level} from 'ng2-logger'
-
+import {Log} from 'ng2-logger'
 
 export class Event extends IDClass implements EventInterface {
 
@@ -138,18 +137,66 @@ export class Event extends IDClass implements EventInterface {
     const t0 = performance.now();
     let count = 1;
     const averageForDataType = this.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
-      if (!point.getDataTypeAverage(dataType)) {
+      if (!point.getDataTypeAverage(dataType)) { // @todo should check against void 0
         return average;
       }
       average += point.getDataTypeAverage(dataType);
       count++;
       return average;
     }, 0);
-    this.logger.d('Activity: Calculated average for ' + dataType + ' after ' +
+    this.logger.d('Calculated average for ' + dataType + ' after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
     return averageForDataType / count;
+  }
+
+  getDataTypeGain(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[], precision?: number, minDiff?: number): number {
+    const t0 = performance.now();
+    precision = precision || 1;
+    minDiff = minDiff || 1.5;
+    let gain = 0;
+    this.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataTypeAverage(dataType)){
+        return next;
+      }
+      if (!next.getDataTypeAverage(dataType)) {
+        return previous;
+      }
+      if ((previous.getDataTypeAverage(dataType) + minDiff) < (Number(next.getDataTypeAverage(dataType)))) {
+        gain += Number(next.getDataTypeAverage(dataType).toFixed(precision)) - Number(previous.getDataTypeAverage(dataType).toFixed(precision));
+      }
+      return next;
+    });
+    this.logger.d('Calculated gain for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return gain;
+  }
+
+  getDataTypeLoss(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[], precision?: number, minDiff?: number): number {
+    const t0 = performance.now();
+    precision = precision || 1;
+    minDiff = minDiff || 1.5;
+    let loss = 0;
+    this.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataTypeAverage(dataType)){
+        return next;
+      }
+      if (!next.getDataTypeAverage(dataType)) {
+        return previous;
+      }
+      if ((Number(next.getDataTypeAverage(dataType).toFixed(precision)) - minDiff) < Number(previous.getDataTypeAverage(dataType).toFixed(precision))) {
+        loss += Number(previous.getDataTypeAverage(dataType).toFixed(precision)) - Number(next.getDataTypeAverage(dataType).toFixed(precision));
+      }
+      return next;
+    });
+    this.logger.d('Calculated loss for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return loss;
   }
 
   getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number {

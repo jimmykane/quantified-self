@@ -1,5 +1,4 @@
 import {PointInterface} from './point.interface';
-import {ActivityInterface} from '../activities/activity.interface';
 import {DataInterface} from '../data/data.interface';
 import {DataLatitudeDegrees} from '../data/data.latitude-degrees';
 import {DataPositionInterface} from '../data/data.position.interface';
@@ -7,11 +6,9 @@ import {DataLongitudeDegrees} from '../data/data.longitude-degrees';
 
 export class Point implements PointInterface {
 
-  private activity: ActivityInterface;
   private date: Date;
   private position: DataPositionInterface;
   private data: Map<string, DataInterface[]> = new Map<string, DataInterface[]>();
-
 
   constructor(date: Date) {
     this.date = date;

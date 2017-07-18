@@ -4,6 +4,7 @@ import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataPower} from '../../../../entities/data/data.power';
 import {DataTemperature} from "../../../../entities/data/data.temperature";
+import {DataAltitude} from "../../../../entities/data/data.altitude";
 
 
 @Component({
@@ -48,8 +49,38 @@ export class EventCardStatsComponent implements OnChanges {
     }
   ];
 
+  public dataTypeGains = [
+    {
+      name: DataAltitude.name,
+      value: null,
+      iconName: 'trending_up',
+      units: 'm',
+      iconType: 'material'
+    }
+  ];
+
+  public dataTypeLosses = [
+    {
+      name: DataAltitude.name,
+      value: null,
+      iconName: 'trending_down',
+      units: 'm',
+      iconType: 'material'
+    }
+  ];
+
   ngOnChanges() {
-    this.stats = [...[
+    this.dataTypeAverages.forEach((dataTypeAverage) => {
+      dataTypeAverage.value = Number(this.event.getDataTypeAverage(dataTypeAverage.name).toFixed(0));
+    });
+    this.dataTypeGains.forEach((dataTypeGain) => {
+      dataTypeGain.value = Number(this.event.getDataTypeGain(dataTypeGain.name).toFixed(0));
+    });
+    this.dataTypeLosses.forEach((dataTypeLoss) => {
+      dataTypeLoss.value = Number(this.event.getDataTypeLoss(dataTypeLoss.name).toFixed(0));
+    });
+
+    this.stats = [...this.dataTypeGains, ...this.dataTypeLosses, ...[
       {
         name: 'Distance',
         value: (this.event.getDistanceInMeters() / 1000).toFixed(2),
@@ -80,8 +111,5 @@ export class EventCardStatsComponent implements OnChanges {
         iconType: 'material'
       }
     ], ...this.dataTypeAverages];
-    this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = Number(this.event.getDataTypeAverage(dataTypeAverage.name).toFixed(0));
-    });
   }
 }

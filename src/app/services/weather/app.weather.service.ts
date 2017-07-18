@@ -20,8 +20,8 @@ export class WeatherService {
   getWeatherForEvent(event: EventInterface): Observable<Weather> {
     return this.http
       .get(this.historyApiUrl
-        .replace('{lat}', event.getFirstActivity().getStartPoint().getPosition().latitudeDegrees.toString())
-        .replace('{lon}', event.getFirstActivity().getStartPoint().getPosition().longitudeDegrees.toString())
+        .replace('{lat}', event.getPointsWithPosition()[0].getPosition().latitudeDegrees.toString())
+        .replace('{lon}', event.getPointsWithPosition()[0].getPosition().longitudeDegrees.toString())
         .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
         .replace('{apiKey}', this.apiKey))
       .map((response) => {
