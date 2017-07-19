@@ -11,6 +11,9 @@
     <md-card-title>
       {{ event.getName() }}
     </md-card-title>
+
+    <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
+
     <md-card-subtitle>
       {{ event.getFirstActivity().getStartDate() | date:'short' }}
     </md-card-subtitle>
