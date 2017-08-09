@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {ActionButtonService} from '../../../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../../../services/action-buttons/app.action-button';
@@ -13,7 +13,7 @@ import {Router} from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardListComponent implements OnChanges, OnInit {
+export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
   @Input() events: EventInterface[];
   gridListColumnCount: number;
 
@@ -57,6 +57,10 @@ export class EventCardListComponent implements OnChanges, OnInit {
     } else {
       this.actionButtonService.removeActionButton('mergeEvents');
     }
+  }
+
+  ngOnDestroy() {
+    this.actionButtonService.removeActionButton('mergeEvents');
   }
 
   private getColumnsFromWidth(width: number): number {
