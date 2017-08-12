@@ -2,7 +2,7 @@ import {Injectable} from '@angular/core';
 import {DataPositionInterface} from '../../entities/data/data.position.interface';
 import {MapsAPILoader} from '@agm/core';
 import {GeoLocationInfo} from './app.geo-location-info';
-import {GeoLocationInfoLocalStorageService} from '../storage/app.geoLocationInfo.local.storage.service';
+import {GeoLocationInfoLocalStorageService} from '../storage/app.geo-location-info.local.storage.service';
 
 declare const google: any;
 

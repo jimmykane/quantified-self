@@ -6,10 +6,11 @@ import {WeatherItem} from './app.weather.item';
 import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/map';
 import {Weather} from "./app.weather";
+import {WeatherServiceInterface} from "app/services/weather/app.weather.service.interface";
 
 
 @Injectable()
-export class WeatherService {
+export class WeatherUndergroundWeatherService implements WeatherServiceInterface{
 
   private historyApiUrl = 'https://api.wunderground.com/api/{apiKey}/history_{YYYYMMDD}/q/{lat},{lon}.json';
   private apiKey = 'a6dbe6951244fa18';

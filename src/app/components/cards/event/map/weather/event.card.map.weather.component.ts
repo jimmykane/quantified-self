@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy} from '@angular/core';
 import {EventInterface} from '../../../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
-import {WeatherService} from '../../../../../services/weather/app.weather.service';
+import {WeatherUndergroundWeatherService} from '../../../../../services/weather/app.weather-underground.weather.service';
 import {WeatherItem} from '../../../../../services/weather/app.weather.item';
 import {Weather} from "../../../../../services/weather/app.weather";
 
@@ -19,7 +19,7 @@ export class EventCardMapWeatherComponent implements OnChanges, OnDestroy {
 
   private weatherSubscription: Subscription;
 
-  constructor(private weatherService: WeatherService, private changeDetectorRef: ChangeDetectorRef) {
+  constructor(private weatherService: WeatherUndergroundWeatherService, private changeDetectorRef: ChangeDetectorRef) {
   }
 
   ngOnChanges() {
