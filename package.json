@@ -5,10 +5,10 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
-    "build-production": "ng build --target=production",
+    "build": "ng build --aot=true --verbose=true --sourcemaps=true",
+    "build-production": "ng build --target=production --verbose=true --sourcemaps=true",
     "deploy": "gcloud app deploy --quiet --promote --stop-previous-version --version=v1",
-    "build-and-deploy": "npm run build-production && npm run deploy",
+    "build-and-deploy-prod": "npm run build-production && npm run deploy",
     "build-and-deploy-dev": "npm run build && npm run deploy",
     "test": "ng test",
     "lint": "ng lint",
