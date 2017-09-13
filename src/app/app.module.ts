@@ -32,15 +32,15 @@ import {HttpModule} from '@angular/http';
 import {EventCardMapLocationComponent} from './components/cards/event/map/location/event.card.map.location.component';
 import {EventCardMapWeatherComponent} from './components/cards/event/map/weather/event.card.map.weather.component';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
-import {CdkTableModule} from '@angular/cdk';
+import {CdkTableModule} from '@angular/cdk/table';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
 import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapActivitiesComponent} from './components/cards/event/map/activities/event.card.map.activities.component';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
-import {EventLocalStorageService} from "./services/storage/app.event.local.storage.service";
-import {GeoLocationInfoLocalStorageService} from "./services/storage/app.geo-location-info.local.storage.service";
+import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
+import {GeoLocationInfoLocalStorageService} from './services/storage/app.geo-location-info.local.storage.service';
 
 @NgModule({
   imports: [

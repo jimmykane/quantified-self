@@ -1,4 +1,4 @@
-import * as GeoLib from 'geolib/dist/geolib';
+import * as GeoLib from 'geolib';
 import PositionAsDecimal = GeoLib.PositionAsDecimal;
 import {DistanceAdapterInterface} from './distance.adapter.interface';
 import {PointInterface} from '../../../points/point.interface';

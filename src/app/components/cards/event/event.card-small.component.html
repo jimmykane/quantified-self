@@ -1,6 +1,6 @@
 <md-card [class.selected]="classActive">
   <md-card-header>
-    <div md-card-avatar>
+    <div mdCardAvatar>
       <div class="card-avatar-container">
         <md-icon>star_border</md-icon>
         <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'running'" >directions_run</md-icon>

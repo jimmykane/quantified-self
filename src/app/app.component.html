@@ -6,19 +6,19 @@
 
   <nav md-tab-nav-bar>
 
-    <a md-tab-link (click)="sidenav.toggle()">{{ title }}</a>
+    <a mdTabLink (click)="sidenav.toggle()">{{ title }}</a>
 
-    <a md-tab-link
+    <a mdTabLink
        routerLink="/dashboard"
        routerLinkActive #dashboard="routerLinkActive"
        [active]="dashboard.isActive">Dashboard</a>
 
-    <a md-tab-link
+    <a mdTabLink
        routerLink="/upload"
        routerLinkActive #upload="routerLinkActive"
        [active]="upload.isActive">Upload</a>
 
-    <a md-tab-link
+    <a mdTabLink
        routerLink="/about"
        routerLinkActive #about="routerLinkActive"
        [active]="about.isActive">About</a>
