@@ -48,7 +48,6 @@
     "ng2-logger": "^1.0.3",
     "roboto-fontface": "^0.8.0",
     "rxjs": "^5.4.3",
-    "typescript": "2.4.2",
     "uuid": "^3.1.0",
     "zone.js": "^0.8.17"
   },
@@ -69,6 +68,6 @@
     "protractor": "~5.1.2",
     "ts-node": "~3.3.0",
     "tslint": "~5.7.0",
-    "typescript": "2.4.2"
+    "typescript": "2.3.3"
   }
 }

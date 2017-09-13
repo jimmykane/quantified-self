@@ -118,7 +118,7 @@ export class EventImporterSML {
           }
         });
 
-        if ([...point.getData().keys()].length){
+        if (Array.from(point.getData().keys()).length) {
           activity.addPoint(point);
         }
 

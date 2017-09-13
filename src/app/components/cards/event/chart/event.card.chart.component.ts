@@ -261,7 +261,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     });
 
     const t1 = performance.now();
-    this.logger.d('Flatten ' + [...dataMap.keys()].length + ' points after ' +
+    this.logger.d('Flatten ' + Array.from(dataMap.keys()).length + ' points after ' +
       (t1 - t0) + ' milliseconds or ' +
       (t1 - t0) / 1000 + ' seconds');
     return dataProvider;

@@ -22,7 +22,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   constructor(private changeDetectorRef: ChangeDetectorRef, private actionButtonService: ActionButtonService) {
     this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
-      this.actionButtons = [...actionButtons.values()];
+      this.actionButtons = Array.from(actionButtons.values());
     });
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
       this.sideNav.toggle();
