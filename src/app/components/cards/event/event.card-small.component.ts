@@ -14,13 +14,12 @@ import {Log, Level} from 'ng2-logger'
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardSmallComponent implements OnInit, OnDestroy {
+export class EventCardSmallComponent implements OnInit {
   @Input() event: EventInterface;
   @Input() classActive: boolean;
   public geoLocationInfo: GeoLocationInfo;
 
   private logger = Log.create(this.constructor.name);
-  private parametersSubscription: Subscription;
 
   constructor(private changeDetectorRef: ChangeDetectorRef,
               private route: ActivatedRoute, private router: Router,
@@ -28,9 +27,6 @@ export class EventCardSmallComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    // Subscribe to route changes
-    this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-    });
     this.geoLocationInfoService.getGeoLocationInfo(this.event.getPointsWithPosition()[0].getPosition())
       .then((geoLocationInfo) => {
         this.geoLocationInfo = geoLocationInfo;
@@ -39,9 +35,5 @@ export class EventCardSmallComponent implements OnInit, OnDestroy {
       .catch((response) => {
         this.logger.error('Could not get geoLocation info. ', response.toString());
       });
-  }
-
-  ngOnDestroy(): void {
-    this.parametersSubscription.unsubscribe();
   }
 }

@@ -6,5 +6,6 @@ export interface DataInterface extends SerializableClassInterface {
   setValue(value: string|number);
   getValue(): number;
   setUnit(unit: string);
+  getType(): string;
   getUnit(): string;
 }

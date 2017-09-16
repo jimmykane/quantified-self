@@ -14,10 +14,10 @@ import {DataTemperature} from '../../../data/data.temperature';
 import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
 import {DataPower} from '../../../data/data.power';
-import {DataRespirationRate} from "../../../data/data.respiration-rate";
-import {DataEHPE} from "../../../data/data.ehpe";
-import {DataAbsolutePressure} from "../../../data/data.absolute-pressure";
-import {DataGPSAltitude} from "../../../data/data.gps-altitude";
+import {DataRespirationRate} from '../../../data/data.respiration-rate';
+import {DataEHPE} from '../../../data/data.ehpe';
+import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
+import {DataGPSAltitude} from '../../../data/data.gps-altitude';
 
 export class EventImporterJSON {
 
@@ -50,60 +50,60 @@ export class EventImporterJSON {
         for (const dataObject of pointObject.data) {
           // @todo make this dynamic
           switch (dataObject.type) {
-            case 'DataAltitude': {
-              new DataAltitude(point, dataObject.value);
+            case 'Altitude': {
+              point.addData(new DataAltitude(dataObject.value));
               break;
             }
-            case 'DataGPSAltitude': {
-              new DataGPSAltitude(point, dataObject.value);
+            case 'Altitude GPS': {
+              point.addData(new DataGPSAltitude(dataObject.value));
               break;
             }
-            case 'DataRespirationRate': {
-              new DataRespirationRate(point, dataObject.value);
+            case 'Respiration Rate': {
+              point.addData(new DataRespirationRate(dataObject.value));
               break;
             }
-            case 'DataEHPE': {
-              new DataEHPE(point, dataObject.value);
+            case 'EHPE': {
+              point.addData(new DataEHPE(dataObject.value));
               break;
             }
-            case 'DataAbsolutePressure': {
-              new DataAbsolutePressure(point, dataObject.value);
+            case 'Absolute Pressure': {
+              point.addData(new DataAbsolutePressure(dataObject.value));
               break;
             }
-            case 'DataCadence': {
-              new DataCadence(point, dataObject.value);
+            case 'Cadence': {
+              point.addData(new DataCadence(dataObject.value));
               break;
             }
-            case 'DataHeartRate': {
-              new DataHeartRate(point, dataObject.value);
+            case 'Heart Rate': {
+              point.addData(new DataHeartRate(dataObject.value));
               break;
             }
-            case 'DataLatitudeDegrees': {
-              new DataLatitudeDegrees(point, dataObject.value);
+            case 'Latitude': {
+              point.addData(new DataLatitudeDegrees(dataObject.value));
               break;
             }
-            case 'DataLongitudeDegrees': {
-              new DataLongitudeDegrees(point, dataObject.value);
+            case 'Longitude': {
+              point.addData(new DataLongitudeDegrees(dataObject.value));
               break;
             }
-            case 'DataSeaLevelPressure': {
-              new DataSeaLevelPressure(point, dataObject.value);
+            case 'Sea Level Pressure': {
+              point.addData(new DataSeaLevelPressure(dataObject.value));
               break;
             }
-            case 'DataSpeed': {
-              new DataSpeed(point, dataObject.value);
+            case 'Speed': {
+              point.addData(new DataSpeed(dataObject.value));
               break;
             }
-            case 'DataTemperature': {
-              new DataTemperature(point, dataObject.value);
+            case 'Temperature': {
+              point.addData(new DataTemperature(dataObject.value));
               break;
             }
-            case 'DataVerticalSpeed': {
-              new DataVerticalSpeed(point, dataObject.value);
+            case 'Vertical Speed': {
+              point.addData(new DataVerticalSpeed(dataObject.value));
               break;
             }
-            case 'DataPower': {
-              new DataPower(point, dataObject.value);
+            case 'Power': {
+              point.addData(new DataPower(dataObject.value));
               break;
             }
           }

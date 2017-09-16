@@ -42,9 +42,9 @@ export class EventImporterSML {
       if (suuntoSML['R-R'] && suuntoSML['R-R']['Data']) {
         const point = new Point(date);
         activity.addPoint(point);
-        new DataRespirationRate(point, suuntoSML['R-R']['Data'].split(',').reduce((acc, data, i, array) => {
+        point.addData(new DataRespirationRate(suuntoSML['R-R']['Data'].split(',').reduce((acc, data, i, array) => {
           return acc + Number(data.trim()) / array.length
-        }, 0));
+        }, 0)));
         return;
       }
 
@@ -56,63 +56,63 @@ export class EventImporterSML {
           }
           switch (key) {
             case 'EHPE': {
-              new DataEHPE(point, Number(suuntoSML['Sample'][key]));
+              point.addData(new DataEHPE(Number(suuntoSML['Sample'][key])));
               break;
             }
             case 'Latitude': {
-              new DataLatitudeDegrees(point, Number(suuntoSML['Sample'][key]) * (180 / Math.PI));
+              point.addData(new DataLatitudeDegrees(Number(suuntoSML['Sample'][key]) * (180 / Math.PI)));
               break;
             }
             case 'Longitude': {
-              new DataLongitudeDegrees(point, Number(suuntoSML['Sample'][key]) * (180 / Math.PI));
+              point.addData(new DataLongitudeDegrees(Number(suuntoSML['Sample'][key]) * (180 / Math.PI)));
               break;
             }
             case 'AbsPressure': {
-              new DataAbsolutePressure(point, Number(suuntoSML['Sample'][key]) / 1000);
+              point.addData(new DataAbsolutePressure(Number(suuntoSML['Sample'][key]) / 1000));
               break;
             }
             case 'Altitude': {
-              new DataAltitude(point, suuntoSML['Sample'][key]);
+              point.addData(new DataAltitude(suuntoSML['Sample'][key]));
               break;
 
             }
             case 'GPSAltitude': {
-              new DataGPSAltitude(point, suuntoSML['Sample'][key]);
+              point.addData(new DataGPSAltitude(suuntoSML['Sample'][key]));
               break;
 
             }
             case 'Cadence': {
-              new DataCadence(point, suuntoSML['Sample'][key] * 50);
+              point.addData(new DataCadence(suuntoSML['Sample'][key] * 50));
               break;
 
             }
             case 'HR': {
-              new DataHeartRate(point, suuntoSML['Sample'][key] * 50);
+              point.addData(new DataHeartRate(suuntoSML['Sample'][key] * 50));
               break;
 
             }
             case 'Power': {
-              new DataPower(point, suuntoSML['Sample'][key]);
+              point.addData(new DataPower(suuntoSML['Sample'][key]));
               break;
 
             }
             case 'SeaLevelPressure': {
-              new DataSeaLevelPressure(point, Number(suuntoSML['Sample'][key]) / 1000);
+              point.addData(new DataSeaLevelPressure(Number(suuntoSML['Sample'][key]) / 1000));
               break;
 
             }
             case 'Speed': {
-              new DataSpeed(point, suuntoSML['Sample'][key]);
+              point.addData(new DataSpeed(suuntoSML['Sample'][key]));
               break;
 
             }
             case 'Temperature': {
-              new DataTemperature(point, suuntoSML['Sample'][key] - 273.15); // convert to celsius from kelvin
+              point.addData(new DataTemperature(suuntoSML['Sample'][key] - 273.15)); // convert to celsius from kelvin
               break;
 
             }
             case 'VerticalSpeed': {
-              new DataVerticalSpeed(point, suuntoSML['Sample'][key]);
+              point.addData(new DataVerticalSpeed(suuntoSML['Sample'][key]));
               break;
             }
           }

@@ -50,56 +50,56 @@ export class EventImporterGPX {
     for (const pointElement of <any>xml.getElementsByTagName('trkpt')) {
       const point = new Point(new Date(pointElement.getElementsByTagName('time')[0].textContent));
       activity.addPoint(point);
-      new DataLatitudeDegrees(point, pointElement.getAttribute('lat'));
-      new DataLongitudeDegrees(point, pointElement.getAttribute('lon'));
+      point.addData(new DataLatitudeDegrees(pointElement.getAttribute('lat')));
+      point.addData(new DataLongitudeDegrees(pointElement.getAttribute('lon')));
       if (pointElement.getElementsByTagName('ele')[0]) {
-        new DataAltitude(point, pointElement.getElementsByTagName('ele')[0].textContent);
+        point.addData(new DataAltitude(pointElement.getElementsByTagName('ele')[0].textContent));
       }
       // Go over the extensions
       if (pointElement.getElementsByTagName('extensions')[0]) {
         for (const dataElement of <any>pointElement.getElementsByTagName('extensions')[0].children) {
           switch (dataElement.tagName) {
             case 'gpxdata:altitude': {
-              new DataAltitude(point, dataElement.textContent);
+              point.addData(new DataAltitude(dataElement.textContent));
               break;
             }
             case 'gpxdata:cadence': {
-              new DataCadence(point, dataElement.textContent);
+              point.addData(new DataCadence(dataElement.textContent));
               break;
             }
             case 'gpxdata:temp': {
-              new DataTemperature(point, dataElement.textContent);
+              point.addData(new DataTemperature(dataElement.textContent));
               break;
             }
             case 'gpxdata:seaLevelPressure': {
-              new DataSeaLevelPressure(point, dataElement.textContent);
+              point.addData(new DataSeaLevelPressure(dataElement.textContent));
               break;
             }
             case 'gpxdata:speed': {
-              new DataSpeed(point, dataElement.textContent);
+              point.addData(new DataSpeed(dataElement.textContent));
               break;
             }
             case 'gpxdata:verticalSpeed': {
-              new DataVerticalSpeed(point, dataElement.textContent);
+              point.addData(new DataVerticalSpeed(dataElement.textContent));
               break;
             }
             case 'gpxdata:power': {
-              new DataPower(point, dataElement.textContent);
+              point.addData(new DataPower(dataElement.textContent));
               break;
             }
             case 'gpxtpx:TrackPointExtension': {
               for (const dataExtensionElement of <any>dataElement.children) {
                 switch (dataExtensionElement.tagName) {
                   case 'gpxtpx:hr': {
-                    new DataHeartRate(point, dataExtensionElement.textContent);
+                    point.addData(new DataHeartRate(dataExtensionElement.textContent));
                     break;
                   }
                   case 'gpxtpx:cad': {
-                    new DataCadence(point, dataExtensionElement.textContent);
+                    point.addData(new DataCadence(dataExtensionElement.textContent));
                     break;
                   }
                   case 'gpxtpx:atemp': {
-                    new DataTemperature(point, dataExtensionElement.textContent);
+                    point.addData(new DataTemperature(dataExtensionElement.textContent));
                     break;
                   }
                 }

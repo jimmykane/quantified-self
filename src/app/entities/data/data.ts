@@ -1,15 +1,14 @@
 import {DataInterface} from './data.interface';
 import {PointInterface} from '../points/point.interface';
 
-export class Data implements DataInterface {
+export abstract class Data implements DataInterface {
 
   private point: PointInterface;
   private value: number;
+  protected type: string;
   protected unit: string;
 
-  constructor(point: PointInterface, value: string|number) {
-    this.point = point;
-    this.point.addData(this);
+  constructor(value: string|number) {
     this.setValue(value);
   }
 
@@ -29,6 +28,10 @@ export class Data implements DataInterface {
     this.unit = unit;
   }
 
+  getType(): string {
+    return this.type;
+  }
+
   getUnit(): string {
     return this.unit;
   }
@@ -36,7 +39,7 @@ export class Data implements DataInterface {
   // @todo add correct type
   toJSON(): any {
     return {
-      type: this.constructor.name,
+      type: this.type,
       value: this.getValue() // @todo Pass type
     };
   }

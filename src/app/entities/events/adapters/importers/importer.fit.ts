@@ -55,8 +55,8 @@ export class EventImporterFIT {
                // Hack for strange Suunto data
               if (creator.getName() === 'suunto') {
                 if (lapRecord.position_lat && lapRecord.position_long) {
-                  new DataLatitudeDegrees(point, lapRecord.position_lat);
-                  new DataLongitudeDegrees(point, lapRecord.position_long);
+                  point.addData(new DataLatitudeDegrees(lapRecord.position_lat));
+                  point.addData(new DataLongitudeDegrees(lapRecord.position_long));
                   dataCount++;
                   dataCount++;
                   continue;
@@ -65,14 +65,14 @@ export class EventImporterFIT {
               Object.keys(lapRecord).forEach((key) => {
                 dataCount++;
                 switch (key) {
-                  case 'altitude': { return new DataAltitude(point, Number(lapRecord[key]) - 1000); }
-                  case 'position_lat': { return new DataLatitudeDegrees(point, lapRecord[key]); }
-                  case 'position_long': { return new DataLongitudeDegrees(point, lapRecord[key]); }
-                  case 'cadence': { return new DataCadence(point, lapRecord[key]); }
-                  case 'heart_rate': { return new DataHeartRate(point, lapRecord[key]); }
-                  case 'vertical_speed': { return new DataVerticalSpeed(point, lapRecord[key]); }
-                  case 'speed': { return new DataSpeed(point, lapRecord[key]); }
-                  case 'temperature': { return new DataTemperature(point, lapRecord[key]); }
+                  case 'altitude': { return point.addData(new DataAltitude(Number(lapRecord[key]) - 1000)); }
+                  case 'position_lat': { return point.addData(new DataLatitudeDegrees(lapRecord[key])); }
+                  case 'position_long': { return point.addData(new DataLongitudeDegrees(lapRecord[key])); }
+                  case 'cadence': { return point.addData(new DataCadence(lapRecord[key])); }
+                  case 'heart_rate': { return point.addData(new DataHeartRate(lapRecord[key])); }
+                  case 'vertical_speed': { return point.addData(new DataVerticalSpeed(lapRecord[key])); }
+                  case 'speed': { return point.addData(new DataSpeed(lapRecord[key])); }
+                  case 'temperature': { return point.addData(new DataTemperature(lapRecord[key])); }
                 }
               });
             }

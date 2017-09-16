@@ -88,7 +88,7 @@ export class Event extends IDClass implements EventInterface {
         }
         return pointsWithPosition;
       }, []);
-    this.logger.d('Retrieved all points after ' +
+    this.logger.d('Retrieved all points with position after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );

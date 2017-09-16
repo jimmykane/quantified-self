@@ -19,9 +19,9 @@ export class Point implements PointInterface {
   }
 
   addData(data: DataInterface) {
-    const dataArray = this.getData().get(data.constructor.name) || [];
+    const dataArray = this.getData().get(data.getType()) || [];
     if (!dataArray.length) {
-      this.getData().set(data.constructor.name, dataArray);
+      this.getData().set(data.getType(), dataArray);
     }
     dataArray.push(data);
   }
@@ -44,8 +44,8 @@ export class Point implements PointInterface {
   }
 
   getPosition(): DataPositionInterface {
-    const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.name);
-    const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.name);
+    const dataLatitudeDegrees = this.getData().get('Latitude');
+    const dataLongitudeDegrees = this.getData().get('Longitude');
     if (!dataLongitudeDegrees || !dataLatitudeDegrees) {
       return;
     }
