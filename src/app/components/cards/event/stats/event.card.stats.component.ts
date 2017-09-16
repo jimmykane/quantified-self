@@ -3,8 +3,8 @@ import {EventInterface} from '../../../../entities/events/event.interface';
 import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataPower} from '../../../../entities/data/data.power';
-import {DataTemperature} from "../../../../entities/data/data.temperature";
-import {DataAltitude} from "../../../../entities/data/data.altitude";
+import {DataTemperature} from '../../../../entities/data/data.temperature';
+import {DataAltitude} from '../../../../entities/data/data.altitude';
 
 
 @Component({
@@ -80,36 +80,40 @@ export class EventCardStatsComponent implements OnChanges {
       dataTypeLoss.value = Number(this.event.getDataTypeLoss(dataTypeLoss.name).toFixed(0));
     });
 
-    this.stats = [...this.dataTypeGains, ...this.dataTypeLosses, ...[
-      {
-        name: 'Distance',
-        value: (this.event.getDistanceInMeters() / 1000).toFixed(2),
-        iconName: 'arrows-h',
-        units: 'km',
-        iconType: 'fontAwesome'
-      },
-      {
-        name: 'Time',
-        value: (new Date(this.event.getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
-        iconName: 'clock-o',
-        units: '',
-        iconType: 'fontAwesome'
-      },
-      {
-        name: 'Pace',
-        value: (new Date((this.event.getTotalDurationInSeconds() * 1000) / (this.event.getDistanceInMeters() / 1000)))
-          .toISOString().substr(14, 5),
-        iconName: 'directions_run',
-        units: 'm/km',
-        iconType: 'material'
-      },
-      {
-        name: 'Speed',
-        value: ((this.event.getDistanceInMeters() / 1000) / (this.event.getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
-        iconName: 'directions_bike',
-        units: 'km/h',
-        iconType: 'material'
-      }
-    ], ...this.dataTypeAverages];
+    this.stats = this.dataTypeGains.concat(
+      this.dataTypeLosses,
+      [
+        {
+          name: 'Distance',
+          value: (this.event.getDistanceInMeters() / 1000).toFixed(2),
+          iconName: 'arrows-h',
+          units: 'km',
+          iconType: 'fontAwesome'
+        },
+        {
+          name: 'Time',
+          value: (new Date(this.event.getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
+          iconName: 'clock-o',
+          units: '',
+          iconType: 'fontAwesome'
+        },
+        {
+          name: 'Pace',
+          value: (new Date((this.event.getTotalDurationInSeconds() * 1000) / (this.event.getDistanceInMeters() / 1000)))
+            .toISOString().substr(14, 5),
+          iconName: 'directions_run',
+          units: 'm/km',
+          iconType: 'material'
+        },
+        {
+          name: 'Speed',
+          value: ((this.event.getDistanceInMeters() / 1000) / (this.event.getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
+          iconName: 'directions_bike',
+          units: 'km/h',
+          iconType: 'material'
+        }
+      ],
+      this.dataTypeAverages
+    );
   }
 }

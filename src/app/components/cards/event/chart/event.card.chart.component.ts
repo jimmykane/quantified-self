@@ -369,7 +369,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       case DataSeaLevelPressure.name:
         return '#889bc8';
     }
-    return '#' + ('000000' + (Math.random()*0xFFFFFF<<0).toString(16)).slice(-6);
+    // noinspection TsLint
+    return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
 
   ngOnDestroy() {

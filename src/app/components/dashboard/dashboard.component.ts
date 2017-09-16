@@ -33,8 +33,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   mergeEvents($event, event: EventInterface) {
     $event.stopPropagation();
-    this.eventService.mergeEvents([this.selectedEvent, event]).then((event: EventInterface) => {
-      this.eventService.saveEvent(event);
+    this.eventService.mergeEvents([this.selectedEvent, event]).then((mergedEvent: EventInterface) => {
+      this.eventService.saveEvent(mergedEvent);
       // this.router.navigate(['/dashboard'], { queryParams: { eventID: event.getID() } });
     });
     return false;

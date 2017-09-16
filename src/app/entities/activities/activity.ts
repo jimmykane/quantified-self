@@ -1,11 +1,9 @@
 import {ActivityInterface} from './activity.interface';
 import {CreatorInterface} from '../creators/creatorInterface';
-import {LapInterface} from '../laps/lap.interface';
 import {PointInterface} from '../points/point.interface';
-import {EventInterface} from '../events/event.interface';
 import {IDClass} from '../id/id.abstract.class';
-import {DataInterface} from "../data/data.interface";
-import {Log} from "ng2-logger";
+import {DataInterface} from '../data/data.interface';
+import {Log} from 'ng2-logger';
 
 export class Activity extends IDClass implements ActivityInterface {
 

@@ -1,6 +1,5 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
-import {LapInterface} from "../../../../entities/laps/lap.interface";
 
 @Component({
   selector: 'app-event-card-laps',

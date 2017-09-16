@@ -59,7 +59,7 @@ export class Point implements PointInterface {
   toJSON(): any {
     let dataArray = [];
     this.getData().forEach((value, key, map) => {
-      dataArray = [...dataArray, ...value];
+      dataArray =  dataArray.concat(value);
     });
     return {
       date: this.getDate(),
