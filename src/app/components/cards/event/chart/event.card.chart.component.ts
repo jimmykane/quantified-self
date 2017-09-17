@@ -322,7 +322,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     const graphs = [];
     this.getAllCategoryTypes().forEach((dataCategory: string) => {
-      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataCategory) > -1) {
+      if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(dataCategory) > -1) {
         return;
       }
       graphs.push({
