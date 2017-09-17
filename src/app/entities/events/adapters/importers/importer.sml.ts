@@ -124,7 +124,6 @@ export class EventImporterSML {
 
       }
     });
-    debugger;
     return event;
   }
 

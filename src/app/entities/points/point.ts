@@ -24,6 +24,7 @@ export class Point implements PointInterface {
       this.getData().set(data.getType(), dataArray);
     }
     dataArray.push(data);
+    data.setPoint(this);
   }
 
   getData(): Map<string, DataInterface[]> {

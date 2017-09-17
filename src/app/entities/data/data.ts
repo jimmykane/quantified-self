@@ -12,6 +12,10 @@ export abstract class Data implements DataInterface {
     this.setValue(value);
   }
 
+  setPoint(point: PointInterface) {
+    this.point = point;
+  }
+
   getPoint(): PointInterface {
     return this.point;
   }
