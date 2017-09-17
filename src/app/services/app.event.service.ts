@@ -44,7 +44,6 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    console.log(event);
     this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
         this.events.next(this.events.getValue().push(event));
     });
