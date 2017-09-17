@@ -2,7 +2,7 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges,
 import {EventInterface} from '../../../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {WeatherUndergroundWeatherService} from '../../../../../services/weather/app.weather-underground.weather.service';
-import {Weather} from '../../../../../services/weather/app.weather';
+import {Weather} from '../../../../../entities/weather/app.weather';
 
 @Component({
   selector: 'app-card-map-weather',

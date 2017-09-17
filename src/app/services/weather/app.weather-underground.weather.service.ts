@@ -2,10 +2,10 @@ import {Injectable} from '@angular/core';
 import {Http} from '@angular/http';
 import {Observable} from 'rxjs/Observable';
 import {EventInterface} from '../../entities/events/event.interface';
-import {WeatherItem} from './app.weather.item';
+import {WeatherItem} from '../../entities/weather/app.weather.item';
 import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/map';
-import {Weather} from './app.weather';
+import {Weather} from '../../entities/weather/app.weather';
 import {WeatherServiceInterface} from 'app/services/weather/app.weather.service.interface';
 
 

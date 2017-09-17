@@ -1,6 +1,6 @@
-import {Weather} from '../../../services/weather/app.weather';
+import {Weather} from '../../weather/app.weather';
 import {SerializableClassInterface} from '../../serializable/serializable.class.interface';
-import {GeoLocationInfo} from '../../../services/geo-location/app.geo-location-info';
+import {GeoLocationInfo} from '../../geo-location-info/app.geo-location-info';
 
 export interface EventSummaryInterface extends SerializableClassInterface {
   setElapsedTimeInSeconds(elapsedTimeInSeconds: number);

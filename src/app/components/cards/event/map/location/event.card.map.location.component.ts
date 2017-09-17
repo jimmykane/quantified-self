@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
 import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
 import {GeoLocationInfoService} from '../../../../../services/geo-location/app.geo-location-info.service';
-import {GeoLocationInfo} from '../../../../../services/geo-location/app.geo-location-info';
+import {GeoLocationInfo} from '../../../../../entities/geo-location-info/app.geo-location-info';
 
 @Component({
   selector: 'app-card-map-location',

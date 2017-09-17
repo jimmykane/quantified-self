@@ -3,7 +3,7 @@ import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {GeoLocationInfoService} from '../../../services/geo-location/app.geo-location-info.service';
-import {GeoLocationInfo} from '../../../services/geo-location/app.geo-location-info';
+import {GeoLocationInfo} from '../../../entities/geo-location-info/app.geo-location-info';
 import {Log, Level} from 'ng2-logger'
 
 
