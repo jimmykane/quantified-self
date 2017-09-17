@@ -44,8 +44,8 @@ export class Point implements PointInterface {
   }
 
   getPosition(): DataPositionInterface {
-    const dataLatitudeDegrees = this.getData().get('Latitude');
-    const dataLongitudeDegrees = this.getData().get('Longitude');
+    const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.type);
+    const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.type);
     if (!dataLongitudeDegrees || !dataLatitudeDegrees) {
       return;
     }

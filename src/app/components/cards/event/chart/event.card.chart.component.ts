@@ -272,12 +272,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     const dataMap = new Map<string, any>();
     let dataCount = 0;
     this.getAllData().forEach((dataArray: DataInterface[], dataType: string) => {
-      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataType) > -1) {
+      if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(dataType) > -1) {
         return;
       }
 
       dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface) => {
         dataCount++;
+        debugger;
+        const b =data.getPoint();
         const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
         dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
           [data.getType()]: data.getValue().toFixed(1)
@@ -297,7 +299,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     let leftIndex = 0;
     let rightIndex = 0;
     this.getAllCategoryTypes().forEach((dataCategory) => {
-      if ([DataLatitudeDegrees.name, DataLongitudeDegrees.name].indexOf(dataCategory) > -1) {
+      if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(dataCategory) > -1) {
         return;
       }
       valueAxes.push({
@@ -352,21 +354,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   private genColor(key: string) {
     switch (key) {
-      case DataHeartRate.name:
+      case DataHeartRate.type:
         return '#ff3f07';
-      case DataAltitude.name:
+      case DataAltitude.type:
         return '#4ab255';
-      case DataCadence.name:
+      case DataCadence.type:
         return '#5b6979';
-      case DataSpeed.name:
+      case DataSpeed.type:
         return '#2261bf';
-      case DataVerticalSpeed.name:
+      case DataVerticalSpeed.type:
         return '#add3c3';
-      case DataTemperature.name:
+      case DataTemperature.type:
         return '#a5a567';
-      case DataPower.name:
+      case DataPower.type:
         return '#d39031';
-      case DataSeaLevelPressure.name:
+      case DataSeaLevelPressure.type:
         return '#889bc8';
     }
     // noinspection TsLint

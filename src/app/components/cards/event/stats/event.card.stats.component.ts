@@ -20,28 +20,28 @@ export class EventCardStatsComponent implements OnChanges {
 
   public dataTypeAverages = [
     {
-      name: DataHeartRate.name,
+      name: DataHeartRate.type,
       value: null,
       iconName: 'heartbeat',
       units: 'BPM',
       iconType: 'fontAwesome'
     },
     {
-      name: DataCadence.name,
+      name: DataCadence.type,
       value: null,
       iconName: 'circle-o-notch',
       units: 'SPM',
       iconType: 'fontAwesome'
     },
     {
-      name: DataTemperature.name,
+      name: DataTemperature.type,
       value: null,
       iconName: 'thermometer',
       units: 'Celsius',
       iconType: 'fontAwesome'
     },
     {
-      name: DataPower.name,
+      name: DataPower.type,
       value: null,
       iconName: 'flash',
       units: 'WATTS',
@@ -51,7 +51,7 @@ export class EventCardStatsComponent implements OnChanges {
 
   public dataTypeGains = [
     {
-      name: DataAltitude.name,
+      name: DataAltitude.type,
       value: null,
       iconName: 'trending_up',
       units: 'm',
@@ -61,7 +61,7 @@ export class EventCardStatsComponent implements OnChanges {
 
   public dataTypeLosses = [
     {
-      name: DataAltitude.name,
+      name: DataAltitude.type,
       value: null,
       iconName: 'trending_down',
       units: 'm',

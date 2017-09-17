@@ -55,63 +55,63 @@ export class EventImporterSML {
             return;
           }
           switch (key) {
-            case 'EHPE': {
+            case DataEHPE.type: {
               point.addData(new DataEHPE(Number(suuntoSML['Sample'][key])));
               break;
             }
-            case 'Latitude': {
+            case DataLatitudeDegrees.type: {
               point.addData(new DataLatitudeDegrees(Number(suuntoSML['Sample'][key]) * (180 / Math.PI)));
               break;
             }
-            case 'Longitude': {
+            case DataLongitudeDegrees.type: {
               point.addData(new DataLongitudeDegrees(Number(suuntoSML['Sample'][key]) * (180 / Math.PI)));
               break;
             }
-            case 'AbsPressure': {
+            case DataAbsolutePressure.type: {
               point.addData(new DataAbsolutePressure(Number(suuntoSML['Sample'][key]) / 1000));
               break;
             }
-            case 'Altitude': {
+            case DataAltitude.type: {
               point.addData(new DataAltitude(suuntoSML['Sample'][key]));
               break;
 
             }
-            case 'GPSAltitude': {
+            case DataGPSAltitude.type: {
               point.addData(new DataGPSAltitude(suuntoSML['Sample'][key]));
               break;
 
             }
-            case 'Cadence': {
+            case DataCadence.type: {
               point.addData(new DataCadence(suuntoSML['Sample'][key] * 50));
               break;
 
             }
-            case 'HR': {
+            case DataHeartRate.type: {
               point.addData(new DataHeartRate(suuntoSML['Sample'][key] * 50));
               break;
 
             }
-            case 'Power': {
+            case DataPower.type: {
               point.addData(new DataPower(suuntoSML['Sample'][key]));
               break;
 
             }
-            case 'SeaLevelPressure': {
+            case DataSeaLevelPressure.type: {
               point.addData(new DataSeaLevelPressure(Number(suuntoSML['Sample'][key]) / 1000));
               break;
 
             }
-            case 'Speed': {
+            case DataSpeed.type: {
               point.addData(new DataSpeed(suuntoSML['Sample'][key]));
               break;
 
             }
-            case 'Temperature': {
+            case DataTemperature.type: {
               point.addData(new DataTemperature(suuntoSML['Sample'][key] - 273.15)); // convert to celsius from kelvin
               break;
 
             }
-            case 'VerticalSpeed': {
+            case DataVerticalSpeed.type: {
               point.addData(new DataVerticalSpeed(suuntoSML['Sample'][key]));
               break;
             }
