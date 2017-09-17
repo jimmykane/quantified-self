@@ -3,9 +3,9 @@ import {PointInterface} from '../points/point.interface';
 
 export abstract class Data implements DataInterface {
 
+  static type: string;
   private point: PointInterface;
   private value: number;
-  protected type: string;
   protected unit: string;
 
   constructor(value: string|number) {
@@ -29,7 +29,7 @@ export abstract class Data implements DataInterface {
   }
 
   getType(): string {
-    return this.type;
+    return (<typeof Data>this.constructor).type;
   }
 
   getUnit(): string {
@@ -39,7 +39,7 @@ export abstract class Data implements DataInterface {
   // @todo add correct type
   toJSON(): any {
     return {
-      type: this.type,
+      type: this.getType(),
       value: this.getValue() // @todo Pass type
     };
   }
