@@ -8,7 +8,7 @@ import {Log} from 'ng2-logger';
 export class LocalStorageService implements StorageServiceInterface {
 
   protected nameSpace = 'quantified-self';
-  private logger = Log.create(this.constructor.name);
+  private logger = Log.create('LocalStorageService');
 
   constructor() {
   }

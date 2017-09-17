@@ -10,7 +10,7 @@ export class Activity extends IDClass implements ActivityInterface {
   private type: string;
   private creators: CreatorInterface[] = [];
   private points: Map<string, PointInterface> = new Map<string, PointInterface>();
-  private logger = Log.create(this.constructor.name);
+  private logger = Log.create('Activity');
 
 
   constructor() {

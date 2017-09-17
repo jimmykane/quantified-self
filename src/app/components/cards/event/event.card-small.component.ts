@@ -19,7 +19,7 @@ export class EventCardSmallComponent implements OnInit {
   @Input() classActive: boolean;
   public geoLocationInfo: GeoLocationInfo;
 
-  private logger = Log.create(this.constructor.name);
+  private logger = Log.create('EventCardSmallComponent');
 
   constructor(private changeDetectorRef: ChangeDetectorRef,
               private route: ActivatedRoute, private router: Router,

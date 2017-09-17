@@ -14,7 +14,7 @@ export class Event extends IDClass implements EventInterface {
   private activities: ActivityInterface[] = [];
   private laps: LapInterface[] = [];
   private geodesyAdapter: GeodesyAdapterInterface;
-  private logger = Log.create(this.constructor.name);
+  private logger = Log.create('Event');
 
   constructor(geodesyAdapter?: GeodesyAdapterInterface) {
     super();

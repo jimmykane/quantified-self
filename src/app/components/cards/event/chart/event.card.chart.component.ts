@@ -29,8 +29,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   private dataMap: Map<string, DataInterface[]>;
   private categories = [];
   private chart: any;
-  private logger = Log.create(this.constructor.name);
-
+  private logger = Log.create('EventCardChartComponent');
 
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
   }

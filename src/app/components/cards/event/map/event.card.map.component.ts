@@ -22,7 +22,7 @@ export class EventCardMapComponent implements OnInit {
   public gridListColumnCount = 2;
   public mapRowSpan = 2;
 
-  private logger = Log.create(this.constructor.name);
+  private logger = Log.create('EventCardMapComponent');
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {
   }
