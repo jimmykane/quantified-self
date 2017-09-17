@@ -1,4 +1,5 @@
 import {WeatherItem} from './app.weather.item';
+
 export class Weather {
   public date: Date;
   public weatherItems: WeatherItem[];
