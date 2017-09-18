@@ -1,8 +1,11 @@
 import {Injectable} from '@angular/core';
-import {DataPositionInterface} from '../../entities/data/data.position.interface';
 import {MapsAPILoader} from '@agm/core';
 import {GeoLocationInfo} from '../../entities/geo-location-info/app.geo-location-info';
 import {GeoLocationInfoLocalStorageService} from '../storage/app.geo-location-info.local.storage.service';
+import {EventInterface} from '../../entities/events/event.interface';
+import {Observable} from 'rxjs/Observable';
+import 'rxjs/add/observable/fromPromise';
+import 'rxjs/add/operator/first';
 
 declare const google: any;
 
@@ -14,8 +17,9 @@ export class GeoLocationInfoService {
   constructor(private geoLocationInfoLocalStorageService: GeoLocationInfoLocalStorageService, private mapsAPILoader: MapsAPILoader) {
   }
 
-  public getGeoLocationInfo(position: DataPositionInterface): Promise<GeoLocationInfo> {
-    return new Promise((resolve, reject) => {
+  public getGeoLocationInfo(event: EventInterface): Observable<GeoLocationInfo> {
+    return Observable.fromPromise(new Promise((resolve, reject) => {
+      const position = event.getPointsWithPosition()[0].getPosition();
       if (this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(','))) {
         return resolve(this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(',')));
       }
@@ -50,6 +54,6 @@ export class GeoLocationInfoService {
           return resolve(geoLocationInfo);
         });
       });
-    });
+    })).first();
   }
 }

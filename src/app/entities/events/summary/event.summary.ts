@@ -4,17 +4,17 @@ import {Weather} from '../../weather/app.weather';
 
 export class EventSummary implements EventSummaryInterface {
 
-  private elapsedTimeInSeconds: number;
+  private totalDurationInSeconds: number;
   private totalDistanceInMeters: number;
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;
 
-  setElapsedTimeInSeconds(elapsedTimeInSeconds: number) {
-    this.elapsedTimeInSeconds = elapsedTimeInSeconds;
+  setTotalDurationInSeconds(totalDurationInSeconds: number) {
+    this.totalDurationInSeconds = totalDurationInSeconds;
   }
 
-  getElapsedTimeInSeconds(): number {
-    return this.elapsedTimeInSeconds;
+  getTotalDurationInSeconds(): number {
+    return this.totalDurationInSeconds;
   }
 
   setTotalDistanceInMeters(totalDistanceInMeters: number) {
@@ -43,7 +43,7 @@ export class EventSummary implements EventSummaryInterface {
 
   toJSON(): any {
     return {
-      elapsedTimeInSecods: this.elapsedTimeInSeconds,
+      totalDurationInSeconds: this.totalDurationInSeconds,
       totalDistanceInMeters: this.totalDistanceInMeters,
     };
   }

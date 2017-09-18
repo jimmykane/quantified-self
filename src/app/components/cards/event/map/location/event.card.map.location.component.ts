@@ -2,6 +2,7 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges}
 import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
 import {GeoLocationInfoService} from '../../../../../services/geo-location/app.geo-location-info.service';
 import {GeoLocationInfo} from '../../../../../entities/geo-location-info/app.geo-location-info';
+import {EventInterface} from "../../../../../entities/events/event.interface";
 
 @Component({
   selector: 'app-card-map-location',
@@ -11,14 +12,14 @@ import {GeoLocationInfo} from '../../../../../entities/geo-location-info/app.geo
 })
 
 export class EventCardMapLocationComponent implements OnChanges {
-  @Input() position: DataPositionInterface;
+  @Input() event: EventInterface;
   public geoLocationInfo: GeoLocationInfo;
 
   constructor(private changeDetectorRef: ChangeDetectorRef, private geoLocationInfoService: GeoLocationInfoService) {
   }
 
   ngOnChanges() {
-    this.geoLocationInfoService.getGeoLocationInfo(this.position).then((geoLocationInfo: GeoLocationInfo) => {
+    this.geoLocationInfoService.getGeoLocationInfo(this.event).subscribe((geoLocationInfo: GeoLocationInfo) => {
       this.geoLocationInfo = geoLocationInfo;
       this.changeDetectorRef.detectChanges();
     })

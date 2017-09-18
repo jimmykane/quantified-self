@@ -27,13 +27,10 @@ export class EventCardSmallComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.geoLocationInfoService.getGeoLocationInfo(this.event.getPointsWithPosition()[0].getPosition())
-      .then((geoLocationInfo) => {
+    this.geoLocationInfoService.getGeoLocationInfo(this.event)
+      .subscribe((geoLocationInfo) => {
         this.geoLocationInfo = geoLocationInfo;
         this.changeDetectorRef.detectChanges();
       })
-      .catch((response) => {
-        this.logger.error('Could not get geoLocation info. ', response.toString());
-      });
   }
 }

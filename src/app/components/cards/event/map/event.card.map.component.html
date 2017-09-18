@@ -1,7 +1,7 @@
 <md-grid-list cols="{{ gridListColumnCount }}" rowHeight="fit">
   <md-grid-tile colspan="1" rowspan="1">
     <app-card-map-location
-      [position]="event.getPointsWithPosition()[0].getPosition()"></app-card-map-location>
+      [event]="event"></app-card-map-location>
   </md-grid-tile>
   <md-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
     <app-event-card-map-agm [event]="event" [resize]="resize"></app-event-card-map-agm>

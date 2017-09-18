@@ -3,8 +3,8 @@ import {SerializableClassInterface} from '../../serializable/serializable.class.
 import {GeoLocationInfo} from '../../geo-location-info/app.geo-location-info';
 
 export interface EventSummaryInterface extends SerializableClassInterface {
-  setElapsedTimeInSeconds(elapsedTimeInSeconds: number);
-  getElapsedTimeInSeconds(): number;
+  setTotalDurationInSeconds(totalDurationInSeconds: number);
+  getTotalDurationInSeconds(): number;
 
   setTotalDistanceInMeters(totalDistanceInMeters: number);
   getTotalDistanceInMeters(): number;

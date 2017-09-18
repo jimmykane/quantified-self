@@ -7,6 +7,7 @@ import 'rxjs/add/operator/catch';
 import 'rxjs/add/operator/map';
 import {Weather} from '../../entities/weather/app.weather';
 import {WeatherServiceInterface} from 'app/services/weather/app.weather.service.interface';
+import 'rxjs/add/operator/first';
 
 
 @Injectable()
@@ -48,6 +49,6 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
         return new Weather(
           Array.from(weatherItemsMap.values())
         );
-      })
+      }).first();
   }
 }
