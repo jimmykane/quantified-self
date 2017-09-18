@@ -1,5 +1,5 @@
 import {Injectable} from '@angular/core';
-import {StorageServiceInterface} from '../app.storage.service.interface';
+import {StorageServiceInterface} from './app.storage.service.interface';
 import * as LZString from 'lz-string';
 import {Log} from 'ng2-logger';
 
