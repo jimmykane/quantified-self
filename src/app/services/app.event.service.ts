@@ -18,6 +18,7 @@ import {WeatherUndergroundWeatherService} from './weather/app.weather-undergroun
 import {EventSummary} from "../entities/events/summary/event.summary";
 import {Weather} from "../entities/weather/app.weather";
 import {GeoLocationInfo} from "../entities/geo-location-info/app.geo-location-info";
+import "rxjs/add/operator/toPromise";
 
 @Injectable()
 export class EventService {
@@ -34,11 +35,9 @@ export class EventService {
     });
   }
 
-  constructor(
-    private eventLocalStorageService: EventLocalStorageService,
-    private weatherService: WeatherUndergroundWeatherService,
-    private geoLocationInfoService: GeoLocationInfoService
-  ) {
+  constructor(private eventLocalStorageService: EventLocalStorageService,
+              private weatherService: WeatherUndergroundWeatherService,
+              private geoLocationInfoService: GeoLocationInfoService) {
     // Fetch existing events
     this.getInitialData();
   }
@@ -47,7 +46,7 @@ export class EventService {
     for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
       this.eventLocalStorageService.getItem(localStorageKey).then((localStorageData) => {
         this.createEventFromJSONString(localStorageData).then((event: EventInterface) => {
-                    this.generateEventSummary(event);
+          this.generateEventSummary(event);
 
           this.events.next(this.events.getValue().push(event));
         });
@@ -57,7 +56,7 @@ export class EventService {
 
   public saveEvent(event: EventInterface) {
     this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
-        this.events.next(this.events.getValue().push(event));
+      this.events.next(this.events.getValue().push(event));
     });
   }
 
@@ -98,17 +97,20 @@ export class EventService {
   }
 
   public generateEventSummary(event: EventInterface): any {
-      return Observable.forkJoin([
-        this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)])
-        .subscribe(results => {
-          const eventSummary = new EventSummary();
-          eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
-          eventSummary.setTotalDistanceInMeters(event.getDistanceInMeters());
-          const locationInfo: GeoLocationInfo = results[0];
-          const weather: Weather = results[1];
-          eventSummary.setWeather(weather);
-          event.setSummary(eventSummary);
-        })
+    const eventSummary = new EventSummary();
+    eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
+    eventSummary.setTotalDistanceInMeters(event.getDistanceInMeters());
+    return new Promise(((resolve, reject) => {
+      Observable.forkJoin([
+        this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)
+      ]).toPromise().then(results => {
+        eventSummary.setGeoLocationInfo(results[0]);
+        eventSummary.setWeather(results[1]);
+        event.setSummary(eventSummary);
+        debugger;
+        resolve(event);
+      })
+    }));
   }
 
   public createEventFromXMLString(data: string): Promise<EventInterface> {
@@ -154,7 +156,7 @@ export class EventService {
 
       // Remove all activities
       const activities = event.getActivities();
-      for (let i = activities.length; i--; ) {
+      for (let i = activities.length; i--;) {
         event.removeActivity(activities[i]);
       }
       const newActivity = new Activity();
