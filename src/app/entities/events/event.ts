@@ -7,12 +7,14 @@ import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {Log} from 'ng2-logger'
+import {EventSummaryInterface} from "./summary/event.summary.interface";
 
 export class Event extends IDClass implements EventInterface {
 
   private name: string;
   private activities: ActivityInterface[] = [];
   private laps: LapInterface[] = [];
+  private summary: EventSummaryInterface;
   private geodesyAdapter: GeodesyAdapterInterface;
   private logger = Log.create('Event');
 
@@ -209,6 +211,14 @@ export class Event extends IDClass implements EventInterface {
     }, 0);
   }
 
+  setSummary(eventSummary: EventSummaryInterface) {
+    this.summary = eventSummary;
+  }
+
+  getSummary(): EventSummaryInterface {
+    return this.summary;
+  }
+
   toJSON(): any {
     return {
       id: this.getID(),
@@ -220,7 +230,7 @@ export class Event extends IDClass implements EventInterface {
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;
-      }, [])
+      }, []),
 
     };
   }
