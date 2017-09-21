@@ -15,10 +15,8 @@ import {EventLocalStorageService} from './storage/app.event.local.storage.servic
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
 import 'rxjs/add/observable/forkJoin';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
-import {EventSummary} from "../entities/events/summary/event.summary";
-import {Weather} from "../entities/weather/app.weather";
-import {GeoLocationInfo} from "../entities/geo-location-info/app.geo-location-info";
-import "rxjs/add/operator/toPromise";
+import {EventSummary} from '../entities/events/summary/event.summary';
+import 'rxjs/add/operator/toPromise';
 
 @Injectable()
 export class EventService {
@@ -102,7 +100,7 @@ export class EventService {
     eventSummary.setTotalDistanceInMeters(event.getDistanceInMeters());
     return new Promise(((resolve, reject) => {
       Observable.forkJoin([
-        this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)
+        this.geoLocationInfoService.getGeoLocationInfo(event).first(), this.weatherService.getWeatherForEvent(event).first()
       ]).toPromise().then(results => {
         eventSummary.setGeoLocationInfo(results[0]);
         eventSummary.setWeather(results[1]);

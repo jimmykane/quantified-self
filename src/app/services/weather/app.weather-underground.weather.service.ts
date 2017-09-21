@@ -49,6 +49,6 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
         return new Weather(
           Array.from(weatherItemsMap.values())
         );
-      }).first();
+      });
   }
 }

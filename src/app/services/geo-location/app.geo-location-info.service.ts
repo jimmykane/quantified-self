@@ -54,6 +54,6 @@ export class GeoLocationInfoService {
           return resolve(geoLocationInfo);
         });
       });
-    })).first();
+    }));
   }
 }
