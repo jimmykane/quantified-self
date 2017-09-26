@@ -100,12 +100,11 @@ export class EventService {
     eventSummary.setTotalDistanceInMeters(event.getDistanceInMeters());
     return new Promise(((resolve, reject) => {
       Observable.forkJoin([
-        this.geoLocationInfoService.getGeoLocationInfo(event).first(), this.weatherService.getWeatherForEvent(event).first()
+        this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)
       ]).toPromise().then(results => {
         eventSummary.setGeoLocationInfo(results[0]);
         eventSummary.setWeather(results[1]);
         event.setSummary(eventSummary);
-        debugger;
         resolve(event);
       })
     }));

@@ -45,6 +45,8 @@ export class EventSummary implements EventSummaryInterface {
     return {
       totalDurationInSeconds: this.totalDurationInSeconds,
       totalDistanceInMeters: this.totalDistanceInMeters,
+      geoLocationInfo: this.geoLocationInfo,
+      weather: this.weather.toJSON()
     };
   }
 }

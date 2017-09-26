@@ -1,7 +1,7 @@
 import {WeatherItem} from './app.weather.item';
+import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 
-export class Weather {
-  public date: Date;
+export class Weather implements SerializableClassInterface {
   public weatherItems: WeatherItem[];
 
   constructor(weatherItems: WeatherItem[]) {
@@ -24,5 +24,11 @@ export class Weather {
     return this.weatherItems.reduce((average, weatherItem: WeatherItem) => {
       return average + weatherItem.temperatureInCelsius / this.weatherItems.length
     }, 0);
+  }
+
+  toJSON(): any {
+    return {
+      weatherItems: this.weatherItems
+    };
   }
 }
