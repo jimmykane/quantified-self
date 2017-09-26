@@ -18,6 +18,10 @@ import {DataRespirationRate} from '../../../data/data.respiration-rate';
 import {DataEHPE} from '../../../data/data.ehpe';
 import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {WeatherItem} from "../../../weather/app.weather.item";
+import {Weather} from "../../../weather/app.weather";
+import {EventSummary} from "../../summary/event.summary";
+import {GeoLocationInfo} from "../../../geo-location-info/app.geo-location-info";
 
 export class EventImporterJSON {
 
@@ -26,6 +30,32 @@ export class EventImporterJSON {
     const event = new Event();
     event.setID(eventObject.id);
     event.setName(eventObject.name);
+    event.setSummary(new EventSummary());
+
+    const weatherItems = [];
+    for (const weatherItemObject of eventObject.summary.weather.weatherItems) {
+      weatherItems.push(
+        new WeatherItem(
+          new Date(weatherItemObject.date),
+          weatherItemObject.conditions,
+          weatherItemObject.temperatureInCelsius
+        )
+      )
+    }
+
+    event.getSummary().setWeather(new Weather(weatherItems));
+    event.getSummary().setTotalDistanceInMeters(eventObject.summary.distanceInMeters);
+    event.getSummary().setTotalDurationInSeconds(eventObject.summary.totalDurationInSeconds);
+
+    event.getSummary().setGeoLocationInfo(
+      new GeoLocationInfo(
+        eventObject.summary.geoLocationInfo.latitude,
+        eventObject.summary.geoLocationInfo.longitude
+      )
+    );
+    event.getSummary().getGeoLocationInfo().city = eventObject.summary.geoLocationInfo.city;
+    event.getSummary().getGeoLocationInfo().country = eventObject.summary.geoLocationInfo.country;
+    event.getSummary().getGeoLocationInfo().province = eventObject.summary.geoLocationInfo.province;
 
     for (const lapObject of eventObject.laps) {
       const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));

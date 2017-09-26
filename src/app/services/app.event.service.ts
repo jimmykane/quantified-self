@@ -44,8 +44,6 @@ export class EventService {
     for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
       this.eventLocalStorageService.getItem(localStorageKey).then((localStorageData) => {
         this.createEventFromJSONString(localStorageData).then((event: EventInterface) => {
-          this.generateEventSummary(event);
-
           this.events.next(this.events.getValue().push(event));
         });
       });
@@ -53,8 +51,10 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
-      this.events.next(this.events.getValue().push(event));
+    this.generateEventSummary(event).then((event) => {
+      this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
+        this.events.next(this.events.getValue().push(event));
+      });
     });
   }
 

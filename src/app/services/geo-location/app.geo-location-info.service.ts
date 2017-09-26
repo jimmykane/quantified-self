@@ -34,6 +34,7 @@ export class GeoLocationInfoService {
             return reject(status);
           }
           const geoLocationInfo = results[0].address_components.reduce((geoLocationInfoBuilder: GeoLocationInfo, addressComponent) => {
+            // Keep first for now
             switch (addressComponent.types[0]) {
               case 'country': {
                 geoLocationInfoBuilder.country = addressComponent.long_name;

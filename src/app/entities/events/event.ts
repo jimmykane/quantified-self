@@ -231,7 +231,7 @@ export class Event extends IDClass implements EventInterface {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;
       }, []),
-
+      summary: this.summary.toJSON()
     };
   }
 }
