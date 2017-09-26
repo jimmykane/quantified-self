@@ -11,18 +11,7 @@ import {EventInterface} from "../../../../../entities/events/event.interface";
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardMapLocationComponent implements OnChanges {
+export class EventCardMapLocationComponent {
   @Input() event: EventInterface;
-  public geoLocationInfo: GeoLocationInfo;
-
-  constructor(private changeDetectorRef: ChangeDetectorRef, private geoLocationInfoService: GeoLocationInfoService) {
-  }
-
-  ngOnChanges() {
-    this.geoLocationInfoService.getGeoLocationInfo(this.event).subscribe((geoLocationInfo: GeoLocationInfo) => {
-      this.geoLocationInfo = geoLocationInfo;
-      this.changeDetectorRef.detectChanges();
-    })
-  }
 }
 

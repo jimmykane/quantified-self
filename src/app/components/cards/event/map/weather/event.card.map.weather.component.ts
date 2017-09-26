@@ -11,29 +11,7 @@ import {Weather} from '../../../../../entities/weather/app.weather';
   changeDetection: ChangeDetectionStrategy.OnPush
 
 })
-export class EventCardMapWeatherComponent implements OnChanges, OnDestroy {
+export class EventCardMapWeatherComponent {
   @Input() event: EventInterface;
-
-  weather: Weather;
-
-  private weatherSubscription: Subscription;
-
-  constructor(private weatherService: WeatherUndergroundWeatherService, private changeDetectorRef: ChangeDetectorRef) {
-  }
-
-  ngOnChanges() {
-    if (this.weatherSubscription) {
-      this.weatherSubscription.unsubscribe();
-    }
-    this.weatherSubscription = this.weatherService.getWeatherForEvent(this.event).subscribe((weather: Weather) => {
-      this.weather = weather;
-      this.changeDetectorRef.detectChanges();
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.weatherSubscription.unsubscribe();
-  }
-
 }
 

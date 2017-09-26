@@ -1,8 +1,8 @@
-<div class="container" *ngIf="geoLocationInfo">
+<div class="container" *ngIf="event.getSummary().getGeoLocationInfo()">
   <md-icon>place</md-icon>
   <h3>
-    <span *ngIf="geoLocationInfo.city">{{ geoLocationInfo.city }}, </span>
-    <span *ngIf="geoLocationInfo.province">{{ geoLocationInfo.province }}, </span>
-    <span *ngIf="geoLocationInfo.country">{{ geoLocationInfo.country }}</span>
+    <span *ngIf="event.getSummary().getGeoLocationInfo().city">{{ event.getSummary().getGeoLocationInfo().city }}, </span>
+    <span *ngIf="event.getSummary().getGeoLocationInfo().province">{{ event.getSummary().getGeoLocationInfo().province }}, </span>
+    <span *ngIf="event.getSummary().getGeoLocationInfo().country">{{ event.getSummary().getGeoLocationInfo().country }}</span>
   </h3>
 </div>

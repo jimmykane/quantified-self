@@ -14,23 +14,7 @@ import {Log, Level} from 'ng2-logger'
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardSmallComponent implements OnInit {
+export class EventCardSmallComponent {
   @Input() event: EventInterface;
   @Input() classActive: boolean;
-  public geoLocationInfo: GeoLocationInfo;
-
-  private logger = Log.create('EventCardSmallComponent');
-
-  constructor(private changeDetectorRef: ChangeDetectorRef,
-              private route: ActivatedRoute, private router: Router,
-              private geoLocationInfoService: GeoLocationInfoService) {
-  }
-
-  ngOnInit() {
-    this.geoLocationInfoService.getGeoLocationInfo(this.event)
-      .subscribe((geoLocationInfo) => {
-        this.geoLocationInfo = geoLocationInfo;
-        this.changeDetectorRef.detectChanges();
-      })
-  }
 }
