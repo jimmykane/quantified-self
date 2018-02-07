@@ -26,14 +26,14 @@ import {GeoLocationInfo} from "../../../geo-location-info/app.geo-location-info"
 export class EventImporterJSON {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
-    const eventObject = JSON.parse(jsonString);
+    const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
-    event.setID(eventObject.id);
-    event.setName(eventObject.name);
+    event.setID(eventJSONObject.id);
+    event.setName(eventJSONObject.name);
     event.setSummary(new EventSummary());
 
     const weatherItems = [];
-    for (const weatherItemObject of eventObject.summary.weather.weatherItems) {
+    for (const weatherItemObject of eventJSONObject.summary.weather.weatherItems) {
       weatherItems.push(
         new WeatherItem(
           new Date(weatherItemObject.date),
@@ -44,20 +44,20 @@ export class EventImporterJSON {
     }
 
     event.getSummary().setWeather(new Weather(weatherItems));
-    event.getSummary().setTotalDistanceInMeters(eventObject.summary.distanceInMeters);
-    event.getSummary().setTotalDurationInSeconds(eventObject.summary.totalDurationInSeconds);
+    event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.distanceInMeters);
+    event.getSummary().setTotalDurationInSeconds(eventJSONObject.summary.totalDurationInSeconds);
 
     event.getSummary().setGeoLocationInfo(
       new GeoLocationInfo(
-        eventObject.summary.geoLocationInfo.latitude,
-        eventObject.summary.geoLocationInfo.longitude
+        eventJSONObject.summary.geoLocationInfo.latitude,
+        eventJSONObject.summary.geoLocationInfo.longitude
       )
     );
-    event.getSummary().getGeoLocationInfo().city = eventObject.summary.geoLocationInfo.city;
-    event.getSummary().getGeoLocationInfo().country = eventObject.summary.geoLocationInfo.country;
-    event.getSummary().getGeoLocationInfo().province = eventObject.summary.geoLocationInfo.province;
+    event.getSummary().getGeoLocationInfo().city = eventJSONObject.summary.geoLocationInfo.city;
+    event.getSummary().getGeoLocationInfo().country = eventJSONObject.summary.geoLocationInfo.country;
+    event.getSummary().getGeoLocationInfo().province = eventJSONObject.summary.geoLocationInfo.province;
 
-    for (const lapObject of eventObject.laps) {
+    for (const lapObject of eventJSONObject.laps) {
       const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
       lap.setCalories(lapObject.calories);
       lap.setIntensity(lapObject.intensity);
@@ -65,7 +65,7 @@ export class EventImporterJSON {
       event.addLap(lap);
     }
 
-    for (const activityObject of eventObject.activities) {
+    for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
       activity.setType(activityObject.type);
       event.addActivity(activity);
