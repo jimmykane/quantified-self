@@ -1,12 +1,12 @@
-<md-grid-list cols="{{ gridListColumnCount }}" rowHeight="fit">
-  <md-grid-tile colspan="1" rowspan="1">
+<mat-grid-list cols="{{ gridListColumnCount }}" rowHeight="fit">
+  <mat-grid-tile colspan="1" rowspan="1">
     <app-card-map-location
       [event]="event"></app-card-map-location>
-  </md-grid-tile>
-  <md-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
+  </mat-grid-tile>
+  <mat-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
     <app-event-card-map-agm [event]="event" [resize]="resize"></app-event-card-map-agm>
-  </md-grid-tile>
-  <md-grid-tile colspan="1" rowspan="1">
+  </mat-grid-tile>
+  <mat-grid-tile colspan="1" rowspan="1">
     <app-card-map-weather [event]="event"></app-card-map-weather>
-  </md-grid-tile>
-</md-grid-list>
+  </mat-grid-tile>
+</mat-grid-list>

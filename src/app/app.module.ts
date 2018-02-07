@@ -18,10 +18,10 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
-  MdButtonModule, MdButtonToggleModule, MdCardModule, MdChipsModule, MdCommonModule, MdGridListModule, MdIconModule,
-  MdMenuModule,
-  MdSidenavModule, MdTableModule,
-  MdTabsModule, MdToolbarModule
+  MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatGridListModule, MatIconModule,
+  MatMenuModule,
+  MatSidenavModule, MatTableModule,
+  MatTabsModule, MatToolbarModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -51,19 +51,19 @@ import {GeoLocationInfoLocalStorageService} from './services/storage/app.geo-loc
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ'
     }),
-    MdButtonModule,
-    MdButtonToggleModule,
-    MdCardModule,
-    MdIconModule,
-    MdCommonModule,
-    MdMenuModule,
-    MdTabsModule,
-    MdSidenavModule,
-    MdToolbarModule,
-    MdGridListModule,
-    MdTableModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatIconModule,
+    MatCommonModule,
+    MatMenuModule,
+    MatTabsModule,
+    MatSidenavModule,
+    MatToolbarModule,
+    MatGridListModule,
+    MatTableModule,
     CdkTableModule,
-    MdChipsModule,
+    MatChipsModule,
     MomentModule,
     AmChartsModule,
     Angular2FontawesomeModule,

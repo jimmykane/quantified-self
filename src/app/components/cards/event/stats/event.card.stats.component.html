@@ -1,9 +1,9 @@
-<md-grid-list cols="2" rowHeight="fit">
+<mat-grid-list cols="2" rowHeight="fit">
   <ng-container *ngFor="let stat of stats">
-    <md-grid-tile *ngIf="stat.value !== 0">
+    <mat-grid-tile *ngIf="stat.value !== 0">
       <fa [name]="stat.iconName" [size]="2" *ngIf="stat.iconType === 'fontAwesome'"></fa>
-      <md-icon *ngIf="stat.iconType === 'material'">{{ stat.iconName }}</md-icon>
+      <mat-icon *ngIf="stat.iconType === 'material'">{{ stat.iconName }}</mat-icon>
       {{ stat.value }} {{stat.units}}
-    </md-grid-tile>
+    </mat-grid-tile>
   </ng-container>
-</md-grid-list>
+</mat-grid-list>

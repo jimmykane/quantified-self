@@ -1,8 +1,8 @@
-md-sidenav-container {
+mat-sidenav-container {
   min-height: 100vh;
 }
 
-md-sidenav{
+mat-sidenav{
   min-width: 300px;
   max-width: 300px;
   padding: 1vw;
@@ -14,6 +14,7 @@ md-sidenav{
   bottom: 2vh;
   right: 2vh;
   height: 50vh;
+  z-index: 1;
 }
 
 .fabButtonsVertical-container {

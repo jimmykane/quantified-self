@@ -1,17 +1,17 @@
-<button md-icon-button [mdMenuTriggerFor]="menu">
-  <md-icon>more_vert</md-icon>
+<button mat-icon-button [matMenuTriggerFor]="menu">
+  <mat-icon>more_vert</mat-icon>
 </button>
-<md-menu #menu="mdMenu">
-  <button md-menu-item (click)="downloadEventAsTCX(event)">
-    <md-icon>file_download</md-icon>
+<mat-menu #menu="matMenu">
+  <button mat-menu-item (click)="downloadEventAsTCX(event)">
+    <mat-icon>file_download</mat-icon>
     <span>Download as TCX</span>
   </button>
-  <button md-menu-item *ngIf="event.getActivities().length > 1" (click)="mergeAllEventActivities(event)">
-    <md-icon>compare_arrows</md-icon>
+  <button mat-menu-item *ngIf="event.getActivities().length > 1" (click)="mergeAllEventActivities(event)">
+    <mat-icon>compare_arrows</mat-icon>
     <span>Merge {{ event.getActivities().length }} activities</span>
   </button>
-  <button md-menu-item (click)="deleteEvent(event)">
-    <md-icon>delete forever</md-icon>
+  <button mat-menu-item (click)="deleteEvent(event)">
+    <mat-icon>delete forever</mat-icon>
     <span>Delete</span>
   </button>
-</md-menu>
+</mat-menu>

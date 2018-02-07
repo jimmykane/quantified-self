@@ -1,17 +1,17 @@
-<md-grid-list cols="3" rowHeight="3:1" *ngIf="event.getSummary().getWeather()">
-  <md-grid-tile colspan="3">
+<mat-grid-list cols="3" rowHeight="3:1" *ngIf="event.getSummary().getWeather()">
+  <mat-grid-tile colspan="3">
     <h3>{{ event.getSummary().getWeather().weatherItems[0].conditions }}</h3>
-  </md-grid-tile>
-  <md-grid-tile>
+  </mat-grid-tile>
+  <mat-grid-tile>
     <fa [name]="'thermometer-empty'" [size]="2"></fa>
     Min {{ event.getSummary().getWeather().getMinTemperatureInCelsius() }}
-  </md-grid-tile>
-  <md-grid-tile>
+  </mat-grid-tile>
+  <mat-grid-tile>
      <fa [name]="'thermometer-full'" [size]="2"></fa>
     Max {{ event.getSummary().getWeather().getMaxTemperatureInCelsius() }}
-  </md-grid-tile>
-  <md-grid-tile>
+  </mat-grid-tile>
+  <mat-grid-tile>
      <fa [name]="'thermometer-half'" [size]="2"></fa>
     Avg. {{ event.getSummary().getWeather().getAverageTemperatureInCelsius().toFixed(0) }}
-  </md-grid-tile>
-</md-grid-list>
+  </mat-grid-tile>
+</mat-grid-list>

@@ -4,7 +4,7 @@ import {
 } from '@angular/core';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
-import {MdSidenav} from '@angular/material';
+import {MatSidenav} from '@angular/material';
 import {Subscription} from 'rxjs/Subscription';
 
 @Component({
@@ -14,7 +14,7 @@ import {Subscription} from 'rxjs/Subscription';
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
-  @ViewChild('sidenav') sideNav: MdSidenav;
+  @ViewChild('sidenav') sideNav: MatSidenav;
   public title = 'Quantified Self';
   public actionButtons: ActionButton[] = [];
   private actionButtonsSubscription: Subscription;

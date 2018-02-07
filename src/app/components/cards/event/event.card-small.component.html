@@ -1,26 +1,26 @@
-<md-card [class.selected]="classActive">
-  <md-card-header>
-    <div mdCardAvatar>
+<mat-card [class.selected]="classActive">
+  <mat-card-header>
+    <div matCardAvatar>
       <div class="card-avatar-container">
-        <md-icon>star_border</md-icon>
-        <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'running'" >directions_run</md-icon>
-        <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'biking'" >directions_bike</md-icon>
-        <md-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'swimming'" >pool</md-icon>
+        <mat-icon>star_border</mat-icon>
+        <mat-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'running'" >directions_run</mat-icon>
+        <mat-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'biking'" >directions_bike</mat-icon>
+        <mat-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'swimming'" >pool</mat-icon>
       </div>
     </div>
-    <md-card-title>
+    <mat-card-title>
       {{ event.getName() }}
-    </md-card-title>
+    </mat-card-title>
 
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
 
-    <md-card-subtitle>
+    <mat-card-subtitle>
       {{ event.getFirstActivity().getStartDate() | date:'short' }}
-    </md-card-subtitle>
+    </mat-card-subtitle>
 
-  </md-card-header>
+  </mat-card-header>
 
-  <md-card-content>
+  <mat-card-content>
     <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
     <span class="mat-body-2">{{ (event.getDistanceInMeters()/1000).toFixed(1) }}</span> km
     in about
@@ -30,9 +30,9 @@
       <span class="mat-body-2">{{ event.getSummary().getGeoLocationInfo().city }},</span>
       <span class="mat-body-2">{{ event.getSummary().getGeoLocationInfo().country }}</span>.
     </span>
-  </md-card-content>
-  <md-card-actions>
-    <a md-button [routerLink]="['/dashboard']"
+  </mat-card-content>
+  <mat-card-actions>
+    <a mat-button [routerLink]="['/dashboard']"
        [queryParams]="{ eventID: event.getID() }">Details</a>
-  </md-card-actions>
-</md-card>
+  </mat-card-actions>
+</mat-card>

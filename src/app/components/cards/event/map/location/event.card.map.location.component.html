@@ -1,5 +1,5 @@
 <div class="container" *ngIf="event.getSummary().getGeoLocationInfo()">
-  <md-icon>place</md-icon>
+  <mat-icon>place</mat-icon>
   <h3>
     <span *ngIf="event.getSummary().getGeoLocationInfo().city">{{ event.getSummary().getGeoLocationInfo().city }}, </span>
     <span *ngIf="event.getSummary().getGeoLocationInfo().province">{{ event.getSummary().getGeoLocationInfo().province }}, </span>

@@ -2,12 +2,12 @@ fa {
   margin-right: 4%;
 }
 
-md-icon {
+mat-icon {
   font-size: 32px;
   height: 32px;
   margin-right: 4%;
 }
 
-md-grid-list{
+mat-grid-list{
   height: 70vh;
 }

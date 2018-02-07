@@ -1,24 +1,24 @@
-<md-sidenav-container class="mat-typography">
+<mat-sidenav-container class="mat-typography">
 
-  <md-sidenav #sidenav mode="push">
+  <mat-sidenav #sidenav mode="push">
     <app-sidenav></app-sidenav>
-  </md-sidenav>
+  </mat-sidenav>
 
-  <nav md-tab-nav-bar>
+  <nav mat-tab-nav-bar>
 
-    <a mdTabLink (click)="sidenav.toggle()">{{ title }}</a>
+    <a matTabLink (click)="sidenav.toggle()">{{ title }}</a>
 
-    <a mdTabLink
+    <a matTabLink
        routerLink="/dashboard"
        routerLinkActive #dashboard="routerLinkActive"
        [active]="dashboard.isActive">Dashboard</a>
 
-    <a mdTabLink
+    <a matTabLink
        routerLink="/upload"
        routerLinkActive #upload="routerLinkActive"
        [active]="upload.isActive">Upload</a>
 
-    <a mdTabLink
+    <a matTabLink
        routerLink="/about"
        routerLinkActive #about="routerLinkActive"
        [active]="about.isActive">About</a>
@@ -27,17 +27,15 @@
 
   <router-outlet></router-outlet>
 
-</md-sidenav-container>
-
+</mat-sidenav-container>
 <div class="fabButtonsVertical">
-
   <div class="fabButtonsVertical-container">
     <ng-container *ngFor="let actionButton of actionButtons; let i = index;">
-      <button *ngIf="i < 1" type="button" md-fab (click)="actionButton.action()">
-        <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
+      <button *ngIf="i < 1" type="button" mat-fab (click)="actionButton.action()">
+        <mat-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</mat-icon>
       </button>
-      <button *ngIf="i > 0" type="button" md-mini-fab (click)="actionButton.action()">
-        <md-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</md-icon>
+      <button *ngIf="i > 0" type="button" mat-mini-fab (click)="actionButton.action()">
+        <mat-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</mat-icon>
       </button>
     </ng-container>
   </div>

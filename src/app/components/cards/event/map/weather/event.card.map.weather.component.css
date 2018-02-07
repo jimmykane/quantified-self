@@ -2,11 +2,11 @@ fa{
   padding-right: 4%;
 }
 
-md-grid-list{
+mat-grid-list{
   padding: 2%;
   min-height: 100%;
   min-width: 100%;
 }
-md-list-item{
+mat-list-item{
   margin: 2%;
 }

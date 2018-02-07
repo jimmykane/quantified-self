@@ -1,12 +1,12 @@
-md-card {
+mat-card {
   margin: 1%;
   width: 250px;
 }
 
-md-card-content {
+mat-card-content {
 }
 
-md-card-title{
+mat-card-title{
   text-overflow: ellipsis;
 }
 
