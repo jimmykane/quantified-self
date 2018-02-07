@@ -17,6 +17,7 @@ import 'rxjs/add/observable/forkJoin';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
 import {EventSummary} from '../entities/events/summary/event.summary';
 import 'rxjs/add/operator/toPromise';
+import {EventImporterSuuntoJSON} from "../entities/events/adapters/importers/importer.suunto.json";
 
 @Injectable()
 export class EventService {
@@ -85,6 +86,12 @@ export class EventService {
   public createEventFromJSONSMLString(data: string): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
       return resolve(EventImporterSML.getFromJSONString(data));
+    });
+  }
+
+  public createEventFromSuuntoJSONString(data: string): Promise<EventInterface> {
+    return new Promise((resolve, reject) => {
+      return resolve(EventImporterSuuntoJSON.getFromJSONString(data));
     });
   }
 

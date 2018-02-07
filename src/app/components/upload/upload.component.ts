@@ -35,7 +35,7 @@ export class UploadComponent {
           this.readAsBinary(input.files[index]);
         } else if (input.files[index].name.split('.').pop() === 'json') {
           this.eventService
-            .createEventFromJSONSMLString(fileReader.result)
+            .createEventFromSuuntoJSONString(fileReader.result)
             .then((newEvent: EventInterface) => {
               newEvent.setName(name);
               this.eventService.saveEvent(newEvent);
