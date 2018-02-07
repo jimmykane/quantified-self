@@ -7,6 +7,7 @@ import {DataSpeed} from '../../../data/data.speed';
 import {Lap} from '../../../laps/lap';
 import {EventInterface} from "../../event.interface";
 import {DataInterface} from "../../../data/data.interface";
+import {DataGPSAltitude} from "../../../data/data.gps-altitude";
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -101,7 +102,7 @@ export class EventExporterTCX implements EventExporterInterface {
         // Go over the Data
         point.getData().forEach((dataArray: DataInterface[], key: string, map) => {
           dataArray.forEach((data: DataInterface) => {
-            if (data instanceof DataAltitude) {
+            if ((data instanceof DataAltitude) && !(data instanceof DataGPSAltitude)) {
               const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
               altitudeElement.textContent = data.getValue().toString();
               pointElement.appendChild(altitudeElement);
