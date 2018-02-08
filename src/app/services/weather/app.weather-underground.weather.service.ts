@@ -3,12 +3,9 @@ import {Http} from '@angular/http';
 import {Observable} from 'rxjs/Observable';
 import {EventInterface} from '../../entities/events/event.interface';
 import {WeatherItem} from '../../entities/weather/app.weather.item';
-import 'rxjs/add/operator/catch';
-import 'rxjs/add/operator/map';
 import {Weather} from '../../entities/weather/app.weather';
 import {WeatherServiceInterface} from 'app/services/weather/app.weather.service.interface';
-import 'rxjs/add/operator/first';
-
+import {map} from 'rxjs/operators'
 
 @Injectable()
 export class WeatherUndergroundWeatherService implements WeatherServiceInterface {
@@ -21,12 +18,13 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
 
   getWeatherForEvent(event: EventInterface): Observable<Weather> {
     return this.http
-      .get(this.historyApiUrl
-        .replace('{lat}', event.getPointsWithPosition()[0].getPosition().latitudeDegrees.toString())
-        .replace('{lon}', event.getPointsWithPosition()[0].getPosition().longitudeDegrees.toString())
-        .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
-        .replace('{apiKey}', this.apiKey))
-      .map((response) => {
+      .get(
+        this.historyApiUrl
+          .replace('{lat}', event.getPointsWithPosition()[0].getPosition().latitudeDegrees.toString())
+          .replace('{lon}', event.getPointsWithPosition()[0].getPosition().longitudeDegrees.toString())
+          .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
+          .replace('{apiKey}', this.apiKey)
+      ).pipe(map((response) => {
         const weatherItemsMap: Map<string, WeatherItem> = JSON.parse(response.text())
           .history
           .observations
@@ -49,6 +47,6 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
         return new Weather(
           Array.from(weatherItemsMap.values())
         );
-      });
+      }));
   }
 }

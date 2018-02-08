@@ -13,11 +13,10 @@ import {EventImporterSML} from '../entities/events/adapters/importers/importer.s
 import {EventImporterFIT} from '../entities/events/adapters/importers/importer.fit';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
-import 'rxjs/add/observable/forkJoin';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
 import {EventSummary} from '../entities/events/summary/event.summary';
-import 'rxjs/add/operator/toPromise';
-import {EventImporterSuuntoJSON} from "../entities/events/adapters/importers/importer.suunto.json";
+import {EventImporterSuuntoJSON} from '../entities/events/adapters/importers/importer.suunto.json';
+import 'rxjs/add/observable/forkJoin';
 
 @Injectable()
 export class EventService {

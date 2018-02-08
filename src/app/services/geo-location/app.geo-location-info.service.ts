@@ -5,7 +5,7 @@ import {GeoLocationInfoLocalStorageService} from '../storage/app.geo-location-in
 import {EventInterface} from '../../entities/events/event.interface';
 import {Observable} from 'rxjs/Observable';
 import 'rxjs/add/observable/fromPromise';
-import 'rxjs/add/operator/first';
+import 'rxjs/operators/first';
 
 declare const google: any;
 
