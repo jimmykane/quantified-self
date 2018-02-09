@@ -85,21 +85,21 @@ export class EventCardStatsComponent implements OnChanges {
       [
         {
           name: 'Distance',
-          value: (this.event.getDistanceInMeters() / 1000).toFixed(2),
+          value: (this.event.getSummary().getTotalDistanceInMeters() / 1000).toFixed(2),
           iconName: 'arrows-h',
           units: 'km',
           iconType: 'fontAwesome'
         },
         {
           name: 'Time',
-          value: (new Date(this.event.getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
+          value: (new Date(this.event.getSummary().getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
           iconName: 'clock-o',
           units: '',
           iconType: 'fontAwesome'
         },
         {
           name: 'Pace',
-          value: (new Date((this.event.getTotalDurationInSeconds() * 1000) / (this.event.getDistanceInMeters() / 1000)))
+          value: (new Date((this.event.getSummary().getTotalDurationInSeconds() * 1000) / (this.event.getSummary().getTotalDistanceInMeters() / 1000)))
             .toISOString().substr(14, 5),
           iconName: 'directions_run',
           units: 'm/km',
@@ -107,7 +107,7 @@ export class EventCardStatsComponent implements OnChanges {
         },
         {
           name: 'Speed',
-          value: ((this.event.getDistanceInMeters() / 1000) / (this.event.getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
+          value: ((this.event.getSummary().getTotalDistanceInMeters() / 1000) / (this.event.getSummary().getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
           iconName: 'directions_bike',
           units: 'km/h',
           iconType: 'material'

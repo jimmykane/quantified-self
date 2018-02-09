@@ -73,7 +73,7 @@ export class EventExporterTCX implements EventExporterInterface {
       lapElement.appendChild(totalTimeInSecondsElement);
 
       const distanceInMetersElement = document.createElementNS(null, 'DistanceMeters');
-      distanceInMetersElement.textContent = event.getDistanceInMeters(void 0, void 0, void 0, [activity]).toString();
+      distanceInMetersElement.textContent = event.getSummary().getTotalDistanceInMeters().toString();
       lapElement.appendChild(distanceInMetersElement);
 
       activityElement.appendChild(lapElement);

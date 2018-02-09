@@ -22,9 +22,9 @@
 
   <mat-card-content>
     <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
-    <span class="mat-body-2">{{ (event.getDistanceInMeters()/1000).toFixed(1) }}</span> km
+    <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
     in about
-    <span class="mat-body-2">{{ event.getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
+    <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
     <span *ngIf="event.getSummary().getGeoLocationInfo()">
       nearby
       <span class="mat-body-2">{{ event.getSummary().getGeoLocationInfo().city }},</span>

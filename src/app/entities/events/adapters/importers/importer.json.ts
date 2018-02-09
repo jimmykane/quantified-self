@@ -44,7 +44,7 @@ export class EventImporterJSON {
     }
 
     event.getSummary().setWeather(new Weather(weatherItems));
-    event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.distanceInMeters);
+    event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.totalDistanceInMeters);
     event.getSummary().setTotalDurationInSeconds(eventJSONObject.summary.totalDurationInSeconds);
 
     event.getSummary().setGeoLocationInfo(

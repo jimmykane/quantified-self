@@ -10,7 +10,7 @@
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
     </mat-card-subtitle>
     <mat-card-subtitle>
-      {{ (event.getDistanceInMeters()/1000).toFixed(1) }} km in about {{ event.getTotalDurationInSeconds() |
+      {{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }} km in about {{ event.getSummary().getTotalDurationInSeconds() |
       amDuration:'seconds' }}
     </mat-card-subtitle>
   </mat-card-header>
