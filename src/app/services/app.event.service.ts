@@ -19,6 +19,8 @@ import {EventImporterSuuntoJSON} from '../entities/events/adapters/importers/imp
 import 'rxjs/add/observable/forkJoin';
 import {ActivityInterface} from '../entities/activities/activity.interface';
 import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
+import {PointInterface} from "../entities/points/point.interface";
+import {Log} from "ng2-logger";
 
 @Injectable()
 export class EventService {
@@ -26,6 +28,7 @@ export class EventService {
   private parser: DOMParser = new DOMParser;
   private events: BehaviorSubject<List<EventInterface>> = new BehaviorSubject(List([]));
   private geodesyAdapter = new GeoLibAdapter();
+  private logger = Log.create('EventService');
 
   public static getEventAsTCXBloB(event: EventInterface): Promise<Blob> {
     return new Promise((resolve, reject) => {
@@ -144,6 +147,97 @@ export class EventService {
     activities?: ActivityInterface[]
   ): number {
     return this.geodesyAdapter.getDistance(event.getPointsWithPosition(startDate, endDate, step, activities));
+  }
+
+  public getEventDataTypeAverage(
+    event: EventInterface,
+    dataType: string,
+    startDate?: Date,
+    endDate?: Date,
+    step?: number,
+    activities?: ActivityInterface[]
+  ): number {
+    const t0 = performance.now();
+    let count = 1;
+    const averageForDataType = event.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
+      if (!point.getDataTypeAverage(dataType)) { // @todo should check against void 0
+        return average;
+      }
+      average += point.getDataTypeAverage(dataType);
+      count++;
+      return average;
+    }, 0);
+    this.logger.d('Calculated average for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return averageForDataType / count;
+  }
+
+  public getEventDataTypeGain(
+    event: EventInterface,
+    dataType: string,
+    startDate?: Date,
+    endDate?: Date,
+    step?: number,
+    activities?: ActivityInterface[],
+    precision?: number,
+    minDiff?: number
+  ): number {
+    const t0 = performance.now();
+    precision = precision || 1;
+    minDiff = minDiff || 1.5;
+    let gain = 0;
+    event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataTypeAverage(dataType)){
+        return next;
+      }
+      if (!next.getDataTypeAverage(dataType)) {
+        return previous;
+      }
+      if ((previous.getDataTypeAverage(dataType) + minDiff) < (Number(next.getDataTypeAverage(dataType)))) {
+        gain += Number(next.getDataTypeAverage(dataType).toFixed(precision)) - Number(previous.getDataTypeAverage(dataType).toFixed(precision));
+      }
+      return next;
+    });
+    this.logger.d('Calculated gain for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return gain;
+  }
+
+  public getEventDataTypeLoss(
+    event: EventInterface,
+    dataType: string,
+    startDate?: Date,
+    endDate?: Date,
+    step?: number,
+    activities?: ActivityInterface[],
+    precision?: number,
+    minDiff?: number
+  ): number {
+    const t0 = performance.now();
+    precision = precision || 1;
+    minDiff = minDiff || 1.5;
+    let loss = 0;
+    event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataTypeAverage(dataType)){
+        return next;
+      }
+      if (!next.getDataTypeAverage(dataType)) {
+        return previous;
+      }
+      if ((Number(next.getDataTypeAverage(dataType).toFixed(precision)) - minDiff) < Number(previous.getDataTypeAverage(dataType).toFixed(precision))) {
+        loss += Number(previous.getDataTypeAverage(dataType).toFixed(precision)) - Number(next.getDataTypeAverage(dataType).toFixed(precision));
+      }
+      return next;
+    });
+    this.logger.d('Calculated loss for ' + dataType + ' after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return loss;
   }
 
   public mergeEvents(events: EventInterface[]): Promise<EventInterface> {

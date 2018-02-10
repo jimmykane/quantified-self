@@ -5,6 +5,7 @@ import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataPower} from '../../../../entities/data/data.power';
 import {DataTemperature} from '../../../../entities/data/data.temperature';
 import {DataAltitude} from '../../../../entities/data/data.altitude';
+import {EventService} from "../../../../services/app.event.service";
 
 
 @Component({
@@ -69,15 +70,19 @@ export class EventCardStatsComponent implements OnChanges {
     }
   ];
 
+  constructor(public eventService: EventService){
+    
+  }
+
   ngOnChanges() {
     this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = Number(this.event.getDataTypeAverage(dataTypeAverage.name).toFixed(0));
+      dataTypeAverage.value = Number(this.eventService.getEventDataTypeAverage(this.event, dataTypeAverage.name).toFixed(0));
     });
     this.dataTypeGains.forEach((dataTypeGain) => {
-      dataTypeGain.value = Number(this.event.getDataTypeGain(dataTypeGain.name).toFixed(0));
+      dataTypeGain.value = Number(this.eventService.getEventDataTypeGain(this.event, dataTypeGain.name).toFixed(0));
     });
     this.dataTypeLosses.forEach((dataTypeLoss) => {
-      dataTypeLoss.value = Number(this.event.getDataTypeLoss(dataTypeLoss.name).toFixed(0));
+      dataTypeLoss.value = Number(this.eventService.getEventDataTypeLoss(this.event, dataTypeLoss.name).toFixed(0));
     });
 
     this.stats = this.dataTypeGains.concat(
