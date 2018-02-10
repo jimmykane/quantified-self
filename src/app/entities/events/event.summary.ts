@@ -28,8 +28,8 @@ export class EventSummary extends Summary implements EventSummaryInterface {
     return {
       totalDurationInSeconds: this.getTotalDurationInSeconds(),
       totalDistanceInMeters: this.getTotalDistanceInMeters(),
-      geoLocationInfo: this.geoLocationInfo,
-      weather: this.weather.toJSON()
+      geoLocationInfo:  this.getGeoLocationInfo() ? this.getGeoLocationInfo().toJSON() : null,
+      weather: this.getWeather() ? this.getWeather().toJSON() : null
     };
   }
 }

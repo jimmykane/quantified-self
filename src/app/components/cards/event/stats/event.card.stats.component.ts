@@ -102,7 +102,11 @@ export class EventCardStatsComponent implements OnChanges {
           units: '',
           iconType: 'fontAwesome'
         },
-        {
+      ],
+      this.dataTypeAverages
+    );
+    if (this.event.getSummary().getTotalDistanceInMeters()) {
+      this.stats.push({
           name: 'Pace',
           value: (new Date((this.event.getSummary().getTotalDurationInSeconds() * 1000) / (this.event.getSummary().getTotalDistanceInMeters() / 1000)))
             .toISOString().substr(14, 5),
@@ -116,9 +120,7 @@ export class EventCardStatsComponent implements OnChanges {
           iconName: 'directions_bike',
           units: 'km/h',
           iconType: 'material'
-        }
-      ],
-      this.dataTypeAverages
-    );
+        });
+    }
   }
 }

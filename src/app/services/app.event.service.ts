@@ -107,35 +107,47 @@ export class EventService {
     });
   }
 
-  public generateEventSummaries(event: EventInterface): any {
-    // Event Summary
-    const eventSummary = new EventSummary();
-    eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
-    eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
-    // Activities Summaries
-    for (const activity of event.getActivities()) {
-      const activitySummary = new Summary();
-      activitySummary.setTotalDistanceInMeters(
-        this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
-      );
-      activitySummary.setTotalDurationInSeconds(activity.getDurationInSeconds());
-      activity.setSummary(activitySummary);
-    }
-
-    for (const lap of event.getLaps()) {
-      const lapSummary = new Summary();
-      lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
-      lapSummary.setTotalDurationInSeconds(lap.getDurationInSeconds());
-      lap.setSummary(lapSummary);
-    }
-
+  public generateEventSummaries(event: EventInterface): Promise<any> {
     return new Promise(((resolve, reject) => {
+      // Event Summary
+      const eventSummary = new EventSummary();
+      eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
+      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
+      event.setSummary(eventSummary);
+
+      // Activities Summaries
+      for (const activity of event.getActivities()) {
+        const activitySummary = new Summary();
+        activitySummary.setTotalDistanceInMeters(
+          this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
+        );
+        activitySummary.setTotalDurationInSeconds(activity.getDurationInSeconds());
+        activity.setSummary(activitySummary);
+      }
+
+      for (const lap of event.getLaps()) {
+        const lapSummary = new Summary();
+        lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
+        lapSummary.setTotalDurationInSeconds(lap.getDurationInSeconds());
+        lap.setSummary(lapSummary);
+      }
+
+      // If indoors
+      if (!event.getPointsWithPosition().length) {
+        resolve(true);
+        return;
+      }
+
       Observable.forkJoin([
         this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)
       ]).toPromise().then(results => {
-        eventSummary.setGeoLocationInfo(results[0]);
-        eventSummary.setWeather(results[1]);
-        event.setSummary(eventSummary);
+        if (results[0]) {
+          eventSummary.setGeoLocationInfo(results[0]);
+        }
+        if (results[1]) {
+
+          eventSummary.setWeather(results[1]);
+        }
         resolve(true);
       })
     }));
@@ -165,6 +177,9 @@ export class EventService {
     step?: number,
     activities?: ActivityInterface[]
   ): number {
+    if (!event.getPointsWithPosition().length) {
+      return 0;
+    }
     return this.geodesyAdapter.getDistance(event.getPointsWithPosition(startDate, endDate, step, activities));
   }
 

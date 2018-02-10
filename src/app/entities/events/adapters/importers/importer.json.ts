@@ -33,30 +33,36 @@ export class EventImporterJSON {
     event.setName(eventJSONObject.name);
     event.setSummary(new EventSummary());
 
-    const weatherItems = [];
-    for (const weatherItemObject of eventJSONObject.summary.weather.weatherItems) {
-      weatherItems.push(
-        new WeatherItem(
-          new Date(weatherItemObject.date),
-          weatherItemObject.conditions,
-          weatherItemObject.temperatureInCelsius
-        )
-      )
-    }
-
-    event.getSummary().setWeather(new Weather(weatherItems));
     event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.totalDistanceInMeters);
     event.getSummary().setTotalDurationInSeconds(eventJSONObject.summary.totalDurationInSeconds);
 
-    event.getSummary().setGeoLocationInfo(
-      new GeoLocationInfo(
-        eventJSONObject.summary.geoLocationInfo.latitude,
-        eventJSONObject.summary.geoLocationInfo.longitude
-      )
-    );
-    event.getSummary().getGeoLocationInfo().city = eventJSONObject.summary.geoLocationInfo.city;
-    event.getSummary().getGeoLocationInfo().country = eventJSONObject.summary.geoLocationInfo.country;
-    event.getSummary().getGeoLocationInfo().province = eventJSONObject.summary.geoLocationInfo.province;
+    if (eventJSONObject.summary.weather) {
+      const weatherItems = [];
+      for (const weatherItemObject of eventJSONObject.summary.weather.weatherItems) {
+        weatherItems.push(
+          new WeatherItem(
+            new Date(weatherItemObject.date),
+            weatherItemObject.conditions,
+            weatherItemObject.temperatureInCelsius
+          )
+        )
+      }
+
+      event.getSummary().setWeather(new Weather(weatherItems));
+    }
+
+    if (eventJSONObject.summary.geoLocationInfo) {
+      event.getSummary().setGeoLocationInfo(
+        new GeoLocationInfo(
+          eventJSONObject.summary.geoLocationInfo.latitude,
+          eventJSONObject.summary.geoLocationInfo.longitude
+        )
+      );
+      event.getSummary().getGeoLocationInfo().city = eventJSONObject.summary.geoLocationInfo.city;
+      event.getSummary().getGeoLocationInfo().country = eventJSONObject.summary.geoLocationInfo.country;
+      event.getSummary().getGeoLocationInfo().province = eventJSONObject.summary.geoLocationInfo.province;
+
+    }
 
     for (const lapObject of eventJSONObject.laps) {
       const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
