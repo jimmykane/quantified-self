@@ -40,7 +40,7 @@
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
         </ng-template>
-        <app-event-card-chart [event]="event">
+        <app-event-card-chart *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 2 : 1)" [event]="event">
         </app-event-card-chart>
       </mat-tab>
       <mat-tab label="Laps" *ngIf="event.getLaps().length > 0">
