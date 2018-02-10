@@ -8,7 +8,6 @@ import {LapInterface} from '../laps/lap.interface';
 import {EventSummaryInterface} from "./summary/event.summary.interface";
 
 export interface EventInterface extends IDClassInterface, SerializableClassInterface {
-  getGeodesyAdapter(): GeodesyAdapterInterface;
 
   setName(name: string);
 
@@ -41,8 +40,6 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getDataTypeGain(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[], precision?: number, minDiff?: number): number;
 
   getDataTypeLoss(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[], precision?: number, minDiff?: number): number;
-
-  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number;
 
   getTotalDurationInSeconds(): number;
 

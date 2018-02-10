@@ -17,12 +17,15 @@ import {WeatherUndergroundWeatherService} from './weather/app.weather-undergroun
 import {EventSummary} from '../entities/events/summary/event.summary';
 import {EventImporterSuuntoJSON} from '../entities/events/adapters/importers/importer.suunto.json';
 import 'rxjs/add/observable/forkJoin';
+import {ActivityInterface} from '../entities/activities/activity.interface';
+import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
 
 @Injectable()
 export class EventService {
 
   private parser: DOMParser = new DOMParser;
   private events: BehaviorSubject<List<EventInterface>> = new BehaviorSubject(List([]));
+  private geodesyAdapter = new GeoLibAdapter();
 
   public static getEventAsTCXBloB(event: EventInterface): Promise<Blob> {
     return new Promise((resolve, reject) => {
@@ -51,7 +54,7 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    this.generateEventSummary(event).then((event) => {
+    this.generateEventSummary(event).then(() => {
       this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
         this.events.next(this.events.getValue().push(event));
       });
@@ -103,7 +106,7 @@ export class EventService {
   public generateEventSummary(event: EventInterface): any {
     const eventSummary = new EventSummary();
     eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
-    eventSummary.setTotalDistanceInMeters(event.getDistanceInMeters());
+    eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
     return new Promise(((resolve, reject) => {
       Observable.forkJoin([
         this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)
@@ -111,7 +114,7 @@ export class EventService {
         eventSummary.setGeoLocationInfo(results[0]);
         eventSummary.setWeather(results[1]);
         event.setSummary(eventSummary);
-        resolve(event);
+        resolve(true);
       })
     }));
   }
@@ -131,6 +134,16 @@ export class EventService {
       }
       return reject('Could not fund an encoder for this file format');
     });
+  }
+
+  public getEventDistanceInMeters(
+    event: EventInterface,
+    startDate?: Date,
+    endDate?: Date,
+    step?: number,
+    activities?: ActivityInterface[]
+  ): number {
+    return this.geodesyAdapter.getDistance(event.getPointsWithPosition(startDate, endDate, step, activities));
   }
 
   public mergeEvents(events: EventInterface[]): Promise<EventInterface> {

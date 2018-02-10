@@ -15,16 +15,10 @@ export class Event extends IDClass implements EventInterface {
   private activities: ActivityInterface[] = [];
   private laps: LapInterface[] = [];
   private summary: EventSummaryInterface;
-  private geodesyAdapter: GeodesyAdapterInterface;
   private logger = Log.create('Event');
 
   constructor(geodesyAdapter?: GeodesyAdapterInterface) {
     super();
-    this.geodesyAdapter = geodesyAdapter || new GeoLibAdapter();
-  }
-
-  getGeodesyAdapter(): GeodesyAdapterInterface {
-    return this.geodesyAdapter;
   }
 
   setName(name: string) {
@@ -199,10 +193,6 @@ export class Event extends IDClass implements EventInterface {
       (performance.now() - t0) / 1000 + ' seconds'
     );
     return loss;
-  }
-
-  getDistanceInMeters(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): number {
-    return this.getGeodesyAdapter().getDistance(this.getPointsWithPosition(startDate, endDate, step, activities));
   }
 
   getTotalDurationInSeconds(): number {

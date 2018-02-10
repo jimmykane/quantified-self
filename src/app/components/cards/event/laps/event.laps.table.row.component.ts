@@ -1,6 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {LapInterface} from '../../../../entities/laps/lap.interface';
 import {EventInterface} from '../../../../entities/events/event.interface';
+import {EventService} from '../../../../services/app.event.service';
 
 @Component({
   selector: '[app-event-lap-table-row]',
@@ -16,4 +17,8 @@ export class EventLapTableRowComponent {
   @Input() isFirst: boolean;
   @Input() isLast: boolean;
   @Input() count: number;
+
+  constructor(public eventService: EventService){
+
+  }
 }

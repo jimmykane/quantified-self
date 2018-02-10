@@ -1,15 +1,15 @@
 <table>
   <tr *ngFor="let activity of event.getActivities()">
     {{ activity.getType() ? activity.getType() : '?'}}
-    {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km
+    {{ (eventService.getEventDistanceInMeters(event, null, null, null, [activity]) / 1000).toFixed(1) }} km
     in
     {{ activity.getDurationInSeconds() | amDuration:'seconds' }}
     at
     <span *ngIf="activity.getType() === 'running' || activity.getType() === 'Running'">
-      {{ (activity.getDurationInSeconds() * 1000) / (event.getDistanceInMeters(null, null, null, [activity]) / 1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} km/h
+      {{ (activity.getDurationInSeconds() * 1000) / (eventService.getEventDistanceInMeters(event, null, null, null, [activity]) / 1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} km/h
     </span>
     <span *ngIf="activity.getType() === 'Biking'">
-        {{ (event.getDistanceInMeters(null, null, null, [activity]) / 1000).toFixed(1) }} km/h
+        {{ (eventService.getEventDistanceInMeters(event, null, null, null, [activity]) / 1000).toFixed(1) }} km/h
     </span>
   </tr>
 </table>
