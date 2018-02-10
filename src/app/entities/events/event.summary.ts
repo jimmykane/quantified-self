@@ -1,6 +1,6 @@
 import {EventSummaryInterface} from './event.summary.interface';
-import {GeoLocationInfo} from '../../geo-location-info/app.geo-location-info';
-import {Weather} from '../../weather/app.weather';
+import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
+import {Weather} from '../weather/app.weather';
 
 export class EventSummary implements EventSummaryInterface {
 

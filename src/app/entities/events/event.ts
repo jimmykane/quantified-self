@@ -7,7 +7,7 @@ import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {Log} from 'ng2-logger'
-import {EventSummaryInterface} from "./summary/event.summary.interface";
+import {EventSummaryInterface} from "./event.summary.interface";
 
 export class Event extends IDClass implements EventInterface {
 

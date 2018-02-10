@@ -71,7 +71,7 @@ export class EventCardStatsComponent implements OnChanges {
   ];
 
   constructor(public eventService: EventService){
-    
+
   }
 
   ngOnChanges() {

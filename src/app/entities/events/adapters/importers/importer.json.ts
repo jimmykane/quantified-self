@@ -20,7 +20,7 @@ import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataGPSAltitude} from '../../../data/data.gps-altitude';
 import {WeatherItem} from "../../../weather/app.weather.item";
 import {Weather} from "../../../weather/app.weather";
-import {EventSummary} from "../../summary/event.summary";
+import {EventSummary} from "../../event.summary";
 import {GeoLocationInfo} from "../../../geo-location-info/app.geo-location-info";
 
 export class EventImporterJSON {

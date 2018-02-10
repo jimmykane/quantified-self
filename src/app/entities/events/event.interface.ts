@@ -5,7 +5,7 @@ import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
-import {EventSummaryInterface} from "./summary/event.summary.interface";
+import {EventSummaryInterface} from "./event.summary.interface";
 
 export interface EventInterface extends IDClassInterface, SerializableClassInterface {
 
