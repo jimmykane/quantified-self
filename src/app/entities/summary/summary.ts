@@ -1,6 +1,6 @@
 import {SummaryInterface} from '../summary/summary.interface';
 
-export class ActivitySummary implements SummaryInterface {
+export class Summary implements SummaryInterface {
 
   private totalDurationInSeconds: number;
   private totalDistanceInMeters: number;

@@ -19,9 +19,9 @@ import {EventImporterSuuntoJSON} from '../entities/events/adapters/importers/imp
 import 'rxjs/add/observable/forkJoin';
 import {ActivityInterface} from '../entities/activities/activity.interface';
 import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
-import {PointInterface} from "../entities/points/point.interface";
-import {Log} from "ng2-logger";
-import {ActivitySummary} from "../entities/activities/activity.summary";
+import {PointInterface} from '../entities/points/point.interface';
+import {Log} from 'ng2-logger';
+import {Summary} from '../entities/summary/summary';
 
 @Injectable()
 export class EventService {
@@ -114,12 +114,19 @@ export class EventService {
     eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
     // Activities Summaries
     for (const activity of event.getActivities()) {
-      const activitySummary = new ActivitySummary();
+      const activitySummary = new Summary();
       activitySummary.setTotalDistanceInMeters(
         this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
       );
       activitySummary.setTotalDurationInSeconds(activity.getDurationInSeconds());
       activity.setSummary(activitySummary);
+    }
+
+    for (const lap of event.getLaps()) {
+      const lapSummary = new Summary();
+      lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
+      lapSummary.setTotalDurationInSeconds(lap.getDurationInSeconds());
+      lap.setSummary(lapSummary);
     }
 
     return new Promise(((resolve, reject) => {
@@ -201,7 +208,7 @@ export class EventService {
     minDiff = minDiff || 1.5;
     let gain = 0;
     event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataTypeAverage(dataType)){
+      if (!previous.getDataTypeAverage(dataType)) {
         return next;
       }
       if (!next.getDataTypeAverage(dataType)) {
@@ -234,7 +241,7 @@ export class EventService {
     minDiff = minDiff || 1.5;
     let loss = 0;
     event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataTypeAverage(dataType)){
+      if (!previous.getDataTypeAverage(dataType)) {
         return next;
       }
       if (!next.getDataTypeAverage(dataType)) {

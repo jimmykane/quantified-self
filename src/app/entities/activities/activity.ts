@@ -4,14 +4,14 @@ import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {Log} from 'ng2-logger';
-import {ActivitySummary} from './activity.summary';
+import {Summary} from '../summary/summary';
 
 export class Activity extends IDClass implements ActivityInterface {
 
   private type: string;
   private creators: CreatorInterface[] = [];
   private points: Map<string, PointInterface> = new Map<string, PointInterface>();
-  private summary: ActivitySummary;
+  private summary: Summary;
   private logger = Log.create('Activity');
 
 
@@ -97,11 +97,11 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.getPoints()[this.getPoints().length - 1];
   }
 
-  setSummary(activitySummary: ActivitySummary) {
+  setSummary(activitySummary: Summary) {
     this.summary = activitySummary;
   }
 
-  getSummary(): ActivitySummary {
+  getSummary(): Summary {
     return this.summary;
   }
 

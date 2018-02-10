@@ -18,11 +18,11 @@ import {DataRespirationRate} from '../../../data/data.respiration-rate';
 import {DataEHPE} from '../../../data/data.ehpe';
 import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataGPSAltitude} from '../../../data/data.gps-altitude';
-import {WeatherItem} from "../../../weather/app.weather.item";
-import {Weather} from "../../../weather/app.weather";
-import {EventSummary} from "../../event.summary";
-import {GeoLocationInfo} from "../../../geo-location-info/app.geo-location-info";
-import {ActivitySummary} from "../../../activities/activity.summary";
+import {WeatherItem} from '../../../weather/app.weather.item';
+import {Weather} from '../../../weather/app.weather';
+import {EventSummary} from '../../event.summary';
+import {GeoLocationInfo} from '../../../geo-location-info/app.geo-location-info';
+import {Summary} from '../../../summary/summary';
 
 export class EventImporterJSON {
 
@@ -63,13 +63,16 @@ export class EventImporterJSON {
       lap.setCalories(lapObject.calories);
       lap.setIntensity(lapObject.intensity);
       lap.setTriggerMethod(lapObject.triggerMethod);
+      const lapSummary = new Summary();
+      lapSummary.setTotalDistanceInMeters(lapObject.summary.totalDistanceInMeters);
+      lapSummary.setTotalDurationInSeconds(lapObject.summary.totalDurationInSeconds);
       event.addLap(lap);
     }
 
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
       activity.setType(activityObject.type);
-      const activitySummary = new ActivitySummary();
+      const activitySummary = new Summary();
       activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
       activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
       activity.setSummary(activitySummary);

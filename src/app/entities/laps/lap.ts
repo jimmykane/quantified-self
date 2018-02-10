@@ -1,7 +1,6 @@
 import {LapInterface} from './lap.interface';
-import {ActivityInterface} from '../activities/activity.interface';
-import {PointInterface} from '../points/point.interface';
-import {EventInterface} from "../events/event.interface";
+import {EventInterface} from '../events/event.interface';
+import {Summary} from '../summary/summary';
 
 export class Lap implements LapInterface {
 
@@ -11,6 +10,7 @@ export class Lap implements LapInterface {
   private calories: number;
   private intensity: string;
   private triggerMethod: string;
+  private summary: Summary;
 
   constructor(startDate: Date, endDate: Date) {
     this.setStartDate(startDate).setEndDate(endDate);
@@ -69,13 +69,22 @@ export class Lap implements LapInterface {
     return this.triggerMethod;
   }
 
+  setSummary(activitySummary: Summary) {
+    this.summary = activitySummary;
+  }
+
+  getSummary(): Summary {
+    return this.summary;
+  }
+
   toJSON(): any {
     return {
       startDate: this.getStartDate(),
       endDate: this.getEndDate(),
       calories: this.getCalories(),
       intensity: this.getIntensity(),
-      triggerMethod: this.getTriggerMethod()
+      triggerMethod: this.getTriggerMethod(),
+      summary: this.getSummary().toJSON(),
     };
   }
 }

@@ -1,5 +1,6 @@
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {EventInterface} from '../events/event.interface';
+import {Summary} from '../summary/summary';
 
 export interface LapInterface extends SerializableClassInterface {
 
@@ -21,4 +22,7 @@ export interface LapInterface extends SerializableClassInterface {
 
   setTriggerMethod(triggerMethod: string);
   getTriggerMethod(): string;
+
+  setSummary(lapSummary: Summary);
+  getSummary(): Summary;
 }
