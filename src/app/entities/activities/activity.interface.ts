@@ -6,6 +6,7 @@ import {IDClass} from '../id/id.abstract.class';
 import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {DataInterface} from '../data/data.interface';
+import {ActivitySummary} from "./activity.summary";
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
   setType(type: string);
@@ -20,4 +21,6 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
+  setSummary(activitySummary: ActivitySummary);
+  getSummary(): ActivitySummary;
 }

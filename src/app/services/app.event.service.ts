@@ -21,6 +21,7 @@ import {ActivityInterface} from '../entities/activities/activity.interface';
 import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
 import {PointInterface} from "../entities/points/point.interface";
 import {Log} from "ng2-logger";
+import {ActivitySummary} from "../entities/activities/activity.summary";
 
 @Injectable()
 export class EventService {
@@ -57,7 +58,7 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    this.generateEventSummary(event).then(() => {
+    this.generateEventSummaries(event).then(() => {
       this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
         this.events.next(this.events.getValue().push(event));
       });
@@ -106,10 +107,21 @@ export class EventService {
     });
   }
 
-  public generateEventSummary(event: EventInterface): any {
+  public generateEventSummaries(event: EventInterface): any {
+    // Event Summary
     const eventSummary = new EventSummary();
     eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
     eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
+    // Activities Summaries
+    for (const activity of event.getActivities()) {
+      const activitySummary = new ActivitySummary();
+      activitySummary.setTotalDistanceInMeters(
+        this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
+      );
+      activitySummary.setTotalDurationInSeconds(activity.getDurationInSeconds());
+      activity.setSummary(activitySummary);
+    }
+
     return new Promise(((resolve, reject) => {
       Observable.forkJoin([
         this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)

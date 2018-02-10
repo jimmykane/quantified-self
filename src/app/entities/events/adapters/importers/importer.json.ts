@@ -22,6 +22,7 @@ import {WeatherItem} from "../../../weather/app.weather.item";
 import {Weather} from "../../../weather/app.weather";
 import {EventSummary} from "../../event.summary";
 import {GeoLocationInfo} from "../../../geo-location-info/app.geo-location-info";
+import {ActivitySummary} from "../../../activities/activity.summary";
 
 export class EventImporterJSON {
 
@@ -68,6 +69,10 @@ export class EventImporterJSON {
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
       activity.setType(activityObject.type);
+      const activitySummary = new ActivitySummary();
+      activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
+      activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
+      activity.setSummary(activitySummary);
       event.addActivity(activity);
       for (const creatorObject of activityObject.creators) {
         const creator = new Creator(activity);
