@@ -34,7 +34,7 @@ export class EventImporterSuuntoJSON {
       const point = new Point(new Date(sample.TimeISO8601));
       activity.addPoint(point);
       if (sample.HR) {
-        point.addData(new DataHeartRate(sample.HR))
+        point.addData(new DataHeartRate(sample.HR * 60))
       }
       if (sample.GPSAltitude) {
         point.addData(new DataGPSAltitude(sample.GPSAltitude))
@@ -55,7 +55,7 @@ export class EventImporterSuuntoJSON {
         point.addData(new DataAltitude(sample.Altitude))
       }
       if (sample.Cadence) {
-        point.addData(new DataCadence(sample.Cadence * 100))
+        point.addData(new DataCadence(sample.Cadence * 120))
       }
       if (sample.Power) {
         point.addData(new DataPower(sample.Power))

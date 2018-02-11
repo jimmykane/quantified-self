@@ -11,9 +11,9 @@ if (environment.production) {
 
 }
 
-if (localStorage.getItem('version') !== 'v0.0.1') {
+if (localStorage.getItem('version') !== 'v0.0.2') {
   localStorage.clear();
-  localStorage.setItem('version', 'v0.0.1');
+  localStorage.setItem('version', 'v0.0.2');
 }
 
 platformBrowserDynamic().bootstrapModule(AppModule);
