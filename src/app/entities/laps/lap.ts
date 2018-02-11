@@ -69,8 +69,8 @@ export class Lap implements LapInterface {
     return this.triggerMethod;
   }
 
-  setSummary(activitySummary: Summary) {
-    this.summary = activitySummary;
+  setSummary(lapSummary: Summary) {
+    this.summary = lapSummary;
   }
 
   getSummary(): Summary {

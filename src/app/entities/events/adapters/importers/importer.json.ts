@@ -72,6 +72,7 @@ export class EventImporterJSON {
       const lapSummary = new Summary();
       lapSummary.setTotalDistanceInMeters(lapObject.summary.totalDistanceInMeters);
       lapSummary.setTotalDurationInSeconds(lapObject.summary.totalDurationInSeconds);
+      lap.setSummary(lapSummary);
       event.addLap(lap);
     }
 
