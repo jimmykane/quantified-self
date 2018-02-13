@@ -37,7 +37,7 @@
     "angular2-fontawesome": "^5.2.1",
     "angular2-moment": "^1.8.0",
     "core-js": "^2.5.3",
-    "easy-fit": "0.0.6",
+    "easy-fit": "git@github.com:pierremtb/easy-fit.git#master",
     "font-awesome": "^4.7.0",
     "geolib": "^2.0.24",
     "hammerjs": "^2.0.8",
