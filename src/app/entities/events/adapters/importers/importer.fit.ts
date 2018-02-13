@@ -30,6 +30,7 @@ export class EventImporterFIT {
       });
 
       easyFitParser.parse(jsonString, (error, data: any) => {
+        // debugger;
         const event = new Event();
         let recordCount = 0;
         let dataCount = 0;
