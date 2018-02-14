@@ -149,7 +149,9 @@ export class EventService {
           eventSummary.setWeather(results[1]);
         }
         resolve(true);
-      })
+      }).catch(() => {
+        resolve(true);
+      });
     }));
   }
 

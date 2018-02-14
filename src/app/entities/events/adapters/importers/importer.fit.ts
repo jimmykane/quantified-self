@@ -30,7 +30,7 @@ export class EventImporterFIT {
       });
 
       easyFitParser.parse(jsonString, (error, data: any) => {
-        // debugger;
+        debugger;
         const event = new Event();
         let recordCount = 0;
         let dataCount = 0;
@@ -66,7 +66,7 @@ export class EventImporterFIT {
               Object.keys(lapRecord).forEach((key) => {
                 dataCount++;
                 switch (key) {
-                  case 'altitude': { return point.addData(new DataAltitude(Number(lapRecord[key]) - 1000)); }
+                  case 'altitude': { return point.addData(new DataAltitude(Number(lapRecord[key]))); }
                   case 'position_lat': { return point.addData(new DataLatitudeDegrees(lapRecord[key])); }
                   case 'position_long': { return point.addData(new DataLongitudeDegrees(lapRecord[key])); }
                   case 'cadence': { return point.addData(new DataCadence(lapRecord[key])); }

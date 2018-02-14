@@ -6,6 +6,7 @@ import {WeatherItem} from '../../entities/weather/app.weather.item';
 import {Weather} from '../../entities/weather/app.weather';
 import {WeatherServiceInterface} from 'app/services/weather/app.weather.service.interface';
 import {map} from 'rxjs/operators'
+import {reject} from "q";
 
 @Injectable()
 export class WeatherUndergroundWeatherService implements WeatherServiceInterface {
@@ -25,7 +26,11 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
           .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
           .replace('{apiKey}', this.apiKey)
       ).pipe(map((response) => {
-        const weatherItemsMap: Map<string, WeatherItem> = JSON.parse(response.text())
+        const jsonResponse = JSON.parse(response.text()).response;
+        if (jsonResponse.error){
+          reject();
+        }
+        const weatherItemsMap: Map<string, WeatherItem> = jsonResponse
           .history
           .observations
           .reduce(
