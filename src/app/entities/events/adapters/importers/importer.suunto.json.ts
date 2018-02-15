@@ -16,6 +16,10 @@ import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from "../../../data/data.power";
 import {DataGPSAltitude} from "../../../data/data.gps-altitude";
 import {DataAbsolutePressure} from "../../../data/data.absolute-pressure";
+import {DataEHPE} from "../../../data/data.ehpe";
+import {DataEVPE} from "../../../data/data.evpe";
+import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
+import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -68,6 +72,18 @@ export class EventImporterSuuntoJSON {
       }
       if (sample.VerticalSpeed) {
         point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
+      }
+      if (sample.EHPE) {
+        point.addData(new DataEHPE(sample.EHPE));
+      }
+      if (sample.EVPE) {
+        point.addData(new DataEVPE(sample.EVPE));
+      }
+      if (sample.NumberOfSatellites) {
+        point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
+      }
+      if (sample.Satellite5BestSNR) {
+        point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
       }
     }
 
