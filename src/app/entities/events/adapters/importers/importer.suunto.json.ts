@@ -20,6 +20,7 @@ import {DataEHPE} from "../../../data/data.ehpe";
 import {DataEVPE} from "../../../data/data.evpe";
 import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
 import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
+import {Summary} from "../../../summary/summary";
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -98,6 +99,11 @@ export class EventImporterSuuntoJSON {
         new Date((new Date(lapObj.TimeISO8601)).getTime() - (lapObj.Duration * 1000)),
         new Date(lapObj.TimeISO8601)
       );
+      const lapSummary = new Summary();
+      lap.setTriggerMethod(lapObj.Type);
+      lap.setCalories(lapObj.Energy);
+      lapSummary.setTotalDistanceInMeters(lapObj.Distance);
+      lapSummary.setTotalDurationInSeconds(lapObj.Duration);
       event.addLap(lap);
     }
 
