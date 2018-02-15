@@ -48,9 +48,9 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   // @todo should do short or somehow
-  addPoint(point: PointInterface) {
+  addPoint(point: PointInterface, detectCollision: boolean = true) {
     const existingPoint = this.points.get(point.getDate().getTime());
-    if (existingPoint) {
+    if (existingPoint && detectCollision) {
       this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString());
       existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
         dataArray.forEach((data: DataInterface) => {
