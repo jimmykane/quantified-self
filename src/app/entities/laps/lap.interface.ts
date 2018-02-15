@@ -12,8 +12,6 @@ export interface LapInterface extends SerializableClassInterface {
   setEndDate(date: Date);
   getEndDate(): Date;
 
-  getDurationInSeconds(): number;
-
   setCalories(calories: number);
   getCalories(): number;
 

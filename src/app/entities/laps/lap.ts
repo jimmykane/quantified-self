@@ -38,10 +38,6 @@ export class Lap implements LapInterface {
     return this.endDate;
   }
 
-  getDurationInSeconds(): number {
-    return (+this.getEndDate() - +this.getStartDate()) / 1000;
-  }
-
   setCalories(calories: number) {
     this.calories = calories;
     return this;
