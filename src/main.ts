@@ -5,15 +5,17 @@ import {AppModule} from './app/app.module';
 import {environment} from './environments/environment';
 import {Log} from 'ng2-logger';
 
+const { version: appVersion } = require('../package.json');
+
 if (environment.production) {
   enableProdMode();
   Log.setProductionMode();
 
 }
 
-if (localStorage.getItem('version') !== 'v0.0.3') {
+if (appVersion !== localStorage.getItem('version')) {
   localStorage.clear();
-  localStorage.setItem('version', 'v0.0.3');
+  localStorage.setItem('version', appVersion);
 }
 
 platformBrowserDynamic().bootstrapModule(AppModule);

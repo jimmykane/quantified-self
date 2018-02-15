@@ -83,7 +83,6 @@ export class Activity extends IDClass implements ActivityInterface {
       if (endDate && endDate < point.getDate()) {
         canBeAdded = false;
       }
-
       if (canBeAdded) {
         points.push(point);
       }

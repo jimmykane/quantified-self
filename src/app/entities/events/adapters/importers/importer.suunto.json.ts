@@ -24,6 +24,7 @@ import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
+    debugger;
     const event = new Event();
 
     const activity = new Activity();
