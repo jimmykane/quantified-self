@@ -10,7 +10,7 @@ export class Activity extends IDClass implements ActivityInterface {
 
   private type: string;
   private creators: CreatorInterface[] = [];
-  private points: Map<string, PointInterface> = new Map<string, PointInterface>();
+  private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: Summary;
   private logger = Log.create('Activity');
 
@@ -49,7 +49,7 @@ export class Activity extends IDClass implements ActivityInterface {
 
   // @todo should do short or somehow
   addPoint(point: PointInterface) {
-    const existingPoint = this.points.get(point.getDate().toISOString());
+    const existingPoint = this.points.get(point.getDate().getTime());
     if (existingPoint) {
       this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString());
       existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
@@ -58,17 +58,17 @@ export class Activity extends IDClass implements ActivityInterface {
         });
       });
     }
-    this.points.set(point.getDate().toISOString(), point);
+    this.points.set(point.getDate().getTime(), point);
   }
 
   removePoint(point: PointInterface) {
-    this.points.delete(point.getDate().toISOString());
+    this.points.delete(point.getDate().getTime());
   }
 
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
     const points = [];
     let index = -1;
-    this.points.forEach((point: PointInterface, date: string, map) => {
+    this.points.forEach((point: PointInterface, date: number, map) => {
       index++;
       let canBeAdded = true;
       // @todo check inclusions
