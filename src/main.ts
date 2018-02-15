@@ -5,6 +5,7 @@ import {AppModule} from './app/app.module';
 import {environment} from './environments/environment';
 import {Log} from 'ng2-logger';
 
+declare function require(moduleName: string): any;
 const { version: appVersion } = require('../package.json');
 
 if (environment.production) {
