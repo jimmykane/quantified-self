@@ -26,8 +26,8 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
           .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
           .replace('{apiKey}', this.apiKey)
       ).pipe(map((response) => {
-        const jsonResponse = JSON.parse(response.text()).response;
-        if (jsonResponse.error){
+        const jsonResponse = JSON.parse(response.text());
+        if (jsonResponse.response.error) {
           reject();
         }
         const weatherItemsMap: Map<string, WeatherItem> = jsonResponse
