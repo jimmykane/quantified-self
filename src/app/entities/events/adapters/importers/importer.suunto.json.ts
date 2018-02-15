@@ -89,14 +89,15 @@ export class EventImporterSuuntoJSON {
 
     // Parse the laps
     for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
-      const lap = lapWindow.Window;
-      if (lap.Type !== 'Autolap') {
+      const lapObj = lapWindow.Window;
+      if (lapObj.Type !== 'Autolap') {
         continue;
       }
-      event.addLap(new Lap(
-        new Date(lap.TimeISO8601),
-        new Date((new Date(lap.TimeISO8601)).getTime() + (lap.Duration * 1000))
-      ));
+      const lap = new Lap(
+        new Date((new Date(lapObj.TimeISO8601)).getTime() - (lapObj.Duration * 1000)),
+        new Date(lapObj.TimeISO8601)
+      );
+      event.addLap(lap);
     }
 
     return event;
