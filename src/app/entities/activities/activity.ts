@@ -54,7 +54,9 @@ export class Activity extends IDClass implements ActivityInterface {
       this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString());
       existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
         dataArray.forEach((data: DataInterface) => {
-          point.addData(data);
+          if (!point.getDataByType(key)) {
+            point.addData(data);
+          }
         });
       });
     }
