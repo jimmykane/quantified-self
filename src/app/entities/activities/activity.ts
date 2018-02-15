@@ -77,7 +77,7 @@ export class Activity extends IDClass implements ActivityInterface {
       if (step && index % step !== 0) {
         canBeAdded = false;
       }
-      if (startDate && startDate > point.getDate()) {
+      if (startDate && startDate >= point.getDate()) {
         canBeAdded = false;
       }
       if (endDate && endDate < point.getDate()) {
