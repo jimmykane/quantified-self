@@ -87,6 +87,18 @@ export class EventImporterSuuntoJSON {
       }
     }
 
+    // Parse the laps
+    for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
+      const lap = lapWindow.Window;
+      if (lap.Type !== 'Autolap') {
+        continue;
+      }
+      event.addLap(new Lap(
+        new Date(lap.TimeISO8601),
+        new Date((new Date(lap.TimeISO8601)).getTime() + (lap.Duration * 1000))
+      ));
+    }
+
     return event;
   }
 }
