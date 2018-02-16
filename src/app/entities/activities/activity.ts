@@ -51,7 +51,7 @@ export class Activity extends IDClass implements ActivityInterface {
   addPoint(point: PointInterface, detectCollision: boolean = true) {
     const existingPoint = this.points.get(point.getDate().getTime());
     if (existingPoint && detectCollision) {
-      this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString());
+      this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString() + ' and date: ' + existingPoint.getDate());
       existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
         dataArray.forEach((data: DataInterface) => {
           if (!point.getDataByType(key)) {
