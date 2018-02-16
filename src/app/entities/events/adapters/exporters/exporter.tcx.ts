@@ -47,7 +47,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // Add an ID element
       const idElement = document.createElementNS(null, 'Id');
-      idElement.textContent = activity.getStartDate().toISOString();
+      idElement.textContent = activity.getStartDate().toISOString().substring(0, 19) + 'Z';
       activityElement.appendChild(idElement);
 
       // Go over the creators of this activities
@@ -66,7 +66,7 @@ export class EventExporterTCX implements EventExporterInterface {
       // Create a lap element
       const lapElement = document.createElementNS(null, 'Lap');
       // Add the first point as start time
-      lapElement.setAttribute('StartTime', activity.getPoints()[0].getDate().toISOString());
+      lapElement.setAttribute('StartTime', activity.getPoints()[0].getDate().toISOString().substring(0, 19) + 'Z');
       // @todo create laps if they exist
       const totalTimeInSecondsElement = document.createElementNS(null, 'TotalTimeSeconds');
       totalTimeInSecondsElement.textContent = activity.getDurationInSeconds().toString();
@@ -85,7 +85,7 @@ export class EventExporterTCX implements EventExporterInterface {
         const pointElement = document.createElementNS(null, 'Trackpoint');
         trackElement.appendChild(pointElement);
         const timeElement = document.createElementNS(null, 'Time');
-        timeElement.textContent = point.getDate().toISOString();
+        timeElement.textContent = point.getDate().toISOString().substring(0, 19) + 'Z';
         pointElement.appendChild(timeElement);
 
         if (point.getPosition()) {
