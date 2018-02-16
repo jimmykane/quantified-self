@@ -120,7 +120,7 @@ export class EventExporterTCX implements EventExporterInterface {
               const extensionsElement = document.createElementNS(null, 'Extensions');
               const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
               extensionsElement.appendChild(tpxElement);
-              const speedElement = document.createElementNS(null, 'Speed');
+              const speedElement = document.createElement('Speed');
               tpxElement.appendChild(speedElement);
               speedElement.textContent = data.getValue().toString();
               pointElement.appendChild(extensionsElement);
