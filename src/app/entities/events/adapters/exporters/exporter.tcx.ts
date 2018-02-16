@@ -113,7 +113,7 @@ export class EventExporterTCX implements EventExporterInterface {
             } else if (data instanceof DataHeartRate) {
               const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
               const heartRateValueElement = document.createElementNS(null, 'Value');
-              heartRateValueElement.textContent = data.getValue().toString();
+              heartRateValueElement.textContent = data.getValue().toFixed(0).toString();
               heartRateElement.appendChild(heartRateValueElement);
               pointElement.appendChild(heartRateElement);
             } else if (data instanceof DataSpeed) {
