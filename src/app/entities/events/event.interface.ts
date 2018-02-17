@@ -31,8 +31,6 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
 
   getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
 
-  getData(startDate?: Date, endDate?: Date, step?: number): Map<string, DataInterface[]>;
-
   getDataByType(dataType: string): DataInterface[];
 
   getTotalDurationInSeconds(): number;

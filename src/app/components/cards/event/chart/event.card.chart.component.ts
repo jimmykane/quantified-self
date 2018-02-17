@@ -10,11 +10,11 @@ import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataAltitude} from '../../../../entities/data/data.altitude';
 import {DataSpeed} from '../../../../entities/data/data.speed';
-import {DataTemperature} from '../../../../entities/data/data.temperature';
-import {DataPower} from '../../../../entities/data/data.power';
 import {DataVerticalSpeed} from '../../../../entities/data/data.verticalspeed';
 import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pressure';
 import {Log, Level} from 'ng2-logger'
+import {ActivityInterface} from '../../../../entities/activities/activity.interface';
+import {PointInterface} from '../../../../entities/points/point.interface';
 
 
 @Component({
@@ -230,10 +230,32 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private getAllData(): Map<string, DataInterface[]> {
+    const t0 = performance.now();
     if (!this.dataMap) {
-      this.dataMap = this.event.getData();
+      this.dataMap = new Map<string, DataInterface[]>();
+      this.event.getActivities().forEach((activity: ActivityInterface, index) => {
+        activity.getPoints(void 0, void 0, 1).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+          point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
+            if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
+              return;
+            }
+            const existingDataArray = dataMap.get(key + (index ? String(index) : '')) || [];
+            if (!existingDataArray.length) {
+              dataMap.set(key + (index ? String(index) : ''), existingDataArray);
+            }
+            pointDataArray.forEach((pointData) => {
+              existingDataArray.push(pointData)
+            });
+          });
+          return dataMap;
+        }, this.dataMap);
+      });
     }
-    return this.dataMap || this.event.getData();
+    this.logger.d('Retrieved all data after ' +
+      (performance.now() - t0) + ' milliseconds or ' +
+      (performance.now() - t0) / 1000 + ' seconds'
+    );
+    return this.dataMap;
   }
 
   private getAllCategoryTypes(): any[] {
@@ -245,10 +267,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     return this.categories;
   }
 
-  private getDataProvider(dataMap: Map<string, any>): any[] {
+  private getDataProvider(dataMap: Map<number, any>): any[] {
     const t0 = performance.now();
     const dataProvider = [];
-    dataMap.forEach((value: number, key: string) => {
+    dataMap.forEach((value: number, key: number) => {
       dataProvider.push(Object.assign({
         date: new Date(key)
       }, value));
@@ -268,18 +290,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   private getDataMapSlice(startDate?: Date, endDate?: Date, step?: number) {
     const t0 = performance.now();
-    const dataMap = new Map<string, any>();
+    const dataMap = new Map<number, any>();
     let dataCount = 0;
     this.getAllData().forEach((dataArray: DataInterface[], dataType: string) => {
-      if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(dataType) > -1) {
-        return;
-      }
-
-      dataArray.reduce((dataAccumulator: Map<string, any>, data: DataInterface) => {
+      dataArray.reduce((dataAccumulator: Map<number, any>, data: DataInterface) => {
         dataCount++;
-        const dateData = dataAccumulator.get(data.getPoint().getDate().toISOString()) || {};
-        dataAccumulator.set(data.getPoint().getDate().toISOString(), Object.assign(dateData, {
-          [data.getType()]: data.getValue().toFixed(1)
+        const dateData = dataAccumulator.get(data.getPoint().getDate().getTime()) || {};
+        dataAccumulator.set(data.getPoint().getDate().getTime(), Object.assign(dateData, {
+          [dataType]: data.getValue().toFixed(1)
         }));
         return dataAccumulator;
       }, dataMap);
@@ -296,9 +314,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     let leftIndex = 0;
     let rightIndex = 0;
     this.getAllCategoryTypes().forEach((dataCategory) => {
-      if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(dataCategory) > -1) {
-        return;
-      }
       valueAxes.push({
         id: dataCategory,
         axisColor: this.genColor(dataCategory),
@@ -321,9 +336,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     const graphs = [];
     this.getAllCategoryTypes().forEach((dataCategory: string) => {
-      if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(dataCategory) > -1) {
-        return;
-      }
       graphs.push({
         id: dataCategory,
         valueAxis: dataCategory,
@@ -350,24 +362,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private genColor(key: string) {
-    switch (key) {
-      case DataHeartRate.type:
-        return '#ff3f07';
-      case DataAltitude.type:
-        return '#4ab255';
-      case DataCadence.type:
-        return '#5b6979';
-      case DataSpeed.type:
-        return '#2261bf';
-      case DataVerticalSpeed.type:
-        return '#add3c3';
-      case DataTemperature.type:
-        return '#a5a567';
-      case DataPower.type:
-        return '#d39031';
-      case DataSeaLevelPressure.type:
-        return '#889bc8';
-    }
+    if (key.includes(DataHeartRate.type)) { return '#ff3f07'; }
+    if (key.includes(DataAltitude.type)) { return '#4ab255'; }
+    if (key.includes(DataCadence.type)) { return '#5b6979'; }
+    if (key.includes(DataSpeed.type)) { return '#2261bf'; }
+    if (key.includes(DataVerticalSpeed.type)) { return '#add3c3'; }
+    if (key.includes(DataSeaLevelPressure.type)) { return '#889bc8'; }
     // noinspection TsLint
     return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
