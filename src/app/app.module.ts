@@ -18,14 +18,15 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
-  MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatGridListModule, MatIconModule,
+  MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatExpansionModule,
+  MatGridListModule, MatIconModule,
   MatMenuModule,
   MatSidenavModule, MatTableModule,
   MatTabsModule, MatToolbarModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
-import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
+import {EventCardActivityStatsComponent} from './components/cards/event/stats/event.card.activity.stats.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {WeatherUndergroundWeatherService} from './services/weather/app.weather-underground.weather.service';
 import {HttpModule} from '@angular/http';
@@ -41,6 +42,7 @@ import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.c
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
 import {GeoLocationInfoLocalStorageService} from './services/storage/app.geo-location-info.local.storage.service';
+import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 
 @NgModule({
   imports: [
@@ -51,6 +53,7 @@ import {GeoLocationInfoLocalStorageService} from './services/storage/app.geo-loc
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ'
     }),
+    MatExpansionModule,
     MatButtonModule,
     MatButtonToggleModule,
     MatCardModule,
@@ -81,6 +84,7 @@ import {GeoLocationInfoLocalStorageService} from './services/storage/app.geo-loc
     EventCardMapActivitiesComponent,
     EventCardMapWeatherComponent,
     EventCardStatsComponent,
+    EventCardActivityStatsComponent,
     EventCardActionsMenuComponent,
     EventCardLapsComponent,
     EventLapTableRowComponent,

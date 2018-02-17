@@ -1,0 +1,9 @@
+<mat-grid-list cols="2" rowHeight="fit">
+  <ng-container *ngFor="let stat of stats">
+    <mat-grid-tile *ngIf="stat.value !== 0">
+      <fa [name]="stat.iconName" [size]="2" *ngIf="stat.iconType === 'fontAwesome'"></fa>
+      <mat-icon *ngIf="stat.iconType === 'material'">{{ stat.iconName }}</mat-icon>
+      {{ stat.value }} {{stat.units}}
+    </mat-grid-tile>
+  </ng-container>
+</mat-grid-list>

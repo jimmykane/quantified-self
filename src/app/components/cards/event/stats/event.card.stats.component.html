@@ -1,9 +1,13 @@
-<mat-grid-list cols="2" rowHeight="fit">
-  <ng-container *ngFor="let stat of stats">
-    <mat-grid-tile *ngIf="stat.value !== 0">
-      <fa [name]="stat.iconName" [size]="2" *ngIf="stat.iconType === 'fontAwesome'"></fa>
-      <mat-icon *ngIf="stat.iconType === 'material'">{{ stat.iconName }}</mat-icon>
-      {{ stat.value }} {{stat.units}}
-    </mat-grid-tile>
-  </ng-container>
-</mat-grid-list>
+<mat-accordion *ngIf="event && event.getActivities().length" >
+  <mat-expansion-panel *ngFor="let activity of event.getActivities(); let i = index;" [expanded]="i === 0">
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        Activity #{{ i+1 }}
+      </mat-panel-title>
+      <mat-panel-description>
+        {{ activity.getType() }}
+      </mat-panel-description>
+    </mat-expansion-panel-header>
+    <app-event-card-activity-stats [activity]="activity" [event]="event"></app-event-card-activity-stats>
+  </mat-expansion-panel>
+</mat-accordion>
