@@ -5,7 +5,7 @@ import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataPower} from '../../../../entities/data/data.power';
 import {DataTemperature} from '../../../../entities/data/data.temperature';
 import {DataAltitude} from '../../../../entities/data/data.altitude';
-import {EventService} from "../../../../services/app.event.service";
+import {EventService} from '../../../../services/app.event.service';
 
 
 @Component({
@@ -70,7 +70,7 @@ export class EventCardStatsComponent implements OnChanges {
     }
   ];
 
-  constructor(public eventService: EventService){
+  constructor(public eventService: EventService) {
 
   }
 
