@@ -90,13 +90,14 @@ export class EventImporterSuuntoJSON {
     }
 
     // Parse the laps
+    let nextLapStartDate = event.getFirstActivity().getStartPoint().getDate();
     for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
       const lapObj = lapWindow.Window;
       if (lapObj.Type !== 'Autolap') {
         continue;
       }
       const lap = new Lap(
-        new Date((new Date(lapObj.TimeISO8601)).getTime() - (lapObj.Duration * 1000)),
+        nextLapStartDate,
         new Date(lapObj.TimeISO8601)
       );
       const lapSummary = new Summary();
@@ -105,6 +106,7 @@ export class EventImporterSuuntoJSON {
       lapSummary.setTotalDistanceInMeters(lapObj.Distance);
       lapSummary.setTotalDurationInSeconds(lapObj.Duration);
       event.addLap(lap);
+      nextLapStartDate = lap.getEndDate();
     }
 
     return event;
