@@ -70,7 +70,7 @@ export class EventExporterTCX implements EventExporterInterface {
       lapElement.setAttribute('StartTime', activity.getPoints()[0].getDate().toISOString().substring(0, 19) + 'Z');
       // @todo create laps if they exist
       const totalTimeInSecondsElement = document.createElementNS(null, 'TotalTimeSeconds');
-      totalTimeInSecondsElement.textContent = activity.getDurationInSeconds().toString();
+      totalTimeInSecondsElement.textContent = activity.getSummary().getTotalDurationInSeconds().toString();
       lapElement.appendChild(totalTimeInSecondsElement);
 
       const distanceInMetersElement = document.createElementNS(null, 'DistanceMeters');

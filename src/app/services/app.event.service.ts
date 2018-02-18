@@ -121,7 +121,7 @@ export class EventService {
         activitySummary.setTotalDistanceInMeters(
           this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
         );
-        activitySummary.setTotalDurationInSeconds(activity.getDurationInSeconds());
+        activitySummary.setTotalDurationInSeconds(activity.getSummary().getTotalDurationInSeconds());
         activity.setSummary(activitySummary);
       }
 

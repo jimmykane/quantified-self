@@ -14,7 +14,6 @@ export class Activity extends IDClass implements ActivityInterface {
   private summary: Summary;
   private logger = Log.create('Activity');
 
-
   constructor() {
     super();
   }
@@ -33,10 +32,6 @@ export class Activity extends IDClass implements ActivityInterface {
 
   getEndDate(): Date {
     return this.getEndPoint().getDate();
-  }
-
-  getDurationInSeconds(): number {
-    return (+this.getEndDate() - +this.getStartDate()) / 1000;
   }
 
   setCreator(creator: CreatorInterface) {
