@@ -111,7 +111,6 @@ export class EventService {
 
   public generateEventSummaries(event: EventInterface): Promise<any> {
     return new Promise(((resolve, reject) => {
-
       // Lap summaries
       for (const lap of event.getLaps()) {
         const lapSummary = new Summary();
@@ -150,11 +149,11 @@ export class EventService {
       event.setSummary(eventSummary);
 
       Observable.forkJoin(activitiesPromises).toPromise().then(results => {
-        let index = -1;
+        let index = 0;
         for (const activity of event.getActivities()) {
-          index++;
           // If indoors
           if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+            index += 2;
             continue;
           }
           if (results[index]) {
@@ -163,6 +162,7 @@ export class EventService {
           if (results[index + 1]) {
             activity.getSummary().setWeather(<Weather> results[index + 1]);
           }
+          index += 2;
         }
         resolve(true);
       }).catch(() => {
