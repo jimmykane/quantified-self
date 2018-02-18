@@ -1,6 +1,6 @@
-<mat-accordion>
+<mat-accordion [displayMode]="'flat'">
   <mat-expansion-panel *ngFor="let activity of event.getActivities(); let i = index;">
-    <mat-expansion-panel-header [collapsedHeight]="50/event.getActivities().length + 'vh' ">
+    <mat-expansion-panel-header [collapsedHeight]="25/event.getActivities().length + 'vh' ">
       <mat-panel-title>
         {{ activity.getStartDate().toLocaleDateString() }}
       </mat-panel-title>

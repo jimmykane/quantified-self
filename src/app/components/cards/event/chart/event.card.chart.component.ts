@@ -239,9 +239,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
-            const existingDataArray = dataMap.get(key + (index ? String(index) : '')) || [];
+            const existingDataArray = dataMap.get(key + (index ? ' ' + String(index) : '')) || [];
             if (!existingDataArray.length) {
-              dataMap.set(key + (index ? String(index) : ''), existingDataArray);
+              dataMap.set(key + (index ? ' ' + String(index) : ''), existingDataArray);
             }
             pointDataArray.forEach((pointData) => {
               existingDataArray.push(pointData)
