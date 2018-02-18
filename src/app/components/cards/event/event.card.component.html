@@ -32,7 +32,7 @@
         <ng-template matTabLabel>
           <mat-icon>insert_chart</mat-icon>
         </ng-template>
-        <app-event-card-stats
+        <app-event-card-stats *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 1 : 0)"
           [event]="event">
         </app-event-card-stats>
       </mat-tab>
