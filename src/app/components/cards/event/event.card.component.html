@@ -16,11 +16,11 @@
       <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
       <div *ngFor="let activity of event.getActivities(); let i = index;">
         <span *ngIf=" activity.getCreator().getName()">
-          Device:
-          <span class="mat-body-2">Name </span><span>{{ activity.getCreator().getName() }}</span>
-          <span class="mat-body-2" *ngIf=" activity.getCreator().getSerialNumber()"> Serial Number </span><span>{{ activity.getCreator().getSerialNumber() }}</span>
-          <span class="mat-body-2" *ngIf=" activity.getCreator().getHWInfo()"> HW </span><span>{{ activity.getCreator().getHWInfo() }}</span>
-          <span class="mat-body-2" *ngIf=" activity.getCreator().getSWInfo()"> SW </span><span>{{ activity.getCreator().getSWInfo() }}</span>
+          Creator:
+          <span class="mat-body-2">{{ activity.getCreator().getName() }} </span>
+          <span class="mat-body-2" *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
+          <span class="mat-body-2" *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
+          <span class="mat-body-2" *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
         </span>
       </div>
     </mat-card-subtitle>
