@@ -30,7 +30,6 @@ export class EventExporterTCX implements EventExporterInterface {
     trainingCenterDatabaseElement.setAttribute('xmlns:ns2', 'http://www.garmin.com/xmlschemas/UserProfile/v2');
     trainingCenterDatabaseElement.setAttribute('xmlns:ns3', 'http://www.garmin.com/xmlschemas/ActivityExtension/v2');
     trainingCenterDatabaseElement.setAttribute('xmlns:ns5', 'http://www.garmin.com/xmlschemas/ActivityGoals/v1');
-    trainingCenterDatabaseElement.setAttribute('xsi', 'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd');
 
     // Append it to the xmlDocument
     xmlDocument.appendChild(trainingCenterDatabaseElement);
@@ -109,7 +108,7 @@ export class EventExporterTCX implements EventExporterInterface {
               pointElement.appendChild(altitudeElement);
             } else if (data instanceof DataCadence) {
               const cadenceElement = document.createElementNS(null, 'Cadence');
-              cadenceElement.textContent = data.getValue().toString();
+              cadenceElement.textContent = (data.getValue() / 2).toString();
               pointElement.appendChild(cadenceElement);
             } else if (data instanceof DataHeartRate) {
               const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
