@@ -28,8 +28,9 @@ export class EventImporterTCX {
 
       // Setup the creators
       for (const creatorElement of <any>activityElement.getElementsByTagName('Creator')) {
-        const creator = new Creator(activity);
+        const creator = new Creator();
         creator.setName(creatorElement.getElementsByTagName('Name')[0].textContent);
+        activity.setCreator(creator);
       }
 
       // Setup the laps

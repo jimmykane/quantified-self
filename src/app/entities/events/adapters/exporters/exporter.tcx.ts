@@ -54,18 +54,15 @@ export class EventExporterTCX implements EventExporterInterface {
       idElement.textContent = activity.getStartDate().toISOString().substring(0, 19) + 'Z';
       activityElement.appendChild(idElement);
 
-      // Go over the creators of this activities
-      for (const creator of activity.getCreators()) {
 
-        // Create the element
-        const creatorElement = document.createElementNS(null, 'Creator');
-        const nameElement = document.createElementNS(null, 'Name');
-        nameElement.textContent = creator.getName();
-        creatorElement.appendChild(nameElement);
+      // Create the element
+      const creatorElement = document.createElementNS(null, 'Creator');
+      const nameElement = document.createElementNS(null, 'Name');
+      nameElement.textContent = activity.getCreator().getName();
+      creatorElement.appendChild(nameElement);
 
-        // Add it to the activities
-        activityElement.appendChild(creatorElement);
-      }
+      // Add it to the activities
+      activityElement.appendChild(creatorElement);
 
       // Create a lap element
       const lapElement = document.createElementNS(null, 'Lap');

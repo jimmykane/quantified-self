@@ -9,7 +9,7 @@ import {Summary} from '../summary/summary';
 export class Activity extends IDClass implements ActivityInterface {
 
   private type: string;
-  private creators: CreatorInterface[] = [];
+  private creator: CreatorInterface;
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: Summary;
   private logger = Log.create('Activity');
@@ -39,12 +39,12 @@ export class Activity extends IDClass implements ActivityInterface {
     return (+this.getEndDate() - +this.getStartDate()) / 1000;
   }
 
-  addCreator(creator: CreatorInterface) {
-    this.creators.push(creator);
+  setCreator(creator: CreatorInterface) {
+    this.creator = creator;
   }
 
-  getCreators(): CreatorInterface[] {
-    return this.creators;
+  getCreator(): CreatorInterface {
+    return this.creator;
   }
 
   // @todo should do short or somehow
@@ -110,10 +110,7 @@ export class Activity extends IDClass implements ActivityInterface {
     return {
       id: this.getID(),
       type: this.getType(),
-      creators: this.getCreators().reduce((jsonCreatorsArray: any[], creator: CreatorInterface) => {
-        jsonCreatorsArray.push(creator.toJSON());
-        return jsonCreatorsArray;
-      }, []),
+      creator: this.getCreator().toJSON(),
       points: this.getPoints().reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;

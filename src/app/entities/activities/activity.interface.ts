@@ -10,8 +10,8 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getStartDate(): Date;
   getEndDate(): Date;
   getDurationInSeconds(): number;
-  addCreator(creator: CreatorInterface);
-  getCreators(): CreatorInterface[];
+  setCreator(creator: CreatorInterface);
+  getCreator(): CreatorInterface;
   addPoint(point: PointInterface);
   removePoint(point: PointInterface);
   getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];

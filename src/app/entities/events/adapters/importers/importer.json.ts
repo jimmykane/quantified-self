@@ -87,10 +87,13 @@ export class EventImporterJSON {
       activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
       activity.setSummary(activitySummary);
       event.addActivity(activity);
-      for (const creatorObject of activityObject.creators) {
-        const creator = new Creator(activity);
-        creator.setName(creatorObject.name);
-      }
+
+      const creator = new Creator();
+      creator.setName(activityObject.creator.name);
+      creator.setHWInfo(activityObject.creator.hwInfo);
+      creator.setSWInfo(activityObject.creator.swInfo);
+      creator.setSerialNumber(activityObject.creator.serialNumber);
+      activity.setCreator(creator);
 
       for (const pointObject of activityObject.points) {
         const point = new Point(new Date(pointObject.date));

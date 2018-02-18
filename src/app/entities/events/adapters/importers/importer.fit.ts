@@ -39,8 +39,9 @@ export class EventImporterFIT {
           activity.setType(session.sport);
           event.addActivity(activity);
 
-          const creator = new Creator(activity);
+          const creator = new Creator();
           creator.setName(data.file_id.manufacturer);
+          activity.setCreator(creator);
 
           for (const sessionLap of session.laps) {
             // If the lap does not have any elapsed time or distance dont add it

@@ -10,8 +10,19 @@
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
     </mat-card-subtitle>
     <mat-card-subtitle>
-      {{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }} km in about {{ event.getSummary().getTotalDurationInSeconds() |
-      amDuration:'seconds' }}
+      <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
+      <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
+      in about
+      <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
+      <div *ngFor="let activity of event.getActivities(); let i = index;">
+        <span *ngIf=" activity.getCreator().getName()">
+          Device:
+          <span class="mat-body-2">Name </span><span>{{ activity.getCreator().getName() }}</span>
+          <span class="mat-body-2" *ngIf=" activity.getCreator().getSerialNumber()"> Serial Number </span><span>{{ activity.getCreator().getSerialNumber() }}</span>
+          <span class="mat-body-2" *ngIf=" activity.getCreator().getHWInfo()"> HW </span><span>{{ activity.getCreator().getHWInfo() }}</span>
+          <span class="mat-body-2" *ngIf=" activity.getCreator().getSWInfo()"> SW </span><span>{{ activity.getCreator().getSWInfo() }}</span>
+        </span>
+      </div>
     </mat-card-subtitle>
   </mat-card-header>
 
@@ -19,7 +30,7 @@
   <mat-card-content>
 
     <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex"
-                  (selectedIndexChange)="selectedTabIndexChange($event)">
+                   (selectedIndexChange)="selectedTabIndexChange($event)">
       <mat-tab label="Map" *ngIf="event.getPointsWithPosition().length > 0"> <!-- todo check performance on if -->
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
@@ -33,14 +44,15 @@
           <mat-icon>insert_chart</mat-icon>
         </ng-template>
         <app-event-card-stats *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 1 : 0)"
-          [event]="event">
+                              [event]="event">
         </app-event-card-stats>
       </mat-tab>
       <mat-tab label="Chart">
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
         </ng-template>
-        <app-event-card-chart *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 2 : 1)" [event]="event">
+        <app-event-card-chart *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 2 : 1)"
+                              [event]="event">
         </app-event-card-chart>
       </mat-tab>
       <mat-tab label="Laps" *ngIf="event.getLaps().length > 0">

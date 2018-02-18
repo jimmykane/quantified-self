@@ -1,12 +1,15 @@
 import {CreatorInterface} from './creatorInterface';
 import {ActivityInterface} from '../activities/activity.interface';
 export class Creator implements CreatorInterface {
+
   private name: string;
+  private swInfo: string;
+  private hwInfo: string;
+  private serialNumber: string;
   private activity: ActivityInterface;
 
-  constructor(activity: ActivityInterface) {
+  setActivity(activity: ActivityInterface){
     this.activity = activity;
-    this.activity.addCreator(this);
   }
 
   getActivity(): ActivityInterface {
@@ -21,9 +24,36 @@ export class Creator implements CreatorInterface {
     return this.name;
   }
 
+  setSerialNumber(serialNumber: string) {
+    this.serialNumber = serialNumber;
+  }
+
+  getSerialNumber(): string {
+    return this.serialNumber;
+  }
+
+  getSWInfo(): string {
+    return this.swInfo;
+  }
+
+  setSWInfo(swInfo: string) {
+    this.swInfo = swInfo;
+  }
+
+  getHWInfo(): string {
+    return this.hwInfo;
+  }
+
+  setHWInfo(hwInfo: string) {
+    this.hwInfo = hwInfo;
+  }
+
   toJSON(): any {
     return {
-      name: this.getName()
+      name: this.getName(),
+      serialNumber: this.getSerialNumber(),
+      swInfo: this.getSWInfo(),
+      hwInfo: this.getHWInfo()
     };
   }
 }

@@ -17,10 +17,6 @@ export class Event extends IDClass implements EventInterface {
   private summary: EventSummaryInterface;
   private logger = Log.create('Event');
 
-  constructor(geodesyAdapter?: GeodesyAdapterInterface) {
-    super();
-  }
-
   setName(name: string) {
     this.name = name;
   }

@@ -25,16 +25,18 @@ import {Summary} from "../../../summary/summary";
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
-    debugger;
     const event = new Event();
 
     const activity = new Activity();
     activity.setType(eventJSONObject.DeviceLog.Header.Activity);
     event.addActivity(activity);
 
-    const creator = new Creator(activity);
+    const creator = new Creator();
     creator.setName(eventJSONObject.DeviceLog.Device.Name);
-    activity.addCreator(creator);
+    creator.setSerialNumber(eventJSONObject.DeviceLog.Device.SerialNumber);
+    creator.setHWInfo(eventJSONObject.DeviceLog.Device.Info.HW);
+    creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);
+    activity.setCreator(creator);
 
     for (const sample of eventJSONObject.DeviceLog.Samples) {
       const point = new Point(new Date(sample.TimeISO8601));
