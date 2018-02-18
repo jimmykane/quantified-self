@@ -28,7 +28,7 @@ export class EventImporterSuuntoJSON {
     const event = new Event();
 
     const activity = new Activity();
-    activity.setType(eventJSONObject.DeviceLog.Header.Activity);
+    activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
     event.addActivity(activity);
 
     const creator = new Creator();
@@ -112,5 +112,18 @@ export class EventImporterSuuntoJSON {
     }
 
     return event;
+  }
+
+  private static getActivityTypeFromID(id: number): string {
+    switch (id) {
+      case 3:
+      {
+        return 'Running';
+      }
+      case 23: {
+        return 'Weight Training'
+      }
+    }
+    return 'Unknown'
   }
 }
