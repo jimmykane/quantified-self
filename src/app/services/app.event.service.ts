@@ -14,7 +14,6 @@ import {EventImporterFIT} from '../entities/events/adapters/importers/importer.f
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
-import {EventSummary} from '../entities/events/event.summary';
 import {EventImporterSuuntoJSON} from '../entities/events/adapters/importers/importer.suunto.json';
 import 'rxjs/add/observable/forkJoin';
 import {ActivityInterface} from '../entities/activities/activity.interface';
@@ -22,6 +21,9 @@ import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
 import {PointInterface} from '../entities/points/point.interface';
 import {Log} from 'ng2-logger';
 import {Summary} from '../entities/summary/summary';
+import {ActivitySummary} from "../entities/activities/activity.summary";
+import {GeoLocationInfo} from "../entities/geo-location-info/app.geo-location-info";
+import {Weather} from "../entities/weather/app.weather";
 
 @Injectable()
 export class EventService {
@@ -109,22 +111,8 @@ export class EventService {
 
   public generateEventSummaries(event: EventInterface): Promise<any> {
     return new Promise(((resolve, reject) => {
-      // Event Summary
-      const eventSummary = new EventSummary();
-      eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
-      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
-      event.setSummary(eventSummary);
 
-      // Activities Summaries
-      for (const activity of event.getActivities()) {
-        const activitySummary = new Summary();
-        activitySummary.setTotalDistanceInMeters(
-          this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
-        );
-        activitySummary.setTotalDurationInSeconds(activity.getSummary().getTotalDurationInSeconds());
-        activity.setSummary(activitySummary);
-      }
-
+      // Lap summaries
       for (const lap of event.getLaps()) {
         const lapSummary = new Summary();
         lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
@@ -132,21 +120,49 @@ export class EventService {
         lap.setSummary(lapSummary);
       }
 
-      // If indoors
-      if (!event.getPointsWithPosition().length) {
-        resolve(true);
-        return;
+      // Activities Summaries
+      const activitiesPromises = [];
+      for (const activity of event.getActivities()) {
+        const activitySummary = new ActivitySummary();
+        activitySummary.setTotalDistanceInMeters(
+          this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
+        );
+        activitySummary.setTotalDurationInSeconds((+activity.getEndDate() - +activity.getStartDate()) / 1000);
+        activity.setSummary(activitySummary);
+
+        // If indoors
+        if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+          continue;
+        }
+
+        activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
+          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
+        ));
+        activitiesPromises.push(this.weatherService.getWeather(
+          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
+        ));
       }
 
-      Observable.forkJoin([
-        this.geoLocationInfoService.getGeoLocationInfo(event), this.weatherService.getWeatherForEvent(event)
-      ]).toPromise().then(results => {
-        if (results[0]) {
-          eventSummary.setGeoLocationInfo(results[0]);
-        }
-        if (results[1]) {
+      // Event Summary
+      const eventSummary = new Summary();
+      eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
+      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
+      event.setSummary(eventSummary);
 
-          eventSummary.setWeather(results[1]);
+      Observable.forkJoin(activitiesPromises).toPromise().then(results => {
+        let index = -1;
+        for (const activity of event.getActivities()) {
+          index++;
+          // If indoors
+          if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+            continue;
+          }
+          if (results[index]) {
+            activity.getSummary().setGeoLocationInfo(<GeoLocationInfo> results[index]);
+          }
+          if (results[index + 1]) {
+            activity.getSummary().setWeather(<Weather> results[index + 1]);
+          }
         }
         resolve(true);
       }).catch(() => {
@@ -172,27 +188,23 @@ export class EventService {
     });
   }
 
-  public getEventDistanceInMeters(
-    event: EventInterface,
-    startDate?: Date,
-    endDate?: Date,
-    step?: number,
-    activities?: ActivityInterface[]
-  ): number {
+  public getEventDistanceInMeters(event: EventInterface,
+                                  startDate?: Date,
+                                  endDate?: Date,
+                                  step?: number,
+                                  activities?: ActivityInterface[]): number {
     if (!event.getPointsWithPosition().length) {
       return 0;
     }
     return this.geodesyAdapter.getDistance(event.getPointsWithPosition(startDate, endDate, step, activities));
   }
 
-  public getEventDataTypeAverage(
-    event: EventInterface,
-    dataType: string,
-    startDate?: Date,
-    endDate?: Date,
-    step?: number,
-    activities?: ActivityInterface[]
-  ): number {
+  public getEventDataTypeAverage(event: EventInterface,
+                                 dataType: string,
+                                 startDate?: Date,
+                                 endDate?: Date,
+                                 step?: number,
+                                 activities?: ActivityInterface[]): number {
     const t0 = performance.now();
     let count = 1;
     const averageForDataType = event.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
@@ -210,16 +222,14 @@ export class EventService {
     return averageForDataType / count;
   }
 
-  public getEventDataTypeGain(
-    event: EventInterface,
-    dataType: string,
-    startDate?: Date,
-    endDate?: Date,
-    step?: number,
-    activities?: ActivityInterface[],
-    precision?: number,
-    minDiff?: number
-  ): number {
+  public getEventDataTypeGain(event: EventInterface,
+                              dataType: string,
+                              startDate?: Date,
+                              endDate?: Date,
+                              step?: number,
+                              activities?: ActivityInterface[],
+                              precision?: number,
+                              minDiff?: number): number {
     const t0 = performance.now();
     precision = precision || 1;
     minDiff = minDiff || 1.5;
@@ -243,16 +253,14 @@ export class EventService {
     return gain;
   }
 
-  public getEventDataTypeLoss(
-    event: EventInterface,
-    dataType: string,
-    startDate?: Date,
-    endDate?: Date,
-    step?: number,
-    activities?: ActivityInterface[],
-    precision?: number,
-    minDiff?: number
-  ): number {
+  public getEventDataTypeLoss(event: EventInterface,
+                              dataType: string,
+                              startDate?: Date,
+                              endDate?: Date,
+                              step?: number,
+                              activities?: ActivityInterface[],
+                              precision?: number,
+                              minDiff?: number): number {
     const t0 = performance.now();
     precision = precision || 1;
     minDiff = minDiff || 1.5;

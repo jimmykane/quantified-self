@@ -1,9 +1,9 @@
-import {EventSummaryInterface} from './event.summary.interface';
 import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
 import {Weather} from '../weather/app.weather';
 import {Summary} from "../summary/summary";
+import {ActivitySummaryInterface} from "./activity.summary.interface";
 
-export class EventSummary extends Summary implements EventSummaryInterface {
+export class ActivitySummary extends Summary implements ActivitySummaryInterface {
 
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;

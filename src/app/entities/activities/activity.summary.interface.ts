@@ -3,7 +3,7 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
 import {SummaryInterface} from "../summary/summary.interface";
 
-export interface EventSummaryInterface extends SummaryInterface {
+export interface ActivitySummaryInterface extends SummaryInterface {
   setGeoLocationInfo(geoLocationInfo: GeoLocationInfo);
   getGeoLocationInfo(): GeoLocationInfo;
 

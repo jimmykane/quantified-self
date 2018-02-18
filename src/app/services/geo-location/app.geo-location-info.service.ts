@@ -6,6 +6,7 @@ import {EventInterface} from '../../entities/events/event.interface';
 import {Observable} from 'rxjs/Observable';
 import 'rxjs/add/observable/fromPromise';
 import 'rxjs/operators/first';
+import {DataPositionInterface} from "../../entities/data/data.position.interface";
 
 declare const google: any;
 
@@ -17,9 +18,8 @@ export class GeoLocationInfoService {
   constructor(private geoLocationInfoLocalStorageService: GeoLocationInfoLocalStorageService, private mapsAPILoader: MapsAPILoader) {
   }
 
-  public getGeoLocationInfo(event: EventInterface): Observable<GeoLocationInfo> {
+  public getGeoLocationInfo(position: DataPositionInterface): Observable<GeoLocationInfo> {
     return Observable.fromPromise(new Promise((resolve, reject) => {
-      const position = event.getPointsWithPosition()[0].getPosition();
       if (this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(','))) {
         return resolve(this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(',')));
       }

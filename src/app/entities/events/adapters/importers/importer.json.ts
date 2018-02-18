@@ -20,12 +20,12 @@ import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataGPSAltitude} from '../../../data/data.gps-altitude';
 import {WeatherItem} from '../../../weather/app.weather.item';
 import {Weather} from '../../../weather/app.weather';
-import {EventSummary} from '../../event.summary';
 import {GeoLocationInfo} from '../../../geo-location-info/app.geo-location-info';
 import {Summary} from '../../../summary/summary';
 import {DataEVPE} from "../../../data/data.evpe";
 import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
 import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
+import {ActivitySummary} from "../../../activities/activity.summary";
 
 export class EventImporterJSON {
 
@@ -34,38 +34,10 @@ export class EventImporterJSON {
     const event = new Event();
     event.setID(eventJSONObject.id);
     event.setName(eventJSONObject.name);
-    event.setSummary(new EventSummary());
+    event.setSummary(new Summary());
 
     event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.totalDistanceInMeters);
     event.getSummary().setTotalDurationInSeconds(eventJSONObject.summary.totalDurationInSeconds);
-
-    if (eventJSONObject.summary.weather) {
-      const weatherItems = [];
-      for (const weatherItemObject of eventJSONObject.summary.weather.weatherItems) {
-        weatherItems.push(
-          new WeatherItem(
-            new Date(weatherItemObject.date),
-            weatherItemObject.conditions,
-            weatherItemObject.temperatureInCelsius
-          )
-        )
-      }
-
-      event.getSummary().setWeather(new Weather(weatherItems));
-    }
-
-    if (eventJSONObject.summary.geoLocationInfo) {
-      event.getSummary().setGeoLocationInfo(
-        new GeoLocationInfo(
-          eventJSONObject.summary.geoLocationInfo.latitude,
-          eventJSONObject.summary.geoLocationInfo.longitude
-        )
-      );
-      event.getSummary().getGeoLocationInfo().city = eventJSONObject.summary.geoLocationInfo.city;
-      event.getSummary().getGeoLocationInfo().country = eventJSONObject.summary.geoLocationInfo.country;
-      event.getSummary().getGeoLocationInfo().province = eventJSONObject.summary.geoLocationInfo.province;
-
-    }
 
     for (const lapObject of eventJSONObject.laps) {
       const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
@@ -82,9 +54,35 @@ export class EventImporterJSON {
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
       activity.setType(activityObject.type);
-      const activitySummary = new Summary();
+      const activitySummary = new ActivitySummary();
       activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
       activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
+      if (activityObject.summary.weather) {
+        const weatherItems = [];
+        for (const weatherItemObject of activityObject.summary.weather.weatherItems) {
+          weatherItems.push(
+            new WeatherItem(
+              new Date(weatherItemObject.date),
+              weatherItemObject.conditions,
+              weatherItemObject.temperatureInCelsius
+            )
+          )
+        }
+        activitySummary.setWeather(new Weather(weatherItems));
+      }
+
+      if (activityObject.summary.geoLocationInfo) {
+        activitySummary.setGeoLocationInfo(
+          new GeoLocationInfo(
+            activityObject.summary.geoLocationInfo.latitude,
+            activityObject.summary.geoLocationInfo.longitude
+          )
+        );
+        activitySummary.getGeoLocationInfo().city = activityObject.summary.geoLocationInfo.city;
+        activitySummary.getGeoLocationInfo().country = activityObject.summary.geoLocationInfo.country;
+        activitySummary.getGeoLocationInfo().province = activityObject.summary.geoLocationInfo.province;
+      }
+
       activity.setSummary(activitySummary);
       event.addActivity(activity);
 

@@ -7,14 +7,14 @@ import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {Log} from 'ng2-logger'
-import {EventSummaryInterface} from "./event.summary.interface";
+import {SummaryInterface} from '../summary/summary.interface';
 
 export class Event extends IDClass implements EventInterface {
 
   private name: string;
   private activities: ActivityInterface[] = [];
   private laps: LapInterface[] = [];
-  private summary: EventSummaryInterface;
+  private summary: SummaryInterface;
   private logger = Log.create('Event');
 
   setName(name: string) {
@@ -110,11 +110,11 @@ export class Event extends IDClass implements EventInterface {
     }, 0);
   }
 
-  setSummary(eventSummary: EventSummaryInterface) {
+  setSummary(eventSummary: SummaryInterface) {
     this.summary = eventSummary;
   }
 
-  getSummary(): EventSummaryInterface {
+  getSummary(): SummaryInterface {
     return this.summary;
   }
 

@@ -7,6 +7,7 @@ import {Weather} from '../../entities/weather/app.weather';
 import {WeatherServiceInterface} from 'app/services/weather/app.weather.service.interface';
 import {map} from 'rxjs/operators'
 import {reject} from "q";
+import {DataPositionInterface} from "../../entities/data/data.position.interface";
 
 @Injectable()
 export class WeatherUndergroundWeatherService implements WeatherServiceInterface {
@@ -17,13 +18,13 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
   constructor(private http: Http) {
   }
 
-  getWeatherForEvent(event: EventInterface): Observable<Weather> {
+  getWeather(position: DataPositionInterface, date: Date): Observable<Weather> {
     return this.http
       .get(
         this.historyApiUrl
-          .replace('{lat}', event.getPointsWithPosition()[0].getPosition().latitudeDegrees.toString())
-          .replace('{lon}', event.getPointsWithPosition()[0].getPosition().longitudeDegrees.toString())
-          .replace('{YYYYMMDD}', event.getFirstActivity().getStartDate().toISOString().slice(0, 10).replace(/-/g, ''))
+          .replace('{lat}', position.latitudeDegrees.toString())
+          .replace('{lon}', position.longitudeDegrees.toString())
+          .replace('{YYYYMMDD}', date.toISOString().slice(0, 10).replace(/-/g, ''))
           .replace('{apiKey}', this.apiKey)
       ).pipe(map((response) => {
         const jsonResponse = JSON.parse(response.text());
@@ -35,10 +36,10 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
           .observations
           .reduce(
             (weatherItems: Map<string, WeatherItem>, observation: any) => {
-              if (Number(observation.date.hour) >= event.getFirstActivity().getStartDate().getHours() &&
-                Number(observation.date.hour) <= event.getLastActivity().getEndDate().getHours() &&
+              if (Number(observation.date.hour) >= date.getHours() &&
+                Number(observation.date.hour) <= date.getHours() &&
                 Number(observation.tempm) !== -9999) {
-                const weatherItemDate = new Date(event.getFirstActivity().getStartDate().getTime());
+                const weatherItemDate = new Date(date.getTime());
                 weatherItemDate.setHours(Number(observation.date.hour));
                 weatherItems.set(weatherItemDate.toISOString(), new WeatherItem(
                   weatherItemDate,
