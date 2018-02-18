@@ -23,6 +23,9 @@ import {Weather} from '../../../weather/app.weather';
 import {EventSummary} from '../../event.summary';
 import {GeoLocationInfo} from '../../../geo-location-info/app.geo-location-info';
 import {Summary} from '../../../summary/summary';
+import {DataEVPE} from "../../../data/data.evpe";
+import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
+import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
 
 export class EventImporterJSON {
 
@@ -109,6 +112,18 @@ export class EventImporterJSON {
             }
             case DataEHPE.type: {
               point.addData(new DataEHPE(dataObject.value));
+              break;
+            }
+            case DataEVPE.type: {
+              point.addData(new DataEVPE(dataObject.value));
+              break;
+            }
+            case DataSatellite5BestSNR.type: {
+              point.addData(new DataSatellite5BestSNR(dataObject.value));
+              break;
+            }
+            case DataNumberOfSatellites.type: {
+              point.addData(new DataNumberOfSatellites(dataObject.value));
               break;
             }
             case DataAbsolutePressure.type: {
