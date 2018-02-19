@@ -88,6 +88,17 @@ export class EventExporterTCX implements EventExporterInterface {
           pointWithoutPosition = point;
           continue;
         }
+        // Go over date that did not have a position and append missing data
+        if (pointWithoutPosition) {
+          pointWithoutPosition.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+            if (!point.getData().get(key)) {
+              dataArray.forEach((data: DataInterface) => {
+                point.addData(data);
+              });
+            }
+          });
+          pointWithoutPosition = void 0;
+        }
 
         const pointElement = document.createElementNS(null, 'Trackpoint');
         trackElement.appendChild(pointElement);
@@ -104,24 +115,12 @@ export class EventExporterTCX implements EventExporterInterface {
         positionElement.appendChild(positionLongitudeDegreesElement);
         pointElement.appendChild(positionElement);
 
-        // Go over date that did not have a position and append missing data
-        if (pointWithoutPosition) {
-          pointWithoutPosition.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-            if (!point.getData().get(key)) {
-              dataArray.forEach((data: DataInterface) => {
-                point.addData(data);
-              });
-            }
-          });
-          pointWithoutPosition = void 0;
-        }
-
         // Go over the Data
         point.getData().forEach((dataArray: DataInterface[], key: string, map) => {
           dataArray.forEach((data: DataInterface) => {
             if ((data instanceof DataAltitude) && !(data instanceof DataGPSAltitude)) {
               const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
-              altitudeElement.textContent = data.getValue().toString();
+              altitudeElement.textContent = data.getValue().toFixed(0).toString();
               pointElement.appendChild(altitudeElement);
             } else if (data instanceof DataCadence) {
               const cadenceElement = document.createElementNS(null, 'Cadence');
@@ -139,7 +138,7 @@ export class EventExporterTCX implements EventExporterInterface {
               extensionsElement.appendChild(tpxElement);
               const speedElement = document.createElementNS(null, 'Speed');
               tpxElement.appendChild(speedElement);
-              speedElement.textContent = data.getValue().toString();
+              speedElement.textContent = data.getValue().toFixed().toString();
               pointElement.appendChild(extensionsElement);
             }
           })
