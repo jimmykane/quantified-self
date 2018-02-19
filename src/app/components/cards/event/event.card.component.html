@@ -13,7 +13,7 @@
       <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
       <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
       in
-      <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'hh:mm:ss' }}</span>
+      <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
       <div *ngFor="let activity of event.getActivities(); let i = index;">
         <span *ngIf=" activity.getCreator().getName()">
           Creator:

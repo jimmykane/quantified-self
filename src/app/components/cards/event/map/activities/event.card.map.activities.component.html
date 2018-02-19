@@ -6,7 +6,7 @@
     {{ activity.getSummary().getTotalDurationInSeconds() | amDuration:'seconds' }}
     at
     <span *ngIf="activity.getType() === 'running' || activity.getType() === 'Running'">
-      {{ (activity.getSummary().getTotalDurationInSeconds() * 1000) / (activity.getSummary().getTotalDistanceInMeters() / 1000) || 0 | amUtc | amDateFormat: 'mm:ss' }} km/h
+      {{ (activity.getSummary().getTotalDurationInSeconds() * 1000) / (activity.getSummary().getTotalDistanceInMeters() / 1000) || 0 | amUtc | amDateFormat: 'HH:mm:ss' }} km/h
     </span>
     <span *ngIf="activity.getType() === 'Biking'">
         {{ (activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} km/h
