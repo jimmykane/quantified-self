@@ -8,6 +8,7 @@ import {Lap} from '../../../laps/lap';
 import {EventInterface} from "../../event.interface";
 import {DataInterface} from "../../../data/data.interface";
 import {DataGPSAltitude} from "../../../data/data.gps-altitude";
+import {PointInterface} from "../../../points/point.interface";
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -80,23 +81,39 @@ export class EventExporterTCX implements EventExporterInterface {
       const trackElement = document.createElementNS(null, 'Track');
       lapElement.appendChild(trackElement);
 
-      // Go over the points
+      // Go over the points and find the ones without position
+      let pointWithoutPosition: PointInterface;
       for (const point of activity.getPoints()) {
+        if (!point.getPosition()) {
+          pointWithoutPosition = point;
+          continue;
+        }
+
         const pointElement = document.createElementNS(null, 'Trackpoint');
         trackElement.appendChild(pointElement);
         const timeElement = document.createElementNS(null, 'Time');
         timeElement.textContent = point.getDate().toISOString().substring(0, 19) + 'Z';
         pointElement.appendChild(timeElement);
 
-        if (point.getPosition()) {
-          const positionElement = document.createElementNS(null, 'Position');
-          const positionLatitudeDegreesElement = document.createElementNS(null, 'LatitudeDegrees');
-          positionLatitudeDegreesElement.textContent = point.getPosition().latitudeDegrees.toString();
-          const positionLongitudeDegreesElement = document.createElementNS(null, 'LongitudeDegrees');
-          positionLongitudeDegreesElement.textContent = point.getPosition().longitudeDegrees.toString();
-          positionElement.appendChild(positionLatitudeDegreesElement);
-          positionElement.appendChild(positionLongitudeDegreesElement);
-          pointElement.appendChild(positionElement);
+        const positionElement = document.createElementNS(null, 'Position');
+        const positionLatitudeDegreesElement = document.createElementNS(null, 'LatitudeDegrees');
+        positionLatitudeDegreesElement.textContent = point.getPosition().latitudeDegrees.toString();
+        const positionLongitudeDegreesElement = document.createElementNS(null, 'LongitudeDegrees');
+        positionLongitudeDegreesElement.textContent = point.getPosition().longitudeDegrees.toString();
+        positionElement.appendChild(positionLatitudeDegreesElement);
+        positionElement.appendChild(positionLongitudeDegreesElement);
+        pointElement.appendChild(positionElement);
+
+        // Go over date that did not have a position and append missing data
+        if (pointWithoutPosition) {
+          pointWithoutPosition.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+            if (!point.getData().get(key)) {
+              dataArray.forEach((data: DataInterface) => {
+                point.addData(data);
+              });
+            }
+          });
+          pointWithoutPosition = void 0;
         }
 
         // Go over the Data
@@ -108,7 +125,7 @@ export class EventExporterTCX implements EventExporterInterface {
               pointElement.appendChild(altitudeElement);
             } else if (data instanceof DataCadence) {
               const cadenceElement = document.createElementNS(null, 'Cadence');
-              cadenceElement.textContent = (data.getValue() / 2).toString();
+              cadenceElement.textContent = (data.getValue() / 2).toFixed(0).toString();
               pointElement.appendChild(cadenceElement);
             } else if (data instanceof DataHeartRate) {
               const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
@@ -120,13 +137,13 @@ export class EventExporterTCX implements EventExporterInterface {
               const extensionsElement = document.createElementNS(null, 'Extensions');
               const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
               extensionsElement.appendChild(tpxElement);
-              const speedElement = document.createElement('Speed');
+              const speedElement = document.createElementNS(null, 'Speed');
               tpxElement.appendChild(speedElement);
               speedElement.textContent = data.getValue().toString();
               pointElement.appendChild(extensionsElement);
             }
           })
-        })
+        });
       }
     }
     return '<?xml version="1.0" encoding="UTF-8"?>' + this.xmlSerializer.serializeToString(xmlDocument);

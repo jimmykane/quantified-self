@@ -27,12 +27,14 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
+    debugger;
+
     const activity = new Activity();
     activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
     event.addActivity(activity);
 
     const creator = new Creator();
-    creator.setName(eventJSONObject.DeviceLog.Device.Name);
+    creator.setName(eventJSONObject.DeviceLog.Device.Name); // Should show model
     creator.setSerialNumber(eventJSONObject.DeviceLog.Device.SerialNumber);
     creator.setHWInfo(eventJSONObject.DeviceLog.Device.Info.HW);
     creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);
@@ -110,6 +112,8 @@ export class EventImporterSuuntoJSON {
       event.addLap(lap);
       nextLapStartDate = lap.getEndDate();
     }
+
+    activity.sortPointsByDate();
 
     return event;
   }
