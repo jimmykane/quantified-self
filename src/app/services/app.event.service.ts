@@ -194,7 +194,9 @@ export class EventService {
     if (!event.getPointsWithPosition().length) {
       return 0;
     }
-    return this.geodesyAdapter.getDistance(event.getPointsWithPosition(startDate, endDate, step, activities));
+    return event.getActivities().reduce((distance: number, activity: ActivityInterface) => {
+      return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, void 0, [activity]));
+    }, 0);
   }
 
   public getEventDataTypeAverage(event: EventInterface,
