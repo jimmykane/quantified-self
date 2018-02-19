@@ -46,6 +46,7 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         () => {
+          this.actionButtonService.removeActionButton('mergeEvents');
           this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
             this.eventService.generateEventSummaries(mergedEvent).then((mergedEventWithSummaries: EventInterface) => {
               this.eventService.saveEvent(mergedEvent);
