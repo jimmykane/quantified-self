@@ -193,7 +193,6 @@ export class EventImporterJSON {
         }
       }
     }
-    debugger;
     return event;
   }
 }
