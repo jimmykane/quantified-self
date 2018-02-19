@@ -9,4 +9,44 @@ export interface ActivitySummaryInterface extends SummaryInterface {
 
   setWeather(weather: Weather);
   getWeather(): Weather;
+
+  setMaxAltitudeInMeters(maxAltitudeInMeters: number);
+  getMaxAltitudeInMeters(): number
+
+  setMinAltitudeInMeters(minAltitudeInMeters: number);
+  getMinAltitudeInMeters(): number
+
+  setAscentTimeInSeconds(ascentTimeInSeconds: number);
+  getAscentTimeInSeconds(): number
+
+  setDescentTimeInSeconds(decentTimeInSeconds: number);
+  getDescentTimeInSeconds(): number
+
+  setAscentInMeters(ascentInMeters: number);
+  getAscentInMeters(): number
+
+  setDescentInMeters(decentInMeters: number);
+  getDescentInMeters(): number
+
+  setEPOC(epoc: number);
+  getEPOC(): number
+
+  setEnergyInCal(energy: number);
+  getEnergyInCal(): number
+
+  setFeeling(feeling: number);
+  getFeeling(): number
+
+  setFeeling(feeling: number);
+  getFeeling(): number
+
+  setPauseDurationInSeconds(pauseDurationInSeconds: number);
+  getPauseDurationInSeconds(): number
+
+  setPeakTrainingEffect(peakTrainingEffect: number);
+  getPeakTrainingEffect(): number
+
+  setRecoveryTimeInSeconds(recoveryTimeInSeconds: number);
+  getRecoveryTimeInSeconds(): number
+
 }

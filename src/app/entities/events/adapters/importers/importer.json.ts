@@ -22,10 +22,10 @@ import {WeatherItem} from '../../../weather/app.weather.item';
 import {Weather} from '../../../weather/app.weather';
 import {GeoLocationInfo} from '../../../geo-location-info/app.geo-location-info';
 import {Summary} from '../../../summary/summary';
-import {DataEVPE} from "../../../data/data.evpe";
-import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
-import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
-import {ActivitySummary} from "../../../activities/activity.summary";
+import {DataEVPE} from '../../../data/data.evpe';
+import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
+import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
+import {ActivitySummary} from '../../../activities/activity.summary';
 
 export class EventImporterJSON {
 
@@ -57,6 +57,19 @@ export class EventImporterJSON {
       const activitySummary = new ActivitySummary();
       activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
       activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
+      activitySummary.setMaxAltitudeInMeters(activityObject.summary.maxAltitudeInMeters);
+      activitySummary.setMinAltitudeInMeters(activityObject.summary.minAltitudeInMeters);
+      activitySummary.setAscentTimeInSeconds(activityObject.summary.ascentTimeInSeconds);
+      activitySummary.setDescentTimeInSeconds(activityObject.summary.descentTimeInSeconds);
+      activitySummary.setAscentInMeters(activityObject.summary.ascentInMeters);
+      activitySummary.setDescentInMeters(activityObject.summary.descentInMeters);
+      activitySummary.setEPOC(activityObject.summary.epoc);
+      activitySummary.setEnergyInCal(activityObject.summary.energyInCal);
+      activitySummary.setFeeling(activityObject.summary.feeling);
+      activitySummary.setPeakTrainingEffect(activityObject.summary.peakTrainingEffect);
+      activitySummary.setPauseDurationInSeconds(activityObject.summary.pauseDurationInSeconds);
+      activitySummary.setRecoveryTimeInSeconds(activityObject.summary.recoveryTimeInSeconds);
+
       if (activityObject.summary.weather) {
         const weatherItems = [];
         for (const weatherItemObject of activityObject.summary.weather.weatherItems) {

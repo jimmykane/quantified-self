@@ -21,6 +21,7 @@ import {DataEVPE} from "../../../data/data.evpe";
 import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
 import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
 import {Summary} from "../../../summary/summary";
+import {ActivitySummary} from "../../../activities/activity.summary";
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -29,9 +30,28 @@ export class EventImporterSuuntoJSON {
 
     debugger;
 
+
+    // @todo iterate over activities
     const activity = new Activity();
     activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
+    const activitySummary = new ActivitySummary();
+    activitySummary.setTotalDistanceInMeters(eventJSONObject.DeviceLog.Header.Distance);
+    activitySummary.setTotalDurationInSeconds(eventJSONObject.DeviceLog.Header.Duration);
+    activitySummary.setMaxAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Max);
+    activitySummary.setMinAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Min);
+    activitySummary.setAscentTimeInSeconds(eventJSONObject.DeviceLog.Header.AscentTime);
+    activitySummary.setDescentTimeInSeconds(eventJSONObject.DeviceLog.Header.DescentTime);
+    activitySummary.setAscentInMeters(eventJSONObject.DeviceLog.Header.Ascent);
+    activitySummary.setDescentInMeters(eventJSONObject.DeviceLog.Header.Descent);
+    activitySummary.setEPOC(eventJSONObject.DeviceLog.Header.EPOC);
+    activitySummary.setEnergyInCal(eventJSONObject.DeviceLog.Header.Energy);
+    activitySummary.setFeeling(eventJSONObject.DeviceLog.Header.Feeling);
+    activitySummary.setPeakTrainingEffect(eventJSONObject.DeviceLog.Header.PeakTrainingEffect);
+    activitySummary.setPauseDurationInSeconds(eventJSONObject.DeviceLog.Header.PauseDuration);
+    activitySummary.setRecoveryTimeInSeconds(eventJSONObject.DeviceLog.Header.RecoveryTime);
+    activity.setSummary(activitySummary);
     event.addActivity(activity);
+
 
     const creator = new Creator();
     creator.setName(eventJSONObject.DeviceLog.Device.Name); // Should show model
