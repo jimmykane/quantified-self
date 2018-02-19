@@ -14,7 +14,6 @@
       <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
       in
       <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'hh:mm:ss' }}</span>
-      elsapsed total time
       <div *ngFor="let activity of event.getActivities(); let i = index;">
         <span *ngIf=" activity.getCreator().getName()">
           Creator:
