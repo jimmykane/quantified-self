@@ -1,6 +1,12 @@
 <mat-card>
   <mat-card-header>
-    <!--<div matCardAvatar class="example-header-image"></div>-->
+    <div matCardAvatar>
+      <div class="card-avatar-container">
+         <mat-icon *ngFor="let activity of event.getActivities()">
+          {{ getIconFromActivityType(activity) }}
+        </mat-icon>
+      </div>
+    </div>
     <mat-card-title>
       {{ event.getName() }}
     </mat-card-title>
@@ -19,8 +25,10 @@
           Creator:
           <span class="mat-body-2">{{ activity.getCreator().getName() }} </span>
           <span class="mat-body-2" *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
-          <span class="mat-body-2" *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
-          <span class="mat-body-2" *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
+          <span class="mat-body-2"
+                *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
+          <span class="mat-body-2"
+                *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
         </span>
       </div>
     </mat-card-subtitle>

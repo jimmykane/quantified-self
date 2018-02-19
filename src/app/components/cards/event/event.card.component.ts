@@ -2,6 +2,7 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy,
 import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
+import {ActivityInterface} from "../../../entities/activities/activity.interface";
 
 
 @Component({
@@ -17,7 +18,8 @@ export class EventCardComponent implements OnInit, OnDestroy {
 
   private parametersSubscription: Subscription;
 
-  constructor(private route: ActivatedRoute, private router: Router, private changeDetectorRef: ChangeDetectorRef) {}
+  constructor(private route: ActivatedRoute, private router: Router, private changeDetectorRef: ChangeDetectorRef) {
+  }
 
   selectedTabIndexChange(index) {
     this.router.navigate(['/dashboard'], {queryParams: {eventID: this.event.getID(), tabIndex: index}});
@@ -32,5 +34,22 @@ export class EventCardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.parametersSubscription.unsubscribe();
+  }
+
+  getIconFromActivityType(activity: ActivityInterface): string {
+    // @todo optimize
+    if (activity.getType().toLocaleLowerCase().includes('running')) {
+      return 'directions_run';
+    }
+    if (activity.getType().toLocaleLowerCase().includes('biking')) {
+      return 'directions_bike';
+    }
+    if (activity.getType().toLocaleLowerCase().includes('cycling')) {
+      return 'directions_bike';
+    }
+    if (activity.getType().toLocaleLowerCase().includes('swimming')) {
+      return 'pool';
+    }
+
   }
 }

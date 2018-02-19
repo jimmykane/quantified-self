@@ -1,10 +1,6 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {EventInterface} from '../../../entities/events/event.interface';
-import {Subscription} from 'rxjs/Subscription';
-import {ActivatedRoute, Params, Router} from '@angular/router';
-import {GeoLocationInfoService} from '../../../services/geo-location/app.geo-location-info.service';
-import {GeoLocationInfo} from '../../../entities/geo-location-info/app.geo-location-info';
-import {Log, Level} from 'ng2-logger'
+import {ActivityInterface} from '../../../entities/activities/activity.interface';
 
 
 @Component({
@@ -17,4 +13,21 @@ import {Log, Level} from 'ng2-logger'
 export class EventCardSmallComponent {
   @Input() event: EventInterface;
   @Input() classActive: boolean;
+
+  getIconFromActivityType(activity: ActivityInterface): string {
+    // @todo optimize
+    if (activity.getType().toLocaleLowerCase().includes('running')) {
+      return 'directions_run';
+    }
+    if (activity.getType().toLocaleLowerCase().includes('biking')) {
+      return 'directions_bike';
+    }
+    if (activity.getType().toLocaleLowerCase().includes('cycling')) {
+      return 'directions_bike';
+    }
+    if (activity.getType().toLocaleLowerCase().includes('swimming')) {
+      return 'pool';
+    }
+  }
+
 }

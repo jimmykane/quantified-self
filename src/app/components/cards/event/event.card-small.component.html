@@ -2,10 +2,9 @@
   <mat-card-header>
     <div matCardAvatar>
       <div class="card-avatar-container">
-        <mat-icon>star_border</mat-icon>
-        <mat-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'running'" >directions_run</mat-icon>
-        <mat-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'biking'" >directions_bike</mat-icon>
-        <mat-icon class="" *ngIf="event.getFirstActivity().getType() && event.getFirstActivity().getType().toLowerCase() === 'swimming'" >pool</mat-icon>
+        <mat-icon *ngFor="let activity of event.getActivities()">
+          {{ getIconFromActivityType(activity) }}
+        </mat-icon>
       </div>
     </div>
     <mat-card-title>
