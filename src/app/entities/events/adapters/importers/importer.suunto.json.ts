@@ -131,8 +131,8 @@ export class EventImporterSuuntoJSON {
       lap.setType(lapObj.Type);
       lapSummary.setTotalDistanceInMeters(lapObj.Distance);
       lapSummary.setTotalDurationInSeconds(lapObj.Duration);
-      lapSummary.setMaxAltitudeInMeters(lapObj.Altitude.Max);
-      lapSummary.setMinAltitudeInMeters(lapObj.Altitude.Min);
+      lapSummary.setMaxAltitudeInMeters(lapObj.Altitude[0].Max);
+      lapSummary.setMinAltitudeInMeters(lapObj.Altitude[0].Min);
       lapSummary.setAscentTimeInSeconds(lapObj.AscentTime);
       lapSummary.setDescentTimeInSeconds(lapObj.DescentTime);
       lapSummary.setAscentInMeters(lapObj.Ascent);
