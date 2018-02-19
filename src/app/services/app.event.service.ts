@@ -338,6 +338,10 @@ export class EventService {
           mergeEvent.addActivity(activity);
         }
       }
+      const eventSummary = new Summary();
+      eventSummary.setTotalDurationInSeconds(mergeEvent.getTotalDurationInSeconds());
+      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(mergeEvent));
+      mergeEvent.setSummary(eventSummary);
       return resolve(mergeEvent);
     });
   }

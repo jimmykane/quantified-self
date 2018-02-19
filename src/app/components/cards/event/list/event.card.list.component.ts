@@ -48,11 +48,9 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
           this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
-            this.eventService.generateEventSummaries(mergedEvent).then((mergedEventWithSummaries: EventInterface) => {
-              this.eventService.saveEvent(mergedEvent);
-              this.actionButtonService.removeActionButton('mergeEvents');
-              this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});
-            });
+            this.eventService.saveEvent(mergedEvent);
+            this.actionButtonService.removeActionButton('mergeEvents');
+            this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});
           })
         },
         'material'
