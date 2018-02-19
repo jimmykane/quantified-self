@@ -12,14 +12,8 @@ export interface LapInterface extends SerializableClassInterface {
   setEndDate(date: Date);
   getEndDate(): Date;
 
-  setCalories(calories: number);
-  getCalories(): number;
-
-  setIntensity(intensity: string);
-  getIntensity(): string;
-
-  setTriggerMethod(triggerMethod: string);
-  getTriggerMethod(): string;
+  setType(type: string);
+  getType(): string;
 
   setSummary(lapSummary: Summary);
   getSummary(): Summary;

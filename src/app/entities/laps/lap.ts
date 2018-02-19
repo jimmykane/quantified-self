@@ -7,9 +7,7 @@ export class Lap implements LapInterface {
   private event: EventInterface;
   private startDate: Date;
   private endDate: Date;
-  private calories: number;
-  private intensity: string;
-  private triggerMethod: string;
+  private type: string;
   private summary: Summary;
 
   constructor(startDate: Date, endDate: Date) {
@@ -38,31 +36,13 @@ export class Lap implements LapInterface {
     return this.endDate;
   }
 
-  setCalories(calories: number) {
-    this.calories = calories;
+  setType(type: string) {
+    this.type = type;
     return this;
   }
 
-  getCalories(): number {
-    return this.calories;
-  }
-
-  setIntensity(intensity: string) {
-    this.intensity = intensity;
-    return this;
-  }
-
-  getIntensity(): string {
-    return this.intensity;
-  }
-
-  setTriggerMethod(triggerMethod: string) {
-    this.triggerMethod = triggerMethod;
-    return this;
-  }
-
-  getTriggerMethod(): string {
-    return this.triggerMethod;
+  getType(): string {
+    return this.type;
   }
 
   setSummary(lapSummary: Summary) {
@@ -77,9 +57,7 @@ export class Lap implements LapInterface {
     return {
       startDate: this.getStartDate(),
       endDate: this.getEndDate(),
-      calories: this.getCalories(),
-      intensity: this.getIntensity(),
-      triggerMethod: this.getTriggerMethod(),
+      type: this.getType(),
       summary: this.getSummary().toJSON(),
     };
   }

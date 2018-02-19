@@ -52,31 +52,15 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
     }
   ];
 
-  public dataTypeGains = [
-    {
-      name: DataAltitude.type,
-      value: null,
-      iconName: 'trending_up',
-      units: 'm',
-      iconType: 'material'
-    }
-  ];
+  public dataTypeGains = [];
 
-  public dataTypeLosses = [
-    {
-      name: DataAltitude.type,
-      value: null,
-      iconName: 'trending_down',
-      units: 'm',
-      iconType: 'material'
-    }
-  ];
+  public dataTypeLosses = [];
 
   constructor(public eventService: EventService) {
 
   }
 
-  ngOnInit(){
+  ngOnInit() {
   }
 
   ngOnChanges() {
@@ -129,7 +113,8 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       this.dataTypeAverages
     );
     if (this.event.getSummary().getTotalDistanceInMeters()) {
-      this.stats.push({
+      this.stats.push(
+        {
           name: 'Pace',
           value: (new Date((this.activity.getSummary().getTotalDurationInSeconds() * 1000) / (this.activity.getSummary().getTotalDistanceInMeters() / 1000)))
             .toISOString().substr(14, 5),
@@ -139,11 +124,26 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         },
         {
           name: 'Speed',
-          value: ((this.event.getSummary().getTotalDistanceInMeters() / 1000) / (this.activity.getSummary().getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
+          value: ((this.activity.getSummary().getTotalDistanceInMeters() / 1000) / (this.activity.getSummary().getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
           iconName: 'directions_bike',
           units: 'km/h',
           iconType: 'material'
-        });
+        },
+        {
+          name: 'Ascent',
+          value: this.activity.getSummary().getAscentInMeters(),
+          iconName: 'trending_up',
+          units: 'm',
+          iconType: 'material'
+        },
+        {
+          name: 'Descent',
+          value: this.activity.getSummary().getDescentInMeters(),
+          iconName: 'trending_down',
+          units: 'm',
+          iconType: 'material'
+        }
+      );
     }
   }
 }

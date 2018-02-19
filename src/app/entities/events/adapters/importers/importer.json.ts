@@ -25,7 +25,6 @@ import {Summary} from '../../../summary/summary';
 import {DataEVPE} from '../../../data/data.evpe';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
-import {ActivitySummary} from '../../../activities/activity.summary';
 
 export class EventImporterJSON {
 
@@ -41,12 +40,22 @@ export class EventImporterJSON {
 
     for (const lapObject of eventJSONObject.laps) {
       const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
-      lap.setCalories(lapObject.calories);
-      lap.setIntensity(lapObject.intensity);
-      lap.setTriggerMethod(lapObject.triggerMethod);
+      lap.setType(lapObject.type);
       const lapSummary = new Summary();
       lapSummary.setTotalDistanceInMeters(lapObject.summary.totalDistanceInMeters);
       lapSummary.setTotalDurationInSeconds(lapObject.summary.totalDurationInSeconds);
+      lapSummary.setMaxAltitudeInMeters(lapObject.summary.maxAltitudeInMeters);
+      lapSummary.setMinAltitudeInMeters(lapObject.summary.minAltitudeInMeters);
+      lapSummary.setAscentTimeInSeconds(lapObject.summary.ascentTimeInSeconds);
+      lapSummary.setDescentTimeInSeconds(lapObject.summary.descentTimeInSeconds);
+      lapSummary.setAscentInMeters(lapObject.summary.ascentInMeters);
+      lapSummary.setDescentInMeters(lapObject.summary.descentInMeters);
+      lapSummary.setEPOC(lapObject.summary.epoc);
+      lapSummary.setEnergyInCal(lapObject.summary.energyInCal);
+      lapSummary.setFeeling(lapObject.summary.feeling);
+      lapSummary.setPeakTrainingEffect(lapObject.summary.peakTrainingEffect);
+      lapSummary.setPauseDurationInSeconds(lapObject.summary.pauseDurationInSeconds);
+      lapSummary.setRecoveryTimeInSeconds(lapObject.summary.recoveryTimeInSeconds);
       lap.setSummary(lapSummary);
       event.addLap(lap);
     }
@@ -54,7 +63,7 @@ export class EventImporterJSON {
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
       activity.setType(activityObject.type);
-      const activitySummary = new ActivitySummary();
+      const activitySummary = new Summary();
       activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
       activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
       activitySummary.setMaxAltitudeInMeters(activityObject.summary.maxAltitudeInMeters);
@@ -184,6 +193,7 @@ export class EventImporterJSON {
         }
       }
     }
+    debugger;
     return event;
   }
 }

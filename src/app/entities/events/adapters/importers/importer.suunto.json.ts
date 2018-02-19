@@ -13,15 +13,14 @@ import {DataSeaLevelPressure} from '../../../data/data.sea-level-pressure';
 import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
-import {DataPower} from "../../../data/data.power";
-import {DataGPSAltitude} from "../../../data/data.gps-altitude";
-import {DataAbsolutePressure} from "../../../data/data.absolute-pressure";
-import {DataEHPE} from "../../../data/data.ehpe";
-import {DataEVPE} from "../../../data/data.evpe";
-import {DataNumberOfSatellites} from "../../../data/data.number-of-satellites";
-import {DataSatellite5BestSNR} from "../../../data/data.satellite-5-best-snr";
-import {Summary} from "../../../summary/summary";
-import {ActivitySummary} from "../../../activities/activity.summary";
+import {DataPower} from '../../../data/data.power';
+import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
+import {DataEHPE} from '../../../data/data.ehpe';
+import {DataEVPE} from '../../../data/data.evpe';
+import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
+import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
+import {Summary} from '../../../summary/summary';
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -30,11 +29,10 @@ export class EventImporterSuuntoJSON {
 
     debugger;
 
-
     // @todo iterate over activities
     const activity = new Activity();
     activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
-    const activitySummary = new ActivitySummary();
+    const activitySummary = new Summary();
     activitySummary.setTotalDistanceInMeters(eventJSONObject.DeviceLog.Header.Distance);
     activitySummary.setTotalDurationInSeconds(eventJSONObject.DeviceLog.Header.Duration);
     activitySummary.setMaxAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Max);
@@ -52,6 +50,11 @@ export class EventImporterSuuntoJSON {
     activity.setSummary(activitySummary);
     event.addActivity(activity);
 
+    const eventSummary = new Summary();
+    eventSummary.setTotalDurationInSeconds(activitySummary.getTotalDurationInSeconds());
+    eventSummary.setTotalDistanceInMeters(activitySummary.getTotalDistanceInMeters());
+
+    event.setSummary(eventSummary);
 
     const creator = new Creator();
     creator.setName(eventJSONObject.DeviceLog.Device.Name); // Should show model
@@ -125,10 +128,22 @@ export class EventImporterSuuntoJSON {
         new Date(lapObj.TimeISO8601)
       );
       const lapSummary = new Summary();
-      lap.setTriggerMethod(lapObj.Type);
-      lap.setCalories(lapObj.Energy);
+      lap.setType(lapObj.Type);
       lapSummary.setTotalDistanceInMeters(lapObj.Distance);
       lapSummary.setTotalDurationInSeconds(lapObj.Duration);
+      lapSummary.setMaxAltitudeInMeters(lapObj.Altitude.Max);
+      lapSummary.setMinAltitudeInMeters(lapObj.Altitude.Min);
+      lapSummary.setAscentTimeInSeconds(lapObj.AscentTime);
+      lapSummary.setDescentTimeInSeconds(lapObj.DescentTime);
+      lapSummary.setAscentInMeters(lapObj.Ascent);
+      lapSummary.setDescentInMeters(lapObj.Descent);
+      lapSummary.setEPOC(lapObj.EPOC);
+      lapSummary.setEnergyInCal(lapObj.Energy);
+      lapSummary.setFeeling(lapObj.Feeling);
+      lapSummary.setPeakTrainingEffect(lapObj.PeakTrainingEffect);
+      lapSummary.setPauseDurationInSeconds(lapObj.PauseDuration);
+      lapSummary.setRecoveryTimeInSeconds(lapObj.RecoveryTime);
+      lap.setSummary(lapSummary);
       event.addLap(lap);
       nextLapStartDate = lap.getEndDate();
     }

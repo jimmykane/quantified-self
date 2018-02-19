@@ -48,14 +48,14 @@ export class EventImporterTCX {
         ));
         event.addLap(lap);
 
-        if (lapElement.getElementsByTagName('Calories')[0]) {
-          lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));
-        }
-        if (lapElement.getElementsByTagName('Intensity')[0]) {
-          lap.setIntensity(lapElement.getElementsByTagName('Intensity')[0].textContent);
-        }
+        // if (lapElement.getElementsByTagName('Calories')[0]) {
+        //   lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));
+        // }
+        // if (lapElement.getElementsByTagName('Intensity')[0]) {
+        //   lap.setIntensity(lapElement.getElementsByTagName('Intensity')[0].textContent);
+        // }
         if (lapElement.getElementsByTagName('TriggerMethod')[0]) {
-          lap.setTriggerMethod(lapElement.getElementsByTagName('TriggerMethod')[0].textContent);
+          lap.setType(lapElement.getElementsByTagName('TriggerMethod')[0].textContent);
         }
 
         // Go over the points and append them to the track

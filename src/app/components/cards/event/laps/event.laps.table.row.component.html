@@ -3,4 +3,4 @@
 <td>{{ lap.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</td>
 <td>{{ lap.getStartDate() | date:'mediumTime' }}</td>
 <td>{{ lap.getEndDate() | date:'mediumTime' }}</td>
-<td>{{ lap.getTriggerMethod() }}</td>
+<td>{{ lap.getType() }}</td>

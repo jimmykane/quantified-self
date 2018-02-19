@@ -21,9 +21,8 @@ import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
 import {PointInterface} from '../entities/points/point.interface';
 import {Log} from 'ng2-logger';
 import {Summary} from '../entities/summary/summary';
-import {ActivitySummary} from "../entities/activities/activity.summary";
-import {GeoLocationInfo} from "../entities/geo-location-info/app.geo-location-info";
-import {Weather} from "../entities/weather/app.weather";
+import {GeoLocationInfo} from '../entities/geo-location-info/app.geo-location-info';
+import {Weather} from '../entities/weather/app.weather';
 
 @Injectable()
 export class EventService {
@@ -107,6 +106,48 @@ export class EventService {
     });
   }
 
+  public generateGeoAndWeather(event: EventInterface): Promise<EventInterface> {
+    // @todo refactor this poc
+    return new Promise(((resolve, reject) => {
+      // Activities Summaries
+      const activitiesPromises = [];
+      for (const activity of event.getActivities()) {
+        const activitySummary = event.getSummary() || new Summary();
+        if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+          continue;
+        }
+
+        activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
+          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
+        ));
+        activitiesPromises.push(this.weatherService.getWeather(
+          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
+        ));
+      }
+
+      Observable.forkJoin(activitiesPromises).toPromise().then(results => {
+        let index = 0;
+        for (const activity of event.getActivities()) {
+          // If indoors
+          if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+            index += 2;
+            continue;
+          }
+          if (results[index]) {
+            activity.getSummary().setGeoLocationInfo(<GeoLocationInfo> results[index]);
+          }
+          if (results[index + 1]) {
+            activity.getSummary().setWeather(<Weather> results[index + 1]);
+          }
+          index += 2;
+        }
+        resolve(event);
+      }).catch(() => {
+        resolve(event);
+      });
+    }));
+  }
+
   public generateEventSummaries(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
       // Lap summaries
@@ -120,7 +161,7 @@ export class EventService {
       // Activities Summaries
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
-        const activitySummary = new ActivitySummary();
+        const activitySummary = new Summary();
         activitySummary.setTotalDistanceInMeters(
           this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
         );

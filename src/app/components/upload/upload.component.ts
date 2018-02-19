@@ -40,8 +40,8 @@ export class UploadComponent {
             .createEventFromSuuntoJSONString(fileReader.result)
             .then((newEvent: EventInterface) => {
               newEvent.setName(name);
-              this.eventService.generateEventSummaries(newEvent).then((newEventWithSummaries: EventInterface) => {
-                this.eventService.saveEvent(newEventWithSummaries);
+              this.eventService.generateGeoAndWeather(newEvent).then(() => {
+                this.eventService.saveEvent(newEvent);
               });
             })
             .catch((error) => {
