@@ -47,9 +47,11 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
         'compare_arrows',
         () => {
           this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
-            this.eventService.addEvents([mergedEvent]);
-            this.actionButtonService.removeActionButton('mergeEvents');
-            this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});
+            this.eventService.generateEventSummaries(mergedEvent).then((mergedEventWithSummaries: EventInterface) => {
+              this.eventService.saveEvent(mergedEvent);
+              this.actionButtonService.removeActionButton('mergeEvents');
+              this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});
+            });
           })
         },
         'material'
@@ -70,7 +72,7 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
       return 2;
     } else if (width < 1300) {
       return 3;
-    }else {
+    } else {
       return 4;
     }
   }

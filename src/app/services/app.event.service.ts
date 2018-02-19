@@ -60,10 +60,8 @@ export class EventService {
   }
 
   public saveEvent(event: EventInterface) {
-    this.generateEventSummaries(event).then(() => {
-      this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
-        this.events.next(this.events.getValue().push(event));
-      });
+    this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
+      this.events.next(this.events.getValue().push(event));
     });
   }
 
@@ -109,7 +107,7 @@ export class EventService {
     });
   }
 
-  public generateEventSummaries(event: EventInterface): Promise<any> {
+  public generateEventSummaries(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
       // Lap summaries
       for (const lap of event.getLaps()) {
@@ -164,9 +162,9 @@ export class EventService {
           }
           index += 2;
         }
-        resolve(true);
+        resolve(event);
       }).catch(() => {
-        resolve(true);
+        resolve(event);
       });
     }));
   }

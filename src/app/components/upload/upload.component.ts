@@ -26,7 +26,9 @@ export class UploadComponent {
             .createEventFromXMLString(fileReader.result)
             .then((newEvent: EventInterface) => {
               newEvent.setName(name);
-              this.eventService.saveEvent(newEvent);
+              this.eventService.generateEventSummaries(newEvent).then((newEventWithSummaries: EventInterface) => {
+                this.eventService.saveEvent(newEventWithSummaries);
+              });
             })
             .catch((error) => {
               console.error('Could not load event from file' + input.files[index].name, error);
@@ -38,7 +40,9 @@ export class UploadComponent {
             .createEventFromSuuntoJSONString(fileReader.result)
             .then((newEvent: EventInterface) => {
               newEvent.setName(name);
-              this.eventService.saveEvent(newEvent);
+              this.eventService.generateEventSummaries(newEvent).then((newEventWithSummaries: EventInterface) => {
+                this.eventService.saveEvent(newEventWithSummaries);
+              });
             })
             .catch((error) => {
               console.error('Could not load event from file' + input.files[index].name, error);
@@ -59,7 +63,9 @@ export class UploadComponent {
         .createEventFromJSONFITString(fileReader.result)
         .then((newEvent: EventInterface) => {
           newEvent.setName(file.name.split('.')[0].slice(0, 20));
-          this.eventService.saveEvent(newEvent);
+          this.eventService.generateEventSummaries(newEvent).then((newEventWithSummaries: EventInterface) => {
+            this.eventService.saveEvent(newEventWithSummaries);
+          });
         })
         .catch((error) => {
           console.error('Could not load event from file' + file.name, error);
