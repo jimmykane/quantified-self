@@ -127,6 +127,9 @@ export class EventImporterSuuntoJSON {
       case 23: {
         return 'Weight Training'
       }
+      case 82: {
+        return 'Trail Running'
+      }
     }
     return 'Unknown'
   }
