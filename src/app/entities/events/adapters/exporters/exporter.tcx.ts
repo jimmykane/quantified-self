@@ -48,7 +48,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // Set the sport @todo should map them to Garmin accepted ones
       // For now it's forced to Running
-      activityElement.setAttribute('Sport', '');
+      activityElement.setAttribute('Sport', 'Running');
 
       // Add an ID element
       const idElement = document.createElementNS(null, 'Id');
