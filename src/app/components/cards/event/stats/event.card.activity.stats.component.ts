@@ -154,6 +154,13 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         units: null,
         iconType: null
       },
+      {
+        name: 'PTE',
+        value: this.activity.getSummary().getPeakTrainingEffect(),
+        iconName: null,
+        units: null,
+        iconType: null
+      },
     );
   }
 }
