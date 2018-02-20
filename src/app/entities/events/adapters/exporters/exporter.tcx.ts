@@ -5,10 +5,10 @@ import {DataCadence} from '../../../data/data.cadence';
 import {DataHeartRate} from '../../../data/data.heart-rate';
 import {DataSpeed} from '../../../data/data.speed';
 import {Lap} from '../../../laps/lap';
-import {EventInterface} from "../../event.interface";
-import {DataInterface} from "../../../data/data.interface";
-import {DataGPSAltitude} from "../../../data/data.gps-altitude";
-import {PointInterface} from "../../../points/point.interface";
+import {EventInterface} from '../../event.interface';
+import {DataInterface} from '../../../data/data.interface';
+import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {PointInterface} from '../../../points/point.interface';
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -26,12 +26,11 @@ export class EventExporterTCX implements EventExporterInterface {
     // Create the TrainingCenterDatabase Element
     const trainingCenterDatabaseElement = document.createElementNS(null, 'TrainingCenterDatabase');
     trainingCenterDatabaseElement.setAttribute('xsi:schemaLocation', 'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd');
-    trainingCenterDatabaseElement.setAttribute('xmlns:xsd', 'http://www.w3.org/2001/XMLSchema');
-    trainingCenterDatabaseElement.setAttribute('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
-    trainingCenterDatabaseElement.setAttribute('xmlns', 'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2');
-    trainingCenterDatabaseElement.setAttribute('xmlns:ns2', 'http://www.garmin.com/xmlschemas/UserProfile/v2');
-    trainingCenterDatabaseElement.setAttribute('xmlns:ns3', 'http://www.garmin.com/xmlschemas/ActivityExtension/v2');
     trainingCenterDatabaseElement.setAttribute('xmlns:ns5', 'http://www.garmin.com/xmlschemas/ActivityGoals/v1');
+    trainingCenterDatabaseElement.setAttribute('xmlns:ns3', 'http://www.garmin.com/xmlschemas/ActivityExtension/v2');
+    trainingCenterDatabaseElement.setAttribute('xmlns:ns2', 'http://www.garmin.com/xmlschemas/UserProfile/v2');
+    trainingCenterDatabaseElement.setAttribute('xmlns', 'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2');
+    trainingCenterDatabaseElement.setAttribute('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
 
     // Append it to the xmlDocument
     xmlDocument.appendChild(trainingCenterDatabaseElement);
@@ -47,8 +46,9 @@ export class EventExporterTCX implements EventExporterInterface {
       const activityElement = document.createElementNS(null, 'Activity');
       activitiesElement.appendChild(activityElement);
 
-      // Set the sport
-      activityElement.setAttribute('Sport', activity.getType());
+      // Set the sport @todo should map them to Garmin accepted ones
+      // For now it's forced to Running
+      activityElement.setAttribute('Sport', '');
 
       // Add an ID element
       const idElement = document.createElementNS(null, 'Id');
@@ -57,7 +57,8 @@ export class EventExporterTCX implements EventExporterInterface {
 
 
       // Create the element
-      const creatorElement = document.createElementNS(null, 'Creator');
+      const creatorElement = document.createElementNS(null, 'Creator'); // @todo should output the correct creator
+      creatorElement.setAttribute('xsi:type', 'Device_t');
       const nameElement = document.createElementNS(null, 'Name');
       nameElement.textContent = activity.getCreator().getName();
       creatorElement.appendChild(nameElement);
@@ -116,34 +117,49 @@ export class EventExporterTCX implements EventExporterInterface {
         positionElement.appendChild(positionLongitudeDegreesElement);
         pointElement.appendChild(positionElement);
 
+
         // Go over the Data
+
+
+        const extensionsElement = document.createElementNS(null, 'Extensions');
+        const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
+        extensionsElement.appendChild(tpxElement);
+        pointElement.appendChild(extensionsElement);
+
         point.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-          dataArray.forEach((data: DataInterface) => {
-            if ((data instanceof DataAltitude) && !(data instanceof DataGPSAltitude)) {
-              const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
-              altitudeElement.textContent = data.getValue().toFixed(0).toString();
-              pointElement.appendChild(altitudeElement);
-            } else if (data instanceof DataCadence) {
-              const cadenceElement = document.createElementNS(null, 'Cadence');
-              cadenceElement.textContent = (data.getValue() / 2).toFixed(0).toString();
-              pointElement.appendChild(cadenceElement);
-            } else if (data instanceof DataHeartRate) {
-              const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
-              const heartRateValueElement = document.createElementNS(null, 'Value');
-              heartRateValueElement.textContent = data.getValue().toFixed(0).toString();
-              heartRateElement.appendChild(heartRateValueElement);
-              pointElement.appendChild(heartRateElement);
-            } else if (data instanceof DataSpeed) {
-              const extensionsElement = document.createElementNS(null, 'Extensions');
-              const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
-              extensionsElement.appendChild(tpxElement);
-              const speedElement = document.createElementNS(null, 'Speed');
-              tpxElement.appendChild(speedElement);
+          const data = dataArray[0];
+          if ((data instanceof DataAltitude) && !(data instanceof DataGPSAltitude)) {
+            const altitudeElement = document.createElementNS(null, 'AltitudeMeters');
+            altitudeElement.textContent = data.getValue().toFixed(0).toString();
+            pointElement.appendChild(altitudeElement);
+          } else if (data instanceof DataHeartRate) {
+            const heartRateElement = document.createElementNS(null, 'HeartRateBpm');
+            const heartRateValueElement = document.createElementNS(null, 'Value');
+            heartRateValueElement.textContent = data.getValue().toFixed(0).toString();
+            heartRateElement.appendChild(heartRateValueElement);
+            pointElement.appendChild(heartRateElement);
+          } else if (data instanceof DataSpeed || data instanceof DataCadence) {
+            if (data instanceof DataSpeed) {
+              const speedElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'Speed');
               speedElement.textContent = data.getValue().toFixed().toString();
-              pointElement.appendChild(extensionsElement);
+              tpxElement.appendChild(speedElement);
             }
-          })
+            if (data instanceof DataCadence) {
+              const cadenceElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'RunCadence');
+              const cadenceElementNoNS = document.createElementNS(null, 'Cadence');
+              cadenceElement.textContent = (data.getValue() / 2).toFixed(0).toString();
+              cadenceElementNoNS.textContent = (data.getValue() / 2).toFixed(0).toString();
+              tpxElement.appendChild(cadenceElement);
+              // Apend a normal and an extension one
+              pointElement.appendChild(cadenceElementNoNS);
+            }
+
+          }
+
+
         });
+
+
       }
     }
     return '<?xml version="1.0" encoding="UTF-8"?>' + this.xmlSerializer.serializeToString(xmlDocument);
@@ -156,10 +172,5 @@ export class EventExporterTCX implements EventExporterInterface {
 
   getFileType(): string {
     return this.fileType;
-  }
-
-
-  private getPointsAsXMLElements() {
-
   }
 }
