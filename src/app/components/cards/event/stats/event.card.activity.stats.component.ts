@@ -94,56 +94,59 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
 
     this.stats = this.dataTypeGains.concat(
       this.dataTypeLosses,
-      [
-        {
-          name: 'Distance',
-          value: (this.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(2),
-          iconName: 'arrows-h',
-          units: 'km',
-          iconType: 'fontAwesome'
-        },
-        {
-          name: 'Time',
-          value: (new Date(this.activity.getSummary().getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
-          iconName: 'clock-o',
-          units: '',
-          iconType: 'fontAwesome'
-        },
-      ],
       this.dataTypeAverages
     );
-    if (this.event.getSummary().getTotalDistanceInMeters()) {
-      this.stats.push(
-        {
-          name: 'Pace',
-          value: (new Date((this.activity.getSummary().getTotalDurationInSeconds() * 1000) / (this.activity.getSummary().getTotalDistanceInMeters() / 1000)))
-            .toISOString().substr(14, 5),
-          iconName: 'directions_run',
-          units: 'm/km',
-          iconType: 'material'
-        },
-        {
-          name: 'Speed',
-          value: ((this.activity.getSummary().getTotalDistanceInMeters() / 1000) / (this.activity.getSummary().getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
-          iconName: 'directions_bike',
-          units: 'km/h',
-          iconType: 'material'
-        },
-        {
-          name: 'Ascent',
-          value: this.activity.getSummary().getAscentInMeters(),
-          iconName: 'trending_up',
-          units: 'm',
-          iconType: 'material'
-        },
-        {
-          name: 'Descent',
-          value: this.activity.getSummary().getDescentInMeters(),
-          iconName: 'trending_down',
-          units: 'm',
-          iconType: 'material'
-        }
-      );
-    }
+    this.stats.push(
+      {
+        name: 'Distance',
+        value: (this.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(2),
+        iconName: 'arrows-h',
+        units: 'km',
+        iconType: 'fontAwesome'
+      },
+      {
+        name: 'Time',
+        value: (new Date(this.activity.getSummary().getTotalDurationInSeconds() * 1000)).toISOString().substr(11, 8),
+        iconName: 'clock-o',
+        units: '',
+        iconType: 'fontAwesome'
+      },
+      {
+        name: 'Pace',
+        value: (new Date((this.activity.getSummary().getTotalDurationInSeconds() * 1000) / (this.activity.getSummary().getTotalDistanceInMeters() / 1000)))
+          .toISOString().substr(14, 5),
+        iconName: 'directions_run',
+        units: 'm/km',
+        iconType: 'material'
+      },
+      {
+        name: 'Speed',
+        value: ((this.activity.getSummary().getTotalDistanceInMeters() / 1000) / (this.activity.getSummary().getTotalDurationInSeconds() / 60 / 60)).toFixed(1),
+        iconName: 'directions_bike',
+        units: 'km/h',
+        iconType: 'material'
+      },
+      {
+        name: 'Ascent',
+        value: this.activity.getSummary().getAscentInMeters(),
+        iconName: 'trending_up',
+        units: 'm',
+        iconType: 'material'
+      },
+      {
+        name: 'Descent',
+        value: this.activity.getSummary().getDescentInMeters(),
+        iconName: 'trending_down',
+        units: 'm',
+        iconType: 'material'
+      },
+      {
+        name: 'Recovery Time',
+        value: (new Date(this.activity.getSummary().getRecoveryTimeInSeconds() * 1000)).getHours(),
+        iconName: 'restore',
+        units: '',
+        iconType: ' hours'
+      },
+    );
   }
 }
