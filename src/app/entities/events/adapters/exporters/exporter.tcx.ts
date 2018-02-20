@@ -57,14 +57,14 @@ export class EventExporterTCX implements EventExporterInterface {
 
 
       // Create the element
-      const creatorElement = document.createElementNS(null, 'Creator'); // @todo should output the correct creator
-      creatorElement.setAttribute('xsi:type', 'Device_t');
-      const nameElement = document.createElementNS(null, 'Name');
-      nameElement.textContent = activity.getCreator().getName();
-      creatorElement.appendChild(nameElement);
+      // const creatorElement = document.createElementNS(null, 'Creator'); // @todo should output the correct creator
+      // creatorElement.setAttribute('xsi:type', 'Device_t');
+      // const nameElement = document.createElementNS(null, 'Name');
+      // nameElement.textContent = activity.getCreator().getName();
+      // creatorElement.appendChild(nameElement);
 
       // Add it to the activities
-      activityElement.appendChild(creatorElement);
+      // activityElement.appendChild(creatorElement);
 
       // Create a lap element
       const lapElement = document.createElementNS(null, 'Lap');
