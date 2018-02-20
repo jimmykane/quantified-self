@@ -144,8 +144,15 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         name: 'Recovery Time',
         value: (new Date(this.activity.getSummary().getRecoveryTimeInSeconds() * 1000)).getHours(),
         iconName: 'restore',
-        units: '',
-        iconType: ' hours'
+        units: 'hours',
+        iconType: 'material'
+      },
+      {
+        name: 'EPOC',
+        value: this.activity.getSummary().getEPOC(),
+        iconName: null,
+        units: null,
+        iconType: null
       },
     );
   }
