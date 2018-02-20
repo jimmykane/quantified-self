@@ -25,6 +25,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
     // Create the TrainingCenterDatabase Element
     const trainingCenterDatabaseElement = document.createElementNS(null, 'TrainingCenterDatabase');
+    trainingCenterDatabaseElement.setAttribute('xsi:schemaLocation', 'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2 http://www.garmin.com/xmlschemas/TrainingCenterDatabasev2.xsd');
     trainingCenterDatabaseElement.setAttribute('xmlns:xsd', 'http://www.w3.org/2001/XMLSchema');
     trainingCenterDatabaseElement.setAttribute('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance');
     trainingCenterDatabaseElement.setAttribute('xmlns', 'http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2');
