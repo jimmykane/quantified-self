@@ -142,7 +142,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Recovery Time',
-        value: (new Date(this.activity.getSummary().getRecoveryTimeInSeconds() * 1000)).getHours(),
+        value: Math.floor(this.activity.getSummary().getRecoveryTimeInSeconds() / 60 / 60),
         iconName: 'restore',
         units: 'hours',
         iconType: 'material'
@@ -155,8 +155,8 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         iconType: null
       },
       {
-        name: 'PTE',
-        value: this.activity.getSummary().getPeakTrainingEffect(),
+        name: 'KCal',
+        value: this.activity.getSummary().getEnergyInCal().toFixed(0),
         iconName: null,
         units: null,
         iconType: null
