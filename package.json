@@ -1,6 +1,6 @@
 {
   "name": "track-tools",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "scripts": {
     "ng": "ng",
@@ -19,14 +19,14 @@
     "@agm/core": "^1.0.0-beta.2",
     "@amcharts/amcharts3-angular": "^2.0.3",
     "@angular/animations": "^5.2.5",
-    "@angular/cdk": "^5.2.1",
+    "@angular/cdk": "^5.2.2",
     "@angular/common": "^5.2.5",
     "@angular/compiler": "^5.2.5",
     "@angular/compiler-cli": "^5.2.4",
     "@angular/core": "^5.2.5",
     "@angular/forms": "^5.2.5",
     "@angular/http": "^5.2.5",
-    "@angular/material": "^5.2.1",
+    "@angular/material": "^5.2.2",
     "@angular/platform-browser": "^5.2.5",
     "@angular/platform-browser-dynamic": "^5.2.5",
     "@angular/platform-server": "^5.2.5",
@@ -67,7 +67,7 @@
     "karma-jasmine": "~1.1.1",
     "karma-jasmine-html-reporter": "^0.2.2",
     "protractor": "~5.3.0",
-    "ts-node": "~4.1.0",
+    "ts-node": "~5.0.0",
     "tslint": "~5.9.1",
     "typescript": "2.7.2"
   }
