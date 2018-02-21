@@ -42,7 +42,7 @@ export class EventImporterSuuntoJSON {
     activitySummary.setAscentInMeters(eventJSONObject.DeviceLog.Header.Ascent);
     activitySummary.setDescentInMeters(eventJSONObject.DeviceLog.Header.Descent);
     activitySummary.setEPOC(eventJSONObject.DeviceLog.Header.EPOC);
-    activitySummary.setEnergyInCal(eventJSONObject.DeviceLog.Header.Energy *  0.239 / 1000);
+    activitySummary.setEnergyInCal(eventJSONObject.DeviceLog.Header.Energy * 0.239 / 1000);
     activitySummary.setFeeling(eventJSONObject.DeviceLog.Header.Feeling);
     activitySummary.setPeakTrainingEffect(eventJSONObject.DeviceLog.Header.PeakTrainingEffect);
     activitySummary.setPauseDurationInSeconds(eventJSONObject.DeviceLog.Header.PauseDuration);
@@ -150,13 +150,40 @@ export class EventImporterSuuntoJSON {
 
     activity.sortPointsByDate();
 
+    // Go over the IBI
+    const ibiMap = {};
+    let ibiBuffer = [];
+    let lastDate = event.getFirstActivity().getStartDate();
+    for (const ibiInMilliseconds of eventJSONObject.DeviceLog["R-R"].Data) {
+      ibiBuffer.push(ibiInMilliseconds);
+      const ibiBufferTotal = ibiBuffer.reduce((a, b) => a + b, 0);
+      // If adding the ibi to the start of the activity is greater or equal to 3 second then empty the buffer there
+      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 3000) {
+        const average = ibiBuffer.reduce((total, ibi) => {
+          return total + ibi;
+        }) / ibiBuffer.length;
+        ibiMap[lastDate.getTime() + ibiInMilliseconds] = 1000 * 60 / average;
+
+        // Find existing points
+
+        const eventPoints = event.getPoints( new Date(lastDate.getTime()) , new Date(lastDate.getTime() + ibiInMilliseconds));
+        for (const eventPoint of eventPoints) {
+          eventPoint.addData(new DataHeartRate(1000 * 60 / average));
+        }
+
+        ibiBuffer = [];
+        lastDate = new Date(lastDate.getTime() + ibiBufferTotal);
+
+
+      }
+    }
+    debugger;
     return event;
   }
 
   private static getActivityTypeFromID(id: number): string {
     switch (id) {
-      case 3:
-      {
+      case 3: {
         return 'Running';
       }
       case 23: {
