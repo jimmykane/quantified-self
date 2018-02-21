@@ -148,15 +148,22 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         iconType: 'material'
       },
       {
-        name: 'EPOC',
-        value: this.activity.getSummary().getEPOC(),
+        name: 'KCal',
+        value: this.activity.getSummary().getEnergyInCal().toFixed(0),
         iconName: null,
         units: null,
         iconType: null
       },
       {
-        name: 'KCal',
-        value: this.activity.getSummary().getEnergyInCal().toFixed(0),
+        name: 'PTE',
+        value: this.activity.getSummary().getPeakTrainingEffect().toFixed(0),
+        iconName: null,
+        units: null,
+        iconType: null
+      },
+      {
+        name: 'EPOC',
+        value: this.activity.getSummary().getEPOC(),
         iconName: null,
         units: null,
         iconType: null
