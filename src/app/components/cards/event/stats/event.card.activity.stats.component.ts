@@ -128,14 +128,14 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Ascent',
-        value: this.activity.getSummary().getAscentInMeters(),
+        value: this.activity.getSummary().getAscentInMeters().toFixed(0),
         iconName: 'trending_up',
         units: 'm',
         iconType: 'material'
       },
       {
         name: 'Descent',
-        value: this.activity.getSummary().getDescentInMeters(),
+        value: this.activity.getSummary().getDescentInMeters().toFixed(0),
         iconName: 'trending_down',
         units: 'm',
         iconType: 'material'
