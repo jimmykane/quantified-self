@@ -134,11 +134,25 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         iconType: 'material'
       },
       {
+        name: 'Ascent Time',
+        value: new Date(this.activity.getSummary().getAscentTimeInSeconds() * 1000).toISOString().substr(11, 8),
+        iconName: null,
+        units: null,
+        iconType: null
+      },
+      {
         name: 'Descent',
         value: this.activity.getSummary().getDescentInMeters().toFixed(0),
         iconName: 'trending_down',
         units: 'm',
         iconType: 'material'
+      },
+      {
+        name: 'Descent Time',
+        value: new Date(this.activity.getSummary().getDescentTimeInSeconds() * 1000).toISOString().substr(11, 8),
+        iconName: null,
+        units: null,
+        iconType: null
       },
       {
         name: 'Recovery Time',
@@ -156,7 +170,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'PTE',
-        value: this.activity.getSummary().getPeakTrainingEffect().toFixed(0),
+        value: this.activity.getSummary().getPeakTrainingEffect().toFixed(1),
         iconName: null,
         units: null,
         iconType: null
