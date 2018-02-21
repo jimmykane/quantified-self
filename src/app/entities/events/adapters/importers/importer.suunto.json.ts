@@ -42,7 +42,7 @@ export class EventImporterSuuntoJSON {
     activitySummary.setAscentInMeters(eventJSONObject.DeviceLog.Header.Ascent);
     activitySummary.setDescentInMeters(eventJSONObject.DeviceLog.Header.Descent);
     activitySummary.setEPOC(eventJSONObject.DeviceLog.Header.EPOC);
-    activitySummary.setEnergyInCal(eventJSONObject.DeviceLog.Header.Energy);
+    activitySummary.setEnergyInCal(eventJSONObject.DeviceLog.Header.Energy *  0.239 / 1000);
     activitySummary.setFeeling(eventJSONObject.DeviceLog.Header.Feeling);
     activitySummary.setPeakTrainingEffect(eventJSONObject.DeviceLog.Header.PeakTrainingEffect);
     activitySummary.setPauseDurationInSeconds(eventJSONObject.DeviceLog.Header.PauseDuration);
@@ -138,7 +138,7 @@ export class EventImporterSuuntoJSON {
       lapSummary.setAscentInMeters(lapObj.Ascent);
       lapSummary.setDescentInMeters(lapObj.Descent);
       lapSummary.setEPOC(lapObj.EPOC);
-      lapSummary.setEnergyInCal(lapObj.Energy);
+      lapSummary.setEnergyInCal(lapObj.Energy * 0.239 / 1000);
       lapSummary.setFeeling(lapObj.Feeling);
       lapSummary.setPeakTrainingEffect(lapObj.PeakTrainingEffect);
       lapSummary.setPauseDurationInSeconds(lapObj.PauseDuration);
