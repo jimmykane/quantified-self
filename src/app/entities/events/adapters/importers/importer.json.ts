@@ -56,6 +56,7 @@ export class EventImporterJSON {
       lapSummary.setPeakTrainingEffect(lapObject.summary.peakTrainingEffect);
       lapSummary.setPauseDurationInSeconds(lapObject.summary.pauseDurationInSeconds);
       lapSummary.setRecoveryTimeInSeconds(lapObject.summary.recoveryTimeInSeconds);
+      lapSummary.setMaxVO2(lapObject.summary.maxVO2);
       lap.setSummary(lapSummary);
       event.addLap(lap);
     }
@@ -78,6 +79,7 @@ export class EventImporterJSON {
       activitySummary.setPeakTrainingEffect(activityObject.summary.peakTrainingEffect);
       activitySummary.setPauseDurationInSeconds(activityObject.summary.pauseDurationInSeconds);
       activitySummary.setRecoveryTimeInSeconds(activityObject.summary.recoveryTimeInSeconds);
+      activitySummary.setMaxVO2(activityObject.summary.maxVO2);
 
       if (activityObject.summary.weather) {
         const weatherItems = [];

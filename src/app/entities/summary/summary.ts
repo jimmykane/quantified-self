@@ -18,6 +18,7 @@ export class Summary implements SummaryInterface {
   private pauseDurationInSeconds: number;
   private peakTrainingEffect: number;
   private recoveryTimeInSeconds: number;
+  private maxVO2: number;
 
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;
@@ -151,6 +152,15 @@ setGeoLocationInfo(geoLocationInfo: GeoLocationInfo) {
     return this.recoveryTimeInSeconds;
   }
 
+
+  setMaxVO2(maxVO2: number) {
+    this.maxVO2 = maxVO2;
+  }
+
+  getMaxVO2(): number {
+    return this.maxVO2;
+  }
+
   toJSON(): any {
     return {
       totalDurationInSeconds: this.getTotalDurationInSeconds(),
@@ -169,6 +179,7 @@ setGeoLocationInfo(geoLocationInfo: GeoLocationInfo) {
       pauseDurationInSeconds: this.getPauseDurationInSeconds() ,
       peakTrainingEffect: this.getPeakTrainingEffect() ,
       recoveryTimeInSeconds: this.getRecoveryTimeInSeconds() ,
+      maxVO2: this.getMaxVO2(),
     };
   }
 }

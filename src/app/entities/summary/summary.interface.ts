@@ -53,4 +53,7 @@ export interface SummaryInterface extends SerializableClassInterface {
 
   setRecoveryTimeInSeconds(recoveryTimeInSeconds: number);
   getRecoveryTimeInSeconds(): number
+
+  setMaxVO2(maxVO2: number);
+  getMaxVO2(): number
 }

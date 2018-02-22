@@ -47,6 +47,8 @@ export class EventImporterSuuntoJSON {
     activitySummary.setPeakTrainingEffect(eventJSONObject.DeviceLog.Header.PeakTrainingEffect);
     activitySummary.setPauseDurationInSeconds(eventJSONObject.DeviceLog.Header.PauseDuration);
     activitySummary.setRecoveryTimeInSeconds(eventJSONObject.DeviceLog.Header.RecoveryTime);
+    activitySummary.setMaxVO2(eventJSONObject.DeviceLog.Header.MAXVO2);
+
     activity.setSummary(activitySummary);
     event.addActivity(activity);
 
