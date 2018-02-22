@@ -29,7 +29,6 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 export class EventImporterJSON {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
-    debugger;
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
     event.setID(eventJSONObject.id);
@@ -202,7 +201,6 @@ export class EventImporterJSON {
         }
       }
     }
-    debugger;
     return event;
   }
 }
