@@ -1,6 +1,9 @@
 <td>{{ index+1 }}</td>
 <td>{{ (lap.getSummary().getTotalDistanceInMeters()/1000).toFixed(2) }} km</td>
 <td>{{ lap.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</td>
-<td>{{ lap.getStartDate() | date:'mediumTime' }}</td>
+<td>{{ lap.getStartDate() | date:'shortTime' }}</td>
 <td>{{ lap.getEndDate() | date:'mediumTime' }}</td>
 <td>{{ lap.getType() }}</td>
+<td> {{lap.getSummary().getAvgHR().toFixed(0) }} </td>
+<td> {{lap.getSummary().getMaxHR().toFixed(0) }} </td>
+<td> {{lap.getSummary().getMinHR().toFixed(0) }} </td>
