@@ -1,7 +1,5 @@
-import {SerializableClassInterface} from '../serializable/serializable.class.interface';
-import {EventInterface} from '../events/event.interface';
-import {Summary} from '../summary/summary';
+import {SerializableClassInterface} from "../serializable/serializable.class.interface";
 
-export interface IntensityZoneAbstract extends SerializableClassInterface {
+export interface IntensityZone extends SerializableClassInterface {
 
 }
