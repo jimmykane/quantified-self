@@ -152,6 +152,12 @@ export class EventImporterSuuntoJSON {
 
     activity.sortPointsByDate();
 
+    // If no IBI return
+    if (!eventJSONObject.DeviceLog["R-R"] || !eventJSONObject.DeviceLog["R-R"].Data){
+      debugger;
+      return event
+    }
+
     // Go over the IBI
     const ibiMap = {};
     let ibiBuffer = [];
@@ -175,10 +181,9 @@ export class EventImporterSuuntoJSON {
 
         ibiBuffer = [];
         lastDate = new Date(lastDate.getTime() + ibiBufferTotal);
-
-
       }
     }
+
     debugger;
     return event;
   }
