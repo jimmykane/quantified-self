@@ -29,6 +29,7 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 export class EventImporterJSON {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
+    debugger;
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
     event.setID(eventJSONObject.id);
@@ -57,6 +58,9 @@ export class EventImporterJSON {
       lapSummary.setPauseDurationInSeconds(lapObject.summary.pauseDurationInSeconds);
       lapSummary.setRecoveryTimeInSeconds(lapObject.summary.recoveryTimeInSeconds);
       lapSummary.setMaxVO2(lapObject.summary.maxVO2);
+      lapSummary.setAvgHR(lapObject.summary.avgHR);
+      lapSummary.setMaxHR(lapObject.summary.maxHR);
+      lapSummary.setMinHR(lapObject.summary.minHR);
       lap.setSummary(lapSummary);
       event.addLap(lap);
     }
@@ -80,6 +84,9 @@ export class EventImporterJSON {
       activitySummary.setPauseDurationInSeconds(activityObject.summary.pauseDurationInSeconds);
       activitySummary.setRecoveryTimeInSeconds(activityObject.summary.recoveryTimeInSeconds);
       activitySummary.setMaxVO2(activityObject.summary.maxVO2);
+      activitySummary.setAvgHR(activityObject.summary.avgHR);
+      activitySummary.setMaxHR(activityObject.summary.maxHR);
+      activitySummary.setMinHR(activityObject.summary.minHR);
 
       if (activityObject.summary.weather) {
         const weatherItems = [];

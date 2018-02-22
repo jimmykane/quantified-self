@@ -48,6 +48,12 @@ export class EventImporterSuuntoJSON {
     activitySummary.setPauseDurationInSeconds(eventJSONObject.DeviceLog.Header.PauseDuration);
     activitySummary.setRecoveryTimeInSeconds(eventJSONObject.DeviceLog.Header.RecoveryTime);
     activitySummary.setMaxVO2(eventJSONObject.DeviceLog.Header.MAXVO2);
+    if (eventJSONObject.DeviceLog.Header.HR) {
+      debugger;
+      activitySummary.setAvgHR(eventJSONObject.DeviceLog.Header.HR[0].Avg * 60);
+      activitySummary.setMaxHR(eventJSONObject.DeviceLog.Header.HR[0].Max * 60);
+      activitySummary.setMinHR(eventJSONObject.DeviceLog.Header.HR[0].Min * 60);
+    }
 
     activity.setSummary(activitySummary);
     event.addActivity(activity);
@@ -145,6 +151,13 @@ export class EventImporterSuuntoJSON {
       lapSummary.setPeakTrainingEffect(lapObj.PeakTrainingEffect);
       lapSummary.setPauseDurationInSeconds(lapObj.PauseDuration);
       lapSummary.setRecoveryTimeInSeconds(lapObj.RecoveryTime);
+      lapSummary.setMaxVO2(lapObj.MAXVO2);
+      if (lapObj.HR) {
+        debugger
+        lapSummary.setAvgHR(lapObj.HR[0].Avg * 60);
+        lapSummary.setMaxHR(lapObj.HR[0].Max * 60);
+        lapSummary.setMinHR(lapObj.HR[0].Min * 60);
+      }
       lap.setSummary(lapSummary);
       event.addLap(lap);
       nextLapStartDate = lap.getEndDate();
@@ -153,7 +166,7 @@ export class EventImporterSuuntoJSON {
     activity.sortPointsByDate();
 
     // If no IBI return
-    if (!eventJSONObject.DeviceLog["R-R"] || !eventJSONObject.DeviceLog["R-R"].Data){
+    if (!eventJSONObject.DeviceLog["R-R"] || !eventJSONObject.DeviceLog["R-R"].Data) {
       debugger;
       return event
     }
@@ -174,7 +187,7 @@ export class EventImporterSuuntoJSON {
 
         // Find existing points
         // @todo optimize
-        const eventPoints = event.getPoints( new Date(lastDate.getTime()) , new Date(lastDate.getTime() + ibiInMilliseconds));
+        const eventPoints = event.getPoints(new Date(lastDate.getTime()), new Date(lastDate.getTime() + ibiInMilliseconds));
         for (const eventPoint of eventPoints) {
           eventPoint.addData(new DataHeartRate(1000 * 60 / average));
         }

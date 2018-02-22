@@ -56,4 +56,13 @@ export interface SummaryInterface extends SerializableClassInterface {
 
   setMaxVO2(maxVO2: number);
   getMaxVO2(): number
+
+  setAvgHR(avgHR: number);
+  getAvgHR(): number
+
+  setMinHR(minHR: number);
+  getMinHR(): number
+
+  setMaxHR(maxHR: number);
+  getMaxHR(): number
 }

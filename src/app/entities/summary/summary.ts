@@ -19,6 +19,9 @@ export class Summary implements SummaryInterface {
   private peakTrainingEffect: number;
   private recoveryTimeInSeconds: number;
   private maxVO2: number;
+  private avgHR: number;
+  private minHR: number;
+  private maxHR: number;
 
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;
@@ -39,7 +42,7 @@ export class Summary implements SummaryInterface {
     return this.totalDistanceInMeters;
   }
 
-setGeoLocationInfo(geoLocationInfo: GeoLocationInfo) {
+  setGeoLocationInfo(geoLocationInfo: GeoLocationInfo) {
     this.geoLocationInfo = geoLocationInfo;
   }
 
@@ -161,25 +164,53 @@ setGeoLocationInfo(geoLocationInfo: GeoLocationInfo) {
     return this.maxVO2;
   }
 
+
+  setAvgHR(avgHR: number) {
+    this.avgHR = avgHR;
+  }
+
+  getAvgHR(): number {
+    return this.avgHR;
+  }
+
+  setMinHR(minHR: number) {
+    this.minHR = minHR;
+  }
+
+  getMinHR(): number {
+    return this.minHR;
+  }
+
+  setMaxHR(maxHR: number) {
+    this.maxHR = maxHR;
+  }
+
+  getMaxHR(): number {
+    return this.maxHR;
+  }
+
   toJSON(): any {
     return {
       totalDurationInSeconds: this.getTotalDurationInSeconds(),
       totalDistanceInMeters: this.getTotalDistanceInMeters(),
-      geoLocationInfo:  this.getGeoLocationInfo() ? this.getGeoLocationInfo().toJSON() : null,
+      geoLocationInfo: this.getGeoLocationInfo() ? this.getGeoLocationInfo().toJSON() : null,
       weather: this.getWeather() ? this.getWeather().toJSON() : null,
-      maxAltitudeInMeters: this.getMaxAltitudeInMeters() ,
+      maxAltitudeInMeters: this.getMaxAltitudeInMeters(),
       minAltitudeInMeters: this.getMinAltitudeInMeters(),
-      ascentTimeInSeconds: this.getAscentTimeInSeconds() ,
-      descentTimeInSeconds: this.getDescentTimeInSeconds() ,
-      ascentInMeters: this.getAscentInMeters() ,
-      descentInMeters: this.getDescentInMeters() ,
-      epoc: this.getEPOC() ,
-      energyInCal: this.getEnergyInCal() ,
-      feeling: this.getFeeling() ,
-      pauseDurationInSeconds: this.getPauseDurationInSeconds() ,
-      peakTrainingEffect: this.getPeakTrainingEffect() ,
-      recoveryTimeInSeconds: this.getRecoveryTimeInSeconds() ,
+      ascentTimeInSeconds: this.getAscentTimeInSeconds(),
+      descentTimeInSeconds: this.getDescentTimeInSeconds(),
+      ascentInMeters: this.getAscentInMeters(),
+      descentInMeters: this.getDescentInMeters(),
+      epoc: this.getEPOC(),
+      energyInCal: this.getEnergyInCal(),
+      feeling: this.getFeeling(),
+      pauseDurationInSeconds: this.getPauseDurationInSeconds(),
+      peakTrainingEffect: this.getPeakTrainingEffect(),
+      recoveryTimeInSeconds: this.getRecoveryTimeInSeconds(),
       maxVO2: this.getMaxVO2(),
+      minHR: this.getMinHR(),
+      maxHR: this.getMaxHR(),
+      avgHR: this.getAvgHR(),
     };
   }
 }
