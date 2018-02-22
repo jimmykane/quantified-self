@@ -158,14 +158,14 @@ export class EventImporterSuuntoJSON {
       ibiBuffer.push(ibiInMilliseconds);
       const ibiBufferTotal = ibiBuffer.reduce((a, b) => a + b, 0);
       // If adding the ibi to the start of the activity is greater or equal to 3 second then empty the buffer there
-      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 3000) {
+      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 3500) {
         const average = ibiBuffer.reduce((total, ibi) => {
           return total + ibi;
         }) / ibiBuffer.length;
         ibiMap[lastDate.getTime() + ibiInMilliseconds] = 1000 * 60 / average;
 
         // Find existing points
-
+        // @todo optimize
         const eventPoints = event.getPoints( new Date(lastDate.getTime()) , new Date(lastDate.getTime() + ibiInMilliseconds));
         for (const eventPoint of eventPoints) {
           eventPoint.addData(new DataHeartRate(1000 * 60 / average));
