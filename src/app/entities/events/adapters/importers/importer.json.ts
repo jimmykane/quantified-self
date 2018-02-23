@@ -60,6 +60,22 @@ export class EventImporterJSON {
       lapSummary.setAvgHR(lapObject.summary.avgHR);
       lapSummary.setMaxHR(lapObject.summary.maxHR);
       lapSummary.setMinHR(lapObject.summary.minHR);
+      lapSummary.setMinHR(lapObject.summary.minHR);
+      lapSummary.setMinPower(lapObject.summary.minPower);
+      lapSummary.setAvgPower(lapObject.summary.avgPower);
+      lapSummary.setMaxPower(lapObject.summary.maxPower);
+      lapSummary.setMinCadence(lapObject.summary.minCadence);
+      lapSummary.setMaxCadence(lapObject.summary.maxCadence);
+      lapSummary.setAvgCadence(lapObject.summary.avgCadence);
+      lapSummary.setMaxSpeed(lapObject.summary.maxSpeed);
+      lapSummary.setMinSpeed(lapObject.summary.minSpeed);
+      lapSummary.setAvgSpeed(lapObject.summary.avgSpeed);
+      lapSummary.setMinVerticalSpeed(lapObject.summary.minVerticalSpeed);
+      lapSummary.setMaxVerticalSpeed(lapObject.summary.maxVerticalSpeed);
+      lapSummary.setAvgVerticalSpeed(lapObject.summary.avgVerticalSpeed);
+      lapSummary.setMinTemperature(lapObject.summary.minTemperature);
+      lapSummary.setMaxTemperature(lapObject.summary.maxTemperature);
+      lapSummary.setAvgTemperature(lapObject.summary.avgTemperature);
       lap.setSummary(lapSummary);
       event.addLap(lap);
     }
