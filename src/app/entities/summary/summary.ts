@@ -1,4 +1,4 @@
-import {SummaryInterface} from '../summary/summary.interface';
+import {SummaryInterface} from './summary.interface';
 import {Weather} from '../weather/app.weather';
 import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
 
@@ -22,6 +22,21 @@ export class Summary implements SummaryInterface {
   private avgHR: number;
   private minHR: number;
   private maxHR: number;
+  private avgPower: number;
+  private minPower: number;
+  private maxPower: number;
+  private avgTemperature: number;
+  private minTemperature: number;
+  private maxTemperature: number;
+  private avgCadence: number;
+  private minCadence: number;
+  private maxCadence: number;
+  private maxVerticalSpeed: number;
+  private minVerticalSpeed: number;
+  private avgVerticalSpeed: number;
+  private maxSpeed: number;
+  private avgSpeed: number;
+  private minSpeed: number;
 
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;
@@ -189,6 +204,126 @@ export class Summary implements SummaryInterface {
     return this.maxHR;
   }
 
+  setAvgPower(avgPower: number) {
+    this.avgPower = avgPower;
+  }
+
+  getAvgPower(): number {
+    return this.avgPower;
+  }
+
+  setMinPower(minPower: number) {
+    this.minPower = minPower;
+  }
+
+  getMinPower(): number {
+    return this.minPower;
+  }
+
+  setMaxPower(maxPower: number) {
+    this.maxPower = maxPower;
+  }
+
+  getMaxPower(): number {
+    return this.maxPower;
+  }
+
+  setAvgTemperature(avgTemperature: number) {
+    this.avgTemperature = avgTemperature;
+  }
+
+  getAvgTemperature(): number {
+    return this.avgTemperature;
+  }
+
+  setMinTemperature(minTemperature: number) {
+    this.minTemperature = minTemperature;
+  }
+
+  getMinTemperature(): number {
+    return this.minTemperature;
+  }
+
+  setMaxTemperature(maxTemperature: number) {
+    this.maxTemperature = maxTemperature;
+  }
+
+  getMaxTemperature(): number {
+    return this.maxTemperature;
+  }
+
+  setAvgCadence(avgCadence: number) {
+    this.avgCadence = avgCadence;
+  }
+
+  getAvgCadence(): number {
+    return this.avgCadence;
+  }
+
+  setMinCadence(minCadence: number) {
+    this.minCadence = minCadence;
+  }
+
+  getMinCadence(): number {
+    return this.minCadence;
+  }
+
+  setMaxCadence(maxCadence: number) {
+    this.maxCadence = maxCadence;
+  }
+
+  getMaxCadence(): number {
+    return this.maxCadence;
+  }
+
+  setAvgSpeed(avgSpeed: number) {
+    this.avgSpeed = avgSpeed;
+  }
+
+  getAvgSpeed(): number {
+    return this.avgSpeed;
+  }
+
+  setMinSpeed(minSpeed: number) {
+    this.minSpeed = minSpeed;
+  }
+
+  getMinSpeed(): number {
+    return this.minSpeed;
+  }
+
+  setMaxSpeed(maxSpeed: number) {
+    this.maxSpeed = maxSpeed;
+  }
+
+  getMaxSpeed(): number {
+    return this.maxSpeed;
+  }
+
+  setAvgVerticalSpeed(avgVerticalSpeed: number) {
+    this.avgVerticalSpeed = avgVerticalSpeed;
+  }
+
+  getAvgVerticalSpeed(): number {
+    return this.avgVerticalSpeed;
+  }
+
+  setMinVerticalSpeed(minVerticalSpeed: number) {
+    this.minVerticalSpeed = minVerticalSpeed;
+  }
+
+  getMinVerticalSpeed(): number {
+    return this.minVerticalSpeed;
+  }
+
+  setMaxVerticalSpeed(maxVerticalSpeed: number) {
+    this.maxVerticalSpeed = maxVerticalSpeed;
+  }
+
+  getMaxVerticalSpeed(): number {
+    return this.maxVerticalSpeed;
+  }
+
   toJSON(): any {
     return {
       totalDurationInSeconds: this.getTotalDurationInSeconds(),
@@ -211,6 +346,22 @@ export class Summary implements SummaryInterface {
       minHR: this.getMinHR(),
       maxHR: this.getMaxHR(),
       avgHR: this.getAvgHR(),
+      avgPower: this.getAvgPower(),
+      minPower: this.getMinPower(),
+      maxPower: this.getMaxPower(),
+      avgTemperature: this.getAvgTemperature(),
+      minTemperature: this.getMinTemperature(),
+      maxTemperature: this.getMaxTemperature(),
+      avgCadence: this.getAvgCadence(),
+      minCadence: this.getMinCadence(),
+      maxCadence: this.getMaxCadence(),
+      maxVerticalSpeed: this.getMaxVerticalSpeed(),
+      minVerticalSpeed: this.getMinVerticalSpeed(),
+      avgVerticalSpeed: this.getAvgVerticalSpeed(),
+      maxSpeed: this.getMaxSpeed(),
+      avgSpeed: this.getAvgSpeed(),
+      minSpeed: this.getMinSpeed(),
+
     };
   }
 }

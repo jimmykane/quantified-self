@@ -49,11 +49,41 @@ export class EventImporterSuuntoJSON {
     activitySummary.setRecoveryTimeInSeconds(eventJSONObject.DeviceLog.Header.RecoveryTime);
     activitySummary.setMaxVO2(eventJSONObject.DeviceLog.Header.MAXVO2);
     if (eventJSONObject.DeviceLog.Header.HR) {
-      debugger;
       activitySummary.setAvgHR(eventJSONObject.DeviceLog.Header.HR[0].Avg * 60);
       activitySummary.setMaxHR(eventJSONObject.DeviceLog.Header.HR[0].Max * 60);
       activitySummary.setMinHR(eventJSONObject.DeviceLog.Header.HR[0].Min * 60);
     }
+
+    if (eventJSONObject.DeviceLog.Header.Cadence) {
+      activitySummary.setAvgCadence(eventJSONObject.DeviceLog.Header.Cadence[0].Avg * 60 * 2);
+      activitySummary.setMaxCadence(eventJSONObject.DeviceLog.Header.Cadence[0].Max * 60 * 2);
+      activitySummary.setMinCadence(eventJSONObject.DeviceLog.Header.Cadence[0].Min * 60 * 2);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.Power) {
+      activitySummary.setAvgPower(eventJSONObject.DeviceLog.Header.Power[0].Avg);
+      activitySummary.setMaxPower(eventJSONObject.DeviceLog.Header.Power[0].Max);
+      activitySummary.setMinPower(eventJSONObject.DeviceLog.Header.Power[0].Min);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.Speed) {
+      activitySummary.setAvgSpeed(eventJSONObject.DeviceLog.Header.Speed[0].Avg);
+      activitySummary.setMaxSpeed(eventJSONObject.DeviceLog.Header.Speed[0].Max);
+      activitySummary.setMinSpeed(eventJSONObject.DeviceLog.Header.Speed[0].Min);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.Temperature) {
+      activitySummary.setAvgTemperature(eventJSONObject.DeviceLog.Header.Temperature[0].Avg - 273.15);
+      activitySummary.setMaxTemperature(eventJSONObject.DeviceLog.Header.Temperature[0].Max - 273.15);
+      activitySummary.setMinTemperature(eventJSONObject.DeviceLog.Header.Temperature[0].Min - 273.15);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.VerticalSpeed) {
+      activitySummary.setAvgVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Avg);
+      activitySummary.setMaxVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Max);
+      activitySummary.setMinVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Min);
+    }
+
 
     activity.setSummary(activitySummary);
     event.addActivity(activity);
@@ -152,12 +182,43 @@ export class EventImporterSuuntoJSON {
       lapSummary.setPauseDurationInSeconds(lapObj.PauseDuration);
       lapSummary.setRecoveryTimeInSeconds(lapObj.RecoveryTime);
       lapSummary.setMaxVO2(lapObj.MAXVO2);
+
       if (lapObj.HR) {
-        debugger
         lapSummary.setAvgHR(lapObj.HR[0].Avg * 60);
         lapSummary.setMaxHR(lapObj.HR[0].Max * 60);
         lapSummary.setMinHR(lapObj.HR[0].Min * 60);
       }
+
+      if (lapObj.Cadence) {
+        lapSummary.setAvgCadence(lapObj.Cadence[0].Avg * 60 * 2);
+        lapSummary.setMaxCadence(lapObj.Cadence[0].Max * 60 * 2);
+        lapSummary.setMinCadence(lapObj.Cadence[0].Min * 60 * 2);
+      }
+
+      if (lapObj.Power) {
+        lapSummary.setAvgPower(lapObj.Power[0].Avg);
+        lapSummary.setMaxPower(lapObj.Power[0].Max);
+        lapSummary.setMinPower(lapObj.Power[0].Min);
+      }
+
+      if (lapObj.Speed) {
+        lapSummary.setAvgSpeed(lapObj.Speed[0].Avg);
+        lapSummary.setMaxSpeed(lapObj.Speed[0].Max);
+        lapSummary.setMinSpeed(lapObj.Speed[0].Min);
+      }
+
+      if (lapObj.Temperature) {
+        lapSummary.setAvgTemperature(lapObj.Temperature[0].Avg - 273.15);
+        lapSummary.setMaxTemperature(lapObj.Temperature[0].Max - 273.15);
+        lapSummary.setMinTemperature(lapObj.Temperature[0].Min - 273.15);
+      }
+
+      if (lapObj.VerticalSpeed) {
+        lapSummary.setAvgVerticalSpeed(lapObj.VerticalSpeed[0].Avg);
+        lapSummary.setMaxVerticalSpeed(lapObj.VerticalSpeed[0].Max);
+        lapSummary.setMinVerticalSpeed(lapObj.VerticalSpeed[0].Min);
+      }
+
       lap.setSummary(lapSummary);
       event.addLap(lap);
       nextLapStartDate = lap.getEndDate();

@@ -65,4 +65,49 @@ export interface SummaryInterface extends SerializableClassInterface {
 
   setMaxHR(maxHR: number);
   getMaxHR(): number
+
+  setAvgPower(avgPower: number);
+  getAvgPower(): number
+
+  setMinPower(minPower: number);
+  getMinPower(): number
+
+  setMaxPower(maxPower: number);
+  getMaxPower(): number
+
+  setAvgTemperature(avgTemperature: number);
+  getAvgTemperature(): number
+
+  setMinTemperature(minTemperature: number);
+  getMinTemperature(): number
+
+  setMaxTemperature(maxTemperature: number);
+  getMaxTemperature(): number
+
+  setAvgCadence(avgCadence: number);
+  getAvgCadence(): number
+
+  setMinCadence(minCadence: number);
+  getMinCadence(): number
+
+  setMaxCadence(maxCadence: number);
+  getMaxCadence(): number
+
+  setAvgSpeed(avgSpeed: number);
+  getAvgSpeed(): number
+
+  setMinSpeed(minSpeed: number);
+  getMinSpeed(): number
+
+  setMaxSpeed(maxSpeed: number);
+  getMaxSpeed(): number
+
+  setAvgVerticalSpeed(avgVerticalSpeed: number);
+  getAvgVerticalSpeed(): number
+
+  setMinVerticalSpeed(minVerticalSpeed: number);
+  getMinVerticalSpeed(): number
+
+  setMaxVerticalSpeed(maxVerticalSpeed: number);
+  getMaxVerticalSpeed(): number
 }

@@ -86,6 +86,23 @@ export class EventImporterJSON {
       activitySummary.setAvgHR(activityObject.summary.avgHR);
       activitySummary.setMaxHR(activityObject.summary.maxHR);
       activitySummary.setMinHR(activityObject.summary.minHR);
+      activitySummary.setMinPower(activityObject.summary.minPower);
+      activitySummary.setAvgPower(activityObject.summary.avgPower);
+      activitySummary.setMaxPower(activityObject.summary.maxPower);
+      activitySummary.setMinCadence(activityObject.summary.minCadence);
+      activitySummary.setMaxCadence(activityObject.summary.maxCadence);
+      activitySummary.setAvgCadence(activityObject.summary.avgCadence);
+      activitySummary.setMaxSpeed(activityObject.summary.maxSpeed);
+      activitySummary.setMinSpeed(activityObject.summary.minSpeed);
+      activitySummary.setAvgSpeed(activityObject.summary.avgSpeed);
+      activitySummary.setMinVerticalSpeed(activityObject.summary.minVerticalSpeed);
+      activitySummary.setMaxVerticalSpeed(activityObject.summary.maxVerticalSpeed);
+      activitySummary.setAvgVerticalSpeed(activityObject.summary.avgVerticalSpeed);
+      activitySummary.setMinTemperature(activityObject.summary.minTemperature);
+      activitySummary.setMaxTemperature(activityObject.summary.maxTemperature);
+      activitySummary.setAvgTemperature(activityObject.summary.avgTemperature);
+
+
 
       if (activityObject.summary.weather) {
         const weatherItems = [];
