@@ -4,5 +4,5 @@
 <td>{{ lap.getStartDate() | date:'shortTime' }}</td>
 <td>{{ lap.getEndDate() | date:'mediumTime' }}</td>
 <td>{{ lap.getType() }}</td>
-<td> {{lap.getSummary().getAvgHR().toFixed(0) }} </td>
-<td> {{lap.getSummary().getAvgSpeed().toFixed(0) }} </td>
+<td *ngIf="lap.getSummary().getAvgHR()"> {{lap.getSummary().getAvgHR().toFixed(0) }} </td>
+<td *ngIf="lap.getSummary().getAvgSpeed()"> {{lap.getSummary().getAvgSpeed().toFixed(0) }} </td>
