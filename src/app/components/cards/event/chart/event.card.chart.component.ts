@@ -297,7 +297,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         dataCount++;
         const dateData = dataAccumulator.get(data.getPoint().getDate().getTime()) || {};
         dataAccumulator.set(data.getPoint().getDate().getTime(), Object.assign(dateData, {
-          [dataType]: data.getValue().toFixed(1)
+          [dataType]: dataType === DataHeartRate.type ? data.getValue().toFixed(0) : data.getValue().toFixed(1)
         }));
         return dataAccumulator;
       }, dataMap);
