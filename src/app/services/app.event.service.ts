@@ -337,6 +337,9 @@ export class EventService {
         for (const activity of event.getActivities()) {
           mergeEvent.addActivity(activity);
         }
+        for (const lap of event.getLaps()){
+          mergeEvent.addLap(lap);
+        }
       }
       const eventSummary = new Summary();
       eventSummary.setTotalDurationInSeconds(mergeEvent.getTotalDurationInSeconds());
