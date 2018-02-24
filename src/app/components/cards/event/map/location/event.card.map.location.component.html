@@ -1,8 +1,0 @@
-<div class="container" *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">
-  <mat-icon>place</mat-icon>
-  <h3>
-    <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().city">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().city }}, </span>
-    <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().province">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().province }}, </span>
-    <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().country">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().country }}</span>
-  </h3>
-</div>

@@ -2,7 +2,7 @@
   <mat-card-header>
     <div matCardAvatar>
       <div class="card-avatar-container">
-         <mat-icon *ngFor="let activity of event.getActivities()">
+        <mat-icon *ngFor="let activity of event.getActivities()">
           {{ getIconFromActivityType(activity) }}
         </mat-icon>
       </div>
@@ -14,6 +14,12 @@
 
     <mat-card-subtitle>
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
+      <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">
+        @
+        <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().city">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().city }}, </span>
+        <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().province">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().province }}, </span>
+        <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().country">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().country }}</span>
+      </span>
     </mat-card-subtitle>
     <mat-card-subtitle>
       <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
@@ -22,7 +28,7 @@
       <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
       <div *ngFor="let activity of event.getActivities(); let i = index;">
         <span *ngIf=" activity.getCreator().getName()">
-          Creator:
+          Created by
           <span class="mat-body-2">{{ activity.getCreator().getName() }} </span>
           <span class="mat-body-2" *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
           <span class="mat-body-2"

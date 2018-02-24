@@ -1,8 +1,4 @@
 <mat-grid-list cols="{{ gridListColumnCount }}" rowHeight="fit">
-  <mat-grid-tile colspan="1" rowspan="1">
-    <app-card-map-location
-      [event]="event"></app-card-map-location>
-  </mat-grid-tile>
   <mat-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
     <app-event-card-map-agm [event]="event" [resize]="resize"></app-event-card-map-agm>
   </mat-grid-tile>
