@@ -41,7 +41,6 @@ import {EventCardMapActivitiesComponent} from './components/cards/event/map/acti
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
-import {GeoLocationInfoLocalStorageService} from './services/storage/app.geo-location-info.local.storage.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 
 @NgModule({
@@ -95,7 +94,6 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
   providers: [
     LocalStorageService,
     EventLocalStorageService,
-    GeoLocationInfoLocalStorageService,
     EventService,
     ActionButtonService,
     WeatherUndergroundWeatherService,
