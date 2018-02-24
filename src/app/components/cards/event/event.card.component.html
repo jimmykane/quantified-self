@@ -12,7 +12,7 @@
         <mat-icon>filter_{{ event.getActivities().length }}</mat-icon>
         <mat-icon *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">place</mat-icon>
         <mat-icon *ngIf="event.getFirstActivity().getSummary().getWeather()">terrain</mat-icon>
-        <mat-icon>watch</mat-icon>
+        <mat-icon *ngFor="let activity of event.getActivities()">watch</mat-icon>
       </div>
     </div>
     <mat-card-title>
@@ -23,7 +23,7 @@
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
     </mat-card-subtitle>
     <mat-card-subtitle>
-      Activities of total
+      <span class="mat-body-2">{{ event.getActivities().length }}</span> Activities of total
       <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
       in
       <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
