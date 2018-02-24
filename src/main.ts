@@ -11,7 +11,6 @@ const { version: appVersion } = require('../package.json');
 if (environment.production) {
   enableProdMode();
   Log.setProductionMode();
-
 }
 
 if (appVersion !== localStorage.getItem('version')) {
