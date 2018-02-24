@@ -340,7 +340,11 @@ export class EventService {
       }
       const eventSummary = new Summary();
       eventSummary.setTotalDurationInSeconds(mergeEvent.getTotalDurationInSeconds());
-      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(mergeEvent));
+      eventSummary.setTotalDistanceInMeters(
+        mergeEvent.getActivities().reduce(
+          (totalDistance, activity) => activity.getSummary().getTotalDistanceInMeters() + totalDistance, 0
+        )
+      );
       mergeEvent.setSummary(eventSummary);
       return resolve(mergeEvent);
     });
