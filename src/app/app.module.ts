@@ -30,7 +30,6 @@ import {EventCardActivityStatsComponent} from './components/cards/event/stats/ev
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {WeatherUndergroundWeatherService} from './services/weather/app.weather-underground.weather.service';
 import {HttpModule} from '@angular/http';
-import {EventCardMapWeatherComponent} from './components/cards/event/map/weather/event.card.map.weather.component';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
@@ -79,7 +78,6 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
     EventCardMapComponent,
     EventCardMapAGMComponent,
     EventCardMapActivitiesComponent,
-    EventCardMapWeatherComponent,
     EventCardStatsComponent,
     EventCardActivityStatsComponent,
     EventCardActionsMenuComponent,

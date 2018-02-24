@@ -2,47 +2,54 @@
   <mat-card-header>
     <div matCardAvatar>
       <div class="card-avatar-container">
-        <mat-icon *ngFor="let activity of event.getActivities()">
-          {{ getIconFromActivityType(activity) }}
+        <mat-icon *ngIf="event.getActivities().length === 1 ">
+          {{ getIconFromActivityType(event.getFirstActivity()) }}
         </mat-icon>
+        <mat-icon *ngIf="event.getActivities().length > 1 ">
+          compare_arrows
+        </mat-icon>
+        <mat-icon>access_time</mat-icon>
+        <mat-icon>filter_{{ event.getActivities().length }}</mat-icon>
+        <mat-icon *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">place</mat-icon>
+        <mat-icon *ngIf="event.getFirstActivity().getSummary().getWeather()">terrain</mat-icon>
+        <mat-icon>watch</mat-icon>
       </div>
     </div>
     <mat-card-title>
       {{ event.getName() }}
     </mat-card-title>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
-
     <mat-card-subtitle>
       {{ event.getFirstActivity().getStartDate() | date:'medium' }}
+    </mat-card-subtitle>
+    <mat-card-subtitle>
+      Activities of total
+      <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
+      in
+      <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
+    </mat-card-subtitle>
+    <mat-card-subtitle>
       <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">
-        @
         <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().city">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().city }}, </span>
         <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().province">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().province }}, </span>
         <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().country">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().country }}</span>
       </span>
     </mat-card-subtitle>
-    <mat-card-subtitle>
-      <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
-      <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
-      in
-      <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
-      <div *ngFor="let activity of event.getActivities(); let i = index;">
-        <span *ngIf=" activity.getCreator().getName()">
-          Created by
-          <span class="mat-body-2">{{ activity.getCreator().getName() }} </span>
-          <span class="mat-body-2" *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
-          <span class="mat-body-2"
-                *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
-          <span class="mat-body-2"
-                *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
+    <mat-card-subtitle *ngIf="event.getFirstActivity().getSummary().getWeather()">
+      {{ event.getFirstActivity().getSummary().getWeather().getAverageTemperatureInCelsius().toFixed(0) }}c and {{
+      event.getFirstActivity().getSummary().getWeather().weatherItems[0].conditions }}
+    </mat-card-subtitle>
+    <mat-card-subtitle *ngFor="let activity of event.getActivities(); let i = index;">
+      <span *ngIf=" activity.getCreator().getName()">
+          <span>{{ activity.getCreator().getName() }} </span>
+          <span *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
+          <span *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
+          <span *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
         </span>
-      </div>
     </mat-card-subtitle>
   </mat-card-header>
 
-
   <mat-card-content>
-
     <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex"
                    (selectedIndexChange)="selectedTabIndexChange($event)">
       <mat-tab label="Map" *ngIf="event.getPointsWithPosition().length > 0"> <!-- todo check performance on if -->
