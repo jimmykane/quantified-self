@@ -1,3 +1,7 @@
 mat-card{
   margin: 0;
 }
+
+mat-icon{
+  vertical-align: middle;
+}
