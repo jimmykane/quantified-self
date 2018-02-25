@@ -102,6 +102,7 @@ export class EventExporterTCX implements EventExporterInterface {
         const lapElement = document.createElementNS(null, 'Lap');
         // Add the first point as start time
         lapElement.setAttribute('StartTime', lap.getStartDate().toISOString().substring(0, 19) + 'Z');
+
         const totalTimeInSecondsElement = document.createElementNS(null, 'TotalTimeSeconds');
         totalTimeInSecondsElement.textContent = lap.getSummary().getTotalDurationInSeconds().toString();
         lapElement.appendChild(totalTimeInSecondsElement);
@@ -109,6 +110,11 @@ export class EventExporterTCX implements EventExporterInterface {
         const distanceInMetersElement = document.createElementNS(null, 'DistanceMeters');
         distanceInMetersElement.textContent = lap.getSummary().getTotalDistanceInMeters().toString();
         lapElement.appendChild(distanceInMetersElement);
+
+        const caloriesInKCALElement = document.createElementNS(null, 'Calories');
+        caloriesInKCALElement.textContent = lap.getSummary().getEnergyInCal().toFixed(0).toString();
+        lapElement.appendChild(caloriesInKCALElement);
+
         activityElement.appendChild(lapElement);
         const trackElement = document.createElementNS(null, 'Track');
         lapElement.appendChild(trackElement);
