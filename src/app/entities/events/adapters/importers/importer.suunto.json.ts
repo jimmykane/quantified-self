@@ -31,6 +31,7 @@ export class EventImporterSuuntoJSON {
 
     // @todo iterate over activities
     const activity = new Activity();
+    activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
     activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
     const activitySummary = new Summary();
     activitySummary.setTotalDistanceInMeters(eventJSONObject.DeviceLog.Header.Distance);
@@ -158,6 +159,8 @@ export class EventImporterSuuntoJSON {
       }
     }
 
+    // Important
+
     // Parse the laps
     let nextLapStartDate = event.getFirstActivity().getStartPoint().getDate();
     for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
@@ -229,6 +232,8 @@ export class EventImporterSuuntoJSON {
     }
 
     activity.sortPointsByDate();
+    activity.setEndDate(activity.getEndPoint().getDate());
+
 
     // If no IBI return
     if (!eventJSONObject.DeviceLog["R-R"] || !eventJSONObject.DeviceLog["R-R"].Data) {

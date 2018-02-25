@@ -8,7 +8,9 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   setType(type: string);
   getType(): string;
   getStartDate(): Date;
+  setStartDate(startDate: Date);
   getEndDate(): Date;
+  setEndDate(endDate: Date);
   setCreator(creator: CreatorInterface);
   getCreator(): CreatorInterface;
   addPoint(point: PointInterface);

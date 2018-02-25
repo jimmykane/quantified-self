@@ -82,6 +82,8 @@ export class EventImporterJSON {
 
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
+      activity.setStartDate(new Date(activityObject.startDate));
+      activity.setEndDate(new Date(activityObject.endDate));
       activity.setType(activityObject.type);
       const activitySummary = new Summary();
       activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
