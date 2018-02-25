@@ -41,6 +41,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   ngOnChanges(): void {
     // Create the checkboxes
+    this.activityCheckboxes = [];
     let index = 0;
     for (const activity of this.event.getActivities()) {
       this.activityCheckboxes.push({
