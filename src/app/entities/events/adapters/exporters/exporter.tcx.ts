@@ -85,7 +85,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // Go over the points and find the ones without position
       let pointWithoutPosition: PointInterface;
-      for (const point of activity.getPoints()) {
+      for (const point of activity.getPoints(void 0, void 0, void 0 , true)) {
         if (!point.getPosition()) {
           pointWithoutPosition = point;
           continue;
