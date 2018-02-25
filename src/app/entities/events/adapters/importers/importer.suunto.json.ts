@@ -102,6 +102,10 @@ export class EventImporterSuuntoJSON {
     activity.setCreator(creator);
 
     for (const sample of eventJSONObject.DeviceLog.Samples) {
+      // Skip unwanted samples
+      if (sample.Debug || sample.Events) {
+        continue;
+      }
       const point = new Point(new Date(sample.TimeISO8601));
       activity.addPoint(point);
       if (sample.HR) {
