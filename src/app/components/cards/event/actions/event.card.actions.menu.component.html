@@ -2,10 +2,10 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  <!--<button mat-menu-item (click)="downloadEventAsTCX(event)">-->
-    <!--<mat-icon>file_download</mat-icon>-->
-    <!--<span>Download as TCX</span>-->
-  <!--</button>-->
+  <button mat-menu-item (click)="downloadEventAsTCX(event)">
+    <mat-icon>file_download</mat-icon>
+    <span>Download as TCX</span>
+  </button>
   <!--<button mat-menu-item *ngIf="event.getActivities().length > 1" (click)="mergeAllEventActivities(event)">-->
     <!--<mat-icon>compare_arrows</mat-icon>-->
     <!--<span>Merge {{ event.getActivities().length }} activities</span>-->
