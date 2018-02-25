@@ -30,7 +30,9 @@
         <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo().country">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().country }}</span>
       </span>
     </mat-card-subtitle>
-    <mat-card-subtitle *ngIf="event.getFirstActivity().getSummary().getWeather()">
+    <mat-card-subtitle *ngIf="event.getFirstActivity().getSummary().getWeather()
+    && event.getFirstActivity().getSummary().getWeather().weatherItems.length
+    && event.getFirstActivity().getSummary().getWeather().getAverageTemperatureInCelsius() ">
       <mat-icon>terrain</mat-icon>
       <span class="mat-body-2">{{ event.getFirstActivity().getSummary().getWeather().getAverageTemperatureInCelsius().toFixed(0) }}c</span>
       and
