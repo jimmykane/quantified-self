@@ -62,7 +62,7 @@ export class Activity extends IDClass implements ActivityInterface {
     this.points.delete(point.getDate().getTime());
   }
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: number): PointInterface[] {
+  getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: boolean): PointInterface[] {
     const points: Map<number, PointInterface> = new Map();
     let index = -1;
     this.points.forEach((point: PointInterface, date: number, map) => {
@@ -79,8 +79,26 @@ export class Activity extends IDClass implements ActivityInterface {
         canBeAdded = false;
       }
       if (canBeAdded) {
-
-        points.set(point.getDate().getTime(), point);
+        let key = point.getDate().getTime();
+        // Merge to 1s precision and keep old data
+        if (sanitizeToSecond) {
+          // Put a key for the map to 0 ms so every 1s
+          key = point.getDate().setMilliseconds(0);
+          // Check if anything exists
+          const existingPoint = points.get(key);
+          if (existingPoint) {
+            // If it exists use unique to add it to the iterating point (the current loop point)
+            existingPoint.getData().forEach((dataArray: DataInterface[], key: string) => {
+              dataArray.forEach((data: DataInterface) => {
+                if (!point.getDataByType(key)) {
+                  point.addData(data);
+                }
+              });
+            });
+          }
+        }
+        // Set the current loop point on the map
+        points.set(key, point);
       }
     });
     return Array.from(points.values());
