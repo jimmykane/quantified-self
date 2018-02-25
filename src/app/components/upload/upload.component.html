@@ -5,7 +5,7 @@
 
   <div>
     <p>You can select multiple JSON files</p>
-    <button mat-button (click)="inputFile.click()">Import file</button>
+    <button mat-button (click)="inputFile.click()">Import Suunto JSON</button>
     <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
   </div>
 
