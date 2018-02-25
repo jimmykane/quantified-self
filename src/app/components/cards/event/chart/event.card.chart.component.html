@@ -1,4 +1,4 @@
-<mat-card>
+<mat-card *ngIf="event.getActivities().length > 1">
   <mat-card-content>
     <section>
       <mat-checkbox *ngFor="let activityCheckbox of activityCheckboxes let i = index;"
