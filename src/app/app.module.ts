@@ -42,6 +42,7 @@ import {EventLocalStorageService} from './services/storage/app.event.local.stora
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 import {FormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
+import {DisqusModule} from 'ngx-disqus';
 
 @NgModule({
   imports: [
@@ -52,6 +53,7 @@ import {ActivityIconComponent} from './components/activity-icon/activity-icon.co
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ'
     }),
+    DisqusModule.forRoot('quantified-self-io'),
     MatExpansionModule,
     MatButtonModule,
     MatButtonToggleModule,

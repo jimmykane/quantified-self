@@ -5,6 +5,7 @@ mat-card{
 mat-icon{
   vertical-align: middle;
 }
+
 .title {
   display: flex;
   align-content: center;
