@@ -62,11 +62,6 @@ export class EventExporterTCX implements EventExporterInterface {
       let lapIndex = 0;
       for (const lap of event.getLaps()) {
         lapIndex++;
-        const a_sd = activity.getStartDate().toISOString();
-        const a_ed = activity.getEndDate().toISOString();
-        const al_sd = lap.getStartDate().toISOString();
-        const al_ed = lap.getEndDate().toISOString();
-        debugger;
 
         // If it's the last activity and the last lap then append it to the activity laps and break
         if (activityIndex === event.getActivities().length && lapIndex === event.getLaps().length) {
