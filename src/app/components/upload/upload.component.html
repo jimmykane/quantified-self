@@ -1,12 +1,15 @@
 <div style="padding: 2vmin;">
-  <h1>
-    JSON ONLY (Specific format for testing for the next few days only).<br/>
-  </h1>
+  <mat-card>
+    <mat-card-content>
+      <h1>
+        Suunto JSON ONLY<br/>
+      </h1>
 
-  <div>
-    <p>You can select multiple JSON files</p>
-    <button mat-button (click)="inputFile.click()">Import Suunto JSON</button>
-    <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
-  </div>
-
+      <div>
+        <p></p>
+        <button mat-button (click)="inputFile.click()">Import Suunto JSON</button>
+        <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
+      </div>
+    </mat-card-content>
+  </mat-card>
 </div>
