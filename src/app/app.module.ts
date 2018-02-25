@@ -22,7 +22,7 @@ import {
   MatGridListModule, MatIconModule,
   MatMenuModule,
   MatSidenavModule, MatTableModule,
-  MatTabsModule, MatToolbarModule
+  MatTabsModule, MatToolbarModule, MatCheckboxModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -40,6 +40,7 @@ import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.c
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
+import {FormsModule} from "@angular/forms";
 
 @NgModule({
   imports: [
@@ -66,6 +67,8 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
     MatChipsModule,
     MomentModule,
     AmChartsModule,
+    MatCheckboxModule,
+    FormsModule,
     Angular2FontawesomeModule,
   ],
   declarations: [

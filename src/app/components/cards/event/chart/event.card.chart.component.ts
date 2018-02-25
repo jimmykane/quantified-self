@@ -20,6 +20,7 @@ import {PointInterface} from '../../../../entities/points/point.interface';
 @Component({
   selector: 'app-event-card-chart',
   templateUrl: './event.card.chart.component.html',
+  styleUrls: ['./event.card.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
@@ -29,6 +30,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   private dataMap: Map<string, DataInterface[]>;
   private categories = [];
   private chart: any;
+  private activityCheckboxes = [];
   private logger = Log.create('EventCardChartComponent');
 
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
@@ -38,6 +40,31 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnChanges(): void {
+    // Create the checkboxes
+    let index = 0;
+    for (const activity of this.event.getActivities()) {
+      this.activityCheckboxes.push({
+        activity: activity,
+        checked: index === 0,
+        intermediate: false,
+        disabled: false,
+      });
+      index++;
+    }
+    this.createAndUpdateChart();
+  }
+
+  onCheckboxChange() {
+    if (this.activityCheckboxes.every((activityCheckbox) => {
+        return activityCheckbox.checked === false
+      })) {
+      this.AmCharts.destroyChart(this.chart);
+      return;
+    }
+    this.createAndUpdateChart();
+  }
+
+  private createAndUpdateChart() {
     const t0 = performance.now();
 
     this.createChart().then(() => {
@@ -233,8 +260,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     if (!this.dataMap) {
       this.dataMap = new Map<string, DataInterface[]>();
-      this.event.getActivities().forEach((activity: ActivityInterface, index) => {
+      const activities = [];
+      for (const activityCheckbox of this.activityCheckboxes) {
+        if (activityCheckbox.checked) {
+          activities.push(activityCheckbox.activity);
+        }
+      }
+      activities.forEach((activity: ActivityInterface, index) => {
         activity.getPoints(void 0, void 0, 1).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+
           point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
@@ -362,12 +396,24 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private genColor(key: string) {
-    if (key.includes(DataHeartRate.type)) { return '#ff3f07'; }
-    if (key.includes(DataAltitude.type)) { return '#4ab255'; }
-    if (key.includes(DataCadence.type)) { return '#5b6979'; }
-    if (key.includes(DataSpeed.type)) { return '#2261bf'; }
-    if (key.includes(DataVerticalSpeed.type)) { return '#add3c3'; }
-    if (key.includes(DataSeaLevelPressure.type)) { return '#889bc8'; }
+    if (key.includes(DataHeartRate.type)) {
+      return '#ff3f07';
+    }
+    if (key.includes(DataAltitude.type)) {
+      return '#4ab255';
+    }
+    if (key.includes(DataCadence.type)) {
+      return '#5b6979';
+    }
+    if (key.includes(DataSpeed.type)) {
+      return '#2261bf';
+    }
+    if (key.includes(DataVerticalSpeed.type)) {
+      return '#add3c3';
+    }
+    if (key.includes(DataSeaLevelPressure.type)) {
+      return '#889bc8';
+    }
     // noinspection TsLint
     return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
