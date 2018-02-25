@@ -35,21 +35,4 @@ export class EventCardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.parametersSubscription.unsubscribe();
   }
-
-  getIconFromActivityType(activity: ActivityInterface): string {
-    // @todo optimize
-    if (activity.getType().toLocaleLowerCase().includes('running')) {
-      return 'directions_run';
-    }
-    if (activity.getType().toLocaleLowerCase().includes('biking')) {
-      return 'directions_bike';
-    }
-    if (activity.getType().toLocaleLowerCase().includes('cycling')) {
-      return 'directions_bike';
-    }
-    if (activity.getType().toLocaleLowerCase().includes('swimming')) {
-      return 'pool';
-    }
-
-  }
 }

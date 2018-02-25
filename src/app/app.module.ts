@@ -40,7 +40,8 @@ import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.c
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
-import {FormsModule} from "@angular/forms";
+import {FormsModule} from '@angular/forms';
+import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 
 @NgModule({
   imports: [
@@ -76,6 +77,7 @@ import {FormsModule} from "@angular/forms";
     SideNavComponent,
     DashboardComponent,
     UploadComponent,
+    ActivityIconComponent,
     EventCardComponent,
     EventCardListComponent,
     EventCardMapComponent,

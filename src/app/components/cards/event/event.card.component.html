@@ -1,13 +1,14 @@
 <mat-card>
   <mat-card-header>
     <mat-card-title>
-      <mat-icon *ngIf="event.getActivities().length === 1 ">
-        {{ getIconFromActivityType(event.getFirstActivity()) }}
-      </mat-icon>
-      <mat-icon *ngIf="event.getActivities().length > 1 ">
-        compare_arrows
-      </mat-icon>
-      {{ event.getName() }}
+      <section class="title">
+        <app-activity-icon [activity]="event.getFirstActivity()"
+                           *ngIf="event.getActivities().length === 1 "></app-activity-icon>
+        <mat-icon *ngIf="event.getActivities().length > 1 ">
+          compare_arrows
+        </mat-icon>
+        {{ event.getName() }}
+      </section>
     </mat-card-title>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
     <mat-card-subtitle>
