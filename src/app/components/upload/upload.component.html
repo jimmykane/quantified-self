@@ -5,9 +5,8 @@
 
   <div>
     <p>You can select multiple JSON files</p>
-    <input type="file"
-           accept=".json"
-           multiple (change)="openFile($event)">
+    <button mat-button (click)="inputFile.click()">Import file</button>
+    <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
   </div>
 
 </div>
