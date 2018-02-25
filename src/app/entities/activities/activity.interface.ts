@@ -2,7 +2,7 @@ import {CreatorInterface} from '../creators/creatorInterface';
 import {PointInterface} from '../points/point.interface';
 import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
-import {SummaryInterface} from "../summary/summary.interface";
+import {SummaryInterface} from '../summary/summary.interface';
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
   setType(type: string);
@@ -13,7 +13,7 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getCreator(): CreatorInterface;
   addPoint(point: PointInterface);
   removePoint(point: PointInterface);
-  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
+  getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: number): PointInterface[];
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
   setSummary(activitySummary: SummaryInterface);

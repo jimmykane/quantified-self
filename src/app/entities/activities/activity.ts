@@ -62,8 +62,8 @@ export class Activity extends IDClass implements ActivityInterface {
     this.points.delete(point.getDate().getTime());
   }
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
-    const points = [];
+  getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: number): PointInterface[] {
+    const points: Map<number, PointInterface> = new Map();
     let index = -1;
     this.points.forEach((point: PointInterface, date: number, map) => {
       index++;
@@ -79,10 +79,11 @@ export class Activity extends IDClass implements ActivityInterface {
         canBeAdded = false;
       }
       if (canBeAdded) {
-        points.push(point);
+
+        points.set(point.getDate().getTime(), point);
       }
     });
-    return points;
+    return Array.from(points.values());
   }
 
   getStartPoint(): PointInterface {
