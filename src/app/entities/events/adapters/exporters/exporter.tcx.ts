@@ -171,7 +171,7 @@ export class EventExporterTCX implements EventExporterInterface {
             } else if (data instanceof DataSpeed || data instanceof DataCadence) {
               if (data instanceof DataSpeed) {
                 const speedElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'Speed');
-                speedElement.textContent = data.getValue().toFixed().toString();
+                speedElement.textContent = data.getValue().toString();
                 tpxElement.appendChild(speedElement);
               }
               if (data instanceof DataCadence) {
