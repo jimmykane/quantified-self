@@ -5,6 +5,7 @@ import {
 import {EventInterface} from '../../../../../entities/events/event.interface';
 import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
+import {ActivityInterface} from "../../../../../entities/activities/activity.interface";
 
 
 @Component({
@@ -18,7 +19,7 @@ export class EventCardMapAGMComponent implements OnChanges {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() resize: boolean;
-
+  @Input() activities: ActivityInterface[];
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {
   }
@@ -28,6 +29,10 @@ export class EventCardMapAGMComponent implements OnChanges {
     this.agmMap.triggerResize().then(() => {
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
+  }
+
+  onSelectedActivities(activities) {
+    this.activities = activities;
   }
 
   getActivityColor(index: number): string {
