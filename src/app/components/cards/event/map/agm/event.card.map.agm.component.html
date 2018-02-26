@@ -1,5 +1,6 @@
 <agm-map
   [fullscreenControl]="true"
+  [mapTypeControl]="true"
   [fitBounds]="getBounds()">
   <agm-polyline
     *ngFor="let activity of event.getActivities(); let i = index;"
