@@ -42,6 +42,26 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   getActivityColor(index: number): string {
+    switch (index) {
+      case 0: {
+        return '#000000';
+      }
+      case 1: {
+        return '#2261bf';
+      }
+      case 2: {
+        return '#73a55e';
+      }
+      case 3: {
+        return '#a51e38';
+      }
+      case 4: {
+        return '#d38e2e';
+      }
+      case 5: {
+        return '#2dd86d';
+      }
+    }
     return '#' + Math.floor((Math.abs(Math.sin(index) * 16777215)) % 16777215).toString(16);
   }
 
