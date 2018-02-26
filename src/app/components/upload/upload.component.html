@@ -2,12 +2,12 @@
   <mat-card>
     <mat-card-content>
       <h1>
-        Suunto JSON ONLY<br/>
+        JSON ONLY<br/>
       </h1>
 
       <div>
         <p></p>
-        <button mat-button (click)="inputFile.click()">Import Suunto JSON</button>
+        <button mat-button (click)="inputFile.click()">Open JSON</button>
         <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
       </div>
     </mat-card-content>
