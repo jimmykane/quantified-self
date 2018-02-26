@@ -6,7 +6,7 @@
                     [(ngModel)]="activityCheckbox.checked"
                     [disabled]="activityCheckbox.disabled"
                     (change)="onCheckboxChange()">
-        {{ activityCheckbox.activity.getType() }} {{ i + 1 }}
+         Activity {{ i + 1 }} {{ activityCheckbox.activity.getCreator().getName() }} - {{ activityCheckbox.activity.getType() }} {{ activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000 }}Km
       </mat-checkbox>
     </section>
   </mat-card-content>
