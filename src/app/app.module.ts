@@ -43,7 +43,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
 import {FormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {DisqusModule} from 'ngx-disqus';
-import {ActivitiesCheckboxesComponent} from './components/activity-icon/activities-checkboxes.component';
+import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
 
 @NgModule({
   imports: [

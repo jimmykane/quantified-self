@@ -1,25 +1,26 @@
-<table class="table">
-  <thead>
-  <tr>
-    <th><h4>#</h4></th>
-    <th><h4>Distance</h4></th>
-    <th><h4>Duration</h4></th>
-    <th><h4>Start Time</h4></th>
-    <th><h4>End Time</h4></th>
-    <th><h4>Type</h4></th>
-    <th><h4>Avg HR</h4></th>
-  </tr>
-  </thead>
-  <tbody>
-  <tr app-event-lap-table-row
-      [attr.data-index]="i"
-      *ngFor="let lap of event.getLaps(); index as index; first as isFirst; last as isLast; count as count;"
-      [index]="index"
-      [isFirst]="isFirst"
-      [isLast]="isLast"
-      [count]="count"
-      [event]="event"
-      [lap]="lap"></tr>
-  </tbody>
-</table>
-
+<mat-card>
+  <table class="table">
+    <thead>
+    <tr>
+      <th><h4>#</h4></th>
+      <th><h4>Distance</h4></th>
+      <th><h4>Duration</h4></th>
+      <th><h4>Start Time</h4></th>
+      <th><h4>End Time</h4></th>
+      <th><h4>Type</h4></th>
+      <th><h4>Avg HR</h4></th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr app-event-lap-table-row
+        [attr.data-index]="i"
+        *ngFor="let lap of event.getLaps(); index as index; first as isFirst; last as isLast; count as count;"
+        [index]="index"
+        [isFirst]="isFirst"
+        [isLast]="isLast"
+        [count]="count"
+        [event]="event"
+        [lap]="lap"></tr>
+    </tbody>
+  </table>
+</mat-card>

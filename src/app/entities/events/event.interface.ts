@@ -22,7 +22,7 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
 
   getLastActivity(): ActivityInterface;
 
-  getLaps(): LapInterface[];
+  getLaps(activity?: ActivityInterface): LapInterface[];
 
   addLap(lap: LapInterface);
 

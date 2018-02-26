@@ -55,7 +55,7 @@ export class Event extends IDClass implements EventInterface {
     this.laps.push(lap);
   }
 
-  getLaps(): LapInterface[] {
+  getLaps(activity?: ActivityInterface): LapInterface[] {
     return this.laps;
   }
 
