@@ -8,7 +8,7 @@ import {ActivityInterface} from '../../entities/activities/activity.interface';
   styleUrls: ['./activities-checkboxes.component.css'],
 })
 
-export class ActivitiesCheckboxesComponent implements OnChanges, OnInit{
+export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Output() selectedActivities: EventEmitter<ActivityInterface[]> = new EventEmitter();
 

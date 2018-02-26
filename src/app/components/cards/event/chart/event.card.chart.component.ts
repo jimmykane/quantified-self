@@ -30,39 +30,32 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   private dataMap: Map<string, DataInterface[]>;
   private categories = [];
   private chart: any;
-  private activityCheckboxes = [];
+  private selectedActivities = [];
   private logger = Log.create('EventCardChartComponent');
 
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
   }
 
   ngOnInit() {
+
   }
 
   ngOnChanges(): void {
-    // Create the checkboxes
-    this.activityCheckboxes = [];
-    let index = 0;
-    for (const activity of this.event.getActivities()) {
-      this.activityCheckboxes.push({
-        activity: activity,
-        checked: index === 0,
-        intermediate: false,
-        disabled: false,
-      });
-      index++;
+    debugger;
+    if (this.event.getActivities().length === 1) {
+      this.selectedActivities = [this.event.getFirstActivity()];
+      this.createAndUpdateChart();
     }
-    this.createAndUpdateChart();
   }
 
-  onCheckboxChange() {
-    if (this.activityCheckboxes.every((activityCheckbox) => {
-        return activityCheckbox.checked === false
-      })) {
+  onSelectedActivities(activities) {
+    this.selectedActivities = activities;
+    if (this.selectedActivities.length) {
+      this.createAndUpdateChart();
+    } else if (this.chart) {
       this.AmCharts.destroyChart(this.chart);
-      return;
     }
-    this.createAndUpdateChart();
+
   }
 
   private createAndUpdateChart() {
@@ -261,13 +254,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     if (!this.dataMap) {
       this.dataMap = new Map<string, DataInterface[]>();
-      const activities = [];
-      for (const activityCheckbox of this.activityCheckboxes) {
-        if (activityCheckbox.checked) {
-          activities.push(activityCheckbox.activity);
-        }
-      }
-      activities.forEach((activity: ActivityInterface, index) => {
+      this.selectedActivities.forEach((activity: ActivityInterface, index) => {
         activity.getPoints(void 0, void 0, 1, true).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
           point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {

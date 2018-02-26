@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
   ViewChild
 } from '@angular/core';
 import {EventInterface} from '../../../../../entities/events/event.interface';
@@ -15,13 +15,19 @@ import {ActivityInterface} from "../../../../../entities/activities/activity.int
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardMapAGMComponent implements OnChanges {
+export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() resize: boolean;
   @Input() activities: ActivityInterface[];
 
   constructor(private changeDetectorRef: ChangeDetectorRef) {
+  }
+
+  ngOnInit() {
+    if (this.event.getActivities().length === 1) {
+      this.activities = [this.event.getFirstActivity()];
+    }
   }
 
   ngOnChanges() {
