@@ -5,5 +5,5 @@
   [disabled]="activityCheckbox.disabled"
   (change)="onCheckboxChange()">
   Activity {{ i + 1 }} {{ activityCheckbox.activity.getCreator().getName() }} - {{ activityCheckbox.activity.getType()
-  }} {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }}Km
+  }} {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
 </mat-checkbox>
