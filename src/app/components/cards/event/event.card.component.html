@@ -7,7 +7,7 @@
         <mat-icon *ngIf="event.getActivities().length > 1 ">
           compare_arrows
         </mat-icon>
-        {{ event.getName() }}
+        {{ event.getName().slice(0, 70) }}
       </section>
     </mat-card-title>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>

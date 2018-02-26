@@ -332,7 +332,6 @@ export class EventService {
         return +eventA.getFirstActivity().getStartDate() - +eventB.getFirstActivity().getStartDate();
       });
       const mergeEvent = new Event();
-      mergeEvent.setName((new Date()).toISOString());
       for (const event of events) {
         for (const activity of event.getActivities()) {
           mergeEvent.addActivity(activity);
@@ -349,6 +348,7 @@ export class EventService {
         )
       );
       mergeEvent.setSummary(eventSummary);
+      mergeEvent.setName('Merged at ' + (new Date()).toISOString());
       return resolve(mergeEvent);
     });
   }
