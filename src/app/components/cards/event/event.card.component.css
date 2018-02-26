@@ -11,3 +11,6 @@ mat-icon{
   align-content: center;
   align-items: center;
 }
+mat-chip-list{
+  display: inline-block;
+}

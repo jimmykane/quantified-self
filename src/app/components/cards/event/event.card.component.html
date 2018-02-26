@@ -42,7 +42,7 @@
     <mat-card-subtitle *ngFor="let activity of event.getActivities(); let i = index;">
       <span *ngIf=" activity.getCreator().getName()">
           <mat-icon>watch</mat-icon>
-          <span class="mat-body-2">{{ activity.getCreator().getName() }} </span>
+          <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
           <span *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
           <span *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
           <span class="mat-body-2"
