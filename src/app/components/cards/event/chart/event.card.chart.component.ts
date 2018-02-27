@@ -296,11 +296,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       }, value));
     });
 
-    // @todo move this logic to activities or importer
-    dataProvider.sort((dataA: any, dataB: any) => {
-      return +dataA.date - +dataB.date;
-    });
-
     const t1 = performance.now();
     this.logger.d('Flatten ' + Array.from(dataMap.keys()).length + ' points after ' +
       (t1 - t0) + ' milliseconds or ' +
