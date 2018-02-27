@@ -12,7 +12,7 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Output() selectedActivities: EventEmitter<ActivityInterface[]> = new EventEmitter();
 
-  private activitiesCheckboxes: any[];
+  activitiesCheckboxes: any[];
 
   ngOnInit() {
     this.onCheckboxChange();
