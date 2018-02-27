@@ -47,10 +47,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
         return '#000000';
       }
       case 1: {
-        return '#2261bf';
+        return '#1881ea';
       }
       case 2: {
-        return '#73a55e';
+        return '#71be76';
       }
       case 3: {
         return '#a51e38';
