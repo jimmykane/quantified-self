@@ -1,3 +1,6 @@
 .margin {
   margin: auto;
 }
+mat-icon{
+  vertical-align: middle;
+}

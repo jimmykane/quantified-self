@@ -3,7 +3,7 @@
   class="margin"
   [(ngModel)]="activityCheckbox.checked"
   [disabled]="activityCheckbox.disabled"
-  (change)="onCheckboxChange()">#{{ i + 1 }} {{ activityCheckbox.activity.getType() }}<br/>
-  Time: {{ activityCheckbox.activity.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}<br/>
-  Distance:  {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
+  (change)="onCheckboxChange()">{{ activityCheckbox.activity.getType() }}<br/>
+  <mat-icon>timer</mat-icon> {{ activityCheckbox.activity.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}<br/>
+  <mat-icon>trending_flat</mat-icon> {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
 </mat-checkbox>
