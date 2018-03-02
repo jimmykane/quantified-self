@@ -13,9 +13,9 @@ if (environment.production) {
   Log.setProductionMode();
 }
 
-if (appVersion !== localStorage.getItem('version')) {
-  localStorage.clear();
-  localStorage.setItem('version', appVersion);
-}
+// if (appVersion !== localStorage.getItem('version')) {
+//   localStorage.clear();
+//   localStorage.setItem('version', appVersion);
+// }
 
 platformBrowserDynamic().bootstrapModule(AppModule);
