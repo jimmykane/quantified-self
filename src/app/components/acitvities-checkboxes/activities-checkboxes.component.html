@@ -3,7 +3,27 @@
   class="margin"
   [(ngModel)]="activityCheckbox.checked"
   [disabled]="activityCheckbox.disabled"
-  (change)="onCheckboxChange()">{{ activityCheckbox.activity.getType() }}<br/>
-  <mat-icon>timer</mat-icon> {{ activityCheckbox.activity.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}<br/>
-  <mat-icon>trending_flat</mat-icon> {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
+  (change)="onCheckboxChange()">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>
+        <app-activity-icon [activity]="activityCheckbox.activity"></app-activity-icon>
+        {{ activityCheckbox.activity.getType() }}
+      </mat-card-title>
+      <mat-card-subtitle>
+        <mat-icon>timer</mat-icon>
+        {{
+        activityCheckbox.activity.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss'
+        }}
+      </mat-card-subtitle>
+      <mat-card-subtitle>
+        <mat-icon>trending_flat</mat-icon>
+        {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
+      </mat-card-subtitle>
+      <mat-card-subtitle>
+        <mat-icon>watch</mat-icon>
+        <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activityCheckbox.activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
+      </mat-card-subtitle>
+    </mat-card-header>
+  </mat-card>
 </mat-checkbox>

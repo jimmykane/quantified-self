@@ -4,3 +4,7 @@
 mat-icon{
   vertical-align: middle;
 }
+
+mat-chip-list{
+  display: inline-block;
+}
