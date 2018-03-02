@@ -281,7 +281,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   private getAllCategoryTypes(): any[] {
     if (this.categories.length < 1) {
       this.getAllData().forEach((dataArray, category, eventData) => {
-        this.categories.push(category);
+        // Hack here to add the units unfortunately
+        this.categories.push({name: category, unit: dataArray[0].getUnit()});
       });
     }
     return this.categories;
@@ -321,7 +322,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           value = data.getValue().toFixed(0)
         }
         dataAccumulator.set(data.getPoint().getDate().getTime(), Object.assign(dateData, {
-          [dataType]: value
+          [dataType]: value,
         }));
         return dataAccumulator;
       }, dataMap);
@@ -339,8 +340,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     let rightIndex = 0;
     this.getAllCategoryTypes().forEach((dataCategory) => {
       valueAxes.push({
-        id: dataCategory,
-        axisColor: this.genColor(dataCategory),
+        id: dataCategory.name,
+        axisColor: this.genColor(dataCategory.name),
         axisThickness: 1,
         axisAlpha: 1,
         position: valueAxes.length % 2 === 0 ? 'left' : 'right',
@@ -359,21 +360,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   private getGraphs(): any[] {
     const t0 = performance.now();
     const graphs = [];
-    this.getAllCategoryTypes().forEach((dataCategory: string) => {
+    this.getAllCategoryTypes().forEach((dataCategory: any ) => {
       graphs.push({
-        id: dataCategory,
-        valueAxis: dataCategory,
-        lineColor: this.genColor(dataCategory),
+        id: dataCategory.name,
+        valueAxis: dataCategory.name,
+        lineColor: this.genColor(dataCategory.name),
         bulletBorderThickness: 3,
         hideBulletsCount: 1,
-        title: dataCategory,
-        valueField: dataCategory,
-        balloonText: dataCategory + '<br><b><span>[[value]]</span></b>',
-        fillAlphas: 0.1,
-        lineThickness: 1.4,
+        title: dataCategory.name,
+        valueField: dataCategory.name,
+        balloonText: dataCategory.name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b>',
+        fillAlphas: 0.05,
+        lineThickness: 1.5,
         useLineColorForBulletBorder: true,
-        bulletBorderAlpha: 1,
-        bulletColor: '#FFFFFF',
         type: 'line',
         hidden: graphs.length >= 1
       });
