@@ -4,10 +4,10 @@
       <section class="title">
         <app-activity-icon [activity]="event.getFirstActivity()"
                            *ngIf="event.getActivities().length === 1 "></app-activity-icon>
-        <mat-icon *ngIf="event.getActivities().length > 1 ">
+        <mat-icon *ngIf="event.getActivities().length > 1 " style="margin-right: 0.2vw;">
           compare_arrows
         </mat-icon>
-        {{ event.getName().slice(0, 70) }}
+        <span>{{ event.getName().slice(0, 70) }}</span>
       </section>
     </mat-card-title>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
