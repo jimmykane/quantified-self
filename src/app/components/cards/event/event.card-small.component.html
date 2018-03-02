@@ -2,9 +2,8 @@
   <mat-card-header>
     <div matCardAvatar>
       <div class="card-avatar-container">
-        <mat-icon *ngFor="let activity of event.getActivities()">
-          {{ getIconFromActivityType(activity) }}
-        </mat-icon>
+        <app-activity-icon [activity]="activity" *ngFor="let activity of event.getActivities()">
+        </app-activity-icon>
       </div>
     </div>
     <mat-card-title>
