@@ -370,6 +370,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         title: dataCategory.name,
         valueField: dataCategory.name,
         balloonText: dataCategory.name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b>',
+        legendValueText: '[[value]] ' + dataCategory.unit,
         fillAlphas: 0.05,
         lineThickness: 1.5,
         useLineColorForBulletBorder: true,
