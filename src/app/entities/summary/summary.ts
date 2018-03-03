@@ -38,7 +38,7 @@ export class Summary implements SummaryInterface {
   private maxSpeed: number;
   private avgSpeed: number;
   private minSpeed: number;
-  private intensityZones: Map<string, ZonesInterface>;
+  private intensityZones: Map<string, ZonesInterface> = new Map<string, ZonesInterface>();
 
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;
@@ -336,6 +336,12 @@ export class Summary implements SummaryInterface {
   }
 
   toJSON(): any {
+    const intensityZonesArray = [];
+    this.getIntensityZones().forEach((value: ZonesInterface, key: string, map) => {
+      intensityZonesArray.push({
+        [key]: value.toJSON(),
+      })
+    });
     return {
       totalDurationInSeconds: this.getTotalDurationInSeconds(),
       totalDistanceInMeters: this.getTotalDistanceInMeters(),
@@ -372,7 +378,7 @@ export class Summary implements SummaryInterface {
       maxSpeed: this.getMaxSpeed(),
       avgSpeed: this.getAvgSpeed(),
       minSpeed: this.getMinSpeed(),
-
+      intensityZones: intensityZonesArray,
     };
   }
 }

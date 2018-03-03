@@ -21,6 +21,7 @@ import {DataEVPE} from '../../../data/data.evpe';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
+import {Zones} from "../../../intensity-zones/intensity-zone";
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -83,6 +84,48 @@ export class EventImporterSuuntoJSON {
       activitySummary.setAvgVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Avg);
       activitySummary.setMaxVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Max);
       activitySummary.setMinVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Min);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.HrZones) {
+      const zones = new Zones;
+      zones.zone1Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone1Duration;
+      zones.zone2Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone2Duration;
+      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit;
+      zones.zone3Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone3Duration;
+      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone3LowerLimit;
+      zones.zone4Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone4Duration;
+      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit;
+      zones.zone5Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone5Duration;
+      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit;
+      activitySummary.addIntensityZone('HrZones', zones);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.PowerZones) {
+      const zones = new Zones;
+      zones.zone1Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone1Duration;
+      zones.zone2Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone2Duration;
+      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone2LowerLimit;
+      zones.zone3Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone3Duration;
+      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone3LowerLimit;
+      zones.zone4Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone4Duration;
+      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone4LowerLimit;
+      zones.zone5Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone5Duration;
+      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone5LowerLimit;
+      activitySummary.addIntensityZone('PowerZones', zones);
+    }
+
+    if (eventJSONObject.DeviceLog.Header.SpeedZones) {
+      const zones = new Zones;
+      zones.zone1Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone1Duration;
+      zones.zone2Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone2Duration;
+      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone2LowerLimit;
+      zones.zone3Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone3Duration;
+      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone3LowerLimit;
+      zones.zone4Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone4Duration;
+      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone4LowerLimit;
+      zones.zone5Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5Duration;
+      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5LowerLimit;
+      activitySummary.addIntensityZone('SpeedZones', zones);
     }
 
 
