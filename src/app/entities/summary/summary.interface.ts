@@ -1,6 +1,8 @@
 import {Weather} from '../weather/app.weather';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
+import {Zones} from "../intensity-zones/intensity-zone";
+import {ZonesInterface} from "../intensity-zones/intensity-zone.interface";
 
 export interface SummaryInterface extends SerializableClassInterface {
   setTotalDurationInSeconds(totalDurationInSeconds: number);
@@ -110,4 +112,7 @@ export interface SummaryInterface extends SerializableClassInterface {
 
   setMaxVerticalSpeed(maxVerticalSpeed: number);
   getMaxVerticalSpeed(): number
+
+  getIntensityZones(): Map<string, ZonesInterface>;
+  addIntensityZone(zonesName: string, zone: ZonesInterface);
 }

@@ -1,6 +1,7 @@
 import {SummaryInterface} from './summary.interface';
 import {Weather} from '../weather/app.weather';
 import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
+import {ZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export class Summary implements SummaryInterface {
 
@@ -37,6 +38,7 @@ export class Summary implements SummaryInterface {
   private maxSpeed: number;
   private avgSpeed: number;
   private minSpeed: number;
+  private intensityZones: Map<string, ZonesInterface>;
 
   private geoLocationInfo: GeoLocationInfo;
   private weather: Weather;
@@ -322,6 +324,15 @@ export class Summary implements SummaryInterface {
 
   getMaxVerticalSpeed(): number {
     return this.maxVerticalSpeed;
+  }
+
+
+  getIntensityZones(): Map<string, ZonesInterface> {
+    return this.intensityZones;
+  }
+
+  addIntensityZone(zoneName: string, zone: ZonesInterface) {
+    this.intensityZones.set(zoneName, zone)
   }
 
   toJSON(): any {
