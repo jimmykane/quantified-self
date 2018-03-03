@@ -25,6 +25,7 @@ import {Summary} from '../../../summary/summary';
 import {DataEVPE} from '../../../data/data.evpe';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
+import {Zones} from "../../../intensity-zones/intensity-zone";
 
 export class EventImporterJSON {
 
@@ -121,7 +122,6 @@ export class EventImporterJSON {
       activitySummary.setAvgTemperature(activityObject.summary.avgTemperature);
 
 
-
       if (activityObject.summary.weather) {
         const weatherItems = [];
         for (const weatherItemObject of activityObject.summary.weather.weatherItems) {
@@ -147,6 +147,23 @@ export class EventImporterJSON {
         activitySummary.getGeoLocationInfo().country = activityObject.summary.geoLocationInfo.country;
         activitySummary.getGeoLocationInfo().province = activityObject.summary.geoLocationInfo.province;
       }
+
+      if (activityObject.summary.intensityZones) {
+        activityObject.summary.intensityZones.forEach((value, key) => {
+          const zones = new Zones();
+          zones.zone1Duration = value.Zone1Duration;
+          zones.zone2Duration = value.Zone2Duration;
+          zones.zone2LowerLimit = value.Zone2LowerLimit;
+          zones.zone3Duration = value.Zone3Duration;
+          zones.zone3LowerLimit = value.Zone3LowerLimit;
+          zones.zone4Duration = value.Zone4Duration;
+          zones.zone4LowerLimit = value.Zone4LowerLimit;
+          zones.zone5Duration = value.Zone5Duration;
+          zones.zone5LowerLimit = value.Zone5LowerLimit;
+          activitySummary.addIntensityZone(key, zones);
+        });
+      }
+
 
       activity.setSummary(activitySummary);
       event.addActivity(activity);
