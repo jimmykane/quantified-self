@@ -4,7 +4,7 @@ Quantified Self
 
 You can have a quick view of what it is if you know what GPX, TCX and FIT
 files are about. 
-Check quantified-self.com
+Check quantified-self.io
 
 Donations: <br/>
 
