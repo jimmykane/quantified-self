@@ -56,7 +56,21 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getLaps(activity?: ActivityInterface): LapInterface[] {
-    return this.laps;
+    if (!activity){
+      return this.laps;
+    }
+    const activityLaps: LapInterface[] = [];
+    for (const lap of this.laps) {
+      // If it's the last activity and the last lap then append it to the activity laps and break
+      if (this.activities[this.activities.length] === activity && this.laps[this.laps.length] === lap) {
+        activityLaps.push(lap);
+        break;
+      }
+      if ((lap.getStartDate() >= activity.getStartDate()) && (lap.getEndDate() <= activity.getEndDate())) {
+        activityLaps.push(lap);
+      }
+    }
+    return activityLaps
   }
 
   getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
