@@ -139,7 +139,7 @@ export class EventImporterSuuntoJSON {
     event.setSummary(eventSummary);
 
     const creator = new Creator();
-    creator.setName(eventJSONObject.DeviceLog.Device.Name); // Should show model
+    creator.setName(this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name)); // Should show model
     creator.setSerialNumber(eventJSONObject.DeviceLog.Device.SerialNumber);
     creator.setHWInfo(eventJSONObject.DeviceLog.Device.Info.HW);
     creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);
@@ -327,6 +327,33 @@ export class EventImporterSuuntoJSON {
       }
     }
     return 'Unknown'
+  }
+
+  private static getDeviceModelFromCodeName(codeName: string): string{
+    switch (codeName) {
+      case 'Amsterdam': {
+        return 'Spartan Ultra';
+      }
+      case 'Ibiza': {
+        return 'Ultra X'
+      }
+      case 'Brighton': {
+        return 'Spartan Sport'
+      }
+      case 'Cairo': {
+        return 'Spartan Wrist HR'
+      }
+      case 'Forssa': {
+        return 'Spartan Trainer'
+      }
+      case 'Gdansk': {
+        return 'Spartan Wrist HR Baro'
+      }
+      case 'Helsinki': {
+        return '3 Fitness'
+      }
+    }
+    return codeName;
   }
 
 }
