@@ -58,20 +58,8 @@ export class EventExporterTCX implements EventExporterInterface {
       activityElement.appendChild(idElement);
 
 
-      const activityLaps: LapInterface[] = [];
-      let lapIndex = 0;
-      for (const lap of event.getLaps()) {
-        lapIndex++;
+      const activityLaps: LapInterface[] = event.getLaps(activity);
 
-        // If it's the last activity and the last lap then append it to the activity laps and break
-        if (activityIndex === event.getActivities().length && lapIndex === event.getLaps().length) {
-          activityLaps.push(lap);
-          break;
-        }
-        if ((lap.getStartDate() >= activity.getStartDate()) && (lap.getEndDate() <= activity.getEndDate())) {
-          activityLaps.push(lap);
-        }
-      }
 
       // If there are no laps create one and clone it from the activity
       if (!activityLaps.length) {
