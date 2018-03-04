@@ -205,7 +205,7 @@ export class EventImporterSuuntoJSON {
     // Important
 
     // Parse the laps
-    let nextLapStartDate = event.getFirstActivity().getStartPoint().getDate();
+    let nextLapStartDate = event.getFirstActivity().getStartDate();
     for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
       const lapObj = lapWindow.Window;
       if (lapObj.Type !== 'Autolap') {
