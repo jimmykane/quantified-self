@@ -334,9 +334,6 @@ export class EventImporterSuuntoJSON {
       case 'Amsterdam': {
         return 'Spartan Ultra';
       }
-      case 'Ibiza': {
-        return 'Ultra X'
-      }
       case 'Brighton': {
         return 'Spartan Sport'
       }
