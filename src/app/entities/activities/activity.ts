@@ -15,6 +15,7 @@ export class Activity extends IDClass implements ActivityInterface {
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: SummaryInterface;
   private logger = Log.create('Activity');
+  private rrData: number[];
 
   constructor() {
     super();
@@ -131,6 +132,14 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.summary;
   }
 
+  setRRData(rrData) {
+    this.rrData = rrData;
+  }
+
+  getRRData() {
+    return this.rrData;
+  }
+
   sortPointsByDate(): void {
     this.getPoints().sort((pointA: PointInterface, pointB: PointInterface) => {
       return pointA.getDate().getTime() - pointB.getDate().getTime();
@@ -148,7 +157,8 @@ export class Activity extends IDClass implements ActivityInterface {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
-      summary: this.summary.toJSON()
+      summary: this.summary.toJSON(),
+      rrData: this.getRRData()
     };
   }
 }

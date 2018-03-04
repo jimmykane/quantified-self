@@ -284,6 +284,8 @@ export class EventImporterSuuntoJSON {
       return event
     }
 
+    activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
+
     // Go over the IBI
     let ibiBuffer = [];
     let lastDate = event.getFirstActivity().getStartDate();
@@ -326,4 +328,5 @@ export class EventImporterSuuntoJSON {
     }
     return 'Unknown'
   }
+
 }

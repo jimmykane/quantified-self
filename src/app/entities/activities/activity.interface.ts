@@ -20,5 +20,7 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getEndPoint(): PointInterface;
   setSummary(activitySummary: SummaryInterface);
   getSummary(): SummaryInterface;
+  setRRData(rrData: number[]);
+  getRRData(): number[]
   sortPointsByDate(): void;
 }

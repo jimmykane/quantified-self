@@ -121,7 +121,6 @@ export class EventImporterJSON {
       activitySummary.setMaxTemperature(activityObject.summary.maxTemperature);
       activitySummary.setAvgTemperature(activityObject.summary.avgTemperature);
 
-
       if (activityObject.summary.weather) {
         const weatherItems = [];
         for (const weatherItemObject of activityObject.summary.weather.weatherItems) {
@@ -166,6 +165,8 @@ export class EventImporterJSON {
 
 
       activity.setSummary(activitySummary);
+      activity.setRRData(activityObject.rrData);
+
       event.addActivity(activity);
 
       const creator = new Creator();
