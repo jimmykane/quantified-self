@@ -386,6 +386,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private genColor(key: string) {
+    if (key.includes(DataHeartRate.type + ' 1')) {
+      return '#249fe6';
+    }
+    if (key.includes(DataHeartRate.type + ' 2')) {
+      return '#ff8f87';
+    }
     if (key.includes(DataHeartRate.type)) {
       return '#ff3f07';
     }
