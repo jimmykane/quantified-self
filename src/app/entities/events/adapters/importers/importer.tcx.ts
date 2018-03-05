@@ -46,7 +46,7 @@ export class EventImporterTCX {
             +(new Date(lapElement.getAttribute('StartTime'))) +
             1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
         ));
-        event.addLap(lap);
+        activity.addLap(lap);
 
         // if (lapElement.getElementsByTagName('Calories')[0]) {
         //   lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));

@@ -49,7 +49,7 @@ export class EventImporterFIT {
               continue;
             }
             const lap = new Lap(sessionLap.start_time, sessionLap.timestamp);
-            event.addLap(lap);
+            activity.addLap(lap);
             for (const lapRecord of sessionLap.records) {
               recordCount++;
               const point = new Point(new Date(lapRecord.timestamp));

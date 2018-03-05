@@ -3,6 +3,7 @@ import {PointInterface} from '../points/point.interface';
 import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {SummaryInterface} from '../summary/summary.interface';
+import {LapInterface} from "../laps/lap.interface";
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
   setType(type: string);
@@ -22,5 +23,7 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getSummary(): SummaryInterface;
   setRRData(rrData: number[]);
   getRRData(): number[]
+  getLaps(): LapInterface[];
+  addLap(lap: LapInterface);
   sortPointsByDate(): void;
 }

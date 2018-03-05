@@ -150,13 +150,7 @@ export class EventService {
 
   public generateEventSummaries(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
-      // Lap summaries
-      for (const lap of event.getLaps()) {
-        const lapSummary = new Summary();
-        lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
-        lapSummary.setTotalDurationInSeconds((+lap.getEndDate() - +lap.getStartDate()) / 1000);
-        lap.setSummary(lapSummary);
-      }
+
 
       // Activities Summaries
       const activitiesPromises = [];
@@ -179,6 +173,14 @@ export class EventService {
         activitiesPromises.push(this.weatherService.getWeather(
           event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
         ));
+
+        // Lap summaries
+        for (const lap of activity.getLaps()) {
+          const lapSummary = new Summary();
+          lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
+          lapSummary.setTotalDurationInSeconds((+lap.getEndDate() - +lap.getStartDate()) / 1000);
+          lap.setSummary(lapSummary);
+        }
       }
 
       // Event Summary
@@ -335,9 +337,6 @@ export class EventService {
       for (const event of events) {
         for (const activity of event.getActivities()) {
           mergeEvent.addActivity(activity);
-        }
-        for (const lap of event.getLaps()){
-          mergeEvent.addLap(lap);
         }
       }
       const eventSummary = new Summary();

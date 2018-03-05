@@ -270,7 +270,7 @@ export class EventImporterSuuntoJSON {
       }
 
       lap.setSummary(lapSummary);
-      event.addLap(lap);
+      activity.addLap(lap);
       nextLapStartDate = lap.getEndDate();
     }
 

@@ -78,7 +78,7 @@
                               [event]="event">
         </app-event-card-chart>
       </mat-tab>
-      <mat-tab label="Laps" *ngIf="event.getLaps().length > 0">
+      <mat-tab label="Laps" *ngIf="event.getFirstActivity().getLaps().length > 0">
         <ng-template matTabLabel>
           <mat-icon>linear_scale</mat-icon>
         </ng-template>

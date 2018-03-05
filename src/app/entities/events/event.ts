@@ -1,6 +1,4 @@
 import {EventInterface} from './event.interface';
-import {GeodesyAdapterInterface} from '../geodesy/adapters/adapter.interface';
-import {GeoLibAdapter} from '../geodesy/adapters/geolib.adapter';
 import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
@@ -13,7 +11,6 @@ export class Event extends IDClass implements EventInterface {
 
   private name: string;
   private activities: ActivityInterface[] = [];
-  private laps: LapInterface[] = [];
   private summary: SummaryInterface;
   private logger = Log.create('Event');
 
@@ -49,24 +46,6 @@ export class Event extends IDClass implements EventInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
       return activityA.getStartDate() < activityB.getStartDate() ? activityB : activityA;
     });
-  }
-
-  addLap(lap: LapInterface) {
-    this.laps.push(lap);
-  }
-
-  getLaps(activity?: ActivityInterface): LapInterface[] {
-    if (!activity){
-      return this.laps;
-    }
-    const activityLaps: LapInterface[] = [];
-    for (const lap of this.laps) {
-      if ((lap.getStartDate() >= activity.getStartDate()) && (lap.getStartDate() <= activity.getEndDate())) {
-        activityLaps.push(lap);
-      }
-    }
-    debugger
-    return activityLaps
   }
 
   getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
@@ -135,10 +114,6 @@ export class Event extends IDClass implements EventInterface {
       activities: this.getActivities().reduce((jsonActivitiesArray: any[], activity: ActivityInterface) => {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;
-      }, []),
-      laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
-        jsonLapsArray.push(lap.toJSON());
-        return jsonLapsArray;
       }, []),
       summary: this.summary.toJSON()
     };

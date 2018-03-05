@@ -1,4 +1,4 @@
-<mat-card>
+<mat-card *ngFor="let activity of event.getActivities()">
   <table class="table">
     <thead>
     <tr>
@@ -14,7 +14,7 @@
     <tbody>
     <tr app-event-lap-table-row
         [attr.data-index]="i"
-        *ngFor="let lap of event.getLaps(); index as index; first as isFirst; last as isLast; count as count;"
+        *ngFor="let lap of activity.getLaps(); index as index; first as isFirst; last as isLast; count as count;"
         [index]="index"
         [isFirst]="isFirst"
         [isLast]="isLast"

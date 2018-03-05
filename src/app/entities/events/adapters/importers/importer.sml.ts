@@ -32,7 +32,7 @@ export class EventImporterSML {
     const laps = this.getLapsArray(jsonString);
     for (const lap of laps) {
       const eventLap = new Lap(lap.startDate, lap.endDate);
-      event.addLap(eventLap);
+      activity.addLap(eventLap);
     }
 
     JSON.parse(jsonString)['Samples'].forEach((jsonSampleEntry) => {

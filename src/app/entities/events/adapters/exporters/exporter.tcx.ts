@@ -58,7 +58,7 @@ export class EventExporterTCX implements EventExporterInterface {
       activityElement.appendChild(idElement);
 
 
-      const activityLaps: LapInterface[] = event.getLaps(activity);
+      const activityLaps: LapInterface[] = activity.getLaps();
 
 
       // If there are no laps create one and clone it from the activity

@@ -5,6 +5,7 @@ import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {Log} from 'ng2-logger';
 import {SummaryInterface} from '../summary/summary.interface';
+import {LapInterface} from "../laps/lap.interface";
 
 export class Activity extends IDClass implements ActivityInterface {
 
@@ -16,6 +17,8 @@ export class Activity extends IDClass implements ActivityInterface {
   private summary: SummaryInterface;
   private logger = Log.create('Activity');
   private rrData: number[];
+  private laps: LapInterface[] = [];
+
 
   constructor() {
     super();
@@ -33,7 +36,7 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.startDate;
   }
 
-  setStartDate(startDate: Date){
+  setStartDate(startDate: Date) {
     this.startDate = startDate;
   }
 
@@ -41,7 +44,7 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.endDate;
   }
 
-  setEndDate(endDate: Date){
+  setEndDate(endDate: Date) {
     this.endDate = endDate;
   }
 
@@ -140,6 +143,14 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.rrData;
   }
 
+  addLap(lap: LapInterface) {
+    this.laps.push(lap);
+  }
+
+  getLaps(activity?: ActivityInterface): LapInterface[] {
+    return this.laps;
+  }
+
   sortPointsByDate(): void {
     this.getPoints().sort((pointA: PointInterface, pointB: PointInterface) => {
       return pointA.getDate().getTime() - pointB.getDate().getTime();
@@ -158,7 +169,11 @@ export class Activity extends IDClass implements ActivityInterface {
         return jsonPointsArray;
       }, []),
       summary: this.summary.toJSON(),
-      rrData: this.getRRData()
+      rrData: this.getRRData(),
+      laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
+        jsonLapsArray.push(lap.toJSON());
+        return jsonLapsArray;
+      }, []),
     };
   }
 }
