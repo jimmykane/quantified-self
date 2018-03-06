@@ -41,7 +41,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     this.activities = activities;
   }
 
-  getActivityColor(index: number): string {
+  getActivityColor(activity: ActivityInterface): string {
+    const index = this.event.getActivities().findIndex((eventActivity) => {
+      return activity === eventActivity
+    });
     switch (index) {
       case 0: {
         return '#000000';
