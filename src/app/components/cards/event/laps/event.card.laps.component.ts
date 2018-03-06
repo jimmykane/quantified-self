@@ -9,13 +9,6 @@ import {EventInterface} from '../../../../entities/events/event.interface';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardLapsComponent implements OnChanges {
+export class EventCardLapsComponent {
   @Input() event: EventInterface;
-  public lapData: {startDate: Date, endDate: Date, distanceInMeters: number, durationInSeconds: number}[] = [];
-  displayedColumns = ['startDate', 'endDate', 'distanceInMeters', 'durationInSeconds'];
-
-  constructor(private changeDetectorRef: ChangeDetectorRef){}
-
-  ngOnChanges() {
-  }
 }
