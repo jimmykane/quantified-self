@@ -11,24 +11,25 @@ export class AppEventColorService {
     });
     switch (index) {
       case 0: {
-        return '#000000';
+        return '#263238';
       }
       case 1: {
-        return '#1881ea';
+        return '#1565c0';
       }
       case 2: {
-        return '#71be76';
+        return '#558b2f';
       }
       case 3: {
         return '#a51e38';
       }
       case 4: {
-        return '#d38e2e';
+        return '#f57f17';
       }
       case 5: {
         return '#2dd86d';
       }
     }
+    // Do random else
     return '#' + Math.floor((Math.abs(Math.sin(index) * 16777215)) % 16777215).toString(16);
   }
 }
