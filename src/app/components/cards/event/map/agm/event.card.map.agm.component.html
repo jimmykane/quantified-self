@@ -12,7 +12,7 @@
   [fitBounds]="getBounds()">
   <agm-polyline
     *ngFor="let activity of this.activities;"
-    [strokeColor]="getActivityColor(activity)">
+    [strokeColor]="eventColorService.getActivityColor(event, activity)">
     <agm-polyline-point
       *ngFor="let point of event.getPointsWithPosition(null, null, null, [activity])"
       [latitude]="point.getPosition().latitudeDegrees"

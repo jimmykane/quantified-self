@@ -6,6 +6,7 @@ import {EventInterface} from '../../../../../entities/events/event.interface';
 import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
 import {ActivityInterface} from "../../../../../entities/activities/activity.interface";
+import {AppEventColorService} from "../../../../../services/app.event.color.service";
 
 
 @Component({
@@ -21,7 +22,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() resize: boolean;
   @Input() activities: ActivityInterface[];
 
-  constructor(private changeDetectorRef: ChangeDetectorRef) {
+  constructor(public eventColorService: AppEventColorService) {
   }
 
   ngOnInit() {
@@ -39,33 +40,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   onSelectedActivities(activities) {
     this.activities = activities;
-  }
-
-  getActivityColor(activity: ActivityInterface): string {
-    const index = this.event.getActivities().findIndex((eventActivity) => {
-      return activity === eventActivity
-    });
-    switch (index) {
-      case 0: {
-        return '#000000';
-      }
-      case 1: {
-        return '#1881ea';
-      }
-      case 2: {
-        return '#71be76';
-      }
-      case 3: {
-        return '#a51e38';
-      }
-      case 4: {
-        return '#d38e2e';
-      }
-      case 5: {
-        return '#2dd86d';
-      }
-    }
-    return '#' + Math.floor((Math.abs(Math.sin(index) * 16777215)) % 16777215).toString(16);
   }
 
   getBounds(): LatLngBoundsLiteral {

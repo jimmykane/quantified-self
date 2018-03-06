@@ -44,6 +44,7 @@ import {FormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {DisqusModule} from 'ngx-disqus';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
+import {AppEventColorService} from './services/app.event.color.service';
 
 @NgModule({
   imports: [
@@ -102,7 +103,8 @@ import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/
     EventService,
     ActionButtonService,
     WeatherUndergroundWeatherService,
-    GeoLocationInfoService
+    GeoLocationInfoService,
+    AppEventColorService
   ],
   bootstrap: [AppComponent]
 })
