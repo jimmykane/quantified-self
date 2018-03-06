@@ -91,6 +91,8 @@ export class EventImporterJSON {
           )
         }
         activitySummary.setWeather(new Weather(weatherItems));
+        // debugger;
+        // @todo fix
       }
 
       if (activityObject.summary.geoLocationInfo) {
