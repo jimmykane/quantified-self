@@ -351,25 +351,4 @@ export class EventService {
       return resolve(mergeEvent);
     });
   }
-
-  public mergeAllEventActivities(event: EventInterface): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      // Copy the date
-      const dateCopy = Object.create(event.getFirstActivity().getStartDate());
-      // Copy the points
-      const pointsCopy = Object.create(event.getPoints());
-
-      // Remove all activities
-      const activities = event.getActivities();
-      for (let i = activities.length; i--;) {
-        event.removeActivity(activities[i]);
-      }
-      const newActivity = new Activity();
-      event.addActivity(newActivity);
-      for (const point of pointsCopy) {
-        newActivity.addPoint(point);
-      }
-      return resolve(event);
-    });
-  }
 }
