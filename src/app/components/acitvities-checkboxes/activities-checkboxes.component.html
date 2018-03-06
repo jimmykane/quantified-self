@@ -21,7 +21,7 @@
         {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
       </mat-card-subtitle>
       <mat-card-subtitle>
-        <mat-icon>watch</mat-icon>
+        <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}" >watch</mat-icon>
         <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activityCheckbox.activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
       </mat-card-subtitle>
     </mat-card-header>

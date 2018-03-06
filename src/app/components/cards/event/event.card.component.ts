@@ -2,6 +2,7 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy,
 import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
+import {AppEventColorService} from "../../../services/app.event.color.service";
 
 
 @Component({
@@ -17,7 +18,7 @@ export class EventCardComponent implements OnInit, OnDestroy {
 
   private parametersSubscription: Subscription;
 
-  constructor(private route: ActivatedRoute, private router: Router, private changeDetectorRef: ChangeDetectorRef) {
+  constructor(private route: ActivatedRoute, private router: Router, public eventColorService: AppEventColorService) {
   }
 
   selectedTabIndexChange(index) {

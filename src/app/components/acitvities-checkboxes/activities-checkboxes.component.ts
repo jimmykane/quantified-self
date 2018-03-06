@@ -1,6 +1,7 @@
 import {Component, EventEmitter, Input, OnChanges, OnInit, Output} from '@angular/core';
 import {EventInterface} from '../../entities/events/event.interface';
 import {ActivityInterface} from '../../entities/activities/activity.interface';
+import {AppEventColorService} from "../../services/app.event.color.service";
 
 @Component({
   selector: 'app-activities-checkboxes',
@@ -11,8 +12,11 @@ import {ActivityInterface} from '../../entities/activities/activity.interface';
 export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Output() selectedActivities: EventEmitter<ActivityInterface[]> = new EventEmitter();
-
   activitiesCheckboxes: any[];
+
+  constructor(public eventColorService: AppEventColorService){
+
+  }
 
   ngOnInit() {
     this.onCheckboxChange();
