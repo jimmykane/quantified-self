@@ -20,14 +20,14 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() resize: boolean;
-  @Input() activities: ActivityInterface[];
+  @Input() selectedActivities: ActivityInterface[];
 
   constructor(public eventColorService: AppEventColorService) {
   }
 
   ngOnInit() {
     if (this.event.getActivities().length === 1) {
-      this.activities = [this.event.getFirstActivity()];
+      this.selectedActivities = [this.event.getFirstActivity()];
     }
   }
 
@@ -39,7 +39,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   onSelectedActivities(activities) {
-    this.activities = activities;
+    this.selectedActivities = activities;
   }
 
   getBounds(): LatLngBoundsLiteral {
