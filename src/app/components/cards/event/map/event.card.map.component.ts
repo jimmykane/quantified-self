@@ -22,11 +22,6 @@ export class EventCardMapComponent implements OnInit {
   public gridListColumnCount = 1;
   public mapRowSpan = 1;
 
-  private logger = Log.create('EventCardMapComponent');
-
-  constructor(private changeDetectorRef: ChangeDetectorRef) {
-  }
-
   ngOnInit() {
     // this.gridListColumnCount = (window.innerWidth) > 640 ? 2 : 1;
     // this.mapRowSpan = (window.innerWidth) > 640 ? 2 : 1;
