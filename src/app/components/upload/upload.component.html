@@ -4,8 +4,8 @@
       <h1>
         JSON ONLY<br/>
       </h1>
-
-      <div>
+      <app-upload-info [isVisible]="isUploadActive"></app-upload-info>
+      <div *ngIf="!isUploadActive">
         <p></p>
         <button mat-button (click)="inputFile.click()">Open JSON</button>
         <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
