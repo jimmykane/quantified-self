@@ -336,11 +336,9 @@ export class Summary implements SummaryInterface {
   }
 
   toJSON(): any {
-    const intensityZonesArray = [];
+    const intensityZones = {};
     this.getIntensityZones().forEach((value: ZonesInterface, key: string, map) => {
-      intensityZonesArray.push({
-        [key]: value.toJSON(),
-      })
+        intensityZones[key] =  value.toJSON();
     });
     return {
       totalDurationInSeconds: this.getTotalDurationInSeconds(),
@@ -378,7 +376,7 @@ export class Summary implements SummaryInterface {
       maxSpeed: this.getMaxSpeed(),
       avgSpeed: this.getAvgSpeed(),
       minSpeed: this.getMinSpeed(),
-      intensityZones: intensityZonesArray,
+      intensityZones: intensityZones,
     };
   }
 }
