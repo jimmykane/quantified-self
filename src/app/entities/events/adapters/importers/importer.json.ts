@@ -106,19 +106,19 @@ export class EventImporterJSON {
       }
 
       if (activityObject.summary.intensityZones) {
-        activityObject.summary.intensityZones.forEach((value, key) => {
+        for (const key in activityObject.summary.intensityZones) {
           const zones = new Zones();
-          zones.zone1Duration = value.Zone1Duration;
-          zones.zone2Duration = value.Zone2Duration;
-          zones.zone2LowerLimit = value.Zone2LowerLimit;
-          zones.zone3Duration = value.Zone3Duration;
-          zones.zone3LowerLimit = value.Zone3LowerLimit;
-          zones.zone4Duration = value.Zone4Duration;
-          zones.zone4LowerLimit = value.Zone4LowerLimit;
-          zones.zone5Duration = value.Zone5Duration;
-          zones.zone5LowerLimit = value.Zone5LowerLimit;
+          zones.zone1Duration = activityObject.summary.intensityZones[key].zone1Duration;
+          zones.zone2Duration = activityObject.summary.intensityZones[key].zone2Duration;
+          zones.zone2LowerLimit = activityObject.summary.intensityZones[key].zone2LowerLimit;
+          zones.zone3Duration = activityObject.summary.intensityZones[key].zone3Duration;
+          zones.zone3LowerLimit = activityObject.summary.intensityZones[key].zone3LowerLimit;
+          zones.zone4Duration = activityObject.summary.intensityZones[key].zone4Duration;
+          zones.zone4LowerLimit = activityObject.summary.intensityZones[key].zone4LowerLimit;
+          zones.zone5Duration = activityObject.summary.intensityZones[key].zone5Duration;
+          zones.zone5LowerLimit = activityObject.summary.intensityZones[key].zone5LowerLimit;
           activitySummary.addIntensityZone(key, zones);
-        });
+        }
       }
 
 
