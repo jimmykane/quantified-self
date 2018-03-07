@@ -12,10 +12,15 @@ import {EventInterface} from '../../entities/events/event.interface';
 
 export class UploadComponent {
 
+  //whether an upload is currently active
+  isUploadActive: boolean;
+
   constructor(private eventService: EventService, private localStorageService: LocalStorageService, private router: Router) {
+    this.isUploadActive = false;
   }
 
   openFile(event): void {
+    this.isUploadActive = true;
     const input = event.target;
     for (let index = 0; index < input.files.length; index++) {
       const fileReader = new FileReader;
@@ -28,9 +33,12 @@ export class UploadComponent {
               newEvent.setName(name);
               this.eventService.generateEventSummaries(newEvent).then((newEventWithSummaries: EventInterface) => {
                 this.eventService.saveEvent(newEventWithSummaries);
+                this.isUploadActive = false;
+                this.router.navigate(['dashboard']);
               });
             })
             .catch((error) => {
+              this.isUploadActive = false;
               console.error('Could not load event from file' + input.files[index].name, error);
             });
         } else if (input.files[index].name.split('.').pop() === 'fit') {
@@ -42,9 +50,12 @@ export class UploadComponent {
               newEvent.setName(name);
               this.eventService.generateGeoAndWeather(newEvent).then(() => {
                 this.eventService.saveEvent(newEvent);
+                this.isUploadActive = false;
+                this.router.navigate(['dashboard']);
               });
             })
             .catch((error) => {
+              this.isUploadActive = false;
               console.error('Could not load event from file' + input.files[index].name, error);
             });
         }
@@ -52,7 +63,6 @@ export class UploadComponent {
       // Read it
       fileReader.readAsText(input.files[index]);
     }
-    this.router.navigate(['dashboard']);
   }
 
   // @todo refactor

@@ -20,7 +20,7 @@ import {EventLapTableRowComponent} from './components/cards/event/laps/event.lap
 import {
   MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatExpansionModule,
   MatGridListModule, MatIconModule,
-  MatMenuModule,
+  MatMenuModule, MatProgressBarModule,
   MatSidenavModule, MatTableModule,
   MatTabsModule, MatToolbarModule, MatCheckboxModule
 } from '@angular/material';
@@ -44,6 +44,7 @@ import {FormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {DisqusModule} from 'ngx-disqus';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
+import { UploadInfoComponent } from './components/upload-info/upload-info.component';
 
 @NgModule({
   imports: [
@@ -74,6 +75,7 @@ import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/
     MatCheckboxModule,
     FormsModule,
     Angular2FontawesomeModule,
+    MatProgressBarModule
   ],
   declarations: [
     AppComponent,
@@ -94,7 +96,8 @@ import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/
     EventLapTableRowComponent,
     EventCardChartComponent,
     EventCardSmallComponent,
-    AboutComponent
+    AboutComponent,
+    UploadInfoComponent
   ],
   providers: [
     LocalStorageService,
