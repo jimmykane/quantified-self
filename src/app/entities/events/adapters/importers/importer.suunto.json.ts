@@ -97,7 +97,7 @@ export class EventImporterSuuntoJSON {
       zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit;
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone5Duration;
       zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit;
-      activitySummary.addIntensityZone('HrZones', zones);
+      activitySummary.addIntensityZone(DataHeartRate.type, zones);
     }
 
     if (eventJSONObject.DeviceLog.Header.PowerZones) {
@@ -111,7 +111,7 @@ export class EventImporterSuuntoJSON {
       zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone4LowerLimit;
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone5Duration;
       zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone5LowerLimit;
-      activitySummary.addIntensityZone('PowerZones', zones);
+      activitySummary.addIntensityZone(DataPower.type, zones);
     }
 
     if (eventJSONObject.DeviceLog.Header.SpeedZones) {
@@ -125,7 +125,7 @@ export class EventImporterSuuntoJSON {
       zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone4LowerLimit;
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5Duration;
       zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5LowerLimit;
-      activitySummary.addIntensityZone('SpeedZones', zones);
+      activitySummary.addIntensityZone(DataSpeed.type, zones);
     }
 
 
