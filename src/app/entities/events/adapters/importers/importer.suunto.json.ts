@@ -313,22 +313,23 @@ export class EventImporterSuuntoJSON {
    * @param {number} sampleRateInSeconds
    * @return {number[]}
    */
-  private static getHRFromRR(rr, sampleRateInSeconds?: number): Map<number, number> {
+  private static getHRFromRR(rr, sampleRateInSeconds?: number, smoothByAvg?: boolean): Map<number, number> {
     sampleRateInSeconds = sampleRateInSeconds || 5;
     const limit = sampleRateInSeconds * 1000;
-    let time = 0;
     let totalTime = 0;
     let rrBuffer = [];
     return rr.reduce((hr, d) => {
-      // Increase total time
-      totalTime += d;
-      time += d;
       // add it to the buffer
       rrBuffer.push(d);
+      // Increase total time
+      totalTime += d;
       // Check if buffer is full
+      const time = rrBuffer.reduce((a, b) => a + b, 0);
       if (time >= limit) {
-        hr.set(totalTime, rrBuffer.length * 60 / (time / 1000));
-        time = 0;
+        if (smoothByAvg) {
+        } else {
+          hr.set(totalTime, rrBuffer.length * 60 / (time / 1000));
+        }
         rrBuffer = [];
       }
       return hr;
