@@ -1,7 +1,7 @@
 import {Component} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {UPLOAD_STATUS} from "./status";
+import {UPLOAD_STATUS} from './status';
 
 @Component({
     selector: 'app-upload',
@@ -12,7 +12,7 @@ import {UPLOAD_STATUS} from "./status";
 export class UploadComponent {
 
     //whether an upload is currently active
-    isUploadActive: boolean = false;
+    isUploadActive = false;
     activitiesProcessed = [];
 
     constructor(private eventService: EventService, private router: Router) {
@@ -23,13 +23,13 @@ export class UploadComponent {
      * @param file
      * @returns {Promise}
      */
-    processFile(file):Promise{
+    processFile(file): Promise<any> {
         return new Promise((resolve, reject) => {
             const fileReader = new FileReader;
             const {name} = file,
                 nameParts = name.split('.'),
                 extension = nameParts.pop(),
-                activityName = nameParts.join("."),
+                activityName = nameParts.join('.'),
                 metaData = {
                     name: activityName,
                     status: UPLOAD_STATUS.PROCESSING
@@ -40,14 +40,14 @@ export class UploadComponent {
                     let newEvent;
                     try {
                         newEvent = await this.eventService.createEventFromSuuntoJSONString(fileReader.result);
-                    }catch(error) {
+                    } catch (error) {
                         metaData.status = UPLOAD_STATUS.ERROR;
                         console.error('Could not load event from file' + file.name, error);
                         reject(error);
                         return;
                     }
                     newEvent.setName(activityName);
-                    await this.eventService.generateGeoAndWeather(newEvent)
+                    await this.eventService.generateGeoAndWeather(newEvent);
                     this.eventService.saveEvent(newEvent);
                     metaData.status = UPLOAD_STATUS.PROCESSED;
                     resolve();
@@ -58,19 +58,19 @@ export class UploadComponent {
         });
     }
 
-    async openFile(event): void {
+    async openFile(event) {
         this.isUploadActive = true;
         const input = event.target;
         const processPromises = [];
         for (let index = 0; index < input.files.length; index++) {
             processPromises.push(this.processFile(input.files[index]));
         }
-        try{
+        try {
           await Promise.all(processPromises);
           this.router.navigate(['dashboard']);
-        }catch(error){
+        } catch (error) {
             console.error('Some of the files could not be processed', error);
-        }finally{
+        } finally {
             this.isUploadActive = false;
         }
     }
