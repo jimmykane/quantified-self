@@ -21,7 +21,7 @@ import {DataEVPE} from '../../../data/data.evpe';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
-import {Zones} from "../../../intensity-zones/intensity-zone";
+import {Zones} from '../../../intensity-zones/intensity-zone';
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -327,6 +327,7 @@ export class EventImporterSuuntoJSON {
       const time = rrBuffer.reduce((a, b) => a + b, 0);
       if (time >= limit) {
         if (smoothByAvg) {
+          // @todo implement
         } else {
           hr.set(totalTime, rrBuffer.length * 60 / (time / 1000));
         }
