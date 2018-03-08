@@ -308,13 +308,13 @@ export class EventImporterSuuntoJSON {
   }
 
   /**
-   * Returns an array from RR data that is converted to HR based on a sample rate that defaults to
+   * Returns an Map of elapsed time and HR from RR data
    * @param rr
    * @param {number} sampleRateInSeconds
    * @return {number[]}
    */
   private static getHRFromRR(rr, sampleRateInSeconds?: number, smoothByAvg?: boolean): Map<number, number> {
-    sampleRateInSeconds = sampleRateInSeconds || 5;
+    sampleRateInSeconds = sampleRateInSeconds || 10; // Use any second number
     const limit = sampleRateInSeconds * 1000;
     let totalTime = 0;
     let rrBuffer = [];
@@ -324,12 +324,12 @@ export class EventImporterSuuntoJSON {
       // Increase total time
       totalTime += d;
       // Check if buffer is full
-      const time = rrBuffer.reduce((a, b) => a + b, 0);
+      const time = rrBuffer.reduce((a, b) => a + b, 0); // gets the sum of the buffer [300+600 etc]
       if (time >= limit) {
         if (smoothByAvg) {
           // @todo implement
         } else {
-          hr.set(totalTime, rrBuffer.length * 60 / (time / 1000));
+          hr.set(totalTime, rrBuffer.length * 60 / (time / 1000)); // convert to bpm
         }
         rrBuffer = [];
       }
