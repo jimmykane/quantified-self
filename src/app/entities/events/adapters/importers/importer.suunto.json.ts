@@ -293,7 +293,7 @@ export class EventImporterSuuntoJSON {
       ibiBuffer.push(ibiInMilliseconds);
       const ibiBufferTotal = ibiBuffer.reduce((a, b) => a + b, 0);
       // If adding the ibi to the start of the activity is greater or equal to 3.5 second then empty the buffer there
-      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 3.5) {
+      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 3500) {
         const average = ibiBuffer.reduce((total, ibi) => {
           return total + ibi;
         }) / ibiBuffer.length;
