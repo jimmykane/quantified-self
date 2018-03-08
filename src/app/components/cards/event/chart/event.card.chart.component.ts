@@ -112,7 +112,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           useGraphSettings: true,
           autoMargins: true,
           marginTop: 0,
-          valueText: '[[value]]'
+          valueText: '[[value]]',
+          clickLabel: (graph) => {
+            graph.hidden = !graph.hidden;
+            // this.chart.guides = this.getZoneGuides();
+            // this.chart.validateNow();
+            // graph.guides = this.getZoneGuides();
+            // graph.chart.validateNow();
+          },
         },
         synchronizeGrid: true,
         categoryAxis: {
@@ -169,7 +176,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
-
+        // this.chart.guides = this.getZoneGuides();
         if (!this.chart.events.rendered.length) {
           this.chart.addListener('rendered', () => {
             this.logger.d('Chart rendered after ' +
@@ -189,7 +196,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         }
 
         if (!this.chart.events.dataUpdated.length) {
-          this.chart.addListener('dataUpdated', () => {
+          this.chart.addListener('dataUpdated', (event) => {
             this.logger.d('Chart data updated after ' +
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds'
@@ -231,7 +238,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         }
 
         if (!this.chart.events.drawn.length) {
-          this.chart.addListener('drawn', () => {
+          this.chart.addListener('drawn', (a) => {
             this.logger.d('Chart drawn after ' +
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds');
@@ -259,9 +266,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
-            const existingDataArray = dataMap.get(key + (index ? ' ' + String(index) : '')) || [];
+            key += ':' + activity.getID() + ':' + activity.getCreator().getName();
+            const existingDataArray = dataMap.get(key) || [];
             if (!existingDataArray.length) {
-              dataMap.set(key + (index ? ' ' + String(index) : ''), existingDataArray);
+              dataMap.set(key, existingDataArray);
             }
             pointDataArray.forEach((pointData) => {
               existingDataArray.push(pointData)
@@ -282,7 +290,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     if (this.categories.length < 1) {
       this.getAllData().forEach((dataArray, category, eventData) => {
         // Hack here to add the units unfortunately
-        this.categories.push({name: category, unit: dataArray[0].getUnit()});
+        this.categories.push({id: category, unit: dataArray[0].getUnit()});
       });
     }
     return this.categories;
@@ -318,6 +326,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         dataCount++;
         const dateData = dataAccumulator.get(data.getPoint().getDate().getTime()) || {};
         let value = data.getValue().toFixed(1);
+        // @todo fix below type
         if (dataType === DataHeartRate.type) {
           value = data.getValue().toFixed(0)
         }
@@ -340,8 +349,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     let rightIndex = 0;
     this.getAllCategoryTypes().forEach((dataCategory) => {
       valueAxes.push({
-        id: dataCategory.name,
-        axisColor: this.genColor(dataCategory.name),
+        id: dataCategory.id,
+        axisColor: this.genColor(dataCategory.id),
         axisThickness: 1,
         axisAlpha: 1,
         position: valueAxes.length % 2 === 0 ? 'left' : 'right',
@@ -360,16 +369,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   private getGraphs(): any[] {
     const t0 = performance.now();
     const graphs = [];
-    this.getAllCategoryTypes().forEach((dataCategory: any ) => {
+    this.getAllCategoryTypes().forEach((dataCategory: any) => {
+      const categoryID = dataCategory.id;
+      const name = categoryID.split(':')[0];
+      const activityID = categoryID.split(':')[1];
+      const creator = categoryID.split(':')[2];
+
       graphs.push({
-        id: dataCategory.name,
-        valueAxis: dataCategory.name,
-        lineColor: this.genColor(dataCategory.name),
+        id: categoryID,
+        valueAxis: categoryID,
+        lineColor: this.genColor(name),
         bulletBorderThickness: 3,
         hideBulletsCount: 1,
-        title: dataCategory.name,
-        valueField: dataCategory.name,
-        balloonText: dataCategory.name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b>',
+        title: name,
+        valueField: categoryID,
+        balloonText: name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b></br>' + creator,
         legendValueText: '[[value]] ' + dataCategory.unit,
         fillAlphas: 0.05,
         lineThickness: 1.5,
@@ -383,6 +397,74 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       (performance.now() - t0) / 1000 + ' seconds'
     );
     return graphs;
+  }
+
+  private getZoneGuides() {
+    // Find which graphs are visible and if applicable get a zone guide
+    if (this.chart.graphs.filter(chart => !chart.hidden).length !== 1) {
+      return [];
+    }
+    return this.chart.graphs.reduce((zoneGuides, graph) => {
+      if (graph.hidden) {
+        return zoneGuides;
+      }
+      const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
+        return activity.getID() === graph.id.split(':')[1];
+      }).getSummary().getIntensityZones().get(graph.id.split(':')[0]);
+      if (!activityIntensityZones) {
+        return zoneGuides
+      }
+
+      zoneGuides.push({
+          value: 0,
+          toValue: activityIntensityZones.zone2LowerLimit,
+          lineAlpha: 0.8,
+          lineColor: '#000000',
+          fillColor: '#9c9d9f',
+          fillAlpha: 0.1,
+          label: 'Z1',
+          position: 'right',
+        }, {
+          value: activityIntensityZones.zone2LowerLimit,
+          toValue: activityIntensityZones.zone3LowerLimit,
+          lineAlpha: 0.8,
+          lineColor: '#000000',
+          fillColor: '#00a0d2',
+          fillAlpha: 0.1,
+          label: 'Z2',
+          position: 'right',
+        }, {
+          value: activityIntensityZones.zone3LowerLimit,
+          toValue: activityIntensityZones.zone4LowerLimit,
+          lineAlpha: 0.8,
+          lineColor: '#000000',
+          fillColor: '#019853',
+          fillAlpha: 0.1,
+          label: 'Z3',
+          position: 'right',
+        }, {
+          value: activityIntensityZones.zone4LowerLimit,
+          toValue: activityIntensityZones.zone5LowerLimit,
+          lineAlpha: 0.8,
+          lineColor: '#000000',
+          fillColor: '#f5a918',
+          fillAlpha: 0.1,
+          label: 'Z4',
+          position: 'right',
+        },
+        {
+          value: activityIntensityZones.zone5LowerLimit,
+          toValue: 9999999999,
+          lineAlpha: 0.8,
+          lineColor: '#000000',
+          fillColor: '#e32c3e',
+          fillAlpha: 0.1,
+          label: 'Z5',
+          position: 'right',
+        }
+      );
+      return zoneGuides;
+    }, []);
   }
 
   private genColor(key: string) {
