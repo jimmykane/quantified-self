@@ -277,40 +277,18 @@ export class EventImporterSuuntoJSON {
     activity.sortPointsByDate();
     activity.setEndDate(activity.getEndPoint().getDate());
 
-
-    // If no IBI return
-    if (!eventJSONObject.DeviceLog["R-R"] || !eventJSONObject.DeviceLog["R-R"].Data) {
-      debugger;
-      return event
-    }
-
     activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
 
-    // Go over the IBI
-    let ibiBuffer = [];
-    let lastDate = event.getFirstActivity().getStartDate();
-    for (const ibiInMilliseconds of eventJSONObject.DeviceLog["R-R"].Data) {
-      ibiBuffer.push(ibiInMilliseconds);
-      const ibiBufferTotal = ibiBuffer.reduce((a, b) => a + b, 0);
-      // If adding the ibi to the start of the activity is greater or equal to 2.5 second then empty the buffer there
-      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 2500) {
-        const average = ibiBuffer.reduce((total, ibi) => {
-          return total + ibi;
-        }) / ibiBuffer.length;
-
-        // Find existing points
-        // @todo optimize
-        const eventPoints = event.getPoints(new Date(lastDate.getTime()), new Date(lastDate.getTime() + ibiInMilliseconds));
-        for (const eventPoint of eventPoints) {
-          eventPoint.addData(new DataHeartRate(1000 * 60 / average)); // @todo investigate 1000 magic number
-        }
-
-        ibiBuffer = [];
-        lastDate = new Date(lastDate.getTime() + ibiBufferTotal);
-      }
+    // If no IBI return
+    if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
+      this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
+        // Todo just add point with data to save up
+        const point = new Point(new Date(activity.getStartDate().getTime() + key));
+        point.addData(new DataHeartRate(value));
+        activity.addPoint(point);
+      });
     }
-
-    debugger;
+    debugger
     return event;
   }
 
@@ -329,7 +307,35 @@ export class EventImporterSuuntoJSON {
     return 'Unknown'
   }
 
-  private static getDeviceModelFromCodeName(codeName: string): string{
+  /**
+   * Returns an array from RR data that is converted to HR based on a sample rate that defaults to
+   * @param rr
+   * @param {number} sampleRateInSeconds
+   * @return {number[]}
+   */
+  private static getHRFromRR(rr, sampleRateInSeconds?: number): Map<number, number> {
+    sampleRateInSeconds = sampleRateInSeconds || 5;
+    const limit = sampleRateInSeconds * 1000;
+    let time = 0;
+    let totalTime = 0;
+    let rrBuffer = [];
+    return rr.reduce((hr, d) => {
+      // Increase total time
+      totalTime += d;
+      time += d;
+      // add it to the buffer
+      rrBuffer.push(d);
+      // Check if buffer is full
+      if (time >= limit) {
+        hr.set(totalTime, rrBuffer.length * 60 / (time / 1000));
+        time = 0;
+        rrBuffer = [];
+      }
+      return hr;
+    }, new Map());
+  }
+
+  private static getDeviceModelFromCodeName(codeName: string): string {
     switch (codeName) {
       case 'Amsterdam': {
         return 'Spartan Ultra';
