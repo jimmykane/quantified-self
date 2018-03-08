@@ -1,0 +1,14 @@
+ul.list{
+    list-style: none;
+    padding: 0px;
+}
+ul.list li {
+    padding: 5px;
+}
+li.success{
+    color: #008000;
+}
+
+li.error{
+    color: #ff0000;
+}
