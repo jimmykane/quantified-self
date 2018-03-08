@@ -115,10 +115,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           valueText: '[[value]]',
           clickLabel: (graph) => {
             graph.hidden = !graph.hidden;
-            // this.chart.guides = this.getZoneGuides();
-            // this.chart.validateNow();
-            // graph.guides = this.getZoneGuides();
-            // graph.chart.validateNow();
+            graph.chart.valueAxes.forEach((valueAxis) => {
+              valueAxis.guides = this.getZoneGuides();
+            });
+            graph.chart.validateNow();
           },
         },
         synchronizeGrid: true,
@@ -176,7 +176,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
-        // this.chart.guides = this.getZoneGuides();
         if (!this.chart.events.rendered.length) {
           this.chart.addListener('rendered', () => {
             this.logger.d('Chart rendered after ' +
@@ -197,6 +196,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
         if (!this.chart.events.dataUpdated.length) {
           this.chart.addListener('dataUpdated', (event) => {
+            event.chart.valueAxes.forEach((valueAxis) => {
+              valueAxis.guides = this.getZoneGuides();
+            });
+            event.chart.validateNow();
             this.logger.d('Chart data updated after ' +
               (performance.now() - t0) + ' milliseconds or ' +
               (performance.now() - t0) / 1000 + ' seconds'
@@ -416,41 +419,51 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       }
 
       zoneGuides.push({
-          value: 0,
+          value: 100,
           toValue: activityIntensityZones.zone2LowerLimit,
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#9c9d9f',
-          fillAlpha: 0.1,
+          fillAlpha: 0.05,
           label: 'Z1',
           position: 'right',
+          inside: true,
+          above: true,
+
         }, {
           value: activityIntensityZones.zone2LowerLimit,
           toValue: activityIntensityZones.zone3LowerLimit,
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#00a0d2',
-          fillAlpha: 0.1,
+          fillAlpha: 0.05,
           label: 'Z2',
           position: 'right',
+          inside: true,
+          above: true,
+
         }, {
           value: activityIntensityZones.zone3LowerLimit,
           toValue: activityIntensityZones.zone4LowerLimit,
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#019853',
-          fillAlpha: 0.1,
+          fillAlpha: 0.05,
           label: 'Z3',
           position: 'right',
+          inside: true,
+
         }, {
           value: activityIntensityZones.zone4LowerLimit,
           toValue: activityIntensityZones.zone5LowerLimit,
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#f5a918',
-          fillAlpha: 0.1,
+          fillAlpha: 0.05,
           label: 'Z4',
           position: 'right',
+          inside: true,
+
         },
         {
           value: activityIntensityZones.zone5LowerLimit,
@@ -458,9 +471,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#e32c3e',
-          fillAlpha: 0.1,
+          fillAlpha: 0.05,
           label: 'Z5',
           position: 'right',
+          inside: true,
         }
       );
       return zoneGuides;
