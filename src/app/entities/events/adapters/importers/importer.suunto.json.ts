@@ -90,13 +90,13 @@ export class EventImporterSuuntoJSON {
       const zones = new Zones;
       zones.zone1Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone1Duration;
       zones.zone2Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone2Duration;
-      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit;
+      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit * 60;
       zones.zone3Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone3Duration;
-      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone3LowerLimit;
+      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone3LowerLimit * 60;
       zones.zone4Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone4Duration;
-      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit;
+      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit * 60;
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone5Duration;
-      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit;
+      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit * 60;
       activitySummary.addIntensityZone(DataHeartRate.type, zones);
     }
 
@@ -292,8 +292,8 @@ export class EventImporterSuuntoJSON {
     for (const ibiInMilliseconds of eventJSONObject.DeviceLog["R-R"].Data) {
       ibiBuffer.push(ibiInMilliseconds);
       const ibiBufferTotal = ibiBuffer.reduce((a, b) => a + b, 0);
-      // If adding the ibi to the start of the activity is greater or equal to 2.5 second then empty the buffer there
-      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 2500) {
+      // If adding the ibi to the start of the activity is greater or equal to 3.5 second then empty the buffer there
+      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 3.5) {
         const average = ibiBuffer.reduce((total, ibi) => {
           return total + ibi;
         }) / ibiBuffer.length;
