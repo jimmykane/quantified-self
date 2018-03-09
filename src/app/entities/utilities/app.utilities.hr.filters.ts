@@ -6,7 +6,7 @@ export class HRFilters {
    * @param {number} lowPassHRLimit
    * @return {number | undefined}
    */
-  public static lowPassBPMFilter(hr: Map<number, number>, lowPassHRLimit?: number): Map<number, number>  {
+  public static lowPassBPMFilter(hr: Map<number, number>, lowPassHRLimit?: number): Map<number, number> {
     lowPassHRLimit = lowPassHRLimit || 220; // Vallencel
     const filteredHR = new Map();
     hr.forEach((value, key, map) => {
@@ -23,7 +23,7 @@ export class HRFilters {
    * @param {number} highPassHRLimit
    * @return {number}
    */
-  public static highPassBPMFilter(hr: Map<number, number>, highPassHRLimit?: number): Map<number, number>  {
+  public static highPassBPMFilter(hr: Map<number, number>, highPassHRLimit?: number): Map<number, number> {
     highPassHRLimit = highPassHRLimit || 40; // Magic number
     const filteredHR = new Map();
     hr.forEach((value, key, map) => {
@@ -35,16 +35,21 @@ export class HRFilters {
   }
 
   public static filterHRByStepAVGBuffer(hr: Map<number, number>, step?: number): Map<number, number> {
-    step = step || 1;
+    step = step || 2;
     const filteredHRMap = new Map();
     let buffer = [];
+    let startTime;
     hr.forEach((value, key, map) => {
       buffer.push(value);
+      if (!startTime) {
+        startTime = key;
+      }
       if (buffer.length >= step) {
-        filteredHRMap.set(key, buffer.reduce((total, hrValue) => {
+        filteredHRMap.set(startTime + ((key - startTime) / 2), buffer.reduce((total, hrValue) => {
           return total + hrValue;
         }) / buffer.length);
         buffer = [];
+        startTime = null;
       }
     });
     return filteredHRMap;
