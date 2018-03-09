@@ -281,6 +281,7 @@ export class EventImporterSuuntoJSON {
     // If no IBI return
     if (eventJSONObject.DeviceLog["R-R"] && eventJSONObject.DeviceLog["R-R"].Data) {
       activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
+      // @todo convert to functional
       HRFilters.filterHRByStepAVGBuffer(
         HRFilters.highPassBPMFilter(
           HRFilters.lowPassBPMFilter(
