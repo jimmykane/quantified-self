@@ -281,7 +281,7 @@ export class EventImporterSuuntoJSON {
 
     // If no IBI return
     if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
-      this.filterHR(this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data)).forEach((value, key, map) => {
+      this.getHRFromRRNoBuffer(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
@@ -310,13 +310,19 @@ export class EventImporterSuuntoJSON {
   /**
    * Converts the RR array to HR instantaneus (what user sees)
    * @param rrData
+   * @param lowPassFilterHR
+   * @param highPassFilterHR
    * @return {any}
    */
-  private static getHRFromRRNoBuffer(rrData): any {
+  private static getHRFromRRNoBuffer(rrData, lowPassFilterHR?: number, highPassFilterHR?: number): any {
+    lowPassFilterHR = lowPassFilterHR || 40; // Valencell
+    highPassFilterHR = highPassFilterHR || 220; // magic
     let totalTime = 0;
     return rrData.reduce((hrDataMap: Map<number, number>, rr) => {
       totalTime += rr;
-      hrDataMap.set(totalTime, Math.round(60000 / rr));
+      if ((Math.round(60000 / rr) > lowPassFilterHR) && (Math.round(60000 / rr) < highPassFilterHR)) {
+        hrDataMap.set(totalTime, Math.round(60000 / rr));
+      }
       return hrDataMap;
     }, new Map());
   }
