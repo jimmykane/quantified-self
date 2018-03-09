@@ -22,6 +22,7 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
 import {Zones} from '../../../intensity-zones/intensity-zone';
+import {HRFilters} from "../../../utilities/app.utilities.hr.filters";
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -277,11 +278,17 @@ export class EventImporterSuuntoJSON {
     activity.sortPointsByDate();
     activity.setEndDate(activity.getEndPoint().getDate());
 
-    activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
-
     // If no IBI return
-    if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
-      this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
+    if (eventJSONObject.DeviceLog["R-R"] && eventJSONObject.DeviceLog["R-R"].Data) {
+      activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
+      // @todo convert to functional
+      HRFilters.filterHRByStepAVGBuffer(
+        HRFilters.highPassBPMFilter(
+          HRFilters.lowPassBPMFilter(
+            HRFilters.convertRRtoHR(eventJSONObject.DeviceLog["R-R"].Data)
+          )
+        )
+      , 6).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
@@ -304,32 +311,6 @@ export class EventImporterSuuntoJSON {
       }
     }
     return 'Unknown'
-  }
-
-  /**
-   * Returns an Map of elapsed time and HR from RR data
-   * @param rr
-   * @param {number} sampleRateInSeconds
-   * @return {number[]}
-   */
-  private static getHRFromRR(rr, sampleRateInSeconds?: number): Map<number, number> {
-    sampleRateInSeconds = sampleRateInSeconds || 10; // Use any second number
-    const limit = sampleRateInSeconds * 1000;
-    let totalTime = 0;
-    let rrBuffer = [];
-    return rr.reduce((hr, d) => {
-      // add it to the buffer
-      rrBuffer.push(d);
-      // Increase total time
-      totalTime += d;
-      // Check if buffer is full
-      const time = rrBuffer.reduce((a, b) => a + b, 0); // gets the sum of the buffer [300+600 etc]
-      if (time >= limit) {
-        hr.set(totalTime, rrBuffer.length * 60 / (time / 1000)); // convert to bpm
-        rrBuffer = [];
-      }
-      return hr;
-    }, new Map());
   }
 
   private static getDeviceModelFromCodeName(codeName: string): string {
