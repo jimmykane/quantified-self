@@ -282,13 +282,12 @@ export class EventImporterSuuntoJSON {
     // If no IBI return
     if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
       this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
-        // Todo just add point with data to save up
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
       });
     }
-    debugger
+    debugger;
     return event;
   }
 
@@ -313,7 +312,7 @@ export class EventImporterSuuntoJSON {
    * @param {number} sampleRateInSeconds
    * @return {number[]}
    */
-  private static getHRFromRR(rr, sampleRateInSeconds?: number, smoothByAvg?: boolean): Map<number, number> {
+  private static getHRFromRR(rr, sampleRateInSeconds?: number): Map<number, number> {
     sampleRateInSeconds = sampleRateInSeconds || 10; // Use any second number
     const limit = sampleRateInSeconds * 1000;
     let totalTime = 0;
@@ -326,11 +325,7 @@ export class EventImporterSuuntoJSON {
       // Check if buffer is full
       const time = rrBuffer.reduce((a, b) => a + b, 0); // gets the sum of the buffer [300+600 etc]
       if (time >= limit) {
-        if (smoothByAvg) {
-          // @todo implement
-        } else {
-          hr.set(totalTime, rrBuffer.length * 60 / (time / 1000)); // convert to bpm
-        }
+        hr.set(totalTime, rrBuffer.length * 60 / (time / 1000)); // convert to bpm
         rrBuffer = [];
       }
       return hr;
