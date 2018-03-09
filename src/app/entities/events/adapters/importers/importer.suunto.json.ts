@@ -278,11 +278,16 @@ export class EventImporterSuuntoJSON {
     activity.sortPointsByDate();
     activity.setEndDate(activity.getEndPoint().getDate());
 
-    activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
-
     // If no IBI return
-    if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
-      HRFilters.highPassBPMFilter(HRFilters.lowPassBPMFilter(HRFilters.convertRRtoHR(eventJSONObject.DeviceLog["R-R"].Data))).forEach((value, key, map) => {
+    if (eventJSONObject.DeviceLog["R-R"] && eventJSONObject.DeviceLog["R-R"].Data) {
+      activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
+      HRFilters.filterHRByStepAVGBuffer(
+        HRFilters.highPassBPMFilter(
+          HRFilters.lowPassBPMFilter(
+            HRFilters.convertRRtoHR(eventJSONObject.DeviceLog["R-R"].Data)
+          )
+        )
+      , 6).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
