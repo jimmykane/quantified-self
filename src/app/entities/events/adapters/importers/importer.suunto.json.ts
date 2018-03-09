@@ -306,6 +306,21 @@ export class EventImporterSuuntoJSON {
     return 'Unknown'
   }
 
+
+  /**
+   * Converts the RR array to HR instantaneus (what user sees)
+   * @param rrData
+   * @return {any}
+   */
+  private static getHRFromRRNoBuffer(rrData): any {
+    let totalTime = 0;
+    return rrData.reduce((hrDataMap: Map<number, number>, rr) => {
+      totalTime += rr;
+      hrDataMap.set(totalTime, Math.round(60000 / rr));
+      return hrDataMap;
+    }, new Map());
+  }
+
   /**
    * Returns an Map of elapsed time and HR from RR data
    * @param rr
