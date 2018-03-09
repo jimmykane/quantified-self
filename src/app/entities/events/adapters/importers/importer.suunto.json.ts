@@ -288,7 +288,7 @@ export class EventImporterSuuntoJSON {
             HRFilters.convertRRtoHR(eventJSONObject.DeviceLog["R-R"].Data)
           )
         )
-      , 6).forEach((value, key, map) => {
+      , 4).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
