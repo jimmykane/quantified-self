@@ -281,7 +281,7 @@ export class EventImporterSuuntoJSON {
 
     // If no IBI return
     if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
-      this.getHRFromRRNoBuffer(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
+      this.getInstantaneusHRFRomRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
@@ -314,7 +314,7 @@ export class EventImporterSuuntoJSON {
    * @param highPassFilterHR
    * @return {any}
    */
-  private static getHRFromRRNoBuffer(rrData, lowPassFilterHR?: number, highPassFilterHR?: number): any {
+  private static getInstantaneusHRFRomRR(rrData, lowPassFilterHR?: number, highPassFilterHR?: number): any {
     lowPassFilterHR = lowPassFilterHR || 40; // Valencell
     highPassFilterHR = highPassFilterHR || 220; // magic
     let totalTime = 0;
@@ -357,18 +357,13 @@ export class EventImporterSuuntoJSON {
     step = step || 1;
     const filteredHRMap = new Map();
     let buffer = [];
-    let time = 0;
-    let totalTime = 0;
     hr.forEach((value, key, map) => {
       buffer.push(value);
-      time += key;
       if (buffer.length >= step) {
-        totalTime += time / buffer.length;
         filteredHRMap.set(key, buffer.reduce((total, hrValue) => {
           return total + hrValue;
         }) / buffer.length);
         buffer = [];
-        time = 0;
       }
     });
     return filteredHRMap;
