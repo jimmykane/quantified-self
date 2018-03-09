@@ -22,6 +22,7 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
 import {Zones} from '../../../intensity-zones/intensity-zone';
+import {HRFilters} from "../../../utilities/app.utilities.hr.filters";
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -281,7 +282,7 @@ export class EventImporterSuuntoJSON {
 
     // If no IBI return
     if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
-      this.getInstantaneusHRFRomRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
+      HRFilters.highPassBPMFilter(HRFilters.lowPassBPMFilter(HRFilters.convertRRtoHR(eventJSONObject.DeviceLog["R-R"].Data))).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
@@ -304,69 +305,6 @@ export class EventImporterSuuntoJSON {
       }
     }
     return 'Unknown'
-  }
-
-
-  /**
-   * Converts the RR array to HR instantaneus (what user sees)
-   * @param rrData
-   * @param lowPassFilterHR
-   * @param highPassFilterHR
-   * @return {any}
-   */
-  private static getInstantaneusHRFRomRR(rrData, lowPassFilterHR?: number, highPassFilterHR?: number): any {
-    lowPassFilterHR = lowPassFilterHR || 40; // Valencell
-    highPassFilterHR = highPassFilterHR || 220; // magic
-    let totalTime = 0;
-    return rrData.reduce((hrDataMap: Map<number, number>, rr) => {
-      totalTime += rr;
-      if ((Math.round(60000 / rr) > lowPassFilterHR) && (Math.round(60000 / rr) < highPassFilterHR)) {
-        hrDataMap.set(totalTime, Math.round(60000 / rr));
-      }
-      return hrDataMap;
-    }, new Map());
-  }
-
-  /**
-   * Returns an Map of elapsed time and HR from RR data
-   * @param rr
-   * @param {number} sampleRateInSeconds
-   * @return {number[]}
-   */
-  private static getHRFromRR(rr, sampleRateInSeconds?: number): Map<number, number> {
-    sampleRateInSeconds = sampleRateInSeconds || 10; // Use any second number
-    const limit = sampleRateInSeconds * 1000;
-    let totalTime = 0;
-    let rrBuffer = [];
-    return rr.reduce((hr, d) => {
-      // add it to the buffer
-      rrBuffer.push(d);
-      // Increase total time
-      totalTime += d;
-      // Check if buffer is full
-      const time = rrBuffer.reduce((a, b) => a + b, 0); // gets the sum of the buffer [300+600 etc]
-      if (time >= limit) {
-        hr.set(totalTime, rrBuffer.length * 60 / (time / 1000)); // convert to bpm
-        rrBuffer = [];
-      }
-      return hr;
-    }, new Map());
-  }
-
-  private static filterHR(hr: Map<number, number>, step?: number): Map<number, number> {
-    step = step || 1;
-    const filteredHRMap = new Map();
-    let buffer = [];
-    hr.forEach((value, key, map) => {
-      buffer.push(value);
-      if (buffer.length >= step) {
-        filteredHRMap.set(key, buffer.reduce((total, hrValue) => {
-          return total + hrValue;
-        }) / buffer.length);
-        buffer = [];
-      }
-    });
-    return filteredHRMap;
   }
 
   private static getDeviceModelFromCodeName(codeName: string): string {
