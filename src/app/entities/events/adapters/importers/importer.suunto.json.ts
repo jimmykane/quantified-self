@@ -281,7 +281,7 @@ export class EventImporterSuuntoJSON {
 
     // If no IBI return
     if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
-      this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
+      this.filterHR(this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data)).forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
@@ -330,6 +330,27 @@ export class EventImporterSuuntoJSON {
       }
       return hr;
     }, new Map());
+  }
+
+  private static filterHR(hr: Map<number, number>, step?: number): Map<number, number> {
+    step = step || 1;
+    const filteredHRMap = new Map();
+    let buffer = [];
+    let time = 0;
+    let totalTime = 0;
+    hr.forEach((value, key, map) => {
+      buffer.push(value);
+      time += key;
+      if (buffer.length >= step) {
+        totalTime += time / buffer.length;
+        filteredHRMap.set(key, buffer.reduce((total, hrValue) => {
+          return total + hrValue;
+        }) / buffer.length);
+        buffer = [];
+        time = 0;
+      }
+    });
+    return filteredHRMap;
   }
 
   private static getDeviceModelFromCodeName(codeName: string): string {
