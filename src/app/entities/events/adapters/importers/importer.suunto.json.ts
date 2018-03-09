@@ -21,7 +21,7 @@ import {DataEVPE} from '../../../data/data.evpe';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
-import {Zones} from "../../../intensity-zones/intensity-zone";
+import {Zones} from '../../../intensity-zones/intensity-zone';
 
 export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
@@ -277,40 +277,18 @@ export class EventImporterSuuntoJSON {
     activity.sortPointsByDate();
     activity.setEndDate(activity.getEndPoint().getDate());
 
-
-    // If no IBI return
-    if (!eventJSONObject.DeviceLog["R-R"] || !eventJSONObject.DeviceLog["R-R"].Data) {
-      debugger;
-      return event
-    }
-
     activity.setRRData(eventJSONObject.DeviceLog["R-R"].Data);
 
-    // Go over the IBI
-    let ibiBuffer = [];
-    let lastDate = event.getFirstActivity().getStartDate();
-    for (const ibiInMilliseconds of eventJSONObject.DeviceLog["R-R"].Data) {
-      ibiBuffer.push(ibiInMilliseconds);
-      const ibiBufferTotal = ibiBuffer.reduce((a, b) => a + b, 0);
-      // If adding the ibi to the start of the activity is greater or equal to 2.5 second then empty the buffer there
-      if ((lastDate.getTime() + ibiBufferTotal) >= lastDate.getTime() + 2500) {
-        const average = ibiBuffer.reduce((total, ibi) => {
-          return total + ibi;
-        }) / ibiBuffer.length;
-
-        // Find existing points
-        // @todo optimize
-        const eventPoints = event.getPoints(new Date(lastDate.getTime()), new Date(lastDate.getTime() + ibiInMilliseconds));
-        for (const eventPoint of eventPoints) {
-          eventPoint.addData(new DataHeartRate(1000 * 60 / average)); // @todo investigate 1000 magic number
-        }
-
-        ibiBuffer = [];
-        lastDate = new Date(lastDate.getTime() + ibiBufferTotal);
-      }
+    // If no IBI return
+    if (eventJSONObject.DeviceLog["R-R"] || eventJSONObject.DeviceLog["R-R"].Data) {
+      this.getHRFromRR(eventJSONObject.DeviceLog["R-R"].Data).forEach((value, key, map) => {
+        // Todo just add point with data to save up
+        const point = new Point(new Date(activity.getStartDate().getTime() + key));
+        point.addData(new DataHeartRate(value));
+        activity.addPoint(point);
+      });
     }
-
-    debugger;
+    debugger
     return event;
   }
 
@@ -329,7 +307,37 @@ export class EventImporterSuuntoJSON {
     return 'Unknown'
   }
 
-  private static getDeviceModelFromCodeName(codeName: string): string{
+  /**
+   * Returns an Map of elapsed time and HR from RR data
+   * @param rr
+   * @param {number} sampleRateInSeconds
+   * @return {number[]}
+   */
+  private static getHRFromRR(rr, sampleRateInSeconds?: number, smoothByAvg?: boolean): Map<number, number> {
+    sampleRateInSeconds = sampleRateInSeconds || 10; // Use any second number
+    const limit = sampleRateInSeconds * 1000;
+    let totalTime = 0;
+    let rrBuffer = [];
+    return rr.reduce((hr, d) => {
+      // add it to the buffer
+      rrBuffer.push(d);
+      // Increase total time
+      totalTime += d;
+      // Check if buffer is full
+      const time = rrBuffer.reduce((a, b) => a + b, 0); // gets the sum of the buffer [300+600 etc]
+      if (time >= limit) {
+        if (smoothByAvg) {
+          // @todo implement
+        } else {
+          hr.set(totalTime, rrBuffer.length * 60 / (time / 1000)); // convert to bpm
+        }
+        rrBuffer = [];
+      }
+      return hr;
+    }, new Map());
+  }
+
+  private static getDeviceModelFromCodeName(codeName: string): string {
     switch (codeName) {
       case 'Amsterdam': {
         return 'Spartan Ultra';
