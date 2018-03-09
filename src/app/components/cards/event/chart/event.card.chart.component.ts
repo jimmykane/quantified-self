@@ -269,7 +269,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
-            key += ':' + activity.getID() + ':' + activity.getCreator().getName();
+            key += ':' + activity.getID() + ':' + index + ':' + activity.getCreator().getName();
             const existingDataArray = dataMap.get(key) || [];
             if (!existingDataArray.length) {
               dataMap.set(key, existingDataArray);
@@ -375,15 +375,16 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       const categoryID = dataCategory.id;
       const name = categoryID.split(':')[0];
       const activityID = categoryID.split(':')[1];
-      const creator = categoryID.split(':')[2];
+      const activityIndex = categoryID.split(':')[2];
+      const creator = categoryID.split(':')[3];
 
       graphs.push({
         id: categoryID,
         valueAxis: categoryID,
-        lineColor: this.genColor(name),
+        lineColor: this.genColor(name + ' ' + (activityIndex > 0 ? activityIndex : '')),
         bulletBorderThickness: 3,
         hideBulletsCount: 1,
-        title: name,
+        title: '#' + activityIndex + ' ' + name + ' ' + creator,
         valueField: categoryID,
         balloonText: name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b></br>' + creator,
         legendValueText: '[[value]] ' + dataCategory.unit,
@@ -422,8 +423,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           toValue: activityIntensityZones.zone2LowerLimit,
           lineAlpha: 0.8,
           lineColor: '#000000',
-          fillColor: '#9c9d9f',
-          fillAlpha: 0.05,
+          fillColor: '#a3ccae',
+          fillAlpha: 0.1,
           label: 'Z1',
           position: 'right',
           inside: true,
@@ -435,7 +436,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#00a0d2',
-          fillAlpha: 0.05,
+          fillAlpha: 0.1,
           label: 'Z2',
           position: 'right',
           inside: true,
@@ -447,7 +448,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           lineAlpha: 0.8,
           lineColor: '#000000',
           fillColor: '#019853',
-          fillAlpha: 0.05,
+          fillAlpha: 0.1,
           label: 'Z3',
           position: 'right',
           inside: true,
@@ -457,8 +458,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           toValue: activityIntensityZones.zone5LowerLimit,
           lineAlpha: 0.8,
           lineColor: '#000000',
-          fillColor: '#f5a918',
-          fillAlpha: 0.05,
+          fillColor: '#cc7b1b',
+          fillAlpha: 0.1,
           label: 'Z4',
           position: 'right',
           inside: true,
@@ -469,8 +470,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           toValue: 9999999999,
           lineAlpha: 0.8,
           lineColor: '#000000',
-          fillColor: '#e32c3e',
-          fillAlpha: 0.05,
+          fillColor: '#a51e38',
+          fillAlpha: 0.1,
           label: 'Z5',
           position: 'right',
           inside: true,
@@ -481,11 +482,17 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   private genColor(key: string) {
-    if (key.includes(DataHeartRate.type + ' 1')) {
-      return '#249fe6';
+    if (key.includes(DataHeartRate.type + ' 4')) {
+      return '#006064';
+    }
+    if (key.includes(DataHeartRate.type + ' 3')) {
+      return '#ba68c8';
     }
     if (key.includes(DataHeartRate.type + ' 2')) {
-      return '#ff8f87';
+      return '#4ab255';
+    }
+    if (key.includes(DataHeartRate.type + ' 1')) {
+      return '#249fe6';
     }
     if (key.includes(DataHeartRate.type)) {
       return '#ff3f07';
