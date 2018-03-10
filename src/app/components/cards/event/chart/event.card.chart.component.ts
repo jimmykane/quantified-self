@@ -94,6 +94,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       this.chart = this.AmCharts.makeChart('chartdiv', {
         type: 'serial',
         theme: 'light',
+        autoMarginOffset: 0,
+        // marginRight: 100,
+        autoMargins: true,
         graphs: graphs,
         // autoTransform: false,
         // autoResize: false,
@@ -438,8 +441,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           label: 'Z1',
           position: 'right',
           inside: true,
-          above: true,
-
+          boldLabel: true,
         }, {
           value: activityIntensityZones.zone2LowerLimit,
           toValue: activityIntensityZones.zone3LowerLimit,
@@ -449,8 +451,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           label: 'Z2 (' + activityIntensityZones.zone2LowerLimit + ' to ' + activityIntensityZones.zone3LowerLimit + ') ' + units,
           position: 'right',
           inside: true,
-          above: true,
-
+          boldLabel: true,
         }, {
           value: activityIntensityZones.zone3LowerLimit,
           toValue: activityIntensityZones.zone4LowerLimit,
@@ -460,7 +461,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           label: 'Z3 (' + activityIntensityZones.zone3LowerLimit + ' to ' + activityIntensityZones.zone4LowerLimit + ') ' + units,
           position: 'right',
           inside: true,
-
+          boldLabel: true,
         }, {
           value: activityIntensityZones.zone4LowerLimit,
           toValue: activityIntensityZones.zone5LowerLimit,
@@ -470,7 +471,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           label: 'Z4 (' + activityIntensityZones.zone4LowerLimit + ' to ' + activityIntensityZones.zone5LowerLimit + ') ' + units,
           position: 'right',
           inside: true,
-
+          boldLabel: true,
         },
         {
           value: activityIntensityZones.zone5LowerLimit,
@@ -481,6 +482,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           label: 'Z5 (' + activityIntensityZones.zone5LowerLimit + ' to max) ' + units,
           position: 'right',
           inside: true,
+          boldLabel: true,
         }
       );
       return zoneGuides;
