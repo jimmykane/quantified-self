@@ -101,12 +101,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         // responsive: {
         //   enabled: false
         // },
-        // valueAxes: valueAxes,
-        startDuration: 1,
+        // valueAxes: [{
+        //   gridThickness: 0.0,
+        // }],
+        startDuration: 0.3,
         startEffect: 'elastic',
         sequencedAnimation: false,
         categoryField: 'date',
-        processCount: 1000,
+        // processCount: 1000,
+        // processTimeout: 2000,
         legend: {
           align: 'center',
           useGraphSettings: true,
@@ -126,10 +129,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           parseDates: true,
           minPeriod: 'fff',
           axisColor: '#DADADA',
-          gridThickness: 0.1,
+          gridThickness: 0.0,
           offset: 0,
           labelOffset: 0,
-          minorGridEnabled: true,
+          // minorGridEnabled: true,
         },
         chartScrollbar: {
           hideResizeGrips: true,
@@ -411,6 +414,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       if (graph.hidden) {
         return zoneGuides;
       }
+
+      let units = '';
+      // Only for HR for now
+      if (graph.id.split(':')[0] === DataHeartRate.type) {
+        units = DataHeartRate.unit;
+      }
+
+      // Check if there is an intensity zone
       const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
         return activity.getID() === graph.id.split(':')[1];
       }).getSummary().getIntensityZones().get(graph.id.split(':')[0]);
@@ -419,12 +430,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       }
 
       zoneGuides.push({
-          value: 100,
+          value: 0,
           toValue: activityIntensityZones.zone2LowerLimit,
-          lineAlpha: 0.8,
+          lineAlpha: 0.5,
+          lineThickness: 0.5,
           lineColor: '#000000',
-          fillColor: '#a3ccae',
-          fillAlpha: 0.1,
           label: 'Z1',
           position: 'right',
           inside: true,
@@ -433,11 +443,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         }, {
           value: activityIntensityZones.zone2LowerLimit,
           toValue: activityIntensityZones.zone3LowerLimit,
-          lineAlpha: 0.8,
+          lineAlpha: 0.5,
+          lineThickness: 0.5,
           lineColor: '#000000',
-          fillColor: '#00a0d2',
-          fillAlpha: 0.1,
-          label: 'Z2',
+          label: 'Z2 (' + activityIntensityZones.zone2LowerLimit + ' to ' + activityIntensityZones.zone3LowerLimit + ') ' + units,
           position: 'right',
           inside: true,
           above: true,
@@ -445,22 +454,20 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         }, {
           value: activityIntensityZones.zone3LowerLimit,
           toValue: activityIntensityZones.zone4LowerLimit,
-          lineAlpha: 0.8,
+          lineAlpha: 0.5,
+          lineThickness: 0.5,
           lineColor: '#000000',
-          fillColor: '#019853',
-          fillAlpha: 0.1,
-          label: 'Z3',
+          label: 'Z3 (' + activityIntensityZones.zone3LowerLimit + ' to ' + activityIntensityZones.zone4LowerLimit + ') ' + units,
           position: 'right',
           inside: true,
 
         }, {
           value: activityIntensityZones.zone4LowerLimit,
           toValue: activityIntensityZones.zone5LowerLimit,
-          lineAlpha: 0.8,
+          lineAlpha: 0.5,
+          lineThickness: 0.5,
           lineColor: '#000000',
-          fillColor: '#cc7b1b',
-          fillAlpha: 0.1,
-          label: 'Z4',
+          label: 'Z4 (' + activityIntensityZones.zone4LowerLimit + ' to ' + activityIntensityZones.zone5LowerLimit + ') ' + units,
           position: 'right',
           inside: true,
 
@@ -468,11 +475,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         {
           value: activityIntensityZones.zone5LowerLimit,
           toValue: 9999999999,
-          lineAlpha: 0.8,
+          lineAlpha: 0.5,
+          lineThickness: 0.5,
           lineColor: '#000000',
-          fillColor: '#a51e38',
-          fillAlpha: 0.1,
-          label: 'Z5',
+          label: 'Z5 (' + activityIntensityZones.zone5LowerLimit + ' to max) ' + units,
           position: 'right',
           inside: true,
         }
