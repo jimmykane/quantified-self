@@ -1,29 +1,22 @@
-<mat-checkbox
-  *ngFor="let activityCheckbox of activitiesCheckboxes let i = index;"
-  class="margin"
-  [(ngModel)]="activityCheckbox.checked"
-  [disabled]="activityCheckbox.disabled"
-  (change)="onCheckboxChange()">
-  <mat-card>
-    <mat-card-header>
-      <mat-card-title>
-        <app-activity-icon [activity]="activityCheckbox.activity"></app-activity-icon>
-        {{ activityCheckbox.activity.getType() }}
-      </mat-card-title>
-      <mat-card-subtitle>
-        <mat-icon>timer</mat-icon>
-        {{
-        activityCheckbox.activity.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss'
-        }}
-      </mat-card-subtitle>
-      <mat-card-subtitle>
-        <mat-icon>trending_flat</mat-icon>
-        {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
-      </mat-card-subtitle>
-      <mat-card-subtitle>
-        <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}" >watch</mat-icon>
-        <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activityCheckbox.activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
-      </mat-card-subtitle>
-    </mat-card-header>
-  </mat-card>
-</mat-checkbox>
+<section>
+  <mat-checkbox
+    *ngFor="let activityCheckbox of activitiesCheckboxes let i = index;"
+    class="margin"
+    [(ngModel)]="activityCheckbox.checked"
+    [disabled]="activityCheckbox.disabled"
+    (change)="onCheckboxChange()">
+    <mat-card>
+      <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}">watch
+      </mat-icon>
+      <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activityCheckbox.activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
+       <mat-icon>timer</mat-icon>
+      {{
+      activityCheckbox.activity.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss'
+      }}
+      <app-activity-icon [activity]="activityCheckbox.activity"></app-activity-icon>
+      {{ activityCheckbox.activity.getType() }}
+      <mat-icon>trending_flat</mat-icon>
+      {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
+    </mat-card>
+  </mat-checkbox>
+</section>

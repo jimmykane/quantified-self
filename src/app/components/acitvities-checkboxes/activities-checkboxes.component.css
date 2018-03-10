@@ -8,3 +8,23 @@ mat-icon{
 mat-chip-list{
   display: inline-block;
 }
+
+.mat-card-actions, .mat-card-content, .mat-card-subtitle, .mat-card-title{
+  display: inline-block;
+}
+
+section {
+  margin: auto;
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  align-items: center;
+}
+
+mat-checkbox{
+}
+
+.mat-checkbox-label{
+  width: 100%;
+}
