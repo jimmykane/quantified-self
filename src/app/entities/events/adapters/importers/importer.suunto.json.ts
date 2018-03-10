@@ -91,13 +91,13 @@ export class EventImporterSuuntoJSON {
       const zones = new Zones;
       zones.zone1Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone1Duration;
       zones.zone2Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone2Duration;
-      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit * 60;
+      zones.zone2LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit * 60);
       zones.zone3Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone3Duration;
-      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone3LowerLimit * 60;
+      zones.zone3LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone3LowerLimit * 60);
       zones.zone4Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone4Duration;
-      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit * 60;
+      zones.zone4LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit * 60);
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone5Duration;
-      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit * 60;
+      zones.zone5LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit * 60);
       activitySummary.addIntensityZone(DataHeartRate.type, zones);
     }
 
