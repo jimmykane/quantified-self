@@ -124,6 +124,28 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             graph.chart.valueAxes.forEach((valueAxis) => {
               valueAxis.guides = this.getZoneGuides();
             });
+            if (!graph.hidden) {
+              graph.chart.chartScrollbar = {
+                hideResizeGrips: true,
+                autoGridCount: true,
+                graphType: 'line',
+                graph: graph.id,
+                gridAlpha: 0,
+                color: '#888888',
+                scrollbarHeight: 55,
+                backgroundAlpha: 0,
+                selectedBackgroundAlpha: 0.1,
+                selectedBackgroundColor: '#888888',
+                graphFillAlpha: 0,
+                selectedGraphFillAlpha: 0,
+                graphLineAlpha: 0.2,
+                graphLineColor: '#c2c2c2',
+                selectedGraphLineColor: '#888888',
+                selectedGraphLineAlpha: 1,
+                usePeriod: 'WW',
+                offset: 10
+              };
+            }
             graph.chart.validateNow();
           },
         },
