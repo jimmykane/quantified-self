@@ -6,6 +6,7 @@ import {DataInterface} from '../data/data.interface';
 import {Log} from 'ng2-logger';
 import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
+import {IBIData} from '../data/ibi/data.ibi';
 
 export class Activity extends IDClass implements ActivityInterface {
 
@@ -16,7 +17,7 @@ export class Activity extends IDClass implements ActivityInterface {
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: SummaryInterface;
   private logger = Log.create('Activity');
-  private rrData: number[];
+  private ibiData: IBIData;
   private laps: LapInterface[] = [];
 
 
@@ -135,12 +136,12 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.summary;
   }
 
-  setRRData(rrData) {
-    this.rrData = rrData;
+  setIBIData(ibiData: IBIData) {
+    this.ibiData = ibiData;
   }
 
-  getRRData() {
-    return this.rrData;
+  getIBIData(): IBIData {
+    return this.ibiData;
   }
 
   addLap(lap: LapInterface) {
@@ -169,7 +170,7 @@ export class Activity extends IDClass implements ActivityInterface {
         return jsonPointsArray;
       }, []),
       summary: this.summary.toJSON(),
-      rrData: this.getRRData(),
+      ibiData: this.getIBIData().toJSON(),
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;

@@ -4,6 +4,7 @@ import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from "../laps/lap.interface";
+import {IBIData} from "../data/ibi/data.ibi";
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
   setType(type: string);
@@ -21,8 +22,8 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   getEndPoint(): PointInterface;
   setSummary(activitySummary: SummaryInterface);
   getSummary(): SummaryInterface;
-  setRRData(rrData: number[]);
-  getRRData(): number[]
+  setIBIData(ibiData: IBIData);
+  getIBIData(): IBIData;
   getLaps(): LapInterface[];
   addLap(lap: LapInterface);
   sortPointsByDate(): void;

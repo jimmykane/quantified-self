@@ -25,7 +25,8 @@ import {Summary} from '../../../summary/summary';
 import {DataEVPE} from '../../../data/data.evpe';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
-import {Zones} from "../../../intensity-zones/intensity-zone";
+import {Zones} from '../../../intensity-zones/intensity-zone';
+import {IBIData} from '../../../data/ibi/data.ibi';
 
 export class EventImporterJSON {
 
@@ -123,7 +124,7 @@ export class EventImporterJSON {
 
 
       activity.setSummary(activitySummary);
-      activity.setRRData(activityObject.rrData);
+      activity.setIBIData(new IBIData(activityObject.ibiData));
 
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
@@ -254,6 +255,7 @@ export class EventImporterJSON {
         }
       }
     }
+    debugger;
     return event;
   }
 }
