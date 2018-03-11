@@ -1,4 +1,7 @@
-export class IBIHRFilters {
+/**
+ * Collection of filters parsers and converters for IBI (R-R) data
+ */
+export class IBIHRUtilities {
   /**
    * Low pass filter. Removes all hr values above limit
    * @param {Map<number, number>} hr

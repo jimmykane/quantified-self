@@ -2,23 +2,23 @@ import {SerializableClassInterface} from '../../serializable/serializable.class.
 
 export class IBIData implements SerializableClassInterface {
 
-  private ibiData = [];
+  private ibiDataMap: Map<number, number> = new Map();
 
-  constructor(ibiData?: Array<number>) {
-    if (ibiData) {
-      this.addIBIData(ibiData);
+  constructor(ibiDataArray?: Array<number>) {
+    if (ibiDataArray) {
+      ibiDataArray.reduce((totalTime, ibiData) => {
+        totalTime += ibiData;
+        this.ibiDataMap.set(totalTime, ibiData);
+        return totalTime;
+      }, 0)
     }
   }
 
-  public addIBIData(ibiData: Array<number>) {
-    this.ibiData = [...this.ibiData, ...ibiData];
-  }
-
-  public getIBIData(): Array<number> {
-    return this.ibiData;
+  public getIBIDataArray(): Array<number> {
+    return Array.from(this.ibiDataMap.values());
   }
 
   toJSON(): any {
-    return this.getIBIData();
+    return this.getIBIDataArray();
   }
 }
