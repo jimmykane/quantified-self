@@ -5,7 +5,7 @@ import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {Log} from 'ng2-logger';
 import {SummaryInterface} from '../summary/summary.interface';
-import {LapInterface} from "../laps/lap.interface";
+import {LapInterface} from '../laps/lap.interface';
 
 export class Activity extends IDClass implements ActivityInterface {
 
