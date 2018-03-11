@@ -170,7 +170,7 @@ export class Activity extends IDClass implements ActivityInterface {
         return jsonPointsArray;
       }, []),
       summary: this.summary.toJSON(),
-      ibiData: this.getIBIData().toJSON(),
+      ibiData: this.getIBIData() ? this.getIBIData().toJSON() : [],
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;
