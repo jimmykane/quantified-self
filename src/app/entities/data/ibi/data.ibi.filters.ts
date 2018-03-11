@@ -15,26 +15,26 @@ export class IBIFilters {
     });
   }
 
-  // public static filterHRByStepAVGBuffer(hr: Map<number, number>, step?: number): Map<number, number> {
-  //   step = step || 2;
-  //   const filteredHRMap = new Map();
-  //   let buffer = [];
-  //   let startTime;
-  //   hr.forEach((value, key, map) => {
-  //     buffer.push(value);
-  //     if (!startTime) {
-  //       startTime = key;
-  //     }
-  //     if (buffer.length >= step) {
-  //       filteredHRMap.set(startTime + ((key - startTime) / 2), buffer.reduce((total, hrValue) => {
-  //         return total + hrValue;
-  //       }) / buffer.length);
-  //       buffer = [];
-  //       startTime = null;
-  //     }
-  //   });
-  //   return filteredHRMap;
-  // }
+  public static filterOnStepAverage(ibiData: IBIData, step?: number) {
+    step = step || 2;
+    const bufferMap = new Map();
+    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+      bufferMap.set(elapsedTime, ibi);
+      if (bufferMap.size >= step) {
+        // Find the value average
+        const avgValue = Array.from(bufferMap.values()).reduce((total, value) => {
+          return total + value;
+        }) / bufferMap.size ;
+        // For all the keys that got averaged set that value to the original object
+        bufferMap.forEach((value, key) => {
+          ibiData.setIBI(key, avgValue);
+        });
+        // Clear
+        bufferMap.clear();
+      }
+    });
+    return bufferMap;
+  }
 
   // /**
   //  * Returns an Map of elapsed time and HR from RR data

@@ -54,6 +54,11 @@ export class IBIData implements SerializableClassInterface {
     return this;
   }
 
+  public stepAverageFilter(step?: number){
+    IBIFilters.filterOnStepAverage(this, step);
+    return this;
+  }
+
   toJSON(): any {
     return Array.from(this.ibiDataMap.values());
   }
