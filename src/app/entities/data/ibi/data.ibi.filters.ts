@@ -27,11 +27,11 @@ export class IBIFilters {
    * Buffers and converts the buffer to the average of the buffer
    * @param {IBIData} ibiData
    * @param {number} step
-   * @return {Map<any, any>}
+   * @return {Map<number, number>}
    */
   public static stepAverageFilter(ibiData: IBIData, step?: number) {
     step = step || 2;
-    const bufferMap = new Map();
+    const bufferMap = new Map<number, number>();
     ibiData.getIBIData().forEach((ibi, elapsedTime) => {
       bufferMap.set(elapsedTime, ibi);
       if (bufferMap.size >= step) {
