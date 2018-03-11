@@ -6,7 +6,6 @@ import {IBIData} from './data.ibi';
 export class IBIFilters {
 
   public static passFilter(ibiData: IBIData, passLimit: number, lowPass: boolean) {
-    debugger;
     ibiData.getIBIData().forEach((value, key, map) => {
       if (value < passLimit && lowPass) {
         ibiData.getIBIData().delete(key);
