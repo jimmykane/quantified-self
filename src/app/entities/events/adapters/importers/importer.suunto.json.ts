@@ -22,7 +22,7 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
 import {Zones} from '../../../intensity-zones/intensity-zone';
-import {IBIHRUtilities} from '../../../data/ibi/data.ibi.utilities';
+import {IBIFilters} from '../../../data/ibi/data.ibi.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
 
 export class EventImporterSuuntoJSON {
@@ -282,14 +282,11 @@ export class EventImporterSuuntoJSON {
     // If no IBI return
     if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
       activity.setIBIData(new IBIData(eventJSONObject.DeviceLog['R-R'].Data));
-      // @todo convert to functional
-      IBIHRUtilities.filterHRByStepAVGBuffer(
-        IBIHRUtilities.highPassBPMFilter(
-          IBIHRUtilities.lowPassBPMFilter(
-            IBIHRUtilities.convertRRtoHR(eventJSONObject.DeviceLog['R-R'].Data)
-          )
-        )
-      , 4).forEach((value, key, map) => {
+      // Create a second IBIData so we can have filtering on those with keeping the original
+      (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
+        .lowPassBPMFilter()
+        .highPassBPMFilter()
+        .getAsBPM().forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
