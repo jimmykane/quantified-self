@@ -1,5 +1,4 @@
-export class HRFilters {
-
+export class IBIHRFilters {
   /**
    * Low pass filter. Removes all hr values above limit
    * @param {Map<number, number>} hr

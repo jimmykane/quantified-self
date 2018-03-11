@@ -22,7 +22,7 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
 import {Zones} from '../../../intensity-zones/intensity-zone';
-import {HRFilters} from '../../../utilities/app.utilities.hr.filters';
+import {IBIHRFilters} from '../../../data/ibi/data.ibi.hr.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
 
 export class EventImporterSuuntoJSON {
@@ -283,10 +283,10 @@ export class EventImporterSuuntoJSON {
     if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
       activity.setIBIData(new IBIData(eventJSONObject.DeviceLog['R-R'].Data));
       // @todo convert to functional
-      HRFilters.filterHRByStepAVGBuffer(
-        HRFilters.highPassBPMFilter(
-          HRFilters.lowPassBPMFilter(
-            HRFilters.convertRRtoHR(eventJSONObject.DeviceLog['R-R'].Data)
+      IBIHRFilters.filterHRByStepAVGBuffer(
+        IBIHRFilters.highPassBPMFilter(
+          IBIHRFilters.lowPassBPMFilter(
+            IBIHRFilters.convertRRtoHR(eventJSONObject.DeviceLog['R-R'].Data)
           )
         )
       , 4).forEach((value, key, map) => {
@@ -337,5 +337,4 @@ export class EventImporterSuuntoJSON {
     }
     return codeName;
   }
-
 }
