@@ -1,10 +1,17 @@
+import {IBIData} from './data.ibi';
+import * as createMedianFilter from 'moving-median';
+
 /**
  * Collection of filters parsers and converters for IBI (R-R) data
  */
-import {IBIData} from './data.ibi';
-
 export class IBIFilters {
 
+  /**
+   * A pass filter. It removes all values outside the limit
+   * @param {IBIData} ibiData
+   * @param {number} passLimit
+   * @param {boolean} lowPass
+   */
   public static passFilter(ibiData: IBIData, passLimit: number, lowPass: boolean) {
     ibiData.getIBIData().forEach((value, key, map) => {
       if (value < passLimit && lowPass) {
@@ -15,7 +22,14 @@ export class IBIFilters {
     });
   }
 
-  public static filterOnStepAverage(ibiData: IBIData, step?: number) {
+  /**
+   * A step average filter.
+   * Buffers and converts the buffer to the average of the buffer
+   * @param {IBIData} ibiData
+   * @param {number} step
+   * @return {Map<any, any>}
+   */
+  public static stepAverageFilter(ibiData: IBIData, step?: number) {
     step = step || 2;
     const bufferMap = new Map();
     ibiData.getIBIData().forEach((ibi, elapsedTime) => {
@@ -24,7 +38,7 @@ export class IBIFilters {
         // Find the value average
         const avgValue = Array.from(bufferMap.values()).reduce((total, value) => {
           return total + value;
-        }) / bufferMap.size ;
+        }) / bufferMap.size;
         // For all the keys that got averaged set that value to the original object
         bufferMap.forEach((value, key) => {
           ibiData.setIBI(key, avgValue);
@@ -34,6 +48,19 @@ export class IBIFilters {
       }
     });
     return bufferMap;
+  }
+
+  /**
+   * Running median filter
+   * @param {IBIData} ibiData
+   * @param {number} windowSize
+   */
+  public static movingMedianFilter(ibiData: IBIData, windowSize?: number) {
+    windowSize = windowSize || 5;
+    const medianFilter = createMedianFilter(windowSize);
+    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+      ibiData.setIBI(elapsedTime, medianFilter(ibi));
+    });
   }
 
   // /**
