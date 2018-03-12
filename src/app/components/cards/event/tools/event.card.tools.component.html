@@ -1,8 +1,8 @@
 <mat-card>
-  <mat-checkbox [(ngModel)]="lowLimitFilterChecked">Cut off low peaks at specific BPM</mat-checkbox>
+  <mat-checkbox [(ngModel)]="lowLimitFilterChecked">Remove heart rate below </mat-checkbox>
   <mat-slider
     [disabled]="!lowLimitFilterChecked"
-    [max]="300"
+    [max]="220"
     [min]="0"
     [step]="1"
     [thumb-label]="true"
@@ -13,10 +13,10 @@
 </mat-card>
 
 <mat-card>
-  <mat-checkbox [(ngModel)]="highLimitChecked">Cut off high peaks</mat-checkbox>
+  <mat-checkbox [(ngModel)]="highLimitChecked">Remove heart rate above </mat-checkbox>
   <mat-slider
     [disabled]="!highLimitChecked"
-    [max]="100"
+    [max]="300"
     [min]="0"
     [step]="1"
     [thumb-label]="true"
@@ -27,7 +27,7 @@
 </mat-card>
 
 <mat-card>
-  <mat-checkbox [(ngModel)]="movingMedianChecked">Moving median filter</mat-checkbox>
+  <mat-checkbox [(ngModel)]="movingMedianChecked">Apply moving median filter </mat-checkbox>
   <mat-slider
     [disabled]="!movingMedianChecked"
     [max]="100"
@@ -41,7 +41,7 @@
 </mat-card>
 
 <mat-card>
-  <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Moving weight average filter</mat-checkbox>
+  <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Apply moving median filter </mat-checkbox>
   <mat-slider
     [disabled]="!movingWeightAverageChecked"
     [max]="100"
