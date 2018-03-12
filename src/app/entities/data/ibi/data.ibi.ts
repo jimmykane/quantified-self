@@ -44,7 +44,7 @@ export class IBIData implements SerializableClassInterface {
    * Gets the IBI data map
    * @return {Map<number, number>}
    */
-  public getIBIData(): Map<number, number> {
+  public getIBIDataMap(): Map<number, number> {
     return this.ibiDataMap;
   }
 
@@ -65,7 +65,7 @@ export class IBIData implements SerializableClassInterface {
    * @param {number} bpmLowLimit in BPM
    */
   public lowLimitBPMFilter(bpmLowLimit?: number): IBIData {
-    IBIFilters.limitFilter(this, 60000 / (bpmLowLimit || 40), false); // Lower bpm higher IBI limit!
+    IBIFilters.limitFilter(this, Math.floor(60000 / (bpmLowLimit || 40)), false); // Lower bpm higher IBI limit!
     return this;
   }
 
@@ -74,7 +74,7 @@ export class IBIData implements SerializableClassInterface {
    * @param bpmHighLimit
    */
   public highLimitBPMFilter(bpmHighLimit?: number): IBIData {
-    IBIFilters.limitFilter(this, 60000 / (bpmHighLimit || 220), true); // Higher bpm lower IBI limit!
+    IBIFilters.limitFilter(this, Math.floor( 60000 / (bpmHighLimit || 220)), true); // Higher bpm lower IBI limit!
     return this;
   }
 

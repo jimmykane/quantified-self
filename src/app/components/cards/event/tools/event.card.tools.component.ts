@@ -44,8 +44,14 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
   applyFilters() {
     this.event.getActivities().forEach((activity: ActivityInterface) => {
+      // Remove all HR!
+      activity.getPoints().forEach((point: PointInterface) => {
+        if (point.getDataByType(DataHeartRate.type)) {
+          point.removeDataByType(DataHeartRate.type);
+        }
+      });
       // Create new not to alter existing
-      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIData().values()));
+      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
       if (this.lowLimitFilterChecked) {
         ibiData.lowLimitBPMFilter(this.lowLimitFilterValue);
       }
@@ -58,37 +64,44 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
       if (this.movingWeightAverageChecked) {
         ibiData.lowPassFilter(this.movingWeightAverageValue);
       }
-      // Remove all HR!
-      activity.getPoints().forEach((point: PointInterface) => {
-        if (point.getDataByType(DataHeartRate.type)) {
-          point.removeDataByType(DataHeartRate.type);
-        }
-      });
-
       ibiData.getAsBPM().forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
       });
-
-      this.eventService.saveEvent(this.event).then((result) => {
-        this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
-          duration: 5000,
-        });
-      });
-
     });
+    this.eventService.saveEvent(this.event).then((result) => {
+      this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
+        duration: 5000,
+      });
+    });
+
   }
 
   public applyDefaultFilters() {
     // Create new not to alter existing
     this.event.getActivities().forEach((activity: ActivityInterface) => {
-      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIData().values()));
+      activity.getPoints().forEach((point: PointInterface) => {
+        if (point.getDataByType(DataHeartRate.type)) {
+          point.removeDataByType(DataHeartRate.type);
+        }
+      });
+      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
       ibiData
         .lowLimitBPMFilter()
         .highLimitBPMFilter()
         .movingMedianFilter()
         .lowPassFilter()
+        .getAsBPM().forEach((value, key, map) => {
+        const point = new Point(new Date(activity.getStartDate().getTime() + key));
+        point.addData(new DataHeartRate(value));
+        activity.addPoint(point);
+      });
+    });
+    this.eventService.saveEvent(this.event).then((result) => {
+      this.snackBar.open('Default filters applied! Go to the chart to see the result', null, {
+        duration: 5000,
+      });
     });
   }
 }

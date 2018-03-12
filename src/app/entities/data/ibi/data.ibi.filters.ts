@@ -14,11 +14,11 @@ export class IBIFilters {
    * @param {boolean} lowLimit
    */
   public static limitFilter(ibiData: IBIData, limit: number, lowLimit: boolean) {
-    ibiData.getIBIData().forEach((value, key, map) => {
+    ibiData.getIBIDataMap().forEach((value, key, map) => {
       if (value < limit && lowLimit) {
-        ibiData.getIBIData().delete(key);
+        ibiData.getIBIDataMap().delete(key);
       } else if (value > limit && !lowLimit) {
-        ibiData.getIBIData().delete(key)
+        ibiData.getIBIDataMap().delete(key)
       }
     });
   }
@@ -33,7 +33,7 @@ export class IBIFilters {
   public static stepAverageFilter(ibiData: IBIData, step?: number) {
     step = step || 2;
     const bufferMap = new Map<number, number>();
-    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
       bufferMap.set(elapsedTime, ibi);
       if (bufferMap.size >= step) {
         // Find the value average
@@ -59,7 +59,7 @@ export class IBIFilters {
   public static movingMedianFilter(ibiData: IBIData, windowSize?: number) {
     windowSize = windowSize || 5;
     const medianFilter = CreateMedianFilter(windowSize);
-    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
       ibiData.setIBI(elapsedTime, Math.round(medianFilter(ibi)));
     });
   }
@@ -76,7 +76,7 @@ export class IBIFilters {
     linearWeight = linearWeight ? lowPassFilter.LinearWeightAverage : lowPassFilter.SimpleAverage;
     lowPassFilter.setLogic(linearWeight);
     lowPassFilter.setSamplingRange(windowSize);
-    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
       lowPassFilter.putValue(ibi);
       ibiData.setIBI(elapsedTime, Math.round(lowPassFilter.getFilteredValue()));
     });
