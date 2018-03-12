@@ -48,7 +48,7 @@ export class UploadComponent {
                     }
                     newEvent.setName(activityName);
                     await this.eventService.generateGeoAndWeather(newEvent);
-                    this.eventService.saveEvent(newEvent);
+                    this.eventService.addAndSaveEvent(newEvent);
                     metaData.status = UPLOAD_STATUS.PROCESSED;
                     resolve();
                 }

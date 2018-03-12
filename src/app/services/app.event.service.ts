@@ -58,16 +58,20 @@ export class EventService {
     }
   }
 
-  public saveEvent(event: EventInterface) {
-    this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event)).then((result) => {
+  public addAndSaveEvent(event: EventInterface) {
+    this.saveEvent(event).then((result) => {
       this.events.next(this.events.getValue().push(event));
     });
   }
 
-  public addEvents(events: EventInterface[]) {
+  public addAndSaveEvents(events: EventInterface[]) {
     for (const event of events) {
-      this.saveEvent(event);
+      this.addAndSaveEvent(event);
     }
+  }
+
+  public saveEvent(event: EventInterface): Promise<boolean> {
+    return this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
   }
 
   public deleteEvent(eventToDelete: EventInterface) {
