@@ -55,5 +55,5 @@
 </mat-card>
 
 <mat-card>
-  <button mat-button >Apply</button>
+  <button mat-button (click)="applyFilters()" [disabled]="!(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">Apply filters</button>
 </mat-card>

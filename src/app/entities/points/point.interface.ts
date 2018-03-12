@@ -6,6 +6,7 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 export interface PointInterface extends SerializableClassInterface {
   getDate(): Date;
   addData(data: DataInterface);
+  removeDataByType(dataTyep: string);
   getData(): Map<string, DataInterface[]>;
   getDataByType(dataType: string): DataInterface[];
   getDataTypeAverage(dataType: string): number;
