@@ -72,7 +72,7 @@ export class IBIFilters {
    */
   public static lowPassFilter(ibiData: IBIData, windowSize?: number, linearWeight?: boolean) {
     const lowPassFilter = new LowPassFilter();
-    windowSize = windowSize || 25;
+    windowSize = windowSize || 5;
     linearWeight = linearWeight ? lowPassFilter.LinearWeightAverage : lowPassFilter.SimpleAverage;
     lowPassFilter.setLogic(linearWeight);
     lowPassFilter.setSamplingRange(windowSize);
