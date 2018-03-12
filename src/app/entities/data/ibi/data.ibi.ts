@@ -40,8 +40,8 @@ export class IBIData implements SerializableClassInterface {
    * Low pass filter. Removes all hr values above limit
    * @param {number} bpmLowPassLimit in BPM
    */
-  public lowPassBPMFilter(bpmLowPassLimit?: number): IBIData {
-    IBIFilters.passFilter(this, 60000 / (bpmLowPassLimit || 220), true);
+  public lowLimitBPMFilter(bpmLowPassLimit?: number): IBIData {
+    IBIFilters.limitFilter(this, 60000 / (bpmLowPassLimit || 220), true);
     return this;
   }
 
@@ -49,8 +49,8 @@ export class IBIData implements SerializableClassInterface {
    * Low pass filter. Removes all hr values above limit
    * @param bpmHighPassLimit
    */
-  public highPassBPMFilter(bpmHighPassLimit?: number): IBIData {
-    IBIFilters.passFilter(this, 60000 / (bpmHighPassLimit || 40), false);
+  public highLimitBPMFilter(bpmHighPassLimit?: number): IBIData {
+    IBIFilters.limitFilter(this, 60000 / (bpmHighPassLimit || 40), false);
     return this;
   }
 

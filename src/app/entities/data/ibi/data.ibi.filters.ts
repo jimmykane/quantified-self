@@ -7,16 +7,16 @@ import * as createMedianFilter from 'moving-median';
 export class IBIFilters {
 
   /**
-   * A pass filter. It removes all values outside the limit
+   * A limit filter. It removes all values outside the limit
    * @param {IBIData} ibiData
-   * @param {number} passLimit
-   * @param {boolean} lowPass
+   * @param {number} limit
+   * @param {boolean} lowLimit
    */
-  public static passFilter(ibiData: IBIData, passLimit: number, lowPass: boolean) {
+  public static limitFilter(ibiData: IBIData, limit: number, lowLimit: boolean) {
     ibiData.getIBIData().forEach((value, key, map) => {
-      if (value < passLimit && lowPass) {
+      if (value < limit && lowLimit) {
         ibiData.getIBIData().delete(key);
-      } else if (value > passLimit && !lowPass) {
+      } else if (value > limit && !lowLimit) {
         ibiData.getIBIData().delete(key)
       }
     });

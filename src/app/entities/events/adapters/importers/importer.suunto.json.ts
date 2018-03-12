@@ -284,8 +284,8 @@ export class EventImporterSuuntoJSON {
       activity.setIBIData(new IBIData(eventJSONObject.DeviceLog['R-R'].Data));
       // Create a second IBIData so we can have filtering on those with keeping the original
       (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
-        .lowPassBPMFilter()
-        .highPassBPMFilter()
+        .lowLimitBPMFilter()
+        .highLimitBPMFilter()
         .movingMedianFilter(7)
         .getAsBPM().forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
