@@ -43,10 +43,9 @@
       <span *ngIf=" activity.getCreator().getName()">
           <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch</mat-icon>
           <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
-          <span *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
-          <span *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
           <span class="mat-body-2"
-                *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
+                *ngIf=" activity.getCreator().getSWInfo()">v{{ activity.getCreator().getSWInfo() }}</span>
+          <span *ngIf=" activity.getCreator().getSerialNumber()">{{ activity.getCreator().getSerialNumber() }}</span>
         </span>
     </mat-card-subtitle>
   </mat-card-header>
