@@ -1,5 +1,6 @@
 import {IBIData} from './data.ibi';
-import * as createMedianFilter from 'moving-median';
+import * as CreateMedianFilter from 'moving-median';
+import * as LowPassFilter from 'lowpassf';
 
 /**
  * Collection of filters parsers and converters for IBI (R-R) data
@@ -57,9 +58,27 @@ export class IBIFilters {
    */
   public static movingMedianFilter(ibiData: IBIData, windowSize?: number) {
     windowSize = windowSize || 5;
-    const medianFilter = createMedianFilter(windowSize);
+    const medianFilter = CreateMedianFilter(windowSize);
     ibiData.getIBIData().forEach((ibi, elapsedTime) => {
       ibiData.setIBI(elapsedTime, medianFilter(ibi));
+    });
+  }
+
+  /**
+   * Low pass filter
+   * @param {IBIData} ibiData
+   * @param {number} windowSize
+   * @param linearWeight
+   */
+  public static lowPassFilter(ibiData: IBIData, windowSize?: number, linearWeight?: boolean) {
+    const lowPassFilter = new LowPassFilter();
+    windowSize = windowSize || 25;
+    linearWeight = linearWeight ? lowPassFilter.LinearWeightAverage : lowPassFilter.SimpleAverage;
+    lowPassFilter.setLogic(linearWeight);
+    lowPassFilter.setSamplingRange(windowSize);
+    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+      lowPassFilter.putValue(ibi);
+      ibiData.setIBI(elapsedTime, Math.round(lowPassFilter.getFilteredValue()));
     });
   }
 

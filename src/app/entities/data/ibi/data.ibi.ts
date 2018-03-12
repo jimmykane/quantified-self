@@ -37,7 +37,7 @@ export class IBIData implements SerializableClassInterface {
   }
 
   /**
-   * Low pass filter. Removes all hr values above limit
+   * Low Limit filter. Removes all hr values above limit
    * @param {number} bpmLowPassLimit in BPM
    */
   public lowLimitBPMFilter(bpmLowPassLimit?: number): IBIData {
@@ -46,7 +46,7 @@ export class IBIData implements SerializableClassInterface {
   }
 
   /**
-   * Low pass filter. Removes all hr values above limit
+   * High limit filter. Removes all hr values above limit
    * @param bpmHighPassLimit
    */
   public highLimitBPMFilter(bpmHighPassLimit?: number): IBIData {
@@ -54,12 +54,21 @@ export class IBIData implements SerializableClassInterface {
     return this;
   }
 
-  public stepAverageFilter(step?: number){
+  /**
+   *  Low pass filter
+   * @param windowSize
+   */
+  public lowPassFilter(windowSize?: number): IBIData {
+    IBIFilters.lowPassFilter(this, windowSize);
+    return this;
+  }
+
+  public stepAverageFilter(step?: number) {
     IBIFilters.stepAverageFilter(this, step);
     return this;
   }
 
-  public movingMedianFilter(windowSize?: number){
+  public movingMedianFilter(windowSize?: number) {
     IBIFilters.movingMedianFilter(this, windowSize);
     return this;
   }
