@@ -1,5 +1,5 @@
 import {SerializableClassInterface} from '../../serializable/serializable.class.interface';
-import {IBIFilters} from "./data.ibi.filters";
+import {IBIFilters} from './data.ibi.filters';
 
 export class IBIData implements SerializableClassInterface {
 
@@ -13,8 +13,10 @@ export class IBIData implements SerializableClassInterface {
   constructor(ibiDataArray?: Array<number>) {
     if (ibiDataArray) {
       ibiDataArray.reduce((totalTime, ibiData) => {
-        totalTime += ibiData;
-        this.ibiDataMap.set(totalTime, ibiData);
+        if (ibiData > 0) {
+          totalTime += ibiData;
+          this.ibiDataMap.set(totalTime, ibiData);
+        }
         return totalTime;
       }, 0)
     }
@@ -63,11 +65,21 @@ export class IBIData implements SerializableClassInterface {
     return this;
   }
 
+  /**
+   * Step average filter
+   * @param {number} step
+   * @return {this}
+   */
   public stepAverageFilter(step?: number) {
     IBIFilters.stepAverageFilter(this, step);
     return this;
   }
 
+  /**
+   * Moving median filter
+   * @param {number} windowSize
+   * @return {this}
+   */
   public movingMedianFilter(windowSize?: number) {
     IBIFilters.movingMedianFilter(this, windowSize);
     return this;
