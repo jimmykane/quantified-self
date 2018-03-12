@@ -42,7 +42,7 @@ export class IBIFilters {
         }) / bufferMap.size;
         // For all the keys that got averaged set that value to the original object
         bufferMap.forEach((value, key) => {
-          ibiData.setIBI(key, avgValue);
+          ibiData.setIBI(key, Math.round(avgValue));
         });
         // Clear
         bufferMap.clear();
@@ -60,7 +60,7 @@ export class IBIFilters {
     windowSize = windowSize || 5;
     const medianFilter = CreateMedianFilter(windowSize);
     ibiData.getIBIData().forEach((ibi, elapsedTime) => {
-      ibiData.setIBI(elapsedTime, medianFilter(ibi));
+      ibiData.setIBI(elapsedTime, Math.round(medianFilter(ibi)));
     });
   }
 
