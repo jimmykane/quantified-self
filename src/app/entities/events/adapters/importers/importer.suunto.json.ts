@@ -30,8 +30,6 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
-    debugger;
-
     // @todo iterate over activities
     const activity = new Activity();
     activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
@@ -294,7 +292,6 @@ export class EventImporterSuuntoJSON {
         activity.addPoint(point);
       });
     }
-    debugger;
     return event;
   }
 
