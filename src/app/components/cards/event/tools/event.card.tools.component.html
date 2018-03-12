@@ -1,3 +1,59 @@
 <mat-card>
-  
+  <mat-checkbox [(ngModel)]="lowLimitFilterChecked">Cut off low peaks at specific BPM</mat-checkbox>
+  <mat-slider
+    [disabled]="!lowLimitFilterChecked"
+    [max]="300"
+    [min]="0"
+    [step]="1"
+    [thumb-label]="true"
+    [tick-interval]="true"
+    [(ngModel)]="lowLimitFilterValue"
+    [vertical]="false">
+  </mat-slider>
+</mat-card>
+
+<mat-card>
+  <mat-checkbox [(ngModel)]="highLimitChecked">Cut off high peaks</mat-checkbox>
+  <mat-slider
+    [disabled]="!highLimitChecked"
+    [max]="100"
+    [min]="0"
+    [step]="1"
+    [thumb-label]="true"
+    [tick-interval]="true"
+    [(ngModel)]="highLimitValue"
+    [vertical]="false">
+  </mat-slider>
+</mat-card>
+
+<mat-card>
+  <mat-checkbox [(ngModel)]="movingMedianChecked">Moving median filter</mat-checkbox>
+  <mat-slider
+    [disabled]="!movingMedianChecked"
+    [max]="100"
+    [min]="0"
+    [step]="1"
+    [thumb-label]="true"
+    [tick-interval]="true"
+    [(ngModel)]="movingMedianValue"
+    [vertical]="false">
+  </mat-slider>
+</mat-card>
+
+<mat-card>
+  <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Moving weight average filter</mat-checkbox>
+  <mat-slider
+    [disabled]="!movingWeightAverageChecked"
+    [max]="100"
+    [min]="0"
+    [step]="1"
+    [thumb-label]="true"
+    [tick-interval]="true"
+    [(ngModel)]="movingWeightAverageValue"
+    [vertical]="false">
+  </mat-slider>
+</mat-card>
+
+<mat-card>
+  <button mat-button >Apply</button>
 </mat-card>
