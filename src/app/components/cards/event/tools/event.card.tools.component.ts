@@ -1,11 +1,14 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
+  ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
-import {ActivityInterface} from "../../../../entities/activities/activity.interface";
-import {DataHeartRate} from "../../../../entities/data/data.heart-rate";
-import {Point} from "../../../../entities/points/point";
-import {PointInterface} from "../../../../entities/points/point.interface";
+import {ActivityInterface} from '../../../../entities/activities/activity.interface';
+import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
+import {Point} from '../../../../entities/points/point';
+import {PointInterface} from '../../../../entities/points/point.interface';
+import {MatSnackBar} from '@angular/material';
+import {EventService} from '../../../../services/app.event.service';
+import {IBIData} from '../../../../entities/data/ibi/data.ibi';
 
 @Component({
   selector: 'app-event-card-tools',
@@ -20,14 +23,14 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   lowLimitFilterChecked: boolean;
   lowLimitFilterValue = 40;
   highLimitChecked: boolean;
-  highLimitValue: 220;
+  highLimitValue = 220;
   movingMedianChecked: boolean;
-  movingMedianValue: 5;
+  movingMedianValue = 5;
   movingWeightAverageChecked: boolean;
-  movingWeightAverageValue: 5;
+  movingWeightAverageValue = 5;
 
 
-  constructor() {
+  constructor(private snackBar: MatSnackBar, private eventService: EventService) {
   }
 
   ngOnInit() {
@@ -41,20 +44,20 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
   applyFilters() {
     this.event.getActivities().forEach((activity: ActivityInterface) => {
-      const actvityIBIData = activity.getIBIData();
+      // Create new not to alter existing
+      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIData().values()));
       if (this.lowLimitFilterChecked) {
-        actvityIBIData.lowPassFilter(this.lowLimitFilterValue);
+        ibiData.lowLimitBPMFilter(this.lowLimitFilterValue);
       }
       if (this.highLimitChecked) {
-        actvityIBIData.highLimitBPMFilter(this.highLimitValue);
+        ibiData.highLimitBPMFilter(this.highLimitValue);
       }
       if (this.movingMedianChecked) {
-        actvityIBIData.movingMedianFilter(this.movingMedianValue);
+        ibiData.movingMedianFilter(this.movingMedianValue);
       }
       if (this.movingWeightAverageChecked) {
-        actvityIBIData.lowPassFilter(this.movingWeightAverageValue);
+        ibiData.lowPassFilter(this.movingWeightAverageValue);
       }
-
       // Remove all HR!
       activity.getPoints().forEach((point: PointInterface) => {
         if (point.getDataByType(DataHeartRate.type)) {
@@ -62,11 +65,30 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
         }
       });
 
-      actvityIBIData.getAsBPM().forEach((value, key, map) => {
+      ibiData.getAsBPM().forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
       });
-    })
+
+      this.eventService.saveEvent(this.event).then((result) => {
+        this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
+          duration: 5000,
+        });
+      });
+
+    });
+  }
+
+  public applyDefaultFilters() {
+    // Create new not to alter existing
+    this.event.getActivities().forEach((activity: ActivityInterface) => {
+      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIData().values()));
+      ibiData
+        .lowLimitBPMFilter()
+        .highLimitBPMFilter()
+        .movingMedianFilter()
+        .lowPassFilter()
+    });
   }
 }

@@ -41,7 +41,7 @@
 </mat-card>
 
 <mat-card>
-  <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Apply moving median filter </mat-checkbox>
+  <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Apply moving weight average filter </mat-checkbox>
   <mat-slider
     [disabled]="!movingWeightAverageChecked"
     [max]="100"
@@ -56,4 +56,5 @@
 
 <mat-card>
   <button mat-button (click)="applyFilters()" [disabled]="!(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">Apply filters</button>
+  <button mat-button (click)="applyDefaultFilters()" [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">Apply default filters</button>
 </mat-card>
