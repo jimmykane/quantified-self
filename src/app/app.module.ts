@@ -46,6 +46,7 @@ import {DisqusModule} from 'ngx-disqus';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
 import {AppEventColorService} from './services/app.event.color.service';
 import { UploadInfoComponent } from './components/upload-info/upload-info.component';
+import {EventCardToolsComponent} from "./components/cards/event/tools/event.card.tools.component";
 
 @NgModule({
   imports: [
@@ -97,6 +98,7 @@ import { UploadInfoComponent } from './components/upload-info/upload-info.compon
     EventLapTableRowComponent,
     EventCardChartComponent,
     EventCardSmallComponent,
+    EventCardToolsComponent,
     AboutComponent,
     UploadInfoComponent
   ],
