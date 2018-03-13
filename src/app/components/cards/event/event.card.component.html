@@ -53,7 +53,7 @@
   <mat-card-content>
     <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex"
                    (selectedIndexChange)="selectedTabIndexChange($event)">
-      <mat-tab label="Map" *ngIf="event.hasPointsWithPosition() > 0"> <!-- todo check performance on if -->
+      <mat-tab label="Map" *ngIf="event.hasPointsWithPosition()"> <!-- todo check performance on if -->
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
         </ng-template>
