@@ -1,7 +1,3 @@
-.margin {
-  margin: auto;
-}
-
 mat-icon {
   vertical-align: middle;
 }
@@ -19,12 +15,13 @@ section {
   width: 100%;
   display: flex; /* establish flex container */
   flex-direction: row; /* make main axis horizontal (default setting) */
-  justify-content: center; /* center items horizontally, in this case */
+  justify-content: space-around; /* center items horizontally, in this case */
   align-items: center;
   flex-wrap: wrap;
 }
 
 mat-checkbox {
+  margin: 0.5%;
 }
 
 .mat-checkbox-label {
