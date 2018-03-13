@@ -11,6 +11,16 @@
       </mat-expansion-panel-header>
 
       <mat-card>
+        <button mat-raised-button color="accent" (click)="applyFilters(true)"
+                [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
+          Apply default filters
+        </button>
+        <button mat-raised-button color="warn" (click)="applyFilters(false, true)" align="end"
+                [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
+          Reset to raw IBI data
+        </button>
+      </mat-card>
+      <mat-card>
         <mat-checkbox [(ngModel)]="lowLimitFilterChecked">Remove heart rate below</mat-checkbox>
         <mat-slider
           [disabled]="!lowLimitFilterChecked"
@@ -71,17 +81,9 @@
       </mat-card>
 
       <mat-card>
-        <button mat-raised-button  color="primary" (click)="applyFilters()"
+        <button mat-raised-button color="primary" (click)="applyFilters()"
                 [disabled]="!(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
           Apply filters
-        </button>
-        <button mat-raised-button color="accent" (click)="applyFilters(true)"
-                [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
-          Apply default filters
-        </button>
-        <button mat-raised-button color="warn" (click)="applyFilters(false, true)"
-                [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
-          Reset to raw IBI data
         </button>
       </mat-card>
     </mat-expansion-panel>
