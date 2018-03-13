@@ -48,7 +48,7 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
           this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
-            this.eventService.saveEvent(mergedEvent);
+            this.eventService.addAndSaveEvent(mergedEvent);
             this.actionButtonService.removeActionButton('mergeEvents');
             this.eventSelectionMap.clear();
             this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});

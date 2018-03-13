@@ -30,8 +30,6 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
-    debugger;
-
     // @todo iterate over activities
     const activity = new Activity();
     activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
@@ -294,7 +292,6 @@ export class EventImporterSuuntoJSON {
         activity.addPoint(point);
       });
     }
-    debugger;
     return event;
   }
 
@@ -322,13 +319,13 @@ export class EventImporterSuuntoJSON {
         return 'Spartan Sport'
       }
       case 'Cairo': {
-        return 'Spartan Wrist HR'
+        return 'Spartan WHR'
       }
       case 'Forssa': {
         return 'Spartan Trainer'
       }
       case 'Gdansk': {
-        return 'Spartan Wrist HR Baro'
+        return 'Spartan WHR Baro'
       }
       case 'Helsinki': {
         return '3 Fitness'

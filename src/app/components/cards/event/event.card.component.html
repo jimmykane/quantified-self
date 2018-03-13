@@ -84,7 +84,12 @@
         <app-event-card-laps [event]="event">
         </app-event-card-laps>
       </mat-tab>
+      <mat-tab label="Tools" *ngIf="event.getFirstActivity().getIBIData() && event.getFirstActivity().getIBIData().getIBIDataMap().size">
+        <ng-template matTabLabel>
+          <mat-icon>build</mat-icon>
+        </ng-template>
+        <app-event-card-tools [event]="event" *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 4 : 3)"></app-event-card-tools>
+      </mat-tab>
     </mat-tab-group>
-
   </mat-card-content>
 </mat-card>

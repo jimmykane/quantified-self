@@ -27,6 +27,10 @@ export class Point implements PointInterface {
     data.setPoint(this);
   }
 
+  removeDataByType(dataType: string) {
+    this.data.delete(dataType)
+  }
+
   getData(): Map<string, DataInterface[]> {
     return this.data;
   }
@@ -40,8 +44,8 @@ export class Point implements PointInterface {
       return void 0;
     }
     return (this.getDataByType(dataType)).reduce((average: number, data, currentIndex, array) => {
-        return average + data.getValue() / array.length
-      }, 0);
+      return average + data.getValue() / array.length
+    }, 0);
   }
 
   getPosition(): DataPositionInterface {
@@ -60,7 +64,7 @@ export class Point implements PointInterface {
   toJSON(): any {
     let dataArray = [];
     this.getData().forEach((value, key, map) => {
-      dataArray =  dataArray.concat(value);
+      dataArray = dataArray.concat(value);
     });
     return {
       date: this.getDate(),
