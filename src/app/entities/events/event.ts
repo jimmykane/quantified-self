@@ -12,6 +12,7 @@ export class Event extends IDClass implements EventInterface {
   private name: string;
   private activities: ActivityInterface[] = [];
   private summary: SummaryInterface;
+  private _hasPointsWithPosition;
   private logger = Log.create('Event');
 
   setName(name: string) {
@@ -75,6 +76,15 @@ export class Event extends IDClass implements EventInterface {
       (performance.now() - t0) / 1000 + ' seconds'
     );
     return points;
+  }
+
+  // @todo proper implementation for this query
+  hasPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): boolean {
+    // If not bool = not set
+    if (this._hasPointsWithPosition !== true && this._hasPointsWithPosition !== false) {
+      this._hasPointsWithPosition = this.getPointsWithPosition(startDate, endDate, step, activities).length > 0;
+    }
+    return this._hasPointsWithPosition;
   }
 
   getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): DataInterface[] {

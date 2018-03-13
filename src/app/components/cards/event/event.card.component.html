@@ -53,7 +53,7 @@
   <mat-card-content>
     <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex"
                    (selectedIndexChange)="selectedTabIndexChange($event)">
-      <mat-tab label="Map" *ngIf="event.getPointsWithPosition().length > 0"> <!-- todo check performance on if -->
+      <mat-tab label="Map" *ngIf="event.hasPointsWithPosition() > 0"> <!-- todo check performance on if -->
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
         </ng-template>
@@ -65,7 +65,7 @@
         <ng-template matTabLabel>
           <mat-icon>insert_chart</mat-icon>
         </ng-template>
-        <app-event-card-stats *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 1 : 0)"
+        <app-event-card-stats *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 1 : 0)"
                               [event]="event">
         </app-event-card-stats>
       </mat-tab>
@@ -73,7 +73,7 @@
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
         </ng-template>
-        <app-event-card-chart *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 2 : 1)"
+        <app-event-card-chart *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 2 : 1)"
                               [event]="event">
         </app-event-card-chart>
       </mat-tab>
@@ -88,7 +88,7 @@
         <ng-template matTabLabel>
           <mat-icon>build</mat-icon>
         </ng-template>
-        <app-event-card-tools [event]="event" *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 4 : 2)"></app-event-card-tools>
+        <app-event-card-tools [event]="event" *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 4 : 2)"></app-event-card-tools>
       </mat-tab>
     </mat-tab-group>
   </mat-card-content>

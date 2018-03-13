@@ -117,7 +117,7 @@ export class EventService {
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
         const activitySummary = event.getSummary() || new Summary();
-        if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+        if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
           continue;
         }
 
@@ -133,7 +133,7 @@ export class EventService {
         let index = 0;
         for (const activity of event.getActivities()) {
           // If indoors
-          if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+          if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
             index += 2;
             continue;
           }
@@ -167,7 +167,7 @@ export class EventService {
         activity.setSummary(activitySummary);
 
         // If indoors
-        if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+        if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
           continue;
         }
 
@@ -197,7 +197,7 @@ export class EventService {
         let index = 0;
         for (const activity of event.getActivities()) {
           // If indoors
-          if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+          if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
             index += 2;
             continue;
           }
@@ -238,7 +238,7 @@ export class EventService {
                                   endDate?: Date,
                                   step?: number,
                                   activities?: ActivityInterface[]): number {
-    if (!event.getPointsWithPosition().length) {
+    if (!event.hasPointsWithPosition()) {
       return 0;
     }
     return event.getActivities().reduce((distance: number, activity: ActivityInterface) => {
