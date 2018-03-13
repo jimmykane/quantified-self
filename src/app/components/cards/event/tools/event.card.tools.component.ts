@@ -42,64 +42,50 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   ngOnDestroy() {
   }
 
-  applyFilters() {
+  applyFilters(defaultFilters?: boolean, resetToRawIBIData?: boolean) {
     this.event.getActivities().forEach((activity: ActivityInterface) => {
-      // Remove all HR!
-      activity.getPoints().forEach((point: PointInterface) => {
-        if (point.getDataByType(DataHeartRate.type)) {
-          point.removeDataByType(DataHeartRate.type);
+        // Remove all HR!
+        activity.getPoints().forEach((point: PointInterface) => {
+          if (point.getDataByType(DataHeartRate.type)) {
+            point.removeDataByType(DataHeartRate.type);
+          }
+        });
+
+        // Create new not to alter existing
+        const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
+
+        // If we want the defaults
+        if (defaultFilters) {
+          ibiData
+            .lowLimitBPMFilter()
+            .highLimitBPMFilter()
+            .movingMedianFilter()
+            .lowPassFilter();
+        } else if (!resetToRawIBIData) {
+          if (this.lowLimitFilterChecked) {
+            ibiData.lowLimitBPMFilter(this.lowLimitFilterValue);
+          }
+          if (this.highLimitChecked) {
+            ibiData.highLimitBPMFilter(this.highLimitValue);
+          }
+          if (this.movingMedianChecked) {
+            ibiData.movingMedianFilter(this.movingMedianValue);
+          }
+          if (this.movingWeightAverageChecked) {
+            ibiData.lowPassFilter(this.movingWeightAverageValue);
+          }
         }
-      });
-      // Create new not to alter existing
-      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
-      if (this.lowLimitFilterChecked) {
-        ibiData.lowLimitBPMFilter(this.lowLimitFilterValue);
+
+        // Else just get them as BPM and no filter
+        ibiData.getAsBPM().forEach((value, key, map) => {
+          const point = new Point(new Date(activity.getStartDate().getTime() + key));
+          point.addData(new DataHeartRate(value));
+          activity.addPoint(point);
+        });
       }
-      if (this.highLimitChecked) {
-        ibiData.highLimitBPMFilter(this.highLimitValue);
-      }
-      if (this.movingMedianChecked) {
-        ibiData.movingMedianFilter(this.movingMedianValue);
-      }
-      if (this.movingWeightAverageChecked) {
-        ibiData.lowPassFilter(this.movingWeightAverageValue);
-      }
-      ibiData.getAsBPM().forEach((value, key, map) => {
-        const point = new Point(new Date(activity.getStartDate().getTime() + key));
-        point.addData(new DataHeartRate(value));
-        activity.addPoint(point);
-      });
-    });
+    );
     this.eventService.saveEvent(this.event).then((result) => {
       this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
-        duration: 5000,
-      });
-    });
-
-  }
-
-  public applyDefaultFilters() {
-    // Create new not to alter existing
-    this.event.getActivities().forEach((activity: ActivityInterface) => {
-      activity.getPoints().forEach((point: PointInterface) => {
-        if (point.getDataByType(DataHeartRate.type)) {
-          point.removeDataByType(DataHeartRate.type);
-        }
-      });
-      const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
-      ibiData
-        .lowLimitBPMFilter()
-        .highLimitBPMFilter()
-        .movingMedianFilter()
-        .lowPassFilter()
-        .getAsBPM().forEach((value, key, map) => {
-        const point = new Point(new Date(activity.getStartDate().getTime() + key));
-        point.addData(new DataHeartRate(value));
-        activity.addPoint(point);
-      });
-    });
-    this.eventService.saveEvent(this.event).then((result) => {
-      this.snackBar.open('Default filters applied! Go to the chart to see the result', null, {
         duration: 5000,
       });
     });
