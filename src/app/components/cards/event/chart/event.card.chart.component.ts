@@ -532,6 +532,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // @todo should check better if created or built
     this.AmCharts.destroyChart(this.chart);
   }
 }
