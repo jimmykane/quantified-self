@@ -43,10 +43,9 @@
       <span *ngIf=" activity.getCreator().getName()">
           <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch</mat-icon>
           <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
-          <span *ngIf=" activity.getCreator().getSerialNumber()"> - {{ activity.getCreator().getSerialNumber() }}</span>
-          <span *ngIf=" activity.getCreator().getHWInfo()"> - {{ activity.getCreator().getHWInfo() }}</span>
           <span class="mat-body-2"
-                *ngIf=" activity.getCreator().getSWInfo()"> - {{ activity.getCreator().getSWInfo() }}</span>
+                *ngIf=" activity.getCreator().getSWInfo()">v{{ activity.getCreator().getSWInfo() }}</span>
+          <span *ngIf=" activity.getCreator().getSerialNumber()">{{ activity.getCreator().getSerialNumber() }}</span>
         </span>
     </mat-card-subtitle>
   </mat-card-header>
@@ -85,7 +84,12 @@
         <app-event-card-laps [event]="event">
         </app-event-card-laps>
       </mat-tab>
+      <mat-tab label="Tools" *ngIf="event.getFirstActivity().getIBIData() && event.getFirstActivity().getIBIData().getIBIDataMap().size">
+        <ng-template matTabLabel>
+          <mat-icon>build</mat-icon>
+        </ng-template>
+        <app-event-card-tools [event]="event" *ngIf="selectedTabIndex === (event.getPointsWithPosition().length? 4 : 3)"></app-event-card-tools>
+      </mat-tab>
     </mat-tab-group>
-
   </mat-card-content>
 </mat-card>

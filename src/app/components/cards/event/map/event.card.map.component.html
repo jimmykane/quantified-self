@@ -1,5 +1,9 @@
-<mat-grid-list cols="{{ gridListColumnCount }}" rowHeight="fit">
-  <mat-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
-    <app-event-card-map-agm [event]="event" [resize]="resize"></app-event-card-map-agm>
-  </mat-grid-tile>
-</mat-grid-list>
+<mat-card>
+  <mat-card>
+    <mat-grid-list cols="{{ gridListColumnCount }}" rowHeight="fit">
+      <mat-grid-tile colspan="1" rowspan="{{ mapRowSpan }}">
+        <app-event-card-map-agm [event]="event" [resize]="resize"></app-event-card-map-agm>
+      </mat-grid-tile>
+    </mat-grid-list>
+  </mat-card>
+</mat-card>

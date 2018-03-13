@@ -1,5 +1,6 @@
 import {IBIData} from './data.ibi';
-import * as createMedianFilter from 'moving-median';
+import * as CreateMedianFilter from 'moving-median';
+import * as LowPassFilter from 'lowpassf';
 
 /**
  * Collection of filters parsers and converters for IBI (R-R) data
@@ -7,17 +8,17 @@ import * as createMedianFilter from 'moving-median';
 export class IBIFilters {
 
   /**
-   * A pass filter. It removes all values outside the limit
+   * A limit filter. It removes all values outside the limit
    * @param {IBIData} ibiData
-   * @param {number} passLimit
-   * @param {boolean} lowPass
+   * @param {number} limit
+   * @param {boolean} lowLimit
    */
-  public static passFilter(ibiData: IBIData, passLimit: number, lowPass: boolean) {
-    ibiData.getIBIData().forEach((value, key, map) => {
-      if (value < passLimit && lowPass) {
-        ibiData.getIBIData().delete(key);
-      } else if (value > passLimit && !lowPass) {
-        ibiData.getIBIData().delete(key)
+  public static limitFilter(ibiData: IBIData, limit: number, lowLimit: boolean) {
+    ibiData.getIBIDataMap().forEach((value, key, map) => {
+      if (value < limit && lowLimit) {
+        ibiData.getIBIDataMap().delete(key);
+      } else if (value > limit && !lowLimit) {
+        ibiData.getIBIDataMap().delete(key)
       }
     });
   }
@@ -32,7 +33,7 @@ export class IBIFilters {
   public static stepAverageFilter(ibiData: IBIData, step?: number) {
     step = step || 2;
     const bufferMap = new Map<number, number>();
-    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
+    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
       bufferMap.set(elapsedTime, ibi);
       if (bufferMap.size >= step) {
         // Find the value average
@@ -41,7 +42,7 @@ export class IBIFilters {
         }) / bufferMap.size;
         // For all the keys that got averaged set that value to the original object
         bufferMap.forEach((value, key) => {
-          ibiData.setIBI(key, avgValue);
+          ibiData.setIBI(key, Math.round(avgValue));
         });
         // Clear
         bufferMap.clear();
@@ -57,9 +58,27 @@ export class IBIFilters {
    */
   public static movingMedianFilter(ibiData: IBIData, windowSize?: number) {
     windowSize = windowSize || 5;
-    const medianFilter = createMedianFilter(windowSize);
-    ibiData.getIBIData().forEach((ibi, elapsedTime) => {
-      ibiData.setIBI(elapsedTime, medianFilter(ibi));
+    const medianFilter = CreateMedianFilter(windowSize);
+    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
+      ibiData.setIBI(elapsedTime, Math.round(medianFilter(ibi)));
+    });
+  }
+
+  /**
+   * Low pass filter
+   * @param {IBIData} ibiData
+   * @param {number} windowSize
+   * @param linearWeight
+   */
+  public static lowPassFilter(ibiData: IBIData, windowSize?: number, linearWeight?: boolean) {
+    const lowPassFilter = new LowPassFilter();
+    windowSize = windowSize || 5;
+    linearWeight = linearWeight ? lowPassFilter.LinearWeightAverage : lowPassFilter.SimpleAverage;
+    lowPassFilter.setLogic(linearWeight);
+    lowPassFilter.setSamplingRange(windowSize);
+    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
+      lowPassFilter.putValue(ibi);
+      ibiData.setIBI(elapsedTime, Math.round(lowPassFilter.getFilteredValue()));
     });
   }
 

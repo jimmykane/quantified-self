@@ -30,8 +30,6 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
-    debugger;
-
     // @todo iterate over activities
     const activity = new Activity();
     activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
@@ -284,16 +282,16 @@ export class EventImporterSuuntoJSON {
       activity.setIBIData(new IBIData(eventJSONObject.DeviceLog['R-R'].Data));
       // Create a second IBIData so we can have filtering on those with keeping the original
       (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
-        .lowPassBPMFilter()
-        .highPassBPMFilter()
-        .movingMedianFilter(7)
+        .lowLimitBPMFilter()
+        .highLimitBPMFilter()
+        .lowPassFilter()
+        .movingMedianFilter()
         .getAsBPM().forEach((value, key, map) => {
         const point = new Point(new Date(activity.getStartDate().getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
       });
     }
-    debugger;
     return event;
   }
 
@@ -321,13 +319,13 @@ export class EventImporterSuuntoJSON {
         return 'Spartan Sport'
       }
       case 'Cairo': {
-        return 'Spartan Wrist HR'
+        return 'Spartan WHR'
       }
       case 'Forssa': {
         return 'Spartan Trainer'
       }
       case 'Gdansk': {
-        return 'Spartan Wrist HR Baro'
+        return 'Spartan WHR Baro'
       }
       case 'Helsinki': {
         return '3 Fitness'

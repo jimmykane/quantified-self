@@ -22,7 +22,7 @@ import {
   MatGridListModule, MatIconModule,
   MatMenuModule, MatProgressBarModule,
   MatSidenavModule, MatTableModule,
-  MatTabsModule, MatToolbarModule, MatCheckboxModule
+  MatTabsModule, MatToolbarModule, MatCheckboxModule, MatSliderModule, MatSnackBarModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -35,7 +35,6 @@ import {CdkTableModule} from '@angular/cdk/table';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
 import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
-import {EventCardMapActivitiesComponent} from './components/cards/event/map/activities/event.card.map.activities.component';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
@@ -46,6 +45,7 @@ import {DisqusModule} from 'ngx-disqus';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
 import {AppEventColorService} from './services/app.event.color.service';
 import { UploadInfoComponent } from './components/upload-info/upload-info.component';
+import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
 
 @NgModule({
   imports: [
@@ -74,6 +74,8 @@ import { UploadInfoComponent } from './components/upload-info/upload-info.compon
     MomentModule,
     AmChartsModule,
     MatCheckboxModule,
+    MatSliderModule,
+    MatSnackBarModule,
     FormsModule,
     Angular2FontawesomeModule,
     MatProgressBarModule
@@ -89,7 +91,6 @@ import { UploadInfoComponent } from './components/upload-info/upload-info.compon
     EventCardListComponent,
     EventCardMapComponent,
     EventCardMapAGMComponent,
-    EventCardMapActivitiesComponent,
     EventCardStatsComponent,
     EventCardActivityStatsComponent,
     EventCardActionsMenuComponent,
@@ -97,6 +98,7 @@ import { UploadInfoComponent } from './components/upload-info/upload-info.compon
     EventLapTableRowComponent,
     EventCardChartComponent,
     EventCardSmallComponent,
+    EventCardToolsComponent,
     AboutComponent,
     UploadInfoComponent
   ],
