@@ -5,3 +5,7 @@ app-activities-checkboxes {
   align-content: center;
   align-items: center;
 }
+
+/deep/#chartdiv .amcharts-chart-div{
+  height: 100vh !important;
+}
