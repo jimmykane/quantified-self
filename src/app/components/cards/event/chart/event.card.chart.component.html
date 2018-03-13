@@ -1,4 +1,5 @@
 <mat-card>
+<mat-card>
   <mat-card *ngIf="event.getActivities().length > 1">
     <mat-card-content>
       <section>
@@ -6,7 +7,8 @@
                                    (selectedActivities)="onSelectedActivities($event)"></app-activities-checkboxes>
       </section>
     </mat-card-content>
-      <div id="chartdiv" [style.min-width.%]="90" [style.min-height.vh]="120"></div>
   </mat-card>
+  <div id="chartdiv" [style.min-width.%]="90" [style.min-height.vh]="120"></div>
+</mat-card>
 </mat-card>
 
