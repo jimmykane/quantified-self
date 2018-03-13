@@ -319,13 +319,13 @@ export class EventImporterSuuntoJSON {
         return 'Spartan Sport'
       }
       case 'Cairo': {
-        return 'Spartan Wrist HR'
+        return 'Spartan WHR'
       }
       case 'Forssa': {
         return 'Spartan Trainer'
       }
       case 'Gdansk': {
-        return 'Spartan Wrist HR Baro'
+        return 'Spartan WHR Baro'
       }
       case 'Helsinki': {
         return '3 Fitness'

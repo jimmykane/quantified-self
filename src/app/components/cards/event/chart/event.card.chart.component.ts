@@ -374,7 +374,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         lineColor: this.genColor(name + ' ' + (activityIndex > 0 ? activityIndex : '')),
         bulletBorderThickness: 3,
         hideBulletsCount: 1,
-        title: '#' + activityIndex + ' ' + name + ' ' + creator,
+        title: '#' + activityIndex + ' ' + name + ' ' + creator.slice(0, 25),
         valueField: categoryID,
         balloonText: name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b></br>' + creator,
         legendValueText: '[[value]] ' + dataCategory.unit,
