@@ -1,17 +1,4 @@
-app-card-map-location {
-  margin: 5%;
-}
-
-app-card-map-weather {
-  min-width: 100%;
-  text-align: center;
-}
-
 app-event-card-map-agm {
   width: 100%;
   height: 100%;
-}
-
-mat-grid-list{
-  height: 100vh;
 }
