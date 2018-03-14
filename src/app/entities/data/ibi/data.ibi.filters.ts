@@ -16,9 +16,9 @@ export class IBIFilters {
   public static limitFilter(ibiData: IBIData, limit: number, lowLimit: boolean) {
     ibiData.getIBIDataMap().forEach((value, key, map) => {
       if (value < limit && lowLimit) {
-        ibiData.getIBIDataMap().delete(key);
+        map.delete(key);
       } else if (value > limit && !lowLimit) {
-        ibiData.getIBIDataMap().delete(key)
+        map.delete(key)
       }
     });
   }
