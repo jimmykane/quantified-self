@@ -7,6 +7,7 @@ import {Log} from 'ng2-logger';
 import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
+import {Point} from "../points/point";
 
 export class Activity extends IDClass implements ActivityInterface {
 
@@ -95,29 +96,53 @@ export class Activity extends IDClass implements ActivityInterface {
         canBeAdded = false;
       }
       if (canBeAdded) {
-        let key = point.getDate().getTime();
         // Merge to 1s precision and keep old data
-        if (sanitizeToSecond) {
-          // Put a key for the map to 0 ms so every 1s
-          key = point.getDate().setMilliseconds(0);
-          // Check if anything exists
-          const existingPoint = points.get(key);
-          if (existingPoint) {
-            // If it exists use unique to add it to the iterating point (the current loop point)
-            existingPoint.getData().forEach((dataArray: DataInterface[], key: string) => {
-              dataArray.forEach((data: DataInterface) => {
-                if (!point.getDataByType(key)) {
-                  point.addData(data);
-                }
-              });
-            });
-          }
-        }
+        //   dateTimeKey = interpolatedDateTimePoint.getDate().getTime();
+        //   // Put a key for the map to 0 ms so every 1s
+        //   // Check if anything exists
+        //   const existingPoint = points.get(dateTimeKey);
+        //   if (existingPoint) {
+        //     // If it exists use unique to add it to the iterating point (the current loop point)
+        //     existingPoint.getData().forEach((dataArray: DataInterface[], key: string) => {
+        //       dataArray.forEach((data: DataInterface) => {
+        //         if (!interpolatedDateTimePoint.getDataByType(key)) {
+        //           interpolatedDateTimePoint.addData(data);
+        //         }
+        //       });
+        //     });
+        //   }
         // Set the current loop point on the map
-        points.set(key, point);
+        points.set(point.getDate().getTime(), point);
       }
     });
     return Array.from(points.values());
+  }
+
+  getPointsInterpolated(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
+    return Array.from(this.getPoints(startDate, endDate, step).reduce((pointsMap: Map<number, PointInterface>, point: PointInterface) => {
+      // copy the point and set it's date to 0 ms so 1s interpolation
+      const interpolatedDateTimePoint = new Point(new Date(new Date(point.getDate().getTime()).setMilliseconds(0)));
+      point.getData().forEach((dataArray: DataInterface[], key, map) => {
+        dataArray.forEach((data: DataInterface) => {
+          interpolatedDateTimePoint.addData(data);
+        })
+      });
+
+      // Check if we already have an existing point in our local map for that time
+      const existingPoint = pointsMap.get(interpolatedDateTimePoint.getDate().getTime());
+      if (existingPoint) {
+        // If it exists go over it's data and add them to the current iteration point
+        existingPoint.getData().forEach((dataArray: DataInterface[], key) => {
+          dataArray.forEach((data: DataInterface) => {
+            if (!interpolatedDateTimePoint.getDataByType(key)) {
+              interpolatedDateTimePoint.addData(data);
+            }
+          });
+        });
+      }
+      pointsMap.set(interpolatedDateTimePoint.getDate().getTime(), interpolatedDateTimePoint);
+      return pointsMap;
+    }, new Map<number, PointInterface>()).values());
   }
 
   getStartPoint(): PointInterface {

@@ -19,6 +19,7 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   removePoint(point: PointInterface);
   removePoint(point: PointInterface);
   getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: boolean): PointInterface[];
+  getPointsInterpolated(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
   setSummary(activitySummary: SummaryInterface);

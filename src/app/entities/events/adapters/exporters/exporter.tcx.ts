@@ -103,7 +103,7 @@ export class EventExporterTCX implements EventExporterInterface {
         lapElement.appendChild(trackElement);
         // Go over the points and find the ones without position
         let pointWithoutPosition: PointInterface;
-        for (const point of activity.getPoints(lap.getStartDate(), lap.getEndDate(), 1, true)) {
+        for (const point of activity.getPointsInterpolated(lap.getStartDate(), lap.getEndDate(), 1)) {
           if (!point.getPosition()) {
             pointWithoutPosition = point;
             continue;

@@ -43,13 +43,13 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   applyFilters(defaultFilters?: boolean, resetToRawIBIData?: boolean) {
+    // Remove all HR!
+    this.event.getPoints().forEach((point: PointInterface) => {
+      if (point.getDataByType(DataHeartRate.type)) {
+        point.removeDataByType(DataHeartRate.type);
+      }
+    });
     this.event.getActivities().forEach((activity: ActivityInterface) => {
-        // Remove all HR!
-        activity.getPoints().forEach((point: PointInterface) => {
-          if (point.getDataByType(DataHeartRate.type)) {
-            point.removeDataByType(DataHeartRate.type);
-          }
-        });
 
         // Create new not to alter existing
         const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
