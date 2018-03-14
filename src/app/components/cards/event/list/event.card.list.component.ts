@@ -4,6 +4,7 @@ import {ActionButtonService} from '../../../../services/action-buttons/app.actio
 import {ActionButton} from '../../../../services/action-buttons/app.action-button';
 import {EventService} from '../../../../services/app.event.service';
 import {Router} from '@angular/router';
+import {MatSnackBar} from "@angular/material";
 
 
 @Component({
@@ -19,7 +20,7 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
-  constructor(private eventService: EventService, private actionButtonService: ActionButtonService, private router: Router) {
+  constructor(private snackBar: MatSnackBar, private eventService: EventService, private actionButtonService: ActionButtonService, private router: Router) {
   }
 
   ngOnInit() {
@@ -48,10 +49,19 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
           this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
-            this.eventService.addAndSaveEvent(mergedEvent);
             this.actionButtonService.removeActionButton('mergeEvents');
+            this.eventService.addAndSaveEvent(mergedEvent);
             this.eventSelectionMap.clear();
-            this.router.navigate(['/dashboard'], {queryParams: {eventID: mergedEvent.getID(), tabIndex: 0}});
+            this.router.navigate(['/dashboard'], {
+              queryParams: {
+                eventID: mergedEvent.getID(),
+                tabIndex: 0
+              }
+            }).then(() => {
+              this.snackBar.open('Events merged', null, {
+                duration: 5000,
+              });
+            });
           })
         },
         'material'
