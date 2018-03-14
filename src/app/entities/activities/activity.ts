@@ -96,21 +96,6 @@ export class Activity extends IDClass implements ActivityInterface {
         canBeAdded = false;
       }
       if (canBeAdded) {
-        // Merge to 1s precision and keep old data
-        //   dateTimeKey = interpolatedDateTimePoint.getDate().getTime();
-        //   // Put a key for the map to 0 ms so every 1s
-        //   // Check if anything exists
-        //   const existingPoint = points.get(dateTimeKey);
-        //   if (existingPoint) {
-        //     // If it exists use unique to add it to the iterating point (the current loop point)
-        //     existingPoint.getData().forEach((dataArray: DataInterface[], key: string) => {
-        //       dataArray.forEach((data: DataInterface) => {
-        //         if (!interpolatedDateTimePoint.getDataByType(key)) {
-        //           interpolatedDateTimePoint.addData(data);
-        //         }
-        //       });
-        //     });
-        //   }
         // Set the current loop point on the map
         points.set(point.getDate().getTime(), point);
       }
