@@ -7,7 +7,7 @@ import {Log} from 'ng2-logger';
 import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
-import {Point} from "../points/point";
+import {Point} from '../points/point';
 
 export class Activity extends IDClass implements ActivityInterface {
 
@@ -64,12 +64,10 @@ export class Activity extends IDClass implements ActivityInterface {
     const existingPoint = this.points.get(point.getDate().getTime());
     if (existingPoint && detectCollision) {
       this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString() + ' and date: ' + existingPoint.getDate());
-      existingPoint.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-        dataArray.forEach((data: DataInterface) => {
-          if (!point.getDataByType(key)) {
-            point.addData(data);
-          }
-        });
+      existingPoint.getData().forEach((data: DataInterface, key: string, map) => {
+        if (!point.getDataByType(key)) {
+          point.addData(data);
+        }
       });
     }
     this.points.set(point.getDate().getTime(), point);
@@ -107,22 +105,16 @@ export class Activity extends IDClass implements ActivityInterface {
     return Array.from(this.getPoints(startDate, endDate, step).reduce((pointsMap: Map<number, PointInterface>, point: PointInterface) => {
       // copy the point and set it's date to 0 ms so 1s interpolation
       const interpolatedDateTimePoint = new Point(new Date(new Date(point.getDate().getTime()).setMilliseconds(0)));
-      point.getData().forEach((dataArray: DataInterface[], key, map) => {
-        dataArray.forEach((data: DataInterface) => {
-          interpolatedDateTimePoint.addData(data);
-        })
+      point.getData().forEach((data: DataInterface, key, map) => {
+        interpolatedDateTimePoint.addData(data);
       });
 
       // Check if we already have an existing point in our local map for that time
       const existingPoint = pointsMap.get(interpolatedDateTimePoint.getDate().getTime());
       if (existingPoint) {
         // If it exists go over it's data and add them to the current iteration point
-        existingPoint.getData().forEach((dataArray: DataInterface[], key) => {
-          dataArray.forEach((data: DataInterface) => {
-            if (!interpolatedDateTimePoint.getDataByType(key)) {
-              interpolatedDateTimePoint.addData(data);
-            }
-          });
+        existingPoint.getData().forEach((data: DataInterface, key) => {
+          interpolatedDateTimePoint.addData(data);
         });
       }
       pointsMap.set(interpolatedDateTimePoint.getDate().getTime(), interpolatedDateTimePoint);

@@ -255,10 +255,10 @@ export class EventService {
     const t0 = performance.now();
     let count = 1;
     const averageForDataType = event.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
-      if (!point.getDataTypeAverage(dataType)) { // @todo should check against void 0
+      if (!point.getDataByType(dataType)) {
         return average;
       }
-      average += point.getDataTypeAverage(dataType);
+      average += point.getDataByType(dataType).getValue();
       count++;
       return average;
     }, 0);
@@ -282,14 +282,14 @@ export class EventService {
     minDiff = minDiff || 1.5;
     let gain = 0;
     event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataTypeAverage(dataType)) {
+      if (!previous.getDataByType(dataType)) {
         return next;
       }
-      if (!next.getDataTypeAverage(dataType)) {
+      if (!next.getDataByType(dataType)) {
         return previous;
       }
-      if ((previous.getDataTypeAverage(dataType) + minDiff) < (Number(next.getDataTypeAverage(dataType)))) {
-        gain += Number(next.getDataTypeAverage(dataType).toFixed(precision)) - Number(previous.getDataTypeAverage(dataType).toFixed(precision));
+      if ((previous.getDataByType(dataType).getValue() + minDiff) < (Number(next.getDataByType(dataType).getValue()))) {
+        gain += Number(next.getDataByType(dataType).getValue().toFixed(precision)) - Number(previous.getDataByType(dataType).getValue().toFixed(precision));
       }
       return next;
     });
@@ -313,14 +313,14 @@ export class EventService {
     minDiff = minDiff || 1.5;
     let loss = 0;
     event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataTypeAverage(dataType)) {
+      if (!previous.getDataByType(dataType)) {
         return next;
       }
-      if (!next.getDataTypeAverage(dataType)) {
+      if (!next.getDataByType(dataType)) {
         return previous;
       }
-      if ((Number(next.getDataTypeAverage(dataType).toFixed(precision)) - minDiff) < Number(previous.getDataTypeAverage(dataType).toFixed(precision))) {
-        loss += Number(previous.getDataTypeAverage(dataType).toFixed(precision)) - Number(next.getDataTypeAverage(dataType).toFixed(precision));
+      if ((Number(next.getDataByType(dataType).getValue().toFixed(precision)) - minDiff) < Number(previous.getDataByType(dataType).getValue().toFixed(precision))) {
+        loss += Number(previous.getDataByType(dataType).getValue().toFixed(precision)) - Number(next.getDataByType(dataType).getValue().toFixed(precision));
       }
       return next;
     });

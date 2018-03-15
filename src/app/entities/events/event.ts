@@ -91,9 +91,9 @@ export class Event extends IDClass implements EventInterface {
     const t0 = performance.now();
     const data = this.getPoints(startDate, endDate, step, activities)
       .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
-        point.getDataByType(dataType).forEach((pointData: DataInterface) => {
-          dataArray.push(pointData);
-        });
+        if (point.getDataByType(dataType)) {
+          dataArray.push(point.getDataByType(dataType));
+        }
         return dataArray;
       }, []);
     this.logger.d('Retrieved data for  ' + dataType + ' after ' +

@@ -110,11 +110,9 @@ export class EventExporterTCX implements EventExporterInterface {
           }
           // Go over date that did not have a position and append missing data
           if (pointWithoutPosition) {
-            pointWithoutPosition.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+            pointWithoutPosition.getData().forEach((data: DataInterface, key: string, map) => {
               if (!point.getData().get(key)) {
-                dataArray.forEach((data: DataInterface) => {
-                  point.addData(data);
-                });
+                point.addData(data);
               }
             });
             pointWithoutPosition = void 0;
@@ -144,8 +142,7 @@ export class EventExporterTCX implements EventExporterInterface {
           extensionsElement.appendChild(tpxElement);
           pointElement.appendChild(extensionsElement);
 
-          point.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-            const data = dataArray[0];
+          point.getData().forEach((data: DataInterface, key: string, map) => {
             if ((data instanceof DataAltitude) && !(data instanceof DataGPSAltitude)) {
               const altitudeElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'AltitudeMeters');
               altitudeElement.textContent = data.getValue().toFixed(0).toString();

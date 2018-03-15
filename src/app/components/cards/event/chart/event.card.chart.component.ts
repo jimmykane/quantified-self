@@ -255,7 +255,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       this.dataMap = new Map<string, DataInterface[]>();
       this.selectedActivities.forEach((activity: ActivityInterface, index) => {
         activity.getPointsInterpolated(void 0, void 0, 1).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-          point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
+          point.getData().forEach((pointData: DataInterface, key: string) => {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
@@ -264,9 +264,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             if (!existingDataArray.length) {
               dataMap.set(key, existingDataArray);
             }
-            pointDataArray.forEach((pointData) => {
-              existingDataArray.push(pointData)
-            });
+            existingDataArray.push(pointData)
           });
           return dataMap;
         }, this.dataMap);
