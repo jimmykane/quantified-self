@@ -380,9 +380,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         lineThickness: 1.5,
         useLineColorForBulletBorder: true,
         type: 'line',
-        hidden: graphs.length >= 1
+        hidden: name !== DataHeartRate.type
       });
     });
+    // Check if any is visible and if not make visible the first one
+    if (!graphs.find((graph) => {
+        return graph.hidden !== true
+      })) {
+      graphs[0].hidden = false;
+    }
     this.logger.d('Got graphs after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
