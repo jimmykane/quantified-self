@@ -1,6 +1,7 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import {async, ComponentFixture, TestBed} from '@angular/core/testing';
 
-import { UploadInfoComponent } from './upload-info.component';
+import {UploadInfoComponent} from './upload-info.component';
+import {MatProgressBar} from "@angular/material";
 
 describe('UploadInfoComponent', () => {
   let component: UploadInfoComponent;
@@ -8,9 +9,10 @@ describe('UploadInfoComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ UploadInfoComponent ]
+      declarations: [UploadInfoComponent, MatProgressBar
+      ]
     })
-    .compileComponents();
+      .compileComponents();
   }));
 
   beforeEach(() => {
