@@ -16,4 +16,11 @@ describe('Data', function () {
   it('should get the unit of bpm', function () {
     expect(data.getUnit()).toBe('bpm');
   });
+
+  it('should export correctly to JSON', function () {
+    expect(data.toJSON()).toEqual({
+      type: 'Heart Rate',
+      value: 60
+    });
+  });
 });

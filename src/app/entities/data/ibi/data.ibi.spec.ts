@@ -51,4 +51,8 @@ describe('Data IBI', function () {
     expect(ibiData.getAsBPM()).toEqual(expectedResult);
   });
 
+  it('should export correctly to JSON', function () {
+    expect(ibiData.toJSON()).toEqual([600, 700, 800, 900]);
+  });
+
 });
