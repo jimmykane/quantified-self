@@ -26,7 +26,9 @@ import {IBIFilters} from '../../../data/ibi/data.ibi.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
 
 export class EventImporterSuuntoJSON {
+
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
+
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
