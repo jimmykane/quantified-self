@@ -51,6 +51,26 @@ describe('Data IBI', function () {
     expect(ibiData.getAsBPM()).toEqual(expectedResult);
   });
 
+  it('should apply a low pass filter', function () {
+    const expectedResult = new Map<number, number>();
+    expectedResult.set(600, 100);
+    expectedResult.set(1300, 92);
+    expectedResult.set(2100, 86);
+    expectedResult.set(3000, 80);
+    ibiData.lowPassFilter();
+    expect(ibiData.getAsBPM()).toEqual(expectedResult);
+  });
+
+  it('should apply a moving median filter', function () {
+    const expectedResult = new Map<number, number>();
+    expectedResult.set(600, 100);
+    expectedResult.set(1300, 92);
+    expectedResult.set(2100, 86);
+    expectedResult.set(3000, 80);
+    ibiData.movingMedianFilter();
+    expect(ibiData.getAsBPM()).toEqual(expectedResult);
+  });
+
   it('should export correctly to JSON', function () {
     expect(ibiData.toJSON()).toEqual([600, 700, 800, 900]);
   });
