@@ -51,7 +51,7 @@
     "rxjs": "^5.5.7",
     "typescript": "^2.4.2",
     "uuid": "^3.2.1",
-    "zone.js": "^0.8.20"
+    "zone.js": "git://github.com/JiaLiPassion/zone.js#jasmine-dist"
   },
   "devDependencies": {
     "@angular/cli": "1.7.3",
@@ -59,7 +59,7 @@
     "@types/jasmine": "2.8.6",
     "@types/node": "^9.4.7",
     "codelyzer": "~4.2.1",
-    "jasmine-core": "~3.1.0",
+    "jasmine-core": "^3.1.0",
     "jasmine-spec-reporter": "~4.2.1",
     "karma": "~2.0.0",
     "karma-chrome-launcher": "~2.2.0",
