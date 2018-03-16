@@ -22,7 +22,7 @@
     <span class="mat-body-2">{{ event.getActivities().length }}</span> activities of total
     <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
     in about
-    <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() | amDuration:'seconds' }}</span>
+    <span class="mat-body-2">{{ event.getSummary().totalDurationInSeconds | amDuration:'seconds' }}</span>
     <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">
       nearby
       <span class="mat-body-2">{{ event.getFirstActivity().getSummary().getGeoLocationInfo().city }},</span>

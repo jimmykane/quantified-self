@@ -5,8 +5,8 @@ import {Zones} from "../intensity-zones/intensity-zone";
 import {ZonesInterface} from "../intensity-zones/intensity-zone.interface";
 
 export interface SummaryInterface extends SerializableClassInterface {
-  setTotalDurationInSeconds(totalDurationInSeconds: number);
-  getTotalDurationInSeconds(): number;
+
+  totalDurationInSeconds: number;
 
   setTotalDistanceInMeters(totalDistanceInMeters: number);
   getTotalDistanceInMeters(): number;

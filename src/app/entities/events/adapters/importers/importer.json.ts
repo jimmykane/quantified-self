@@ -38,7 +38,7 @@ export class EventImporterJSON {
     event.setSummary(new Summary());
 
     event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.totalDistanceInMeters);
-    event.getSummary().setTotalDurationInSeconds(eventJSONObject.summary.totalDurationInSeconds);
+    event.getSummary().totalDurationInSeconds = eventJSONObject.summary.totalDurationInSeconds;
 
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
@@ -47,7 +47,7 @@ export class EventImporterJSON {
       activity.setType(activityObject.type);
       const activitySummary = new Summary();
       activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
-      activitySummary.setTotalDurationInSeconds(activityObject.summary.totalDurationInSeconds);
+      activitySummary.totalDurationInSeconds = activityObject.summary.totalDurationInSeconds;
       activitySummary.setMaxAltitudeInMeters(activityObject.summary.maxAltitudeInMeters);
       activitySummary.setMinAltitudeInMeters(activityObject.summary.minAltitudeInMeters);
       activitySummary.setAscentTimeInSeconds(activityObject.summary.ascentTimeInSeconds);
@@ -131,7 +131,7 @@ export class EventImporterJSON {
         lap.setType(lapObject.type);
         const lapSummary = new Summary();
         lapSummary.setTotalDistanceInMeters(lapObject.summary.totalDistanceInMeters);
-        lapSummary.setTotalDurationInSeconds(lapObject.summary.totalDurationInSeconds);
+        lapSummary.totalDurationInSeconds =  lapObject.summary.totalDurationInSeconds;
         lapSummary.setMaxAltitudeInMeters(lapObject.summary.maxAltitudeInMeters);
         lapSummary.setMinAltitudeInMeters(lapObject.summary.minAltitudeInMeters);
         lapSummary.setAscentTimeInSeconds(lapObject.summary.ascentTimeInSeconds);

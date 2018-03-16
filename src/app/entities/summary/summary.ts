@@ -5,7 +5,7 @@ import {ZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export class Summary implements SummaryInterface {
 
-  private totalDurationInSeconds: number;
+  public totalDurationInSeconds: number;
   private totalDistanceInMeters: number;
   private maxAltitudeInMeters: number;
   private minAltitudeInMeters: number;
@@ -341,7 +341,7 @@ export class Summary implements SummaryInterface {
         intensityZones[key] =  value.toJSON();
     });
     return {
-      totalDurationInSeconds: this.getTotalDurationInSeconds(),
+      totalDurationInSeconds: this.totalDurationInSeconds,
       totalDistanceInMeters: this.getTotalDistanceInMeters(),
       geoLocationInfo: this.getGeoLocationInfo() ? this.getGeoLocationInfo().toJSON() : null,
       weather: this.getWeather() ? this.getWeather().toJSON() : null,

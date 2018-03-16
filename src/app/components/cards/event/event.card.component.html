@@ -20,7 +20,7 @@
       Activities of total
       <span class="mat-body-2">{{ (event.getSummary().getTotalDistanceInMeters()/1000).toFixed(1) }}</span> km
       in
-      <span class="mat-body-2">{{ event.getSummary().getTotalDurationInSeconds() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
+      <span class="mat-body-2">{{ event.getSummary().totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
       <span *ngIf="event.getFirstActivity().getSummary().getGeoLocationInfo()">

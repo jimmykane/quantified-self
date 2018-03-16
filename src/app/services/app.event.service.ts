@@ -163,7 +163,7 @@ export class EventService {
         activitySummary.setTotalDistanceInMeters(
           this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
         );
-        activitySummary.setTotalDurationInSeconds((+activity.getEndDate() - +activity.getStartDate()) / 1000);
+        activitySummary.totalDurationInSeconds = (+activity.getEndDate() - +activity.getStartDate()) / 1000;
         activity.setSummary(activitySummary);
 
         // If indoors
@@ -182,14 +182,14 @@ export class EventService {
         for (const lap of activity.getLaps()) {
           const lapSummary = new Summary();
           lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
-          lapSummary.setTotalDurationInSeconds((+lap.getEndDate() - +lap.getStartDate()) / 1000);
+          lapSummary.totalDurationInSeconds = (+lap.getEndDate() - +lap.getStartDate()) / 1000;
           lap.setSummary(lapSummary);
         }
       }
 
       // Event Summary
       const eventSummary = new Summary();
-      eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
+      eventSummary.totalDurationInSeconds = event.getTotalDurationInSeconds();
       eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
       event.setSummary(eventSummary);
 
@@ -344,7 +344,7 @@ export class EventService {
         }
       }
       const eventSummary = new Summary();
-      eventSummary.setTotalDurationInSeconds(mergeEvent.getTotalDurationInSeconds());
+      eventSummary.totalDurationInSeconds = mergeEvent.getTotalDurationInSeconds();
       eventSummary.setTotalDistanceInMeters(
         mergeEvent.getActivities().reduce(
           (totalDistance, activity) => activity.getSummary().getTotalDistanceInMeters() + totalDistance, 0
