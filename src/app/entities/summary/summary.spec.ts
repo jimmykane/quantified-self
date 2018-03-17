@@ -1,5 +1,4 @@
 import {SummaryInterface} from './summary.interface';
-import {DataHeartRate} from '../data/data.heart-rate';
 import {Summary} from './summary';
 import {Weather} from '../weather/app.weather';
 import {WeatherItem} from '../weather/app.weather.item';
