@@ -1,3 +1,4 @@
+/*
 import {Event} from '../../event';
 import {Activity} from '../../../activities/activity';
 import {Lap} from '../../../laps/lap';
@@ -87,3 +88,4 @@ export class EventImporterFIT {
     });
   }
 }
+*/

@@ -1,3 +1,4 @@
+/*
 import {Event} from '../../event';
 import {Activity} from '../../../activities/activity';
 import {Creator} from '../../../creators/creator';
@@ -42,7 +43,7 @@ export class EventImporterGPX {
         new Date(
           +(new Date(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'startTime')[0].textContent)) +
           1000 * Number(lapElement.getElementsByTagNameNS('http://www.cluetrust.com/XML/GPXDATA/1/0', 'elapsedTime')[0].textContent)
-      ));
+        ));
 
       activity.addLap(lap);
     }
@@ -113,3 +114,4 @@ export class EventImporterGPX {
     return event;
   }
 }
+*/
