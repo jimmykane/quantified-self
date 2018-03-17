@@ -2,7 +2,7 @@ import {SummaryInterface} from './summary.interface';
 import {Summary} from './summary';
 import {Weather} from '../weather/app.weather';
 import {WeatherItem} from '../weather/app.weather.item';
-import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
+import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 import {Zones} from '../intensity-zones/intensity-zone';
 
 describe('Summary', function () {

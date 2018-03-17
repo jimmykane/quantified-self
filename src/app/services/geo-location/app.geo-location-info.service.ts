@@ -1,6 +1,6 @@
 import {Injectable} from '@angular/core';
 import {MapsAPILoader} from '@agm/core';
-import {GeoLocationInfo} from '../../entities/geo-location-info/app.geo-location-info';
+import {GeoLocationInfo} from '../../entities/geo-location-info/geo-location-info';
 import {Observable} from 'rxjs/Observable';
 import 'rxjs/add/observable/fromPromise';
 import 'rxjs/operators/first';

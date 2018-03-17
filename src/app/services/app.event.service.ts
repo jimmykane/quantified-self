@@ -21,7 +21,7 @@ import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
 import {PointInterface} from '../entities/points/point.interface';
 import {Log} from 'ng2-logger';
 import {Summary} from '../entities/summary/summary';
-import {GeoLocationInfo} from '../entities/geo-location-info/app.geo-location-info';
+import {GeoLocationInfo} from '../entities/geo-location-info/geo-location-info';
 import {Weather} from '../entities/weather/app.weather';
 
 @Injectable()

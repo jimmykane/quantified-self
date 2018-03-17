@@ -1,6 +1,6 @@
 import {SummaryInterface} from './summary.interface';
 import {Weather} from '../weather/app.weather';
-import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
+import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 import {ZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export class Summary implements SummaryInterface {

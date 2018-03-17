@@ -20,7 +20,7 @@ import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataGPSAltitude} from '../../../data/data.gps-altitude';
 import {WeatherItem} from '../../../weather/app.weather.item';
 import {Weather} from '../../../weather/app.weather';
-import {GeoLocationInfo} from '../../../geo-location-info/app.geo-location-info';
+import {GeoLocationInfo} from '../../../geo-location-info/geo-location-info';
 import {Summary} from '../../../summary/summary';
 import {DataEVPE} from '../../../data/data.evpe';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
