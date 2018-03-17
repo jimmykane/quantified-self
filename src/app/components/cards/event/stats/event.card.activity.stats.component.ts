@@ -99,7 +99,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
     this.stats.push(
       {
         name: 'Distance',
-        value: (this.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(2),
+        value: (this.activity.getSummary().totalDistanceInMeters / 1000).toFixed(2),
         iconName: 'arrows-h',
         units: 'km',
         iconType: 'fontAwesome'
@@ -113,7 +113,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Pace',
-        value: (new Date(( (this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().getPauseDurationInSeconds()) * 1000) / (this.activity.getSummary().getTotalDistanceInMeters() / 1000)))
+        value: (new Date(( (this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().getPauseDurationInSeconds()) * 1000) / (this.activity.getSummary().totalDistanceInMeters / 1000)))
           .toISOString().substr(14, 5),
         iconName: 'directions_run',
         units: 'm/km',
@@ -121,7 +121,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Speed',
-        value: ((this.activity.getSummary().getTotalDistanceInMeters() / 1000) / ( (this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().getPauseDurationInSeconds() ) / 60 / 60)).toFixed(1),
+        value: ((this.activity.getSummary().totalDistanceInMeters / 1000) / ( (this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().getPauseDurationInSeconds() ) / 60 / 60)).toFixed(1),
         iconName: 'directions_bike',
         units: 'km/h',
         iconType: 'material'

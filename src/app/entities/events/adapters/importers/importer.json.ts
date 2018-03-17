@@ -37,7 +37,7 @@ export class EventImporterJSON {
     event.setName(eventJSONObject.name);
     event.setSummary(new Summary());
 
-    event.getSummary().setTotalDistanceInMeters(eventJSONObject.summary.totalDistanceInMeters);
+    event.getSummary().totalDistanceInMeters = eventJSONObject.summary.totalDistanceInMeters;
     event.getSummary().totalDurationInSeconds = eventJSONObject.summary.totalDurationInSeconds;
 
     for (const activityObject of eventJSONObject.activities) {
@@ -46,7 +46,7 @@ export class EventImporterJSON {
       activity.setEndDate(new Date(activityObject.endDate));
       activity.setType(activityObject.type);
       const activitySummary = new Summary();
-      activitySummary.setTotalDistanceInMeters(activityObject.summary.totalDistanceInMeters);
+      activitySummary.totalDistanceInMeters = activityObject.summary.totalDistanceInMeters;
       activitySummary.totalDurationInSeconds = activityObject.summary.totalDurationInSeconds;
       activitySummary.setMaxAltitudeInMeters(activityObject.summary.maxAltitudeInMeters);
       activitySummary.setMinAltitudeInMeters(activityObject.summary.minAltitudeInMeters);
@@ -91,19 +91,17 @@ export class EventImporterJSON {
             )
           )
         }
-        activitySummary.setWeather(new Weather(weatherItems));
+        activitySummary.weather = new Weather(weatherItems);
       }
 
       if (activityObject.summary.geoLocationInfo) {
-        activitySummary.setGeoLocationInfo(
-          new GeoLocationInfo(
-            activityObject.summary.geoLocationInfo.latitude,
-            activityObject.summary.geoLocationInfo.longitude
-          )
+        activitySummary.geoLocationInfo = new GeoLocationInfo(
+          activityObject.summary.geoLocationInfo.latitude,
+          activityObject.summary.geoLocationInfo.longitude
         );
-        activitySummary.getGeoLocationInfo().city = activityObject.summary.geoLocationInfo.city;
-        activitySummary.getGeoLocationInfo().country = activityObject.summary.geoLocationInfo.country;
-        activitySummary.getGeoLocationInfo().province = activityObject.summary.geoLocationInfo.province;
+        activitySummary.geoLocationInfo.city = activityObject.summary.geoLocationInfo.city;
+        activitySummary.geoLocationInfo.country = activityObject.summary.geoLocationInfo.country;
+        activitySummary.geoLocationInfo.province = activityObject.summary.geoLocationInfo.province;
       }
 
       if (activityObject.summary.intensityZones) {
@@ -130,8 +128,8 @@ export class EventImporterJSON {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
         lap.setType(lapObject.type);
         const lapSummary = new Summary();
-        lapSummary.setTotalDistanceInMeters(lapObject.summary.totalDistanceInMeters);
-        lapSummary.totalDurationInSeconds =  lapObject.summary.totalDurationInSeconds;
+        lapSummary.totalDistanceInMeters = lapObject.summary.totalDistanceInMeters;
+        lapSummary.totalDurationInSeconds = lapObject.summary.totalDurationInSeconds;
         lapSummary.setMaxAltitudeInMeters(lapObject.summary.maxAltitudeInMeters);
         lapSummary.setMinAltitudeInMeters(lapObject.summary.minAltitudeInMeters);
         lapSummary.setAscentTimeInSeconds(lapObject.summary.ascentTimeInSeconds);

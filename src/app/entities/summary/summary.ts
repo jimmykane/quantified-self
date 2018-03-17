@@ -6,7 +6,7 @@ import {ZonesInterface} from '../intensity-zones/intensity-zone.interface';
 export class Summary implements SummaryInterface {
 
   public totalDurationInSeconds: number;
-  private totalDistanceInMeters: number;
+  public totalDistanceInMeters: number;
   private maxAltitudeInMeters: number;
   private minAltitudeInMeters: number;
   private ascentTimeInSeconds: number;
@@ -40,41 +40,8 @@ export class Summary implements SummaryInterface {
   private minSpeed: number;
   private intensityZones: Map<string, ZonesInterface> = new Map<string, ZonesInterface>();
 
-  private geoLocationInfo: GeoLocationInfo;
-  private weather: Weather;
-
-  setTotalDurationInSeconds(totalDurationInSeconds: number) {
-    this.totalDurationInSeconds = totalDurationInSeconds;
-  }
-
-  getTotalDurationInSeconds(): number {
-    return this.totalDurationInSeconds;
-  }
-
-  setTotalDistanceInMeters(totalDistanceInMeters: number) {
-    this.totalDistanceInMeters = totalDistanceInMeters;
-  }
-
-  getTotalDistanceInMeters(): number {
-    return this.totalDistanceInMeters;
-  }
-
-  setGeoLocationInfo(geoLocationInfo: GeoLocationInfo) {
-    this.geoLocationInfo = geoLocationInfo;
-  }
-
-  getGeoLocationInfo(): GeoLocationInfo {
-    return this.geoLocationInfo;
-  }
-
-  setWeather(weather: Weather) {
-    this.weather = weather;
-  }
-
-  getWeather(): Weather {
-    return this.weather;
-  }
-
+  public geoLocationInfo: GeoLocationInfo;
+  public weather: Weather;
 
   setMaxAltitudeInMeters(maxAltitudeInMeters: number) {
     this.maxAltitudeInMeters = maxAltitudeInMeters;
@@ -342,9 +309,9 @@ export class Summary implements SummaryInterface {
     });
     return {
       totalDurationInSeconds: this.totalDurationInSeconds,
-      totalDistanceInMeters: this.getTotalDistanceInMeters(),
-      geoLocationInfo: this.getGeoLocationInfo() ? this.getGeoLocationInfo().toJSON() : null,
-      weather: this.getWeather() ? this.getWeather().toJSON() : null,
+      totalDistanceInMeters: this.totalDistanceInMeters,
+      geoLocationInfo: this.geoLocationInfo ? this.geoLocationInfo.toJSON() : null,
+      weather: this.weather ? this.weather.toJSON() : null,
       maxAltitudeInMeters: this.getMaxAltitudeInMeters(),
       minAltitudeInMeters: this.getMinAltitudeInMeters(),
       ascentTimeInSeconds: this.getAscentTimeInSeconds(),

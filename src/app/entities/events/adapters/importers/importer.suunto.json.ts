@@ -37,7 +37,7 @@ export class EventImporterSuuntoJSON {
     activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
     activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
     const activitySummary = new Summary();
-    activitySummary.setTotalDistanceInMeters(eventJSONObject.DeviceLog.Header.Distance);
+    activitySummary.totalDistanceInMeters = eventJSONObject.DeviceLog.Header.Distance;
     activitySummary.totalDurationInSeconds = eventJSONObject.DeviceLog.Header.Duration;
     activitySummary.setMaxAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Max);
     activitySummary.setMinAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Min);
@@ -136,7 +136,7 @@ export class EventImporterSuuntoJSON {
 
     const eventSummary = new Summary();
     eventSummary.totalDurationInSeconds = activitySummary.totalDurationInSeconds;
-    eventSummary.setTotalDistanceInMeters(activitySummary.getTotalDistanceInMeters());
+    eventSummary.totalDistanceInMeters = activitySummary.totalDistanceInMeters;
 
     event.setSummary(eventSummary);
 
@@ -219,7 +219,7 @@ export class EventImporterSuuntoJSON {
       );
       const lapSummary = new Summary();
       lap.setType(lapObj.Type);
-      lapSummary.setTotalDistanceInMeters(lapObj.Distance);
+      lapSummary.totalDistanceInMeters = lapObj.Distance;
       lapSummary.totalDurationInSeconds =  lapObj.Duration;
       lapSummary.setMaxAltitudeInMeters(lapObj.Altitude[0].Max);
       lapSummary.setMinAltitudeInMeters(lapObj.Altitude[0].Min);

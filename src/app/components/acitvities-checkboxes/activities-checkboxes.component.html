@@ -9,14 +9,14 @@
       <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}">watch
       </mat-icon>
       <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activityCheckbox.activity.getCreator().getName().slice(0, 30) }}</mat-chip></mat-chip-list></span>
-       <mat-icon>timer</mat-icon>
+      <mat-icon>timer</mat-icon>
       {{
       activityCheckbox.activity.getSummary().totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss'
       }}
       <app-activity-icon [activity]="activityCheckbox.activity"></app-activity-icon>
       {{ activityCheckbox.activity.getType() }}
       <mat-icon>trending_flat</mat-icon>
-      {{ (activityCheckbox.activity.getSummary().getTotalDistanceInMeters() / 1000).toFixed(1) }} Km
+      {{ (activityCheckbox.activity.getSummary().totalDistanceInMeters / 1000).toFixed(1) }} Km
     </mat-card>
   </mat-checkbox>
 </section>

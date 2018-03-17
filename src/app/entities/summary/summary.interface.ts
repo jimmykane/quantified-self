@@ -1,21 +1,14 @@
 import {Weather} from '../weather/app.weather';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {GeoLocationInfo} from '../geo-location-info/app.geo-location-info';
-import {Zones} from "../intensity-zones/intensity-zone";
-import {ZonesInterface} from "../intensity-zones/intensity-zone.interface";
+import {ZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export interface SummaryInterface extends SerializableClassInterface {
 
   totalDurationInSeconds: number;
-
-  setTotalDistanceInMeters(totalDistanceInMeters: number);
-  getTotalDistanceInMeters(): number;
-
-  setGeoLocationInfo(geoLocationInfo: GeoLocationInfo);
-  getGeoLocationInfo(): GeoLocationInfo;
-
-  setWeather(weather: Weather);
-  getWeather(): Weather;
+  totalDistanceInMeters: number;
+  geoLocationInfo: GeoLocationInfo;
+  weather: Weather;
 
   setMaxAltitudeInMeters(maxAltitudeInMeters: number);
   getMaxAltitudeInMeters(): number

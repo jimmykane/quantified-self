@@ -91,7 +91,7 @@ export class EventExporterTCX implements EventExporterInterface {
         lapElement.appendChild(totalTimeInSecondsElement);
 
         const distanceInMetersElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'DistanceMeters');
-        distanceInMetersElement.textContent = lap.getSummary().getTotalDistanceInMeters().toString();
+        distanceInMetersElement.textContent = lap.getSummary().totalDistanceInMeters.toString();
         lapElement.appendChild(distanceInMetersElement);
 
         const caloriesInKCALElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Calories');

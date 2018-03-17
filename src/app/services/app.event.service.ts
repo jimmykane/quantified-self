@@ -138,10 +138,10 @@ export class EventService {
             continue;
           }
           if (results[index]) {
-            activity.getSummary().setGeoLocationInfo(<GeoLocationInfo> results[index]);
+            activity.getSummary().geoLocationInfo = <GeoLocationInfo> results[index];
           }
           if (results[index + 1]) {
-            activity.getSummary().setWeather(<Weather> results[index + 1]);
+            activity.getSummary().weather = <Weather> results[index + 1];
           }
           index += 2;
         }
@@ -160,9 +160,10 @@ export class EventService {
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
         const activitySummary = new Summary();
-        activitySummary.setTotalDistanceInMeters(
-          this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
+        activitySummary.totalDistanceInMeters = this.getEventDistanceInMeters(
+          event, void 0, void 0, void 0, [activity]
         );
+
         activitySummary.totalDurationInSeconds = (+activity.getEndDate() - +activity.getStartDate()) / 1000;
         activity.setSummary(activitySummary);
 
@@ -181,7 +182,7 @@ export class EventService {
         // Lap summaries
         for (const lap of activity.getLaps()) {
           const lapSummary = new Summary();
-          lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
+          lapSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate());
           lapSummary.totalDurationInSeconds = (+lap.getEndDate() - +lap.getStartDate()) / 1000;
           lap.setSummary(lapSummary);
         }
@@ -190,7 +191,7 @@ export class EventService {
       // Event Summary
       const eventSummary = new Summary();
       eventSummary.totalDurationInSeconds = event.getTotalDurationInSeconds();
-      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
+      eventSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event);
       event.setSummary(eventSummary);
 
       Observable.forkJoin(activitiesPromises).toPromise().then(results => {
@@ -202,10 +203,10 @@ export class EventService {
             continue;
           }
           if (results[index]) {
-            activity.getSummary().setGeoLocationInfo(<GeoLocationInfo> results[index]);
+            activity.getSummary().geoLocationInfo = <GeoLocationInfo> results[index];
           }
           if (results[index + 1]) {
-            activity.getSummary().setWeather(<Weather> results[index + 1]);
+            activity.getSummary().weather = <Weather> results[index + 1];
           }
           index += 2;
         }
@@ -345,10 +346,8 @@ export class EventService {
       }
       const eventSummary = new Summary();
       eventSummary.totalDurationInSeconds = mergeEvent.getTotalDurationInSeconds();
-      eventSummary.setTotalDistanceInMeters(
-        mergeEvent.getActivities().reduce(
-          (totalDistance, activity) => activity.getSummary().getTotalDistanceInMeters() + totalDistance, 0
-        )
+      eventSummary.totalDistanceInMeters = mergeEvent.getActivities().reduce(
+        (totalDistance, activity) => activity.getSummary().totalDistanceInMeters + totalDistance, 0
       );
       mergeEvent.setSummary(eventSummary);
       mergeEvent.setName('Merged at ' + (new Date()).toISOString());
