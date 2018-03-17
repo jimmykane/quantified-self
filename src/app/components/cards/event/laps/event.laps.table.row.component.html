@@ -4,4 +4,4 @@
 <td>{{ lap.getStartDate() | date:'shortTime' }}</td>
 <td>{{ lap.getEndDate() | date:'mediumTime' }}</td>
 <td>{{ lap.getType() }}</td>
-<td *ngIf="lap.getSummary().getAvgHR()"> {{lap.getSummary().getAvgHR().toFixed(0) }} bpm</td>
+<td *ngIf="lap.getSummary().avgHR"> {{lap.getSummary().avgHR.toFixed(0) }} bpm</td>

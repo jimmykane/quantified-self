@@ -113,7 +113,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Pace',
-        value: (new Date(( (this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().getPauseDurationInSeconds()) * 1000) / (this.activity.getSummary().totalDistanceInMeters / 1000)))
+        value: (new Date(((this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().pauseDurationInSeconds) * 1000) / (this.activity.getSummary().totalDistanceInMeters / 1000)))
           .toISOString().substr(14, 5),
         iconName: 'directions_run',
         units: 'm/km',
@@ -121,63 +121,63 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Speed',
-        value: ((this.activity.getSummary().totalDistanceInMeters / 1000) / ( (this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().getPauseDurationInSeconds() ) / 60 / 60)).toFixed(1),
+        value: ((this.activity.getSummary().totalDistanceInMeters / 1000) / ((this.activity.getSummary().totalDurationInSeconds - this.activity.getSummary().pauseDurationInSeconds) / 60 / 60)).toFixed(1),
         iconName: 'directions_bike',
         units: 'km/h',
         iconType: 'material'
       },
       {
         name: 'Ascent',
-        value: this.activity.getSummary().getAscentInMeters().toFixed(0),
+        value: this.activity.getSummary().ascentInMeters.toFixed(0),
         iconName: 'trending_up',
         units: 'm',
         iconType: 'material'
       },
       {
         name: 'Ascent Time',
-        value: new Date(this.activity.getSummary().getAscentTimeInSeconds() * 1000).toISOString().substr(11, 8),
+        value: new Date(this.activity.getSummary().ascentTimeInSeconds * 1000).toISOString().substr(11, 8),
         iconName: null,
         units: null,
         iconType: null
       },
       {
         name: 'Descent',
-        value: this.activity.getSummary().getDescentInMeters().toFixed(0),
+        value: this.activity.getSummary().descentInMeters.toFixed(0),
         iconName: 'trending_down',
         units: 'm',
         iconType: 'material'
       },
       {
         name: 'Descent Time',
-        value: new Date(this.activity.getSummary().getDescentTimeInSeconds() * 1000).toISOString().substr(11, 8),
+        value: new Date(this.activity.getSummary().descentTimeInSeconds * 1000).toISOString().substr(11, 8),
         iconName: null,
         units: null,
         iconType: null
       },
       {
         name: 'Recovery Time',
-        value: Math.floor(this.activity.getSummary().getRecoveryTimeInSeconds() / 60 / 60),
+        value: Math.floor(this.activity.getSummary().recoveryTimeInSeconds / 60 / 60),
         iconName: 'restore',
         units: 'hours',
         iconType: 'material'
       },
       {
         name: 'KCal',
-        value: this.activity.getSummary().getEnergyInCal().toFixed(0),
+        value: this.activity.getSummary().energyInCal.toFixed(0),
         iconName: null,
         units: null,
         iconType: null
       },
       {
         name: 'PTE',
-        value: this.activity.getSummary().getPeakTrainingEffect().toFixed(1),
+        value: this.activity.getSummary().peakTrainingEffect.toFixed(1),
         iconName: null,
         units: null,
         iconType: null
       },
       {
         name: 'EPOC',
-        value: this.activity.getSummary().getEPOC(),
+        value: this.activity.getSummary().epoc,
         iconName: null,
         units: null,
         iconType: null

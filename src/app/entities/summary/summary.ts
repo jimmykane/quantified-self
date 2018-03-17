@@ -7,342 +7,84 @@ export class Summary implements SummaryInterface {
 
   public totalDurationInSeconds: number;
   public totalDistanceInMeters: number;
-  private maxAltitudeInMeters: number;
-  private minAltitudeInMeters: number;
-  private ascentTimeInSeconds: number;
-  private descentTimeInSeconds: number;
-  private ascentInMeters: number;
-  private descentInMeters: number;
-  private epoc: number;
-  private energyInCal: number;
-  private feeling: number;
-  private pauseDurationInSeconds: number;
-  private peakTrainingEffect: number;
-  private recoveryTimeInSeconds: number;
-  private maxVO2: number;
-  private avgHR: number;
-  private minHR: number;
-  private maxHR: number;
-  private avgPower: number;
-  private minPower: number;
-  private maxPower: number;
-  private avgTemperature: number;
-  private minTemperature: number;
-  private maxTemperature: number;
-  private avgCadence: number;
-  private minCadence: number;
-  private maxCadence: number;
-  private maxVerticalSpeed: number;
-  private minVerticalSpeed: number;
-  private avgVerticalSpeed: number;
-  private maxSpeed: number;
-  private avgSpeed: number;
-  private minSpeed: number;
-  private intensityZones: Map<string, ZonesInterface> = new Map<string, ZonesInterface>();
-
+  public maxAltitudeInMeters: number;
+  public minAltitudeInMeters: number;
+  public ascentTimeInSeconds: number;
+  public descentTimeInSeconds: number;
+  public ascentInMeters: number;
+  public descentInMeters: number;
+  public epoc: number;
+  public energyInCal: number;
+  public feeling: number;
+  public pauseDurationInSeconds: number;
+  public peakTrainingEffect: number;
+  public recoveryTimeInSeconds: number;
+  public maxVO2: number;
+  public avgHR: number;
+  public minHR: number;
+  public maxHR: number;
+  public avgPower: number;
+  public minPower: number;
+  public maxPower: number;
+  public avgTemperature: number;
+  public minTemperature: number;
+  public maxTemperature: number;
+  public avgCadence: number;
+  public minCadence: number;
+  public maxCadence: number;
+  public maxVerticalSpeed: number;
+  public minVerticalSpeed: number;
+  public avgVerticalSpeed: number;
+  public maxSpeed: number;
+  public avgSpeed: number;
+  public minSpeed: number;
+  public intensityZones: Map<string, ZonesInterface> = new Map<string, ZonesInterface>();
   public geoLocationInfo: GeoLocationInfo;
   public weather: Weather;
 
-  setMaxAltitudeInMeters(maxAltitudeInMeters: number) {
-    this.maxAltitudeInMeters = maxAltitudeInMeters;
-  }
-
-  getMaxAltitudeInMeters(): number {
-    return this.maxAltitudeInMeters;
-  }
-
-  setMinAltitudeInMeters(minAltitudeInMeters: number) {
-    this.minAltitudeInMeters = minAltitudeInMeters;
-  }
-
-  getMinAltitudeInMeters(): number {
-    return this.minAltitudeInMeters;
-  }
-
-  setAscentTimeInSeconds(ascentTimeInSeconds: number) {
-    this.ascentTimeInSeconds = ascentTimeInSeconds;
-  }
-
-  getAscentTimeInSeconds(): number {
-    return this.ascentTimeInSeconds;
-  }
-
-  setDescentTimeInSeconds(decentTimeInSeconds: number) {
-    this.descentTimeInSeconds = decentTimeInSeconds;
-  }
-
-  getDescentTimeInSeconds(): number {
-    return this.descentTimeInSeconds;
-  }
-
-  setAscentInMeters(ascentInMeters: number) {
-    this.ascentInMeters = ascentInMeters;
-  }
-
-  getAscentInMeters(): number {
-    return this.ascentInMeters;
-  }
-
-  setDescentInMeters(decentInMeters: number) {
-    this.descentInMeters = decentInMeters;
-  }
-
-  getDescentInMeters(): number {
-    return this.descentInMeters;
-  }
-
-  setEPOC(epoc: number) {
-    this.epoc = epoc;
-  }
-
-  getEPOC(): number {
-    return this.epoc;
-  }
-
-  setEnergyInCal(energyInCal: number) {
-    this.energyInCal = energyInCal;
-  }
-
-  getEnergyInCal(): number {
-    return this.energyInCal;
-  }
-
-  setFeeling(feeling: number) {
-    this.feeling = feeling;
-  }
-
-  getFeeling(): number {
-    return this.feeling;
-  }
-
-  setPauseDurationInSeconds(pauseDurationInSeconds: number) {
-    this.pauseDurationInSeconds = pauseDurationInSeconds;
-  }
-
-  getPauseDurationInSeconds(): number {
-    return this.pauseDurationInSeconds;
-  }
-
-  setPeakTrainingEffect(peakTrainingEffect: number) {
-    this.peakTrainingEffect = peakTrainingEffect;
-  }
-
-  getPeakTrainingEffect(): number {
-    return this.peakTrainingEffect;
-  }
-
-  setRecoveryTimeInSeconds(recoveryTimeInSeconds: number) {
-    this.recoveryTimeInSeconds = recoveryTimeInSeconds;
-  }
-
-  getRecoveryTimeInSeconds(): number {
-    return this.recoveryTimeInSeconds;
-  }
-
-
-  setMaxVO2(maxVO2: number) {
-    this.maxVO2 = maxVO2;
-  }
-
-  getMaxVO2(): number {
-    return this.maxVO2;
-  }
-
-
-  setAvgHR(avgHR: number) {
-    this.avgHR = avgHR;
-  }
-
-  getAvgHR(): number {
-    return this.avgHR;
-  }
-
-  setMinHR(minHR: number) {
-    this.minHR = minHR;
-  }
-
-  getMinHR(): number {
-    return this.minHR;
-  }
-
-  setMaxHR(maxHR: number) {
-    this.maxHR = maxHR;
-  }
-
-  getMaxHR(): number {
-    return this.maxHR;
-  }
-
-  setAvgPower(avgPower: number) {
-    this.avgPower = avgPower;
-  }
-
-  getAvgPower(): number {
-    return this.avgPower;
-  }
-
-  setMinPower(minPower: number) {
-    this.minPower = minPower;
-  }
-
-  getMinPower(): number {
-    return this.minPower;
-  }
-
-  setMaxPower(maxPower: number) {
-    this.maxPower = maxPower;
-  }
-
-  getMaxPower(): number {
-    return this.maxPower;
-  }
-
-  setAvgTemperature(avgTemperature: number) {
-    this.avgTemperature = avgTemperature;
-  }
-
-  getAvgTemperature(): number {
-    return this.avgTemperature;
-  }
-
-  setMinTemperature(minTemperature: number) {
-    this.minTemperature = minTemperature;
-  }
-
-  getMinTemperature(): number {
-    return this.minTemperature;
-  }
-
-  setMaxTemperature(maxTemperature: number) {
-    this.maxTemperature = maxTemperature;
-  }
-
-  getMaxTemperature(): number {
-    return this.maxTemperature;
-  }
-
-  setAvgCadence(avgCadence: number) {
-    this.avgCadence = avgCadence;
-  }
-
-  getAvgCadence(): number {
-    return this.avgCadence;
-  }
-
-  setMinCadence(minCadence: number) {
-    this.minCadence = minCadence;
-  }
-
-  getMinCadence(): number {
-    return this.minCadence;
-  }
-
-  setMaxCadence(maxCadence: number) {
-    this.maxCadence = maxCadence;
-  }
-
-  getMaxCadence(): number {
-    return this.maxCadence;
-  }
-
-  setAvgSpeed(avgSpeed: number) {
-    this.avgSpeed = avgSpeed;
-  }
-
-  getAvgSpeed(): number {
-    return this.avgSpeed;
-  }
-
-  setMinSpeed(minSpeed: number) {
-    this.minSpeed = minSpeed;
-  }
-
-  getMinSpeed(): number {
-    return this.minSpeed;
-  }
-
-  setMaxSpeed(maxSpeed: number) {
-    this.maxSpeed = maxSpeed;
-  }
-
-  getMaxSpeed(): number {
-    return this.maxSpeed;
-  }
-
-  setAvgVerticalSpeed(avgVerticalSpeed: number) {
-    this.avgVerticalSpeed = avgVerticalSpeed;
-  }
-
-  getAvgVerticalSpeed(): number {
-    return this.avgVerticalSpeed;
-  }
-
-  setMinVerticalSpeed(minVerticalSpeed: number) {
-    this.minVerticalSpeed = minVerticalSpeed;
-  }
-
-  getMinVerticalSpeed(): number {
-    return this.minVerticalSpeed;
-  }
-
-  setMaxVerticalSpeed(maxVerticalSpeed: number) {
-    this.maxVerticalSpeed = maxVerticalSpeed;
-  }
-
-  getMaxVerticalSpeed(): number {
-    return this.maxVerticalSpeed;
-  }
-
-
-  getIntensityZones(): Map<string, ZonesInterface> {
-    return this.intensityZones;
-  }
-
-  addIntensityZone(zoneName: string, zone: ZonesInterface) {
-    this.intensityZones.set(zoneName, zone)
-  }
-
   toJSON(): any {
     const intensityZones = {};
-    this.getIntensityZones().forEach((value: ZonesInterface, key: string, map) => {
+    this.intensityZones.forEach((value: ZonesInterface, key: string, map) => {
         intensityZones[key] =  value.toJSON();
     });
+
+    // perhaps check this with JSON stringify how it can be optimized to include the starnder props
     return {
       totalDurationInSeconds: this.totalDurationInSeconds,
       totalDistanceInMeters: this.totalDistanceInMeters,
       geoLocationInfo: this.geoLocationInfo ? this.geoLocationInfo.toJSON() : null,
       weather: this.weather ? this.weather.toJSON() : null,
-      maxAltitudeInMeters: this.getMaxAltitudeInMeters(),
-      minAltitudeInMeters: this.getMinAltitudeInMeters(),
-      ascentTimeInSeconds: this.getAscentTimeInSeconds(),
-      descentTimeInSeconds: this.getDescentTimeInSeconds(),
-      ascentInMeters: this.getAscentInMeters(),
-      descentInMeters: this.getDescentInMeters(),
-      epoc: this.getEPOC(),
-      energyInCal: this.getEnergyInCal(),
-      feeling: this.getFeeling(),
-      pauseDurationInSeconds: this.getPauseDurationInSeconds(),
-      peakTrainingEffect: this.getPeakTrainingEffect(),
-      recoveryTimeInSeconds: this.getRecoveryTimeInSeconds(),
-      maxVO2: this.getMaxVO2(),
-      minHR: this.getMinHR(),
-      maxHR: this.getMaxHR(),
-      avgHR: this.getAvgHR(),
-      avgPower: this.getAvgPower(),
-      minPower: this.getMinPower(),
-      maxPower: this.getMaxPower(),
-      avgTemperature: this.getAvgTemperature(),
-      minTemperature: this.getMinTemperature(),
-      maxTemperature: this.getMaxTemperature(),
-      avgCadence: this.getAvgCadence(),
-      minCadence: this.getMinCadence(),
-      maxCadence: this.getMaxCadence(),
-      maxVerticalSpeed: this.getMaxVerticalSpeed(),
-      minVerticalSpeed: this.getMinVerticalSpeed(),
-      avgVerticalSpeed: this.getAvgVerticalSpeed(),
-      maxSpeed: this.getMaxSpeed(),
-      avgSpeed: this.getAvgSpeed(),
-      minSpeed: this.getMinSpeed(),
+      maxAltitudeInMeters: this.maxAltitudeInMeters,
+      minAltitudeInMeters: this.minAltitudeInMeters,
+      ascentTimeInSeconds: this.ascentTimeInSeconds,
+      descentTimeInSeconds: this.descentTimeInSeconds,
+      ascentInMeters: this.ascentInMeters,
+      descentInMeters: this.descentInMeters,
+      epoc: this.epoc,
+      energyInCal: this.energyInCal,
+      feeling: this.feeling,
+      pauseDurationInSeconds: this.pauseDurationInSeconds,
+      peakTrainingEffect: this.peakTrainingEffect,
+      recoveryTimeInSeconds: this.recoveryTimeInSeconds,
+      maxVO2: this.maxVO2,
+      minHR: this.minHR,
+      maxHR: this.maxHR,
+      avgHR: this.avgHR,
+      avgPower: this.avgPower,
+      minPower: this.minPower,
+      maxPower: this.maxPower,
+      avgTemperature: this.avgTemperature,
+      minTemperature: this.minTemperature,
+      maxTemperature: this.maxTemperature,
+      avgCadence: this.avgCadence,
+      minCadence: this.minCadence,
+      maxCadence: this.maxCadence,
+      maxVerticalSpeed: this.maxVerticalSpeed,
+      minVerticalSpeed: this.minVerticalSpeed,
+      avgVerticalSpeed: this.maxVerticalSpeed,
+      maxSpeed: this.maxSpeed,
+      avgSpeed: this.avgSpeed,
+      minSpeed: this.minSpeed,
       intensityZones: intensityZones,
     };
   }

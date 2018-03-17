@@ -415,7 +415,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // Check if there is an intensity zone
       const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
         return activity.getID() === graph.id.split(':')[1];
-      }).getSummary().getIntensityZones().get(graph.id.split(':')[0]);
+      }).getSummary().intensityZones.get(graph.id.split(':')[0]);
       if (!activityIntensityZones) {
         return zoneGuides
       }
@@ -463,7 +463,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         },
         {
           value: activityIntensityZones.zone5LowerLimit,
-          toValue: 9999999999,
+          toValue: 220,
           lineAlpha: 0.5,
           lineThickness: 0.5,
           lineColor: '#000000',

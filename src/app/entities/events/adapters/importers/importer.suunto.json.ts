@@ -39,53 +39,53 @@ export class EventImporterSuuntoJSON {
     const activitySummary = new Summary();
     activitySummary.totalDistanceInMeters = eventJSONObject.DeviceLog.Header.Distance;
     activitySummary.totalDurationInSeconds = eventJSONObject.DeviceLog.Header.Duration;
-    activitySummary.setMaxAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Max);
-    activitySummary.setMinAltitudeInMeters(eventJSONObject.DeviceLog.Header.Altitude.Min);
-    activitySummary.setAscentTimeInSeconds(eventJSONObject.DeviceLog.Header.AscentTime);
-    activitySummary.setDescentTimeInSeconds(eventJSONObject.DeviceLog.Header.DescentTime);
-    activitySummary.setAscentInMeters(eventJSONObject.DeviceLog.Header.Ascent);
-    activitySummary.setDescentInMeters(eventJSONObject.DeviceLog.Header.Descent);
-    activitySummary.setEPOC(eventJSONObject.DeviceLog.Header.EPOC);
-    activitySummary.setEnergyInCal(eventJSONObject.DeviceLog.Header.Energy * 0.239 / 1000);
-    activitySummary.setFeeling(eventJSONObject.DeviceLog.Header.Feeling);
-    activitySummary.setPeakTrainingEffect(eventJSONObject.DeviceLog.Header.PeakTrainingEffect);
-    activitySummary.setPauseDurationInSeconds(eventJSONObject.DeviceLog.Header.PauseDuration);
-    activitySummary.setRecoveryTimeInSeconds(eventJSONObject.DeviceLog.Header.RecoveryTime);
-    activitySummary.setMaxVO2(eventJSONObject.DeviceLog.Header.MAXVO2);
+    activitySummary.maxAltitudeInMeters = eventJSONObject.DeviceLog.Header.Altitude.Max;
+    activitySummary.minAltitudeInMeters = eventJSONObject.DeviceLog.Header.Altitude.Min;
+    activitySummary.ascentTimeInSeconds = eventJSONObject.DeviceLog.Header.AscentTime;
+    activitySummary.descentTimeInSeconds = eventJSONObject.DeviceLog.Header.DescentTime;
+    activitySummary.ascentInMeters = eventJSONObject.DeviceLog.Header.Ascent;
+    activitySummary.descentInMeters = eventJSONObject.DeviceLog.Header.Descent;
+    activitySummary.epoc = eventJSONObject.DeviceLog.Header.EPOC;
+    activitySummary.energyInCal = eventJSONObject.DeviceLog.Header.Energy * 0.239 / 1000;
+    activitySummary.feeling = eventJSONObject.DeviceLog.Header.Feeling;
+    activitySummary.peakTrainingEffect = eventJSONObject.DeviceLog.Header.PeakTrainingEffect;
+    activitySummary.pauseDurationInSeconds = eventJSONObject.DeviceLog.Header.PauseDuration;
+    activitySummary.recoveryTimeInSeconds = eventJSONObject.DeviceLog.Header.RecoveryTime;
+    activitySummary.maxVO2 = eventJSONObject.DeviceLog.Header.MAXVO2;
     if (eventJSONObject.DeviceLog.Header.HR) {
-      activitySummary.setAvgHR(eventJSONObject.DeviceLog.Header.HR[0].Avg * 60);
-      activitySummary.setMaxHR(eventJSONObject.DeviceLog.Header.HR[0].Max * 60);
-      activitySummary.setMinHR(eventJSONObject.DeviceLog.Header.HR[0].Min * 60);
+      activitySummary.avgHR = eventJSONObject.DeviceLog.Header.HR[0].Avg * 60;
+      activitySummary.maxHR = eventJSONObject.DeviceLog.Header.HR[0].Max * 60;
+      activitySummary.minHR = eventJSONObject.DeviceLog.Header.HR[0].Min * 60;
     }
 
     if (eventJSONObject.DeviceLog.Header.Cadence) {
-      activitySummary.setAvgCadence(eventJSONObject.DeviceLog.Header.Cadence[0].Avg * 60 * 2);
-      activitySummary.setMaxCadence(eventJSONObject.DeviceLog.Header.Cadence[0].Max * 60 * 2);
-      activitySummary.setMinCadence(eventJSONObject.DeviceLog.Header.Cadence[0].Min * 60 * 2);
+      activitySummary.avgCadence = eventJSONObject.DeviceLog.Header.Cadence[0].Avg * 60 * 2;
+      activitySummary.maxCadence = eventJSONObject.DeviceLog.Header.Cadence[0].Max * 60 * 2;
+      activitySummary.minCadence = eventJSONObject.DeviceLog.Header.Cadence[0].Min * 60 * 2;
     }
 
     if (eventJSONObject.DeviceLog.Header.Power) {
-      activitySummary.setAvgPower(eventJSONObject.DeviceLog.Header.Power[0].Avg);
-      activitySummary.setMaxPower(eventJSONObject.DeviceLog.Header.Power[0].Max);
-      activitySummary.setMinPower(eventJSONObject.DeviceLog.Header.Power[0].Min);
+      activitySummary.avgPower = eventJSONObject.DeviceLog.Header.Power[0].Avg;
+      activitySummary.maxPower = eventJSONObject.DeviceLog.Header.Power[0].Max;
+      activitySummary.minPower = eventJSONObject.DeviceLog.Header.Power[0].Min;
     }
 
     if (eventJSONObject.DeviceLog.Header.Speed) {
-      activitySummary.setAvgSpeed(eventJSONObject.DeviceLog.Header.Speed[0].Avg);
-      activitySummary.setMaxSpeed(eventJSONObject.DeviceLog.Header.Speed[0].Max);
-      activitySummary.setMinSpeed(eventJSONObject.DeviceLog.Header.Speed[0].Min);
+      activitySummary.avgSpeed = eventJSONObject.DeviceLog.Header.Speed[0].Avg;
+      activitySummary.maxSpeed = eventJSONObject.DeviceLog.Header.Speed[0].Max;
+      activitySummary.minSpeed = eventJSONObject.DeviceLog.Header.Speed[0].Min;
     }
 
     if (eventJSONObject.DeviceLog.Header.Temperature) {
-      activitySummary.setAvgTemperature(eventJSONObject.DeviceLog.Header.Temperature[0].Avg - 273.15);
-      activitySummary.setMaxTemperature(eventJSONObject.DeviceLog.Header.Temperature[0].Max - 273.15);
-      activitySummary.setMinTemperature(eventJSONObject.DeviceLog.Header.Temperature[0].Min - 273.15);
+      activitySummary.avgTemperature = eventJSONObject.DeviceLog.Header.Temperature[0].Avg - 273.15;
+      activitySummary.maxTemperature = eventJSONObject.DeviceLog.Header.Temperature[0].Max - 273.15;
+      activitySummary.minTemperature = eventJSONObject.DeviceLog.Header.Temperature[0].Min - 273.15;
     }
 
     if (eventJSONObject.DeviceLog.Header.VerticalSpeed) {
-      activitySummary.setAvgVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Avg);
-      activitySummary.setMaxVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Max);
-      activitySummary.setMinVerticalSpeed(eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Min);
+      activitySummary.avgVerticalSpeed = eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Avg;
+      activitySummary.maxVerticalSpeed = eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Max;
+      activitySummary.minVerticalSpeed = eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Min;
     }
 
     if (eventJSONObject.DeviceLog.Header.HrZones) {
@@ -99,7 +99,7 @@ export class EventImporterSuuntoJSON {
       zones.zone4LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit * 60);
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone5Duration;
       zones.zone5LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit * 60);
-      activitySummary.addIntensityZone(DataHeartRate.type, zones);
+      activitySummary.intensityZones.set(DataHeartRate.type, zones);
     }
 
     if (eventJSONObject.DeviceLog.Header.PowerZones) {
@@ -113,7 +113,7 @@ export class EventImporterSuuntoJSON {
       zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone4LowerLimit;
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone5Duration;
       zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone5LowerLimit;
-      activitySummary.addIntensityZone(DataPower.type, zones);
+      activitySummary.intensityZones.set(DataPower.type, zones);
     }
 
     if (eventJSONObject.DeviceLog.Header.SpeedZones) {
@@ -127,7 +127,7 @@ export class EventImporterSuuntoJSON {
       zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone4LowerLimit;
       zones.zone5Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5Duration;
       zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5LowerLimit;
-      activitySummary.addIntensityZone(DataSpeed.type, zones);
+      activitySummary.intensityZones.set(DataSpeed.type, zones);
     }
 
 
@@ -221,54 +221,54 @@ export class EventImporterSuuntoJSON {
       lap.setType(lapObj.Type);
       lapSummary.totalDistanceInMeters = lapObj.Distance;
       lapSummary.totalDurationInSeconds =  lapObj.Duration;
-      lapSummary.setMaxAltitudeInMeters(lapObj.Altitude[0].Max);
-      lapSummary.setMinAltitudeInMeters(lapObj.Altitude[0].Min);
-      lapSummary.setAscentTimeInSeconds(lapObj.AscentTime);
-      lapSummary.setDescentTimeInSeconds(lapObj.DescentTime);
-      lapSummary.setAscentInMeters(lapObj.Ascent);
-      lapSummary.setDescentInMeters(lapObj.Descent);
-      lapSummary.setEPOC(lapObj.EPOC);
-      lapSummary.setEnergyInCal(lapObj.Energy * 0.239 / 1000);
-      lapSummary.setFeeling(lapObj.Feeling);
-      lapSummary.setPeakTrainingEffect(lapObj.PeakTrainingEffect);
-      lapSummary.setPauseDurationInSeconds(lapObj.PauseDuration);
-      lapSummary.setRecoveryTimeInSeconds(lapObj.RecoveryTime);
-      lapSummary.setMaxVO2(lapObj.MAXVO2);
+      lapSummary.maxAltitudeInMeters = lapObj.Altitude[0].Max;
+      lapSummary.minAltitudeInMeters = lapObj.Altitude[0].Min;
+      lapSummary.ascentTimeInSeconds = lapObj.AscentTime;
+      lapSummary.descentTimeInSeconds = lapObj.DescentTime;
+      lapSummary.ascentInMeters = lapObj.Ascent;
+      lapSummary.descentInMeters = lapObj.Descent;
+      lapSummary.epoc = lapObj.EPOC;
+      lapSummary.energyInCal = lapObj.Energy * 0.239 / 1000;
+      lapSummary.feeling = lapObj.Feeling;
+      lapSummary.peakTrainingEffect = lapObj.PeakTrainingEffect;
+      lapSummary.pauseDurationInSeconds = lapObj.PauseDuration;
+      lapSummary.recoveryTimeInSeconds = lapObj.RecoveryTime;
+      lapSummary.maxVO2 = lapObj.MAXVO2;
 
       if (lapObj.HR) {
-        lapSummary.setAvgHR(lapObj.HR[0].Avg * 60);
-        lapSummary.setMaxHR(lapObj.HR[0].Max * 60);
-        lapSummary.setMinHR(lapObj.HR[0].Min * 60);
+        lapSummary.avgHR = lapObj.HR[0].Avg * 60;
+        lapSummary.maxHR = lapObj.HR[0].Max * 60;
+        lapSummary.minHR = lapObj.HR[0].Min * 60;
       }
 
       if (lapObj.Cadence) {
-        lapSummary.setAvgCadence(lapObj.Cadence[0].Avg * 60 * 2);
-        lapSummary.setMaxCadence(lapObj.Cadence[0].Max * 60 * 2);
-        lapSummary.setMinCadence(lapObj.Cadence[0].Min * 60 * 2);
+        lapSummary.avgCadence = lapObj.Cadence[0].Avg * 60 * 2;
+        lapSummary.maxCadence = lapObj.Cadence[0].Max * 60 * 2;
+        lapSummary.minCadence = lapObj.Cadence[0].Min * 60 * 2;
       }
 
       if (lapObj.Power) {
-        lapSummary.setAvgPower(lapObj.Power[0].Avg);
-        lapSummary.setMaxPower(lapObj.Power[0].Max);
-        lapSummary.setMinPower(lapObj.Power[0].Min);
+        lapSummary.avgPower = lapObj.Power[0].Avg;
+        lapSummary.maxPower = lapObj.Power[0].Max;
+        lapSummary.minPower = lapObj.Power[0].Min;
       }
 
       if (lapObj.Speed) {
-        lapSummary.setAvgSpeed(lapObj.Speed[0].Avg);
-        lapSummary.setMaxSpeed(lapObj.Speed[0].Max);
-        lapSummary.setMinSpeed(lapObj.Speed[0].Min);
+        lapSummary.avgSpeed = lapObj.Speed[0].Avg;
+        lapSummary.maxSpeed = lapObj.Speed[0].Max;
+        lapSummary.minSpeed = lapObj.Speed[0].Min;
       }
 
       if (lapObj.Temperature) {
-        lapSummary.setAvgTemperature(lapObj.Temperature[0].Avg - 273.15);
-        lapSummary.setMaxTemperature(lapObj.Temperature[0].Max - 273.15);
-        lapSummary.setMinTemperature(lapObj.Temperature[0].Min - 273.15);
+        lapSummary.avgTemperature = lapObj.Temperature[0].Avg - 273.15;
+        lapSummary.maxTemperature = lapObj.Temperature[0].Max - 273.15;
+        lapSummary.minTemperature = lapObj.Temperature[0].Min - 273.15;
       }
 
       if (lapObj.VerticalSpeed) {
-        lapSummary.setAvgVerticalSpeed(lapObj.VerticalSpeed[0].Avg);
-        lapSummary.setMaxVerticalSpeed(lapObj.VerticalSpeed[0].Max);
-        lapSummary.setMinVerticalSpeed(lapObj.VerticalSpeed[0].Min);
+        lapSummary.avgVerticalSpeed = lapObj.VerticalSpeed[0].Avg;
+        lapSummary.maxVerticalSpeed = lapObj.VerticalSpeed[0].Max;
+        lapSummary.minVerticalSpeed = lapObj.VerticalSpeed[0].Min;
       }
 
       lap.setSummary(lapSummary);
