@@ -54,7 +54,7 @@ export class Point implements PointInterface {
       dataArray = dataArray.concat(value);
     });
     return {
-      date: this.getDate(),
+      date: this.getDate().toJSON(),
       data: dataArray.reduce((jsonDataArray: any[], data: DataInterface) => {
         jsonDataArray.push(data.toJSON());
         return jsonDataArray;
