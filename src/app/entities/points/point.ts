@@ -39,7 +39,7 @@ export class Point implements PointInterface {
     const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.type);
     const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.type);
     if (!dataLongitudeDegrees || !dataLatitudeDegrees) {
-      return;
+      return void 0;
     }
     this.position = {
       latitudeDegrees: Number(dataLatitudeDegrees.getValue()),

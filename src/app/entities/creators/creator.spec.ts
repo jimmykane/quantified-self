@@ -1,5 +1,7 @@
 import {CreatorInterface} from './creatorInterface';
 import {Creator} from './creator';
+import {Activity} from "../activities/activity";
+import {ActivityInterface} from "../activities/activity.interface";
 
 describe('Creator', function () {
 
@@ -7,6 +9,12 @@ describe('Creator', function () {
 
   beforeEach(() => {
     creator = new Creator();
+  });
+
+  it('should set an activity', function () {
+    const activty = new Activity();
+    creator.setActivity(activty);
+    expect(creator.getActivity()).toEqual(activty);
   });
 
   it('should export correctly to JSON', function () {

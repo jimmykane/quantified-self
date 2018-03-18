@@ -17,7 +17,6 @@ export class Activity extends IDClass implements ActivityInterface {
   private creator: CreatorInterface;
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: SummaryInterface;
-  private logger = Log.create('Activity');
   private ibiData: IBIData;
   private laps: LapInterface[] = [];
 
@@ -63,7 +62,6 @@ export class Activity extends IDClass implements ActivityInterface {
     // @todo should do dateguard check
     const existingPoint = this.points.get(point.getDate().getTime());
     if (existingPoint && detectCollision) {
-      this.logger.warn('Point collision detected for date: ' + point.getDate().toISOString() + ' and date: ' + existingPoint.getDate());
       existingPoint.getData().forEach((data: DataInterface, key: string, map) => {
         if (!point.getDataByType(key)) {
           point.addData(data);

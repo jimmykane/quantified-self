@@ -11,9 +11,6 @@ describe('Point', function () {
 
   beforeEach(() => {
     point = new Point(new Date(0));
-    point.addData(new DataLatitudeDegrees(0));
-    point.addData(new DataLongitudeDegrees(0));
-    point.addData(new DataHeartRate(60));
   });
 
   it('should add data', function () {
@@ -28,19 +25,28 @@ describe('Point', function () {
   });
 
   it('should remove data', function () {
+    point.addData(new DataHeartRate(60));
     point.removeDataByType(DataHeartRate.type);
     expect(point.getDataByType(DataHeartRate.type)).toBeUndefined();
   });
 
   it('should get a position', function () {
-    point.addData(new DataAltitude(100));
+    point.addData(new DataLatitudeDegrees(0));
+    point.addData(new DataLongitudeDegrees(0));
     expect(point.getPosition()).toEqual({
       latitudeDegrees: 0,
       longitudeDegrees: 0,
     });
   });
 
+  it('should not get a position', function () {
+    expect(point.getPosition()).toBeUndefined();
+  });
+
   it('should export correctly to JSON', function () {
+    point.addData(new DataLatitudeDegrees(0));
+    point.addData(new DataLongitudeDegrees(0));
+    point.addData(new DataHeartRate(60));
     expect(point.toJSON()).toEqual({
       date: (new Date(0)).toJSON(),
       data: [{
