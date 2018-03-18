@@ -29,6 +29,9 @@ script:
   - ng test --watch=false --code-coverage --progress  --colors --single-run
   - ng build --prod
 
+after_success:
+  - codecov
+
 notifications:
   email:
     on_failure: change
