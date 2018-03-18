@@ -1,11 +1,11 @@
-import {Zones} from './intensity-zone';
+import {IntensityZones} from './intensity-zone';
 
 describe('Zone', function () {
 
-  let zones: Zones;
+  let zones: IntensityZones;
 
   beforeEach(() => {
-    zones = new Zones();
+    zones = new IntensityZones();
   });
 
   it('should export correctly to JSON', function () {

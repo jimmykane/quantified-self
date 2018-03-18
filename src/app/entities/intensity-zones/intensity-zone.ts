@@ -1,6 +1,6 @@
-import {ZonesInterface} from './intensity-zone.interface';
+import {IntensityZonesInterface} from './intensity-zone.interface';
 
-export class Zones implements ZonesInterface {
+export class IntensityZones implements IntensityZonesInterface {
   zone1Duration: number;
   zone2Duration: number;
   zone2LowerLimit: number;

@@ -1,6 +1,6 @@
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 
-export interface ZonesInterface extends SerializableClassInterface {
+export interface IntensityZonesInterface extends SerializableClassInterface {
   zone1Duration: number;
   zone2Duration: number;
   zone2LowerLimit: number;

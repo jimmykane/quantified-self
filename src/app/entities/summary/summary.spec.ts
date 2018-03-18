@@ -3,7 +3,7 @@ import {Summary} from './summary';
 import {Weather} from '../weather/app.weather';
 import {WeatherItem} from '../weather/app.weather.item';
 import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
-import {Zones} from '../intensity-zones/intensity-zone';
+import {IntensityZones} from '../intensity-zones/intensity-zone';
 
 describe('Summary', function () {
 
@@ -61,7 +61,7 @@ describe('Summary', function () {
     summary.geoLocationInfo.country = 'France';
     summary.geoLocationInfo.province = 'Ariege';
 
-    const zones = new Zones();
+    const zones = new IntensityZones();
     zones.zone1Duration = 1;
     zones.zone2Duration = 2;
     zones.zone2LowerLimit = 3;

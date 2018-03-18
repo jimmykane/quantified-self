@@ -25,7 +25,7 @@ import {Summary} from '../../../summary/summary';
 import {DataEVPE} from '../../../data/data.evpe';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
-import {Zones} from '../../../intensity-zones/intensity-zone';
+import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../data/ibi/data.ibi';
 
 export class EventImporterJSON {
@@ -106,7 +106,7 @@ export class EventImporterJSON {
 
       if (activityObject.summary.intensityZones) {
         for (const key in activityObject.summary.intensityZones) {
-          const zones = new Zones();
+          const zones = new IntensityZones();
           zones.zone1Duration = activityObject.summary.intensityZones[key].zone1Duration;
           zones.zone2Duration = activityObject.summary.intensityZones[key].zone2Duration;
           zones.zone2LowerLimit = activityObject.summary.intensityZones[key].zone2LowerLimit;

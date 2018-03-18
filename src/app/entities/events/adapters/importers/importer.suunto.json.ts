@@ -21,7 +21,7 @@ import {DataEVPE} from '../../../data/data.evpe';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
-import {Zones} from '../../../intensity-zones/intensity-zone';
+import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIFilters} from '../../../data/ibi/data.ibi.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
 
@@ -89,7 +89,7 @@ export class EventImporterSuuntoJSON {
     }
 
     if (eventJSONObject.DeviceLog.Header.HrZones) {
-      const zones = new Zones;
+      const zones = new IntensityZones;
       zones.zone1Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone1Duration;
       zones.zone2Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone2Duration;
       zones.zone2LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit * 60);
@@ -103,7 +103,7 @@ export class EventImporterSuuntoJSON {
     }
 
     if (eventJSONObject.DeviceLog.Header.PowerZones) {
-      const zones = new Zones;
+      const zones = new IntensityZones;
       zones.zone1Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone1Duration;
       zones.zone2Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone2Duration;
       zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone2LowerLimit;
@@ -117,7 +117,7 @@ export class EventImporterSuuntoJSON {
     }
 
     if (eventJSONObject.DeviceLog.Header.SpeedZones) {
-      const zones = new Zones;
+      const zones = new IntensityZones;
       zones.zone1Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone1Duration;
       zones.zone2Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone2Duration;
       zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone2LowerLimit;

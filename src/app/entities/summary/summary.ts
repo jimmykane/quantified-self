@@ -1,7 +1,7 @@
 import {SummaryInterface} from './summary.interface';
 import {Weather} from '../weather/app.weather';
 import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
-import {ZonesInterface} from '../intensity-zones/intensity-zone.interface';
+import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export class Summary implements SummaryInterface {
 
@@ -38,13 +38,13 @@ export class Summary implements SummaryInterface {
   public maxSpeed: number;
   public avgSpeed: number;
   public minSpeed: number;
-  public intensityZones: Map<string, ZonesInterface> = new Map<string, ZonesInterface>();
+  public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
   public geoLocationInfo: GeoLocationInfo;
   public weather: Weather;
 
   toJSON(): any {
     const intensityZones = {};
-    this.intensityZones.forEach((value: ZonesInterface, key: string, map) => {
+    this.intensityZones.forEach((value: IntensityZonesInterface, key: string, map) => {
         intensityZones[key] =  value.toJSON();
     });
 
