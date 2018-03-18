@@ -10,12 +10,17 @@ module.exports = function (config) {
       require('karma-coverage-istanbul-reporter'),
       require('@angular/cli/plugins/karma')
     ],
-    client:{
+    client: {
       clearContext: false // leave Jasmine Spec Runner output visible in browser
     },
     coverageIstanbulReporter: {
-      reports: [ 'html', 'lcovonly' ],
-      fixWebpackSourcePaths: true
+      reports: ['html', 'lcovonly', 'json'],
+      fixWebpackSourcePaths: true,
+      'report-config': {
+        json: {
+          file: 'coverage.json'
+        }
+      }
     },
     angularCli: {
       environment: 'dev'

@@ -9,10 +9,11 @@ branches:
 
 before_script:
   - npm install -g @angular/cli
+  - npm install codecov -g
 
 script:
+  - ng test --watch=false --code-coverage --progress  --colors --single-run
   - ng build --prod
-  - ng test --watch false --code-coverage
 
 #after_success:
 #  - firebase deploy --token $FIREBASE_TOKEN
