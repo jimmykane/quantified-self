@@ -1,10 +1,10 @@
-import {GeodesyAdapterInterface} from './adapter.interface';
+import {GeoLibAdapterInterface} from './adapter.interface';
 import {DistanceSimple} from './distance/distance.geolib.simple.adapter';
 import {DistanceVincenty} from './distance/distance.geolib.vincenty.adapter';
 import {DistanceAdapterInterface} from './distance/distance.adapter.interface';
 import {PointInterface} from '../../points/point.interface';
 
-export class GeoLibAdapter implements GeodesyAdapterInterface {
+export class GeoLibAdapter implements GeoLibAdapterInterface {
 
   private distanceAdapter: DistanceAdapterInterface;
 
