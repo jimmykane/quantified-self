@@ -64,7 +64,7 @@ export class EventExporterTCX implements EventExporterInterface {
       // If there are no laps create one and clone it from the activity
       if (!activityLaps.length) {
         const lap = new Lap(activity.getStartDate(), activity.getEndDate());
-        lap.setSummary(activity.getSummary());
+        lap.summary = activity.getSummary();
         activityLaps.push(lap);
       }
 
@@ -84,18 +84,18 @@ export class EventExporterTCX implements EventExporterInterface {
         // Create a lap element
         const lapElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Lap');
         // Add the first point as start time
-        lapElement.setAttribute('StartTime', lap.getStartDate().toISOString().substring(0, 19) + 'Z');
+        lapElement.setAttribute('StartTime', lap.startDate.toISOString().substring(0, 19) + 'Z');
 
         const totalTimeInSecondsElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'TotalTimeSeconds');
-        totalTimeInSecondsElement.textContent = lap.getSummary().totalDurationInSeconds.toString();
+        totalTimeInSecondsElement.textContent = lap.summary.totalDurationInSeconds.toString();
         lapElement.appendChild(totalTimeInSecondsElement);
 
         const distanceInMetersElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'DistanceMeters');
-        distanceInMetersElement.textContent = lap.getSummary().totalDistanceInMeters.toString();
+        distanceInMetersElement.textContent = lap.summary.totalDistanceInMeters.toString();
         lapElement.appendChild(distanceInMetersElement);
 
         const caloriesInKCALElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Calories');
-        caloriesInKCALElement.textContent = lap.getSummary().energyInCal.toFixed(0).toString();
+        caloriesInKCALElement.textContent = lap.summary.energyInCal.toFixed(0).toString();
         lapElement.appendChild(caloriesInKCALElement);
 
         activityElement.appendChild(lapElement);
@@ -103,7 +103,7 @@ export class EventExporterTCX implements EventExporterInterface {
         lapElement.appendChild(trackElement);
         // Go over the points and find the ones without position
         let pointWithoutPosition: PointInterface;
-        for (const point of activity.getPointsInterpolated(lap.getStartDate(), lap.getEndDate(), 1)) {
+        for (const point of activity.getPointsInterpolated(lap.startDate, lap.endDate, 1)) {
           if (!point.getPosition()) {
             pointWithoutPosition = point;
             continue;

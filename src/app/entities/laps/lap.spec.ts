@@ -8,8 +8,8 @@ describe('Lap', function () {
 
   beforeEach(() => {
     lap = new Lap(new Date(0), new Date(100));
-    lap.setType('Auto');
-    lap.setSummary(new Summary());
+    lap.type = 'Auto';
+    lap.summary = new Summary();
   });
 
 

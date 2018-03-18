@@ -126,7 +126,7 @@ export class EventImporterJSON {
 
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
-        lap.setType(lapObject.type);
+        lap.type = lapObject.type;
         const lapSummary = new Summary();
         lapSummary.totalDistanceInMeters = lapObject.summary.totalDistanceInMeters;
         lapSummary.totalDurationInSeconds = lapObject.summary.totalDurationInSeconds;
@@ -161,7 +161,7 @@ export class EventImporterJSON {
         lapSummary.minTemperature = lapObject.summary.minTemperature;
         lapSummary.maxTemperature = lapObject.summary.maxTemperature;
         lapSummary.avgTemperature = lapObject.summary.avgTemperature;
-        lap.setSummary(lapSummary);
+        lap.summary = lapSummary;
         activity.addLap(lap);
       }
 

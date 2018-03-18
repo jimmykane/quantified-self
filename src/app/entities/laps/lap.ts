@@ -4,53 +4,14 @@ import {Summary} from '../summary/summary';
 
 export class Lap implements LapInterface {
 
-  private event: EventInterface;
-  private startDate: Date;
-  private endDate: Date;
-  private type: string;
-  private summary: Summary;
+  public startDate: Date;
+  public endDate: Date;
+  public type: string;
+  public summary: Summary;
 
   constructor(startDate: Date, endDate: Date) {
-    this.setStartDate(startDate).setEndDate(endDate);
-  }
-
-  getEvent(): EventInterface {
-    return this.event;
-  }
-
-  setStartDate(date: Date) {
-    this.startDate = date;
-    return this;
-  }
-
-  getStartDate(): Date {
-    return this.startDate;
-  }
-
-  setEndDate(date: Date) {
-    this.endDate = date;
-    return this;
-  }
-
-  getEndDate(): Date {
-    return this.endDate;
-  }
-
-  setType(type: string) {
-    this.type = type;
-    return this;
-  }
-
-  getType(): string {
-    return this.type;
-  }
-
-  setSummary(lapSummary: Summary) {
-    this.summary = lapSummary;
-  }
-
-  getSummary(): Summary {
-    return this.summary;
+    this.startDate = startDate;
+    this.endDate = endDate;
   }
 
   toJSON(): any {

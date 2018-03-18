@@ -168,9 +168,9 @@ export class EventService {
         // Lap summaries
         for (const lap of activity.getLaps()) {
           const lapSummary = new Summary();
-          lapSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate());
-          lapSummary.totalDurationInSeconds = (+lap.getEndDate() - +lap.getStartDate()) / 1000;
-          lap.setSummary(lapSummary);
+          lapSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event, lap.startDate, lap.endDate);
+          lapSummary.totalDurationInSeconds = (+lap.endDate - +lap.startDate) / 1000;
+          lap.summary = lapSummary;
         }
       }
 

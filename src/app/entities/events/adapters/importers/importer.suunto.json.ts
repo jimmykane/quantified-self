@@ -218,7 +218,7 @@ export class EventImporterSuuntoJSON {
         new Date(lapObj.TimeISO8601)
       );
       const lapSummary = new Summary();
-      lap.setType(lapObj.Type);
+      lap.type = lapObj.Type;
       lapSummary.totalDistanceInMeters = lapObj.Distance;
       lapSummary.totalDurationInSeconds =  lapObj.Duration;
       lapSummary.maxAltitudeInMeters = lapObj.Altitude[0].Max;
@@ -271,9 +271,9 @@ export class EventImporterSuuntoJSON {
         lapSummary.minVerticalSpeed = lapObj.VerticalSpeed[0].Min;
       }
 
-      lap.setSummary(lapSummary);
+      lap.summary = lapSummary;
       activity.addLap(lap);
-      nextLapStartDate = lap.getEndDate();
+      nextLapStartDate = lap.endDate;
     }
 
     activity.sortPointsByDate();
