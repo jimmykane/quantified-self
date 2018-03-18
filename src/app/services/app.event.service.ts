@@ -116,7 +116,6 @@ export class EventService {
       // Activities Summaries
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
-        const activitySummary = event.getSummary() || new Summary();
         if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
           continue;
         }
@@ -155,7 +154,6 @@ export class EventService {
   public generateEventSummaries(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
 
-
       // Activities Summaries
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
@@ -172,13 +170,6 @@ export class EventService {
           continue;
         }
 
-        activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
-        ));
-        activitiesPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
-        ));
-
         // Lap summaries
         for (const lap of activity.getLaps()) {
           const lapSummary = new Summary();
@@ -193,27 +184,6 @@ export class EventService {
       eventSummary.totalDurationInSeconds = event.getTotalDurationInSeconds();
       eventSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event);
       event.setSummary(eventSummary);
-
-      Observable.forkJoin(activitiesPromises).toPromise().then(results => {
-        let index = 0;
-        for (const activity of event.getActivities()) {
-          // If indoors
-          if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
-            index += 2;
-            continue;
-          }
-          if (results[index]) {
-            activity.getSummary().geoLocationInfo = <GeoLocationInfo> results[index];
-          }
-          if (results[index + 1]) {
-            activity.getSummary().weather = <Weather> results[index + 1];
-          }
-          index += 2;
-        }
-        resolve(event);
-      }).catch(() => {
-        resolve(event);
-      });
     }));
   }
 
