@@ -11,6 +11,7 @@
     "build-and-deploy-prod": "npm run build-production && npm run deploy",
     "build-and-deploy-dev": "npm run build && npm run deploy",
     "test": "ng test",
+    "test-coverage": "ng test --code-coverage",
     "lint": "ng lint",
     "e2e": "ng e2e"
   },
