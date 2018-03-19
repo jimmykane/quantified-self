@@ -42,7 +42,6 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getPoints(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[] {
-    activities = activities || this.getActivities();
     return (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return pointsArray.concat(activity.getPoints(startDate, endDate));
     }, []);
