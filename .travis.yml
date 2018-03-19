@@ -33,6 +33,9 @@ script:
 
 after_success:
   - codecov
+  - test $TRAVIS_BRANCH = "master" && test $TRAVIS_PULL_REQUEST = "false" && CODECLIMATE_API_HOST=$CODECLIMATE_API_HOST \CODECLIMATE_REPO_TOKEN=$CODECLIMATE_REPO_TOKEN_MASTER \codeclimate-test-reporter < coverage/lcov.info
+  - test $TRAVIS_BRANCH = "develop" && test $TRAVIS_PULL_REQUEST = "false" && CODECLIMATE_API_HOST=$CODECLIMATE_API_HOST \CODECLIMATE_REPO_TOKEN=$CODECLIMATE_REPO_TOKEN_DEVELOP \codeclimate-test-reporter < coverage/lcov.info
+
 
 notifications:
   email:
