@@ -1,9 +1,10 @@
 import {Activity} from './activity';
 import {ActivityInterface} from './activity.interface';
 import {Point} from '../points/point';
-import {DataHeartRate} from "../data/data.heart-rate";
-import {DataAltitude} from "../data/data.altitude";
-import {DataTemperature} from "../data/data.temperature";
+import {DataHeartRate} from '../data/data.heart-rate';
+import {DataAltitude} from '../data/data.altitude';
+import {DataTemperature} from '../data/data.temperature';
+import {Lap} from "../laps/lap";
 
 describe('Activity', function () {
 
@@ -195,13 +196,28 @@ describe('Activity', function () {
 
   });
 
-  // it('should export correctly to JSON', function () {
-  //   expect(creator.toJSON()).toEqual({
-  //     name: 'name',
-  //     serialNumber: 'SerialNumber',
-  //     swInfo: 'SWInfo',
-  //     hwInfo: 'HWInfo',
-  //   });
-  // });
+  it('should export correctly to JSON', function () {
+    const point = new Point(new Date());
+    activity.addPoint(point);
+    const lap = new Lap(new Date(), new Date());
+    activity.addLap(lap);
+
+    spyOn(point, 'toJSON').and.returnValue({});
+    spyOn(lap, 'toJSON').and.returnValue({})
+    activity.setID('123');
+    expect(activity.toJSON()).toEqual({
+      'id': '123',
+      'startDate': undefined,
+      'endDate': undefined,
+      'type': undefined,
+      'creator': undefined,
+      'points': [{}],
+      'summary': undefined,
+      'ibiData': [],
+      'laps': [{}]
+    });
+    expect(point.toJSON).toHaveBeenCalled();
+    expect(lap.toJSON).toHaveBeenCalled();
+  });
 
 });
