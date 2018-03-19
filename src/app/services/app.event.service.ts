@@ -119,7 +119,7 @@ export class EventService {
           event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
         ));
         activitiesPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
+          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.startDate
         ));
       }
 
@@ -157,7 +157,7 @@ export class EventService {
           event, void 0, void 0, void 0, [activity]
         );
 
-        activitySummary.totalDurationInSeconds = (+activity.getEndDate() - +activity.getStartDate()) / 1000;
+        activitySummary.totalDurationInSeconds = (+activity.endDate - +activity.startDate) / 1000;
         activity.setSummary(activitySummary);
 
         // If indoors
@@ -301,7 +301,7 @@ export class EventService {
     return new Promise((resolve, reject) => {
       // First sort the events by first point date
       events.sort((eventA: EventInterface, eventB: EventInterface) => {
-        return +eventA.getFirstActivity().getStartDate() - +eventB.getFirstActivity().getStartDate();
+        return +eventA.getFirstActivity().startDate - +eventB.getFirstActivity().startDate;
       });
       const mergeEvent = new Event();
       for (const event of events) {

@@ -8,11 +8,9 @@ import {IBIData} from '../data/ibi/data.ibi';
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
   type: string;
+  startDate: Date;
+  endDate: Date;
 
-  getStartDate(): Date;
-  setStartDate(startDate: Date);
-  getEndDate(): Date;
-  setEndDate(endDate: Date);
   setCreator(creator: CreatorInterface);
   getCreator(): CreatorInterface;
   addPoint(point: PointInterface);

@@ -54,7 +54,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // Add an ID element
       const idElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Id');
-      idElement.textContent = activity.getStartDate().toISOString().substring(0, 19) + 'Z';
+      idElement.textContent = activity.startDate.toISOString().substring(0, 19) + 'Z';
       activityElement.appendChild(idElement);
 
 
@@ -63,7 +63,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // If there are no laps create one and clone it from the activity
       if (!activityLaps.length) {
-        const lap = new Lap(activity.getStartDate(), activity.getEndDate());
+        const lap = new Lap(activity.startDate, activity.endDate);
         lap.summary = activity.getSummary();
         activityLaps.push(lap);
       }

@@ -85,7 +85,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
         // Else just get them as BPM and no filter
         ibiData.getAsBPM().forEach((value, key, map) => {
-          const point = new Point(new Date(activity.getStartDate().getTime() + key));
+          const point = new Point(new Date(activity.startDate.getTime() + key));
           point.addData(new DataHeartRate(value));
           activity.addPoint(point);
         });

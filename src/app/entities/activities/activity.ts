@@ -10,9 +10,8 @@ import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
 
 export class Activity extends IDClass implements ActivityInterface {
-
-  private startDate;
-  private endDate;
+  public startDate;
+  public endDate;
   public type: string;
   private creator: CreatorInterface;
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
@@ -23,23 +22,6 @@ export class Activity extends IDClass implements ActivityInterface {
 
   constructor() {
     super();
-  }
-
-
-  getStartDate(): Date {
-    return this.startDate;
-  }
-
-  setStartDate(startDate: Date) {
-    this.startDate = startDate;
-  }
-
-  getEndDate(): Date {
-    return this.endDate;
-  }
-
-  setEndDate(endDate: Date) {
-    this.endDate = endDate;
   }
 
   setCreator(creator: CreatorInterface) {
@@ -154,8 +136,8 @@ export class Activity extends IDClass implements ActivityInterface {
   toJSON(): any {
     return {
       id: this.getID(),
-      startDate: this.getStartDate(),
-      endDate: this.getEndDate(),
+      startDate: this.startDate,
+      endDate: this.endDate,
       type: this.type,
       creator: this.getCreator().toJSON(),
       points: this.getPoints().reduce((jsonPointsArray: any[], point: PointInterface) => {

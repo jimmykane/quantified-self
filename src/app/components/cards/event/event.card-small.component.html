@@ -13,7 +13,7 @@
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
 
     <mat-card-subtitle>
-      {{ event.getFirstActivity().getStartDate() | date:'short' }}
+      {{ event.getFirstActivity().startDate | date:'short' }}
     </mat-card-subtitle>
 
   </mat-card-header>

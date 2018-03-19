@@ -34,7 +34,7 @@ export class EventImporterSuuntoJSON {
 
     // @todo iterate over activities
     const activity = new Activity();
-    activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
+    activity.startDate = new Date(eventJSONObject.DeviceLog.Header.DateTime);
     activity.type = this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType);
     const activitySummary = new Summary();
     activitySummary.totalDistanceInMeters = eventJSONObject.DeviceLog.Header.Distance;
@@ -207,7 +207,7 @@ export class EventImporterSuuntoJSON {
     // Important
 
     // Parse the laps
-    let nextLapStartDate = event.getFirstActivity().getStartDate();
+    let nextLapStartDate = event.getFirstActivity().startDate;
     for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
       const lapObj = lapWindow.Window;
       if (lapObj.Type !== 'Autolap') {
@@ -277,7 +277,7 @@ export class EventImporterSuuntoJSON {
     }
 
     activity.sortPointsByDate();
-    activity.setEndDate(activity.getEndPoint().getDate());
+    activity.endDate = activity.getEndPoint().getDate();
 
     // If no IBI return
     if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
@@ -289,7 +289,7 @@ export class EventImporterSuuntoJSON {
         .lowPassFilter()
         .movingMedianFilter()
         .getAsBPM().forEach((value, key, map) => {
-        const point = new Point(new Date(activity.getStartDate().getTime() + key));
+        const point = new Point(new Date(activity.startDate.getTime() + key));
         point.addData(new DataHeartRate(value));
         activity.addPoint(point);
       });

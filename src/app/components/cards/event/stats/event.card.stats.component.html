@@ -3,7 +3,7 @@
     <mat-expansion-panel *ngFor="let activity of event.getActivities(); let i = index;" [expanded]="'true'">
       <mat-expansion-panel-header>
         <mat-panel-title>
-          {{ activity.getStartDate() | date:'medium' }}
+          {{ activity.startDate | date:'medium' }}
         </mat-panel-title>
         <mat-panel-description>
           {{ activity.type }}
