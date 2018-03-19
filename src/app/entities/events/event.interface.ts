@@ -21,9 +21,9 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
 
   getLastActivity(): ActivityInterface;
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
+  getPoints(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[];
 
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[];
+  getPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[];
 
   hasPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): boolean;
 

@@ -116,10 +116,10 @@ export class EventService {
         }
 
         activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
+          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition()
         ));
         activitiesPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.startDate
+          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate
         ));
       }
 
@@ -202,13 +202,12 @@ export class EventService {
   public getEventDistanceInMeters(event: EventInterface,
                                   startDate?: Date,
                                   endDate?: Date,
-                                  step?: number,
                                   activities?: ActivityInterface[]): number {
     if (!event.hasPointsWithPosition()) {
       return 0;
     }
     return event.getActivities().reduce((distance: number, activity: ActivityInterface) => {
-      return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, void 0, [activity]));
+      return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, [activity]));
     }, 0);
   }
 
@@ -216,11 +215,10 @@ export class EventService {
                                  dataType: string,
                                  startDate?: Date,
                                  endDate?: Date,
-                                 step?: number,
                                  activities?: ActivityInterface[]): number {
     const t0 = performance.now();
     let count = 1;
-    const averageForDataType = event.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
+    const averageForDataType = event.getPoints(startDate, endDate,  activities).reduce((average: number, point: PointInterface) => {
       if (!point.getDataByType(dataType)) {
         return average;
       }
@@ -239,7 +237,6 @@ export class EventService {
                               dataType: string,
                               startDate?: Date,
                               endDate?: Date,
-                              step?: number,
                               activities?: ActivityInterface[],
                               precision?: number,
                               minDiff?: number): number {
@@ -247,7 +244,7 @@ export class EventService {
     precision = precision || 1;
     minDiff = minDiff || 1.5;
     let gain = 0;
-    event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
+    event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
       if (!previous.getDataByType(dataType)) {
         return next;
       }
@@ -270,7 +267,6 @@ export class EventService {
                               dataType: string,
                               startDate?: Date,
                               endDate?: Date,
-                              step?: number,
                               activities?: ActivityInterface[],
                               precision?: number,
                               minDiff?: number): number {
@@ -278,7 +274,7 @@ export class EventService {
     precision = precision || 1;
     minDiff = minDiff || 1.5;
     let loss = 0;
-    event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
+    event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
       if (!previous.getDataByType(dataType)) {
         return next;
       }

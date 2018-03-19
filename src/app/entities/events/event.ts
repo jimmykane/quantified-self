@@ -41,15 +41,15 @@ export class Event extends IDClass implements EventInterface {
     });
   }
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
+  getPoints(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[] {
     activities = activities || this.getActivities();
     return (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return pointsArray.concat(activity.getPoints(startDate, endDate));
     }, []);
   }
 
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
-    return this.getPoints(startDate, endDate, step, activities)
+  getPointsWithPosition(startDate?: Date, endDate?: Date,  activities?: ActivityInterface[]): PointInterface[] {
+    return this.getPoints(startDate, endDate, activities)
       .reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
         if (point.getPosition()) {
           pointsWithPosition.push(point);
@@ -62,13 +62,13 @@ export class Event extends IDClass implements EventInterface {
   hasPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): boolean {
     // If not bool = not set
     if (this._hasPointsWithPosition !== true && this._hasPointsWithPosition !== false) {
-      this._hasPointsWithPosition = this.getPointsWithPosition(startDate, endDate, step, activities).length > 0;
+      this._hasPointsWithPosition = this.getPointsWithPosition(startDate, endDate, activities).length > 0;
     }
     return this._hasPointsWithPosition;
   }
 
   getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): DataInterface[] {
-    return this.getPoints(startDate, endDate, step, activities)
+    return this.getPoints(startDate, endDate,  activities)
       .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
         if (point.getDataByType(dataType)) {
           dataArray.push(point.getDataByType(dataType));
