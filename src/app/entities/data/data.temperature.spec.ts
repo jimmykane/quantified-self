@@ -13,8 +13,8 @@ describe('DataTemperature', function () {
     expect(data.getValue()).toBe(60);
   });
 
-  it('should get the unit of °', function () {
-    expect(data.getUnit()).toBe('°');
+  it('should get the unit of °C', function () {
+    expect(data.getUnit()).toBe('°C');
   });
 
   it('should export correctly to JSON', function () {
