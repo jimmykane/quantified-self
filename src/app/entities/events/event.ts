@@ -47,7 +47,7 @@ export class Event extends IDClass implements EventInterface {
     }, []);
   }
 
-  getPointsWithPosition(startDate?: Date, endDate?: Date,  activities?: ActivityInterface[]): PointInterface[] {
+  getPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[] {
     return this.getPoints(startDate, endDate, activities)
       .reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
         if (point.getPosition()) {
@@ -80,7 +80,7 @@ export class Event extends IDClass implements EventInterface {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;
       }, []),
-      summary: this.summary.toJSON()
+      summary: this.summary ? this.summary.toJSON() : undefined
     };
   }
 }
