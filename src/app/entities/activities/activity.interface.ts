@@ -14,11 +14,11 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   summary: SummaryInterface;
   ibiData: IBIData;
 
-  addPoint(point: PointInterface);
+  addPoint(point: PointInterface, overrideAllDataOnCollision?: boolean);
   removePoint(point: PointInterface);
   removePoint(point: PointInterface);
-  getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: boolean): PointInterface[];
-  getPointsInterpolated(startDate?: Date, endDate?: Date, step?: number): PointInterface[];
+  getPoints(startDate?: Date, endDate?: Date): PointInterface[];
+  getPointsInterpolated(startDate?: Date, endDate?: Date): PointInterface[];
   getStartPoint(): PointInterface;
   getEndPoint(): PointInterface;
   getLaps(): LapInterface[];

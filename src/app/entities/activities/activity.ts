@@ -26,10 +26,11 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   // @todo should do short or somehow
-  addPoint(point: PointInterface, detectCollision: boolean = true) {
+  addPoint(point: PointInterface, overrideAllDataOnCollision: boolean = false) {
     // @todo should do dateguard check
     const existingPoint = this.points.get(point.getDate().getTime());
-    if (existingPoint && detectCollision) {
+    // Keep last added value
+    if (existingPoint && !overrideAllDataOnCollision) {
       existingPoint.getData().forEach((data: DataInterface, key: string, map) => {
         if (!point.getDataByType(key)) {
           point.addData(data);
@@ -43,16 +44,12 @@ export class Activity extends IDClass implements ActivityInterface {
     this.points.delete(point.getDate().getTime());
   }
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number, sanitizeToSecond?: boolean): PointInterface[] {
+  getPoints(startDate?: Date, endDate?: Date): PointInterface[] {
     const points: Map<number, PointInterface> = new Map();
     let index = -1;
     this.points.forEach((point: PointInterface, date: number, map) => {
       index++;
       let canBeAdded = true;
-      // @todo check inclusions
-      if (step && index % step !== 0) {
-        canBeAdded = false;
-      }
       if (startDate && startDate > point.getDate()) {
         canBeAdded = false;
       }
@@ -68,7 +65,7 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   getPointsInterpolated(startDate?: Date, endDate?: Date, step?: number): PointInterface[] {
-    return Array.from(this.getPoints(startDate, endDate, step).reduce((pointsMap: Map<number, PointInterface>, point: PointInterface) => {
+    return Array.from(this.getPoints(startDate, endDate).reduce((pointsMap: Map<number, PointInterface>, point: PointInterface) => {
       // copy the point and set it's date to 0 ms so 1s interpolation
       const interpolatedDateTimePoint = new Point(new Date(new Date(point.getDate().getTime()).setMilliseconds(0)));
       point.getData().forEach((data: DataInterface, key, map) => {
@@ -117,7 +114,7 @@ export class Activity extends IDClass implements ActivityInterface {
       endDate: this.endDate,
       type: this.type,
       creator: this.creator.toJSON(),
-      points: this.getPoints().reduce((jsonPointsArray: any[], point: PointInterface) => {
+      points: Array.from(this.points.values()).reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
