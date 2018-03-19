@@ -7,7 +7,7 @@ import {DataSpeed} from '../../../data/data.speed';
 import {Lap} from '../../../laps/lap';
 import {EventInterface} from '../../event.interface';
 import {DataInterface} from '../../../data/data.interface';
-import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {PointInterface} from '../../../points/point.interface';
 import {LapInterface} from '../../../laps/lap.interface';
 

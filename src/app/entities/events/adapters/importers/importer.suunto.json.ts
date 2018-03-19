@@ -14,7 +14,7 @@ import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from '../../../data/data.power';
-import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataEHPE} from '../../../data/data.ehpe';
 import {DataEVPE} from '../../../data/data.evpe';

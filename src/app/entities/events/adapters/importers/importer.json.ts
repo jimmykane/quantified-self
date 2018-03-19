@@ -16,7 +16,7 @@ import {Creator} from '../../../creators/creator';
 import {DataPower} from '../../../data/data.power';
 import {DataEHPE} from '../../../data/data.ehpe';
 import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
-import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {WeatherItem} from '../../../weather/app.weather.item';
 import {Weather} from '../../../weather/app.weather';
 import {GeoLocationInfo} from '../../../geo-location-info/geo-location-info';
