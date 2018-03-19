@@ -1,5 +1,4 @@
 import {DataInterface} from './data.interface';
-import {DataPower} from './data.power';
 import {DataSatellite5BestSNR} from './data.satellite-5-best-snr';
 
 describe('DataSatellite5BestSNR', function () {
