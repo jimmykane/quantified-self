@@ -1,22 +1,25 @@
 <mat-card *ngIf="event.getActivities().length > 1">
   <mat-card-content>
     <section>
-      <app-activities-checkboxes [event]="event" (selectedActivities)="onSelectedActivities($event)"></app-activities-checkboxes>
+      <app-activities-checkboxes [event]="event"
+                                 (selectedActivities)="onSelectedActivities($event)"></app-activities-checkboxes>
     </section>
   </mat-card-content>
 </mat-card>
 
-<agm-map
-  [fullscreenControl]="true"
-  [mapTypeControl]="true"
-  [fitBounds]="getBounds()">
-  <agm-polyline
-    *ngFor="let activity of this.selectedActivities;"
-    [strokeColor]="eventColorService.getActivityColor(event, activity)">
-    <agm-polyline-point
-      *ngFor="let point of event.getPointsWithPosition(null, null, null, [activity])"
-      [latitude]="point.getPosition().latitudeDegrees"
-      [longitude]="point.getPosition().longitudeDegrees">
-    </agm-polyline-point>
-  </agm-polyline>
-</agm-map>
+<mat-card>
+  <agm-map
+    [fullscreenControl]="true"
+    [mapTypeControl]="true"
+    [fitBounds]="getBounds()">
+    <agm-polyline
+      *ngFor="let activity of this.selectedActivities;"
+      [strokeColor]="eventColorService.getActivityColor(event, activity)">
+      <agm-polyline-point
+        *ngFor="let point of event.getPointsWithPosition(null, null, [activity])"
+        [latitude]="point.getPosition().latitudeDegrees"
+        [longitude]="point.getPosition().longitudeDegrees">
+      </agm-polyline-point>
+    </agm-polyline>
+  </agm-map>
+</mat-card>

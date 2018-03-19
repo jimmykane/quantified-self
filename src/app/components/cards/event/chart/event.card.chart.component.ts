@@ -158,11 +158,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     });
   }
 
-  private updateChart(startDate?: Date, endDate?: Date, step?: number, prevStep?: number): Promise<any> {
+  private updateChart(startDate?: Date, endDate?: Date): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
 
-      const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate, step)); // I only need the length @todo
+      const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate)); // I only need the length @todo
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
@@ -254,19 +254,17 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     if (!this.dataMap) {
       this.dataMap = new Map<string, DataInterface[]>();
       this.selectedActivities.forEach((activity: ActivityInterface, index) => {
-        activity.getPoints(void 0, void 0, 1, true).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
-          point.getData().forEach((pointDataArray: DataInterface[], key: string) => {
+        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+          point.getData().forEach((pointData: DataInterface, key: string) => {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
-            key += ':' + activity.getID() + ':' + index + ':' + activity.getCreator().getName();
+            key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
             const existingDataArray = dataMap.get(key) || [];
             if (!existingDataArray.length) {
               dataMap.set(key, existingDataArray);
             }
-            pointDataArray.forEach((pointData) => {
-              existingDataArray.push(pointData)
-            });
+            existingDataArray.push(pointData)
           });
           return dataMap;
         }, this.dataMap);
@@ -310,7 +308,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     return dataProvider;
   }
 
-  private getDataMapSlice(startDate?: Date, endDate?: Date, step?: number) {
+  private getDataMapSlice(startDate?: Date, endDate?: Date) {
     const t0 = performance.now();
     const dataMap = new Map<number, any>();
     let dataCount = 0;
@@ -382,9 +380,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         lineThickness: 1.5,
         useLineColorForBulletBorder: true,
         type: 'line',
-        hidden: graphs.length >= 1
+        hidden: name !== DataHeartRate.type
       });
     });
+    // Check if any is visible and if not make visible the first one
+    if (!graphs.find((graph) => {
+        return graph.hidden !== true
+      })) {
+      graphs[0].hidden = false;
+    }
     this.logger.d('Got graphs after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
@@ -411,7 +415,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // Check if there is an intensity zone
       const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
         return activity.getID() === graph.id.split(':')[1];
-      }).getSummary().getIntensityZones().get(graph.id.split(':')[0]);
+      }).summary.intensityZones.get(graph.id.split(':')[0]);
       if (!activityIntensityZones) {
         return zoneGuides
       }
@@ -459,7 +463,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
         },
         {
           value: activityIntensityZones.zone5LowerLimit,
-          toValue: 9999999999,
+          toValue: 220,
           lineAlpha: 0.5,
           lineThickness: 0.5,
           lineColor: '#000000',
@@ -532,6 +536,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // @todo should check better if created or built
     this.AmCharts.destroyChart(this.chart);
   }
 }

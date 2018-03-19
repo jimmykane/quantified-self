@@ -8,19 +8,12 @@ import {Log} from 'ng2-logger'
 import {SummaryInterface} from '../summary/summary.interface';
 
 export class Event extends IDClass implements EventInterface {
+  public summary: SummaryInterface;
 
-  private name: string;
+  public name: string;
   private activities: ActivityInterface[] = [];
-  private summary: SummaryInterface;
-  private logger = Log.create('Event');
+  private _hasPointsWithPosition;
 
-  setName(name: string) {
-    this.name = name;
-  }
-
-  getName() {
-    return this.name;
-  }
 
   addActivity(activity: ActivityInterface) {
     this.activities.push(activity);
@@ -38,84 +31,56 @@ export class Event extends IDClass implements EventInterface {
 
   getFirstActivity(): ActivityInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
-      return activityA.getStartDate() < activityB.getStartDate() ? activityA : activityB;
+      return activityA.startDate < activityB.startDate ? activityA : activityB;
     });
   }
 
   getLastActivity(): ActivityInterface {
     return this.getActivities().reduce((activityA: ActivityInterface, activityB: ActivityInterface) => {
-      return activityA.getStartDate() < activityB.getStartDate() ? activityB : activityA;
+      return activityA.startDate < activityB.startDate ? activityB : activityA;
     });
   }
 
-  getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
-    const t0 = performance.now();
-    activities = activities || this.getActivities();
-    const points = (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
-      return pointsArray.concat(activity.getPoints(startDate, endDate, step));
+  getPoints(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[] {
+    return (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
+      return pointsArray.concat(activity.getPoints(startDate, endDate));
     }, []);
-    this.logger.d('Retrieved all points after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return points;
   }
 
-  getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
-    const t0 = performance.now();
-    const points = this.getPoints(startDate, endDate, step, activities)
+  getPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[] {
+    return this.getPoints(startDate, endDate, activities)
       .reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
         if (point.getPosition()) {
           pointsWithPosition.push(point);
         }
         return pointsWithPosition;
       }, []);
-    this.logger.d('Retrieved all points with position after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return points;
   }
 
-  getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): DataInterface[] {
-    const t0 = performance.now();
-    const data = this.getPoints(startDate, endDate, step, activities)
-      .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
-        point.getDataByType(dataType).forEach((pointData: DataInterface) => {
-          dataArray.push(pointData);
-        });
-        return dataArray;
-      }, []);
-    this.logger.d('Retrieved data for  ' + dataType + ' after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return data;
+  // @todo proper implementation for this query
+  hasPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): boolean {
+    // If not bool = not set
+    if (this._hasPointsWithPosition !== true && this._hasPointsWithPosition !== false) {
+      this._hasPointsWithPosition = this.getPointsWithPosition(startDate, endDate, activities).length > 0;
+    }
+    return this._hasPointsWithPosition;
   }
 
   getTotalDurationInSeconds(): number {
     return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
-      return durationInSeconds + activity.getSummary().getTotalDurationInSeconds();
+      return durationInSeconds + activity.summary.totalDurationInSeconds;
     }, 0);
-  }
-
-  setSummary(eventSummary: SummaryInterface) {
-    this.summary = eventSummary;
-  }
-
-  getSummary(): SummaryInterface {
-    return this.summary;
   }
 
   toJSON(): any {
     return {
       id: this.getID(),
-      name: this.getName(),
+      name: this.name,
       activities: this.getActivities().reduce((jsonActivitiesArray: any[], activity: ActivityInterface) => {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;
       }, []),
-      summary: this.summary.toJSON()
+      summary: this.summary ? this.summary.toJSON() : undefined
     };
   }
 }

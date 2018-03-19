@@ -1,3 +1,4 @@
+/*
 import {Event} from '../../event';
 import {Activity} from '../../../activities/activity';
 import {Creator} from '../../../creators/creator';
@@ -108,3 +109,4 @@ export class EventImporterTCX {
     return event;
   }
 }
+*/

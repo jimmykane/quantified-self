@@ -1,8 +1,8 @@
 import {CreatorInterface} from './creatorInterface';
 import {ActivityInterface} from '../activities/activity.interface';
 export class Creator implements CreatorInterface {
+  public name: string;
 
-  private name: string;
   private swInfo: string;
   private hwInfo: string;
   private serialNumber: string;
@@ -14,14 +14,6 @@ export class Creator implements CreatorInterface {
 
   getActivity(): ActivityInterface {
     return this.activity;
-  }
-
-  setName(name: string) {
-    this.name = name;
-  }
-
-  getName(): string {
-    return this.name;
   }
 
   setSerialNumber(serialNumber: string) {
@@ -50,7 +42,7 @@ export class Creator implements CreatorInterface {
 
   toJSON(): any {
     return {
-      name: this.getName(),
+      name: this.name,
       serialNumber: this.getSerialNumber(),
       swInfo: this.getSWInfo(),
       hwInfo: this.getHWInfo()

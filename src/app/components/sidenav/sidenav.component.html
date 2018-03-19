@@ -9,7 +9,7 @@
      [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
      [queryParams]="{ eventID: event.getID(), tabIndex: parametersTabIndex }">
     <mat-icon>more_horiz</mat-icon>
-    {{ event.getName().slice(0,30) }}
+    {{ event.name.slice(0,30) }}
   </button>
 </div>
 

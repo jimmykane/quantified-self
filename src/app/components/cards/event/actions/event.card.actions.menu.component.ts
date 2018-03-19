@@ -23,7 +23,7 @@ export class EventCardActionsMenuComponent {
     EventService.getEventAsTCXBloB(event).then((blob: Blob) => {
       FileService.downloadFile(
         blob,
-        event.getName(),
+        event.name,
         (new EventExporterTCX).getfileExtension()
       );
     });

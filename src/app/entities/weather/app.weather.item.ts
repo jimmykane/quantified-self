@@ -1,6 +1,6 @@
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 
-export class WeatherItem implements SerializableClassInterface{
+export class WeatherItem implements SerializableClassInterface {
   public date: Date;
   public conditions: string;
   public temperatureInCelsius;

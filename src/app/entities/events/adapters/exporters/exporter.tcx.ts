@@ -7,7 +7,7 @@ import {DataSpeed} from '../../../data/data.speed';
 import {Lap} from '../../../laps/lap';
 import {EventInterface} from '../../event.interface';
 import {DataInterface} from '../../../data/data.interface';
-import {DataGPSAltitude} from '../../../data/data.gps-altitude';
+import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {PointInterface} from '../../../points/point.interface';
 import {LapInterface} from '../../../laps/lap.interface';
 
@@ -54,7 +54,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // Add an ID element
       const idElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Id');
-      idElement.textContent = activity.getStartDate().toISOString().substring(0, 19) + 'Z';
+      idElement.textContent = activity.startDate.toISOString().substring(0, 19) + 'Z';
       activityElement.appendChild(idElement);
 
 
@@ -63,8 +63,8 @@ export class EventExporterTCX implements EventExporterInterface {
 
       // If there are no laps create one and clone it from the activity
       if (!activityLaps.length) {
-        const lap = new Lap(activity.getStartDate(), activity.getEndDate());
-        lap.setSummary(activity.getSummary());
+        const lap = new Lap(activity.startDate, activity.endDate);
+        lap.summary = activity.summary;
         activityLaps.push(lap);
       }
 
@@ -84,18 +84,18 @@ export class EventExporterTCX implements EventExporterInterface {
         // Create a lap element
         const lapElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Lap');
         // Add the first point as start time
-        lapElement.setAttribute('StartTime', lap.getStartDate().toISOString().substring(0, 19) + 'Z');
+        lapElement.setAttribute('StartTime', lap.startDate.toISOString().substring(0, 19) + 'Z');
 
         const totalTimeInSecondsElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'TotalTimeSeconds');
-        totalTimeInSecondsElement.textContent = lap.getSummary().getTotalDurationInSeconds().toString();
+        totalTimeInSecondsElement.textContent = lap.summary.totalDurationInSeconds.toString();
         lapElement.appendChild(totalTimeInSecondsElement);
 
         const distanceInMetersElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'DistanceMeters');
-        distanceInMetersElement.textContent = lap.getSummary().getTotalDistanceInMeters().toString();
+        distanceInMetersElement.textContent = lap.summary.totalDistanceInMeters.toString();
         lapElement.appendChild(distanceInMetersElement);
 
         const caloriesInKCALElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Calories');
-        caloriesInKCALElement.textContent = lap.getSummary().getEnergyInCal().toFixed(0).toString();
+        caloriesInKCALElement.textContent = lap.summary.energyInCal.toFixed(0).toString();
         lapElement.appendChild(caloriesInKCALElement);
 
         activityElement.appendChild(lapElement);
@@ -103,18 +103,16 @@ export class EventExporterTCX implements EventExporterInterface {
         lapElement.appendChild(trackElement);
         // Go over the points and find the ones without position
         let pointWithoutPosition: PointInterface;
-        for (const point of activity.getPoints(lap.getStartDate(), lap.getEndDate(), 1, true)) {
+        for (const point of activity.getPointsInterpolated(lap.startDate, lap.endDate)) {
           if (!point.getPosition()) {
             pointWithoutPosition = point;
             continue;
           }
           // Go over date that did not have a position and append missing data
           if (pointWithoutPosition) {
-            pointWithoutPosition.getData().forEach((dataArray: DataInterface[], key: string, map) => {
+            pointWithoutPosition.getData().forEach((data: DataInterface, key: string, map) => {
               if (!point.getData().get(key)) {
-                dataArray.forEach((data: DataInterface) => {
-                  point.addData(data);
-                });
+                point.addData(data);
               }
             });
             pointWithoutPosition = void 0;
@@ -144,8 +142,7 @@ export class EventExporterTCX implements EventExporterInterface {
           extensionsElement.appendChild(tpxElement);
           pointElement.appendChild(extensionsElement);
 
-          point.getData().forEach((dataArray: DataInterface[], key: string, map) => {
-            const data = dataArray[0];
+          point.getData().forEach((data: DataInterface, key: string, map) => {
             if ((data instanceof DataAltitude) && !(data instanceof DataGPSAltitude)) {
               const altitudeElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'AltitudeMeters');
               altitudeElement.textContent = data.getValue().toFixed(0).toString();

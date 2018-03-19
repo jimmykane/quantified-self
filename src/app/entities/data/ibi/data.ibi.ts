@@ -65,7 +65,7 @@ export class IBIData implements SerializableClassInterface {
    * @param {number} bpmLowLimit in BPM
    */
   public lowLimitBPMFilter(bpmLowLimit?: number): IBIData {
-    IBIFilters.limitFilter(this, Math.floor(60000 / (bpmLowLimit || 40)), false); // Lower bpm higher IBI limit!
+    IBIFilters.limitFilter(this, 60000 / (bpmLowLimit || 40), false); // Lower bpm higher IBI limit!
     return this;
   }
 
@@ -74,7 +74,7 @@ export class IBIData implements SerializableClassInterface {
    * @param bpmHighLimit
    */
   public highLimitBPMFilter(bpmHighLimit?: number): IBIData {
-    IBIFilters.limitFilter(this, Math.floor( 60000 / (bpmHighLimit || 220)), true); // Higher bpm lower IBI limit!
+    IBIFilters.limitFilter(this, 60000 / (bpmHighLimit || 220), true); // Higher bpm lower IBI limit!
     return this;
   }
 
@@ -84,16 +84,6 @@ export class IBIData implements SerializableClassInterface {
    */
   public lowPassFilter(windowSize?: number): IBIData {
     IBIFilters.lowPassFilter(this, windowSize);
-    return this;
-  }
-
-  /**
-   * Step average filter
-   * @param {number} step
-   * @return {this}
-   */
-  public stepAverageFilter(step?: number) {
-    IBIFilters.stepAverageFilter(this, step);
     return this;
   }
 

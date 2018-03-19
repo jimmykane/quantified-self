@@ -43,16 +43,23 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   applyFilters(defaultFilters?: boolean, resetToRawIBIData?: boolean) {
+    // Remove all HR!
     this.event.getActivities().forEach((activity: ActivityInterface) => {
-        // Remove all HR!
+
+        // Create new not to alter existing
+        const ibiData = new IBIData(Array.from(activity.ibiData.getIBIDataMap().values()));
+
+        if (!ibiData.getIBIDataMap().size) {
+          // Exit if this activity does not have ibiData
+          return;
+        }
+
+        // Clear all current HR points
         activity.getPoints().forEach((point: PointInterface) => {
           if (point.getDataByType(DataHeartRate.type)) {
             point.removeDataByType(DataHeartRate.type);
           }
         });
-
-        // Create new not to alter existing
-        const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
 
         // If we want the defaults
         if (defaultFilters) {
@@ -78,7 +85,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
         // Else just get them as BPM and no filter
         ibiData.getAsBPM().forEach((value, key, map) => {
-          const point = new Point(new Date(activity.getStartDate().getTime() + key));
+          const point = new Point(new Date(activity.startDate.getTime() + key));
           point.addData(new DataHeartRate(value));
           activity.addPoint(point);
         });

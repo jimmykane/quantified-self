@@ -8,7 +8,7 @@ export class Point implements PointInterface {
 
   private date: Date;
   private position: DataPositionInterface;
-  private data: Map<string, DataInterface[]> = new Map<string, DataInterface[]>();
+  private data: Map<string, DataInterface> = new Map<string, DataInterface>();
 
   constructor(date: Date) {
     this.date = date;
@@ -19,11 +19,7 @@ export class Point implements PointInterface {
   }
 
   addData(data: DataInterface) {
-    const dataArray = this.getData().get(data.getType()) || [];
-    if (!dataArray.length) {
-      this.getData().set(data.getType(), dataArray);
-    }
-    dataArray.push(data);
+    this.data.set(data.getType(), data);
     data.setPoint(this);
   }
 
@@ -31,32 +27,23 @@ export class Point implements PointInterface {
     this.data.delete(dataType)
   }
 
-  getData(): Map<string, DataInterface[]> {
+  getData(): Map<string, DataInterface> {
     return this.data;
   }
 
-  getDataByType(dataType: string): DataInterface[] {
+  getDataByType(dataType: string): DataInterface {
     return this.getData().get(dataType);
-  }
-
-  getDataTypeAverage(dataType: string): number {
-    if (!this.getDataByType(dataType)) {
-      return void 0;
-    }
-    return (this.getDataByType(dataType)).reduce((average: number, data, currentIndex, array) => {
-      return average + data.getValue() / array.length
-    }, 0);
   }
 
   getPosition(): DataPositionInterface {
     const dataLatitudeDegrees = this.getData().get(DataLatitudeDegrees.type);
     const dataLongitudeDegrees = this.getData().get(DataLongitudeDegrees.type);
     if (!dataLongitudeDegrees || !dataLatitudeDegrees) {
-      return;
+      return void 0;
     }
     this.position = {
-      latitudeDegrees: Number(dataLatitudeDegrees[0].getValue()),
-      longitudeDegrees: Number(dataLongitudeDegrees[0].getValue())
+      latitudeDegrees: Number(dataLatitudeDegrees.getValue()),
+      longitudeDegrees: Number(dataLongitudeDegrees.getValue())
     };
     return this.position;
   }
@@ -67,7 +54,7 @@ export class Point implements PointInterface {
       dataArray = dataArray.concat(value);
     });
     return {
-      date: this.getDate(),
+      date: this.getDate().toJSON(),
       data: dataArray.reduce((jsonDataArray: any[], data: DataInterface) => {
         jsonDataArray.push(data.toJSON());
         return jsonDataArray;

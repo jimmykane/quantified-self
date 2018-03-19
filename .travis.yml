@@ -1,0 +1,43 @@
+os:
+  - linux
+sudo: required
+language: node_js
+node_js:
+  - "9.8.0"
+
+addons:
+    chrome: stable
+
+cache:
+  directories:
+    - node_modules
+
+branches:
+  only:
+    - master
+    - develop
+
+before_script:
+  - "sudo chown root /opt/google/chrome/chrome-sandbox"
+  - "sudo chmod 4755 /opt/google/chrome/chrome-sandbox"
+  - export CHROME_BIN=/usr/bin/google-chrome
+  - export DISPLAY=:99.0
+  - sh -e /etc/init.d/xvfb start
+  - npm install -g @angular/cli
+  - npm install codecov -g
+  - npm install -g codeclimate-test-reporter
+
+script:
+  - ng test --watch=false --code-coverage --progress  --colors --single-run
+  - ng build --prod
+
+after_success:
+  - codecov
+  - test $TRAVIS_BRANCH = "master" && test $TRAVIS_PULL_REQUEST = "false" && CODECLIMATE_API_HOST=$CODECLIMATE_API_HOST CODECLIMATE_REPO_TOKEN=$CODECLIMATE_REPO_TOKEN_MASTER codeclimate-test-reporter < coverage/lcov.info
+  - test $TRAVIS_BRANCH = "develop" && test $TRAVIS_PULL_REQUEST = "false" && CODECLIMATE_API_HOST=$CODECLIMATE_API_HOST CODECLIMATE_REPO_TOKEN=$CODECLIMATE_REPO_TOKEN_DEVELOP codeclimate-test-reporter < coverage/lcov.info
+
+
+notifications:
+  email:
+    on_failure: change
+    on_success: change

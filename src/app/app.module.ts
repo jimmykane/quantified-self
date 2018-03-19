@@ -22,7 +22,7 @@ import {
   MatGridListModule, MatIconModule,
   MatMenuModule, MatProgressBarModule,
   MatSidenavModule, MatTableModule,
-  MatTabsModule, MatToolbarModule, MatCheckboxModule, MatSliderModule, MatSnackBarModule
+  MatTabsModule, MatToolbarModule, MatCheckboxModule, MatSliderModule, MatSnackBarModule, MatInputModule, MatListModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -76,6 +76,8 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     MatCheckboxModule,
     MatSliderModule,
     MatSnackBarModule,
+    MatInputModule,
+    MatListModule,
     FormsModule,
     Angular2FontawesomeModule,
     MatProgressBarModule

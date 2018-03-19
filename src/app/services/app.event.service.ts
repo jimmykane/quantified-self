@@ -1,16 +1,11 @@
 import {Injectable} from '@angular/core';
 import {Event} from '../entities/events/event';
-import {EventImporterTCX} from '../entities/events/adapters/importers/importer.tcx';
 import {EventExporterTCX} from '../entities/events/adapters/exporters/exporter.tcx';
-import {EventImporterGPX} from '../entities/events/adapters/importers/importer.gpx';
 import {BehaviorSubject} from 'rxjs/BehaviorSubject';
 import {List} from 'immutable';
 import {Observable} from 'rxjs/Observable';
-import {Activity} from '../entities/activities/activity';
 import {EventInterface} from '../entities/events/event.interface';
 import {EventImporterJSON} from '../entities/events/adapters/importers/importer.json';
-import {EventImporterSML} from '../entities/events/adapters/importers/importer.sml';
-import {EventImporterFIT} from '../entities/events/adapters/importers/importer.fit';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
@@ -21,7 +16,7 @@ import {GeoLibAdapter} from '../entities/geodesy/adapters/geolib.adapter';
 import {PointInterface} from '../entities/points/point.interface';
 import {Log} from 'ng2-logger';
 import {Summary} from '../entities/summary/summary';
-import {GeoLocationInfo} from '../entities/geo-location-info/app.geo-location-info';
+import {GeoLocationInfo} from '../entities/geo-location-info/geo-location-info';
 import {Weather} from '../entities/weather/app.weather';
 
 @Injectable()
@@ -92,11 +87,11 @@ export class EventService {
     });
   }
 
-  public createEventFromJSONSMLString(data: string): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      return resolve(EventImporterSML.getFromJSONString(data));
-    });
-  }
+  // public createEventFromJSONSMLString(data: string): Promise<EventInterface> {
+  //   return new Promise((resolve, reject) => {
+  //     return resolve(EventImporterSML.getFromJSONString(data));
+  //   });
+  // }
 
   public createEventFromSuuntoJSONString(data: string): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
@@ -104,11 +99,11 @@ export class EventService {
     });
   }
 
-  public createEventFromJSONFITString(data: string): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      return resolve(EventImporterFIT.getFromJSONString(data));
-    });
-  }
+  // public createEventFromJSONFITString(data: string): Promise<EventInterface> {
+  //   return new Promise((resolve, reject) => {
+  //     return resolve(EventImporterFIT.getFromJSONString(data));
+  //   });
+  // }
 
   public generateGeoAndWeather(event: EventInterface): Promise<EventInterface> {
     // @todo refactor this poc
@@ -116,16 +111,15 @@ export class EventService {
       // Activities Summaries
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
-        const activitySummary = event.getSummary() || new Summary();
-        if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+        if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
           continue;
         }
 
         activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
+          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition()
         ));
         activitiesPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
+          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate
         ));
       }
 
@@ -133,15 +127,15 @@ export class EventService {
         let index = 0;
         for (const activity of event.getActivities()) {
           // If indoors
-          if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+          if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
             index += 2;
             continue;
           }
           if (results[index]) {
-            activity.getSummary().setGeoLocationInfo(<GeoLocationInfo> results[index]);
+            activity.summary.geoLocationInfo = <GeoLocationInfo> results[index];
           }
           if (results[index + 1]) {
-            activity.getSummary().setWeather(<Weather> results[index + 1]);
+            activity.summary.weather = <Weather> results[index + 1];
           }
           index += 2;
         }
@@ -155,94 +149,65 @@ export class EventService {
   public generateEventSummaries(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
 
-
       // Activities Summaries
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
         const activitySummary = new Summary();
-        activitySummary.setTotalDistanceInMeters(
-          this.getEventDistanceInMeters(event, void 0, void 0, void 0, [activity])
+        activitySummary.totalDistanceInMeters = this.getEventDistanceInMeters(
+          event, void 0, void 0,  [activity]
         );
-        activitySummary.setTotalDurationInSeconds((+activity.getEndDate() - +activity.getStartDate()) / 1000);
-        activity.setSummary(activitySummary);
+
+        activitySummary.totalDurationInSeconds = (+activity.endDate - +activity.startDate) / 1000;
+        activity.summary = activitySummary;
 
         // If indoors
-        if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
+        if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
           continue;
         }
-
-        activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition()
-        ));
-        activitiesPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, void 0, [activity])[0].getPosition(), activity.getStartDate()
-        ));
 
         // Lap summaries
         for (const lap of activity.getLaps()) {
           const lapSummary = new Summary();
-          lapSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event, lap.getStartDate(), lap.getEndDate()));
-          lapSummary.setTotalDurationInSeconds((+lap.getEndDate() - +lap.getStartDate()) / 1000);
-          lap.setSummary(lapSummary);
+          lapSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event, lap.startDate, lap.endDate);
+          lapSummary.totalDurationInSeconds = (+lap.endDate - +lap.startDate) / 1000;
+          lap.summary = lapSummary;
         }
       }
 
       // Event Summary
       const eventSummary = new Summary();
-      eventSummary.setTotalDurationInSeconds(event.getTotalDurationInSeconds());
-      eventSummary.setTotalDistanceInMeters(this.getEventDistanceInMeters(event));
-      event.setSummary(eventSummary);
-
-      Observable.forkJoin(activitiesPromises).toPromise().then(results => {
-        let index = 0;
-        for (const activity of event.getActivities()) {
-          // If indoors
-          if (!event.getPointsWithPosition(void 0, void 0, void 0, [activity]).length) {
-            index += 2;
-            continue;
-          }
-          if (results[index]) {
-            activity.getSummary().setGeoLocationInfo(<GeoLocationInfo> results[index]);
-          }
-          if (results[index + 1]) {
-            activity.getSummary().setWeather(<Weather> results[index + 1]);
-          }
-          index += 2;
-        }
-        resolve(event);
-      }).catch(() => {
-        resolve(event);
-      });
+      eventSummary.totalDurationInSeconds = event.getTotalDurationInSeconds();
+      eventSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event);
+      event.summary = eventSummary;
     }));
   }
 
-  public createEventFromXMLString(data: string): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      // Read the xml
-      try {
-        const xml = this.parser.parseFromString(data, 'application/xml');
-        if (xml.getElementsByTagName('gpx')[0]) {
-          return resolve(EventImporterGPX.getFromXML(xml));
-        } else if (xml.getElementsByTagName('TrainingCenterDatabase')[0]) {
-          return resolve(EventImporterTCX.getFromXML(xml));
-        }
-      } catch (e) {
-        return reject(e);
-      }
-      return reject('Could not fund an encoder for this file format');
-    });
-  }
+  // public createEventFromXMLString(data: string): Promise<EventInterface> {
+  //   return new Promise((resolve, reject) => {
+  //     // Read the xml
+  //     try {
+  //       const xml = this.parser.parseFromString(data, 'application/xml');
+  //       if (xml.getElementsByTagName('gpx')[0]) {
+  //         return resolve(EventImporterGPX.getFromXML(xml));
+  //       } else if (xml.getElementsByTagName('TrainingCenterDatabase')[0]) {
+  //         return resolve(EventImporterTCX.getFromXML(xml));
+  //       }
+  //     } catch (e) {
+  //       return reject(e);
+  //     }
+  //     return reject('Could not fund an encoder for this file format');
+  //   });
+  // }
 
   public getEventDistanceInMeters(event: EventInterface,
                                   startDate?: Date,
                                   endDate?: Date,
-                                  step?: number,
                                   activities?: ActivityInterface[]): number {
-    if (!event.getPointsWithPosition().length) {
+    if (!event.hasPointsWithPosition()) {
       return 0;
     }
     return event.getActivities().reduce((distance: number, activity: ActivityInterface) => {
-      return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, void 0, [activity]));
+      return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, [activity]));
     }, 0);
   }
 
@@ -250,15 +215,14 @@ export class EventService {
                                  dataType: string,
                                  startDate?: Date,
                                  endDate?: Date,
-                                 step?: number,
                                  activities?: ActivityInterface[]): number {
     const t0 = performance.now();
     let count = 1;
-    const averageForDataType = event.getPoints(startDate, endDate, step, activities).reduce((average: number, point: PointInterface) => {
-      if (!point.getDataTypeAverage(dataType)) { // @todo should check against void 0
+    const averageForDataType = event.getPoints(startDate, endDate,  activities).reduce((average: number, point: PointInterface) => {
+      if (!point.getDataByType(dataType)) {
         return average;
       }
-      average += point.getDataTypeAverage(dataType);
+      average += point.getDataByType(dataType).getValue();
       count++;
       return average;
     }, 0);
@@ -273,7 +237,6 @@ export class EventService {
                               dataType: string,
                               startDate?: Date,
                               endDate?: Date,
-                              step?: number,
                               activities?: ActivityInterface[],
                               precision?: number,
                               minDiff?: number): number {
@@ -281,15 +244,15 @@ export class EventService {
     precision = precision || 1;
     minDiff = minDiff || 1.5;
     let gain = 0;
-    event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataTypeAverage(dataType)) {
+    event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataByType(dataType)) {
         return next;
       }
-      if (!next.getDataTypeAverage(dataType)) {
+      if (!next.getDataByType(dataType)) {
         return previous;
       }
-      if ((previous.getDataTypeAverage(dataType) + minDiff) < (Number(next.getDataTypeAverage(dataType)))) {
-        gain += Number(next.getDataTypeAverage(dataType).toFixed(precision)) - Number(previous.getDataTypeAverage(dataType).toFixed(precision));
+      if ((previous.getDataByType(dataType).getValue() + minDiff) < (Number(next.getDataByType(dataType).getValue()))) {
+        gain += Number(next.getDataByType(dataType).getValue().toFixed(precision)) - Number(previous.getDataByType(dataType).getValue().toFixed(precision));
       }
       return next;
     });
@@ -304,7 +267,6 @@ export class EventService {
                               dataType: string,
                               startDate?: Date,
                               endDate?: Date,
-                              step?: number,
                               activities?: ActivityInterface[],
                               precision?: number,
                               minDiff?: number): number {
@@ -312,15 +274,15 @@ export class EventService {
     precision = precision || 1;
     minDiff = minDiff || 1.5;
     let loss = 0;
-    event.getPoints(startDate, endDate, step, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataTypeAverage(dataType)) {
+    event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataByType(dataType)) {
         return next;
       }
-      if (!next.getDataTypeAverage(dataType)) {
+      if (!next.getDataByType(dataType)) {
         return previous;
       }
-      if ((Number(next.getDataTypeAverage(dataType).toFixed(precision)) - minDiff) < Number(previous.getDataTypeAverage(dataType).toFixed(precision))) {
-        loss += Number(previous.getDataTypeAverage(dataType).toFixed(precision)) - Number(next.getDataTypeAverage(dataType).toFixed(precision));
+      if ((Number(next.getDataByType(dataType).getValue().toFixed(precision)) - minDiff) < Number(previous.getDataByType(dataType).getValue().toFixed(precision))) {
+        loss += Number(previous.getDataByType(dataType).getValue().toFixed(precision)) - Number(next.getDataByType(dataType).getValue().toFixed(precision));
       }
       return next;
     });
@@ -335,7 +297,7 @@ export class EventService {
     return new Promise((resolve, reject) => {
       // First sort the events by first point date
       events.sort((eventA: EventInterface, eventB: EventInterface) => {
-        return +eventA.getFirstActivity().getStartDate() - +eventB.getFirstActivity().getStartDate();
+        return +eventA.getFirstActivity().startDate - +eventB.getFirstActivity().startDate;
       });
       const mergeEvent = new Event();
       for (const event of events) {
@@ -344,14 +306,12 @@ export class EventService {
         }
       }
       const eventSummary = new Summary();
-      eventSummary.setTotalDurationInSeconds(mergeEvent.getTotalDurationInSeconds());
-      eventSummary.setTotalDistanceInMeters(
-        mergeEvent.getActivities().reduce(
-          (totalDistance, activity) => activity.getSummary().getTotalDistanceInMeters() + totalDistance, 0
-        )
+      eventSummary.totalDurationInSeconds = mergeEvent.getTotalDurationInSeconds();
+      eventSummary.totalDistanceInMeters = mergeEvent.getActivities().reduce(
+        (totalDistance, activity) => activity.summary.totalDistanceInMeters + totalDistance, 0
       );
-      mergeEvent.setSummary(eventSummary);
-      mergeEvent.setName('Merged at ' + (new Date()).toISOString());
+      mergeEvent.summary = eventSummary;
+      mergeEvent.name = 'Merged at ' + (new Date()).toISOString();
       return resolve(mergeEvent);
     });
   }

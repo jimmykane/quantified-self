@@ -1,6 +1,6 @@
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 
-export class GeoLocationInfo implements SerializableClassInterface{
+export class GeoLocationInfo implements SerializableClassInterface {
   public latitude: number;
   public longitude: number;
   public city: string;
