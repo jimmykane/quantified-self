@@ -66,16 +66,6 @@ export class Event extends IDClass implements EventInterface {
     return this._hasPointsWithPosition;
   }
 
-  getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): DataInterface[] {
-    return this.getPoints(startDate, endDate,  activities)
-      .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
-        if (point.getDataByType(dataType)) {
-          dataArray.push(point.getDataByType(dataType));
-        }
-        return dataArray;
-      }, []);
-  }
-
   getTotalDurationInSeconds(): number {
     return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
       return durationInSeconds + activity.summary.totalDurationInSeconds;
