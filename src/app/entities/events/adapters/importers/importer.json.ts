@@ -14,7 +14,6 @@ import {DataTemperature} from '../../../data/data.temperature';
 import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
 import {DataPower} from '../../../data/data.power';
-import {DataRespirationRate} from '../../../data/data.respiration-rate';
 import {DataEHPE} from '../../../data/data.ehpe';
 import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
 import {DataGPSAltitude} from '../../../data/data.gps-altitude';
@@ -186,10 +185,6 @@ export class EventImporterJSON {
             }
             case DataGPSAltitude.type: {
               point.addData(new DataGPSAltitude(dataObject.value));
-              break;
-            }
-            case DataRespirationRate.type: {
-              point.addData(new DataRespirationRate(dataObject.value));
               break;
             }
             case DataEHPE.type: {
