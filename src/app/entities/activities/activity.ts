@@ -115,12 +115,12 @@ export class Activity extends IDClass implements ActivityInterface {
       startDate: this.startDate,
       endDate: this.endDate,
       type: this.type,
-      creator: this.creator.toJSON(),
+      creator: this.creator ? this.creator.toJSON() : undefined,
       points: Array.from(this.points.values()).reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
-      summary: this.summary.toJSON(),
+      summary: this.summary ? this.summary.toJSON() : undefined,
       ibiData: this.ibiData ? this.ibiData.toJSON() : [],
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
