@@ -8,6 +8,8 @@ import {SummaryInterface} from '../summary/summary.interface';
 
 export interface EventInterface extends IDClassInterface, SerializableClassInterface {
 
+  summary: SummaryInterface;
+
   setName(name: string);
 
   getName(): string;
@@ -32,6 +34,4 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
 
   getTotalDurationInSeconds(): number;
 
-  setSummary(eventSummary: SummaryInterface);
-  getSummary(): SummaryInterface;
 }

@@ -8,10 +8,10 @@ import {Log} from 'ng2-logger'
 import {SummaryInterface} from '../summary/summary.interface';
 
 export class Event extends IDClass implements EventInterface {
+  public summary: SummaryInterface;
 
   private name: string;
   private activities: ActivityInterface[] = [];
-  private summary: SummaryInterface;
   private _hasPointsWithPosition;
   private logger = Log.create('Event');
 
@@ -105,16 +105,8 @@ export class Event extends IDClass implements EventInterface {
 
   getTotalDurationInSeconds(): number {
     return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
-      return durationInSeconds + activity.getSummary().totalDurationInSeconds;
+      return durationInSeconds + activity.summary.totalDurationInSeconds;
     }, 0);
-  }
-
-  setSummary(eventSummary: SummaryInterface) {
-    this.summary = eventSummary;
-  }
-
-  getSummary(): SummaryInterface {
-    return this.summary;
   }
 
   toJSON(): any {

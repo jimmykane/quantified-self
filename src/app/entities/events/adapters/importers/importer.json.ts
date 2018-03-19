@@ -34,10 +34,10 @@ export class EventImporterJSON {
     const event = new Event();
     event.setID(eventJSONObject.id);
     event.setName(eventJSONObject.name);
-    event.setSummary(new Summary());
+    event.summary = new Summary();
 
-    event.getSummary().totalDistanceInMeters = eventJSONObject.summary.totalDistanceInMeters;
-    event.getSummary().totalDurationInSeconds = eventJSONObject.summary.totalDurationInSeconds;
+    event.summary.totalDistanceInMeters = eventJSONObject.summary.totalDistanceInMeters;
+    event.summary.totalDurationInSeconds = eventJSONObject.summary.totalDurationInSeconds;
 
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();
@@ -120,7 +120,7 @@ export class EventImporterJSON {
       }
 
 
-      activity.setSummary(activitySummary);
+      activity.summary = activitySummary;
       activity.setIBIData(new IBIData(activityObject.ibiData));
 
       for (const lapObject of activityObject.laps) {

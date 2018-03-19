@@ -18,25 +18,25 @@
     <mat-card-subtitle>
       <mat-icon>filter_{{ event.getActivities().length }}</mat-icon>
       Activities of total
-      <span class="mat-body-2">{{ (event.getSummary().totalDistanceInMeters/1000).toFixed(1) }}</span> km
+      <span class="mat-body-2">{{ (event.summary.totalDistanceInMeters/1000).toFixed(1) }}</span> km
       in
-      <span class="mat-body-2">{{ event.getSummary().totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
+      <span class="mat-body-2">{{ event.summary.totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <span *ngIf="event.getFirstActivity().getSummary().geoLocationInfo">
+      <span *ngIf="event.getFirstActivity().summary.geoLocationInfo">
         <mat-icon>place</mat-icon>
-        <span class="mat-body-2" *ngIf="event.getFirstActivity().getSummary().geoLocationInfo.city">{{ event.getFirstActivity().getSummary().geoLocationInfo.city }}, </span>
-        <span *ngIf="event.getFirstActivity().getSummary().geoLocationInfo.province">{{ event.getFirstActivity().getSummary().geoLocationInfo.province }}, </span>
-        <span *ngIf="event.getFirstActivity().getSummary().geoLocationInfo.country">{{ event.getFirstActivity().getSummary().geoLocationInfo.country }}</span>
+        <span class="mat-body-2" *ngIf="event.getFirstActivity().summary.geoLocationInfo.city">{{ event.getFirstActivity().summary.geoLocationInfo.city }}, </span>
+        <span *ngIf="event.getFirstActivity().summary.geoLocationInfo.province">{{ event.getFirstActivity().summary.geoLocationInfo.province }}, </span>
+        <span *ngIf="event.getFirstActivity().summary.geoLocationInfo.country">{{ event.getFirstActivity().summary.geoLocationInfo.country }}</span>
       </span>
     </mat-card-subtitle>
-    <mat-card-subtitle *ngIf="event.getFirstActivity().getSummary().weather
-    && event.getFirstActivity().getSummary().weather.weatherItems.length
-    && event.getFirstActivity().getSummary().weather.getAverageTemperatureInCelsius() ">
+    <mat-card-subtitle *ngIf="event.getFirstActivity().summary.weather
+    && event.getFirstActivity().summary.weather.weatherItems.length
+    && event.getFirstActivity().summary.weather.getAverageTemperatureInCelsius() ">
       <mat-icon>terrain</mat-icon>
-      <span class="mat-body-2">{{ event.getFirstActivity().getSummary().weather.getAverageTemperatureInCelsius().toFixed(0) }}c</span>
+      <span class="mat-body-2">{{ event.getFirstActivity().summary.weather.getAverageTemperatureInCelsius().toFixed(0) }}c</span>
       and
-      <span class="mat-body-2">{{event.getFirstActivity().getSummary().weather.weatherItems[0].conditions }}</span>
+      <span class="mat-body-2">{{event.getFirstActivity().summary.weather.weatherItems[0].conditions }}</span>
       conditions
     </mat-card-subtitle>
     <mat-card-subtitle *ngFor="let activity of event.getActivities(); let i = index;">

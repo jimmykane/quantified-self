@@ -131,14 +131,14 @@ export class EventImporterSuuntoJSON {
     }
 
 
-    activity.setSummary(activitySummary);
+    activity.summary = activitySummary;
     event.addActivity(activity);
 
     const eventSummary = new Summary();
     eventSummary.totalDurationInSeconds = activitySummary.totalDurationInSeconds;
     eventSummary.totalDistanceInMeters = activitySummary.totalDistanceInMeters;
 
-    event.setSummary(eventSummary);
+    event.summary = eventSummary;
 
     const creator = new Creator();
     creator.setName(this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name)); // Should show model

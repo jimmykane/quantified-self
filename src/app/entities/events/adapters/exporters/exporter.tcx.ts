@@ -64,7 +64,7 @@ export class EventExporterTCX implements EventExporterInterface {
       // If there are no laps create one and clone it from the activity
       if (!activityLaps.length) {
         const lap = new Lap(activity.startDate, activity.endDate);
-        lap.summary = activity.getSummary();
+        lap.summary = activity.summary;
         activityLaps.push(lap);
       }
 

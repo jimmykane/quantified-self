@@ -132,10 +132,10 @@ export class EventService {
             continue;
           }
           if (results[index]) {
-            activity.getSummary().geoLocationInfo = <GeoLocationInfo> results[index];
+            activity.summary.geoLocationInfo = <GeoLocationInfo> results[index];
           }
           if (results[index + 1]) {
-            activity.getSummary().weather = <Weather> results[index + 1];
+            activity.summary.weather = <Weather> results[index + 1];
           }
           index += 2;
         }
@@ -158,7 +158,7 @@ export class EventService {
         );
 
         activitySummary.totalDurationInSeconds = (+activity.endDate - +activity.startDate) / 1000;
-        activity.setSummary(activitySummary);
+        activity.summary = activitySummary;
 
         // If indoors
         if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
@@ -178,7 +178,7 @@ export class EventService {
       const eventSummary = new Summary();
       eventSummary.totalDurationInSeconds = event.getTotalDurationInSeconds();
       eventSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event);
-      event.setSummary(eventSummary);
+      event.summary = eventSummary;
     }));
   }
 
@@ -312,9 +312,9 @@ export class EventService {
       const eventSummary = new Summary();
       eventSummary.totalDurationInSeconds = mergeEvent.getTotalDurationInSeconds();
       eventSummary.totalDistanceInMeters = mergeEvent.getActivities().reduce(
-        (totalDistance, activity) => activity.getSummary().totalDistanceInMeters + totalDistance, 0
+        (totalDistance, activity) => activity.summary.totalDistanceInMeters + totalDistance, 0
       );
-      mergeEvent.setSummary(eventSummary);
+      mergeEvent.summary = eventSummary;
       mergeEvent.setName('Merged at ' + (new Date()).toISOString());
       return resolve(mergeEvent);
     });

@@ -415,7 +415,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // Check if there is an intensity zone
       const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
         return activity.getID() === graph.id.split(':')[1];
-      }).getSummary().intensityZones.get(graph.id.split(':')[0]);
+      }).summary.intensityZones.get(graph.id.split(':')[0]);
       if (!activityIntensityZones) {
         return zoneGuides
       }

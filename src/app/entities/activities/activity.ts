@@ -14,9 +14,9 @@ export class Activity extends IDClass implements ActivityInterface {
   public endDate;
   public type: string;
   public creator: CreatorInterface;
+  public summary: SummaryInterface;
 
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
-  private summary: SummaryInterface;
   private ibiData: IBIData;
   private laps: LapInterface[] = [];
 
@@ -94,14 +94,6 @@ export class Activity extends IDClass implements ActivityInterface {
 
   getEndPoint(): PointInterface {
     return this.getPoints()[this.getPoints().length - 1];
-  }
-
-  setSummary(activitySummary: SummaryInterface) {
-    this.summary = activitySummary;
-  }
-
-  getSummary(): SummaryInterface {
-    return this.summary;
   }
 
   setIBIData(ibiData: IBIData) {
