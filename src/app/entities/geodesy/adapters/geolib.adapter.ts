@@ -6,7 +6,7 @@ import {PointInterface} from '../../points/point.interface';
 
 export class GeoLibAdapter implements GeoLibAdapterInterface {
 
-  private distanceAdapter: DistanceAdapterInterface;
+  public distanceAdapter: DistanceAdapterInterface;
 
   constructor(useSimpleDistance?: boolean) {
     this.distanceAdapter = useSimpleDistance ? new DistanceSimple() : new DistanceVincenty();
