@@ -154,7 +154,7 @@ export class EventService {
       for (const activity of event.getActivities()) {
         const activitySummary = new Summary();
         activitySummary.totalDistanceInMeters = this.getEventDistanceInMeters(
-          event, void 0, void 0, void 0, [activity]
+          event, void 0, void 0,  [activity]
         );
 
         activitySummary.totalDurationInSeconds = (+activity.endDate - +activity.startDate) / 1000;

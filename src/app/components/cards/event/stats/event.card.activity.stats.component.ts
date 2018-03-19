@@ -70,7 +70,6 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         dataTypeAverage.name,
         void 0,
         void 0,
-        void 0,
         [this.activity]
       ).toFixed(0));
     });
@@ -80,12 +79,10 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         dataTypeGain.name,
         void 0,
         void 0,
-        void 0,
         [this.activity]).toFixed(0));
     });
     this.dataTypeLosses.forEach((dataTypeLoss) => {
       dataTypeLoss.value = Number(this.eventService.getEventDataTypeLoss(this.event, dataTypeLoss.name,
-        void 0,
         void 0,
         void 0,
         [this.activity]
