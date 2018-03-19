@@ -196,6 +196,35 @@ describe('Activity', function () {
 
   });
 
+
+  it('should sort points by date', function () {
+    const now = new Date();
+    const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
+    const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
+    const nowAfter3Second = new Date(now.setSeconds(now.getSeconds() + 3));
+    const nowAfter4Second = new Date(now.setSeconds(now.getSeconds() + 4));
+
+    activity.addPoint(new Point(nowAfter4Second));
+    activity.addPoint(new Point(nowAfter3Second));
+    activity.addPoint(new Point(nowAfter2Second));
+    activity.addPoint(new Point(nowAfter1Second));
+
+    // Check that they are not ordered correctly
+    expect(activity.getPoints()[0].getDate()).toBe(nowAfter4Second);
+    expect(activity.getPoints()[1].getDate()).toBe(nowAfter3Second);
+    expect(activity.getPoints()[2].getDate()).toBe(nowAfter2Second);
+    expect(activity.getPoints()[3].getDate()).toBe(nowAfter1Second);
+
+    activity.sortPointsByDate();
+
+    // Check again that now they are shorted ok
+    expect(activity.getPoints()[0].getDate()).toBe(nowAfter1Second);
+    expect(activity.getPoints()[1].getDate()).toBe(nowAfter2Second);
+    expect(activity.getPoints()[2].getDate()).toBe(nowAfter3Second);
+    expect(activity.getPoints()[3].getDate()).toBe(nowAfter4Second);
+  });
+
+
   it('should export correctly to JSON', function () {
     const point = new Point(new Date());
     activity.addPoint(point);
@@ -203,7 +232,7 @@ describe('Activity', function () {
     activity.addLap(lap);
 
     spyOn(point, 'toJSON').and.returnValue({});
-    spyOn(lap, 'toJSON').and.returnValue({})
+    spyOn(lap, 'toJSON').and.returnValue({});
     activity.setID('123');
     expect(activity.toJSON()).toEqual({
       'id': '123',
