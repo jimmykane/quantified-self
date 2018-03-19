@@ -43,7 +43,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   getBounds(): LatLngBoundsLiteral {
-    const pointsWithPosition = this.event.getPointsWithPosition();
+    const pointsWithPosition = this.event.getPointsWithPosition(void 0, void 0, this.selectedActivities);
     const mostEast = pointsWithPosition.reduce((acc: PointInterface, point: PointInterface) => {
       return (acc.getPosition().longitudeDegrees < point.getPosition().longitudeDegrees) ? point : acc;
     });
