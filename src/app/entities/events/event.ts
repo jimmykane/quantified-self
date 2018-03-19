@@ -13,7 +13,6 @@ export class Event extends IDClass implements EventInterface {
   private name: string;
   private activities: ActivityInterface[] = [];
   private _hasPointsWithPosition;
-  private logger = Log.create('Event');
 
   setName(name: string) {
     this.name = name;
@@ -50,32 +49,20 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getPoints(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
-    const t0 = performance.now();
     activities = activities || this.getActivities();
-    const points = (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
+    return (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
       return pointsArray.concat(activity.getPoints(startDate, endDate));
     }, []);
-    this.logger.d('Retrieved all points after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return points;
   }
 
   getPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): PointInterface[] {
-    const t0 = performance.now();
-    const points = this.getPoints(startDate, endDate, step, activities)
+    return this.getPoints(startDate, endDate, step, activities)
       .reduce((pointsWithPosition: PointInterface[], point: PointInterface) => {
         if (point.getPosition()) {
           pointsWithPosition.push(point);
         }
         return pointsWithPosition;
       }, []);
-    this.logger.d('Retrieved all points with position after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return points;
   }
 
   // @todo proper implementation for this query
@@ -88,19 +75,13 @@ export class Event extends IDClass implements EventInterface {
   }
 
   getDataByType(dataType: string, startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): DataInterface[] {
-    const t0 = performance.now();
-    const data = this.getPoints(startDate, endDate, step, activities)
+    return this.getPoints(startDate, endDate, step, activities)
       .reduce((dataArray: DataInterface[], point: PointInterface, currentIndex) => {
         if (point.getDataByType(dataType)) {
           dataArray.push(point.getDataByType(dataType));
         }
         return dataArray;
       }, []);
-    this.logger.d('Retrieved data for  ' + dataType + ' after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return data;
   }
 
   getTotalDurationInSeconds(): number {
