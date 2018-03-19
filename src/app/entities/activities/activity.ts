@@ -104,9 +104,13 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   sortPointsByDate(): void {
-    this.getPoints().sort((pointA: PointInterface, pointB: PointInterface) => {
+    const pointsArray = this.getPoints().sort((pointA: PointInterface, pointB: PointInterface) => {
       return pointA.getDate().getTime() - pointB.getDate().getTime();
     });
+    this.points.clear();
+    pointsArray.forEach((point: PointInterface) => {
+      this.addPoint(point);
+    })
   }
 
   toJSON(): any {
