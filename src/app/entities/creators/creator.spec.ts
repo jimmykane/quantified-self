@@ -1,7 +1,6 @@
 import {CreatorInterface} from './creatorInterface';
 import {Creator} from './creator';
-import {Activity} from "../activities/activity";
-import {ActivityInterface} from "../activities/activity.interface";
+import {Activity} from '../activities/activity';
 
 describe('Creator', function () {
 
