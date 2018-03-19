@@ -24,34 +24,6 @@ export class IBIFilters {
   }
 
   /**
-   * A step average filter.
-   * Buffers and converts the buffer to the average of the buffer
-   * @param {IBIData} ibiData
-   * @param {number} step
-   * @return {Map<number, number>}
-   */
-  public static stepAverageFilter(ibiData: IBIData, step?: number) {
-    step = step || 2;
-    const bufferMap = new Map<number, number>();
-    ibiData.getIBIDataMap().forEach((ibi, elapsedTime) => {
-      bufferMap.set(elapsedTime, ibi);
-      if (bufferMap.size >= step) {
-        // Find the value average
-        const avgValue = Array.from(bufferMap.values()).reduce((total, value) => {
-          return total + value;
-        }) / bufferMap.size;
-        // For all the keys that got averaged set that value to the original object
-        bufferMap.forEach((value, key) => {
-          ibiData.setIBI(key, Math.round(avgValue));
-        });
-        // Clear
-        bufferMap.clear();
-      }
-    });
-    return bufferMap;
-  }
-
-  /**
    * Running median filter
    * @param {IBIData} ibiData
    * @param {number} windowSize

@@ -88,16 +88,6 @@ export class IBIData implements SerializableClassInterface {
   }
 
   /**
-   * Step average filter
-   * @param {number} step
-   * @return {this}
-   */
-  public stepAverageFilter(step?: number) {
-    IBIFilters.stepAverageFilter(this, step);
-    return this;
-  }
-
-  /**
    * Moving median filter
    * @param {number} windowSize
    * @return {this}
