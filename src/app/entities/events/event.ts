@@ -53,7 +53,7 @@ export class Event extends IDClass implements EventInterface {
     const t0 = performance.now();
     activities = activities || this.getActivities();
     const points = (activities || this.getActivities()).reduce((pointsArray: PointInterface[], activity: ActivityInterface) => {
-      return pointsArray.concat(activity.getPoints(startDate, endDate, step));
+      return pointsArray.concat(activity.getPoints(startDate, endDate));
     }, []);
     this.logger.d('Retrieved all points after ' +
       (performance.now() - t0) + ' milliseconds or ' +
