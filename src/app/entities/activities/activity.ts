@@ -77,7 +77,9 @@ export class Activity extends IDClass implements ActivityInterface {
       if (existingPoint) {
         // If it exists go over it's data and add them to the current iteration point
         existingPoint.getData().forEach((data: DataInterface, dataType) => {
-          interpolatedDateTimePoint.addData(data);
+          if (!interpolatedDateTimePoint.getDataByType(dataType)) {
+            interpolatedDateTimePoint.addData(data);
+          }
         });
       }
       pointsMap.set(interpolatedDateTimePoint.getDate().getTime(), interpolatedDateTimePoint);

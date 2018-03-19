@@ -186,7 +186,7 @@ describe('Activity', function () {
     expect(activity.getPointsInterpolated()[4]).toBeFalsy();
 
     // Check data
-    expect(activity.getPointsInterpolated()[3].getDataByType(DataHeartRate.type).getValue()).toBe(60);
+    expect(activity.getPointsInterpolated()[3].getDataByType(DataHeartRate.type).getValue()).toBe(100);
     expect(activity.getPointsInterpolated()[3].getDataByType(DataAltitude.type).getValue()).toBe(1000);
     expect(activity.getPointsInterpolated()[3].getDataByType(DataTemperature.type).getValue()).toBe(10);
 
