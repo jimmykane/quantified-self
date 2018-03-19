@@ -281,7 +281,7 @@ export class EventImporterSuuntoJSON {
 
     // If no IBI return
     if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
-      activity.setIBIData(new IBIData(eventJSONObject.DeviceLog['R-R'].Data));
+      activity.ibiData = new IBIData(eventJSONObject.DeviceLog['R-R'].Data);
       // Create a second IBIData so we can have filtering on those with keeping the original
       (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
         .lowLimitBPMFilter()

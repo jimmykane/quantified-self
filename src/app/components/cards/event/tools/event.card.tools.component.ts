@@ -47,7 +47,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
     this.event.getActivities().forEach((activity: ActivityInterface) => {
 
         // Create new not to alter existing
-        const ibiData = new IBIData(Array.from(activity.getIBIData().getIBIDataMap().values()));
+        const ibiData = new IBIData(Array.from(activity.ibiData.getIBIDataMap().values()));
 
         if (!ibiData.getIBIDataMap().size) {
           // Exit if this activity does not have ibiData

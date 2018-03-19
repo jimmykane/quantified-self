@@ -121,7 +121,7 @@ export class EventImporterJSON {
 
 
       activity.summary = activitySummary;
-      activity.setIBIData(new IBIData(activityObject.ibiData));
+      activity.ibiData = new IBIData(activityObject.ibiData);
 
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));

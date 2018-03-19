@@ -15,9 +15,9 @@ export class Activity extends IDClass implements ActivityInterface {
   public type: string;
   public creator: CreatorInterface;
   public summary: SummaryInterface;
+  public ibiData: IBIData;
 
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
-  private ibiData: IBIData;
   private laps: LapInterface[] = [];
 
 
@@ -96,14 +96,6 @@ export class Activity extends IDClass implements ActivityInterface {
     return this.getPoints()[this.getPoints().length - 1];
   }
 
-  setIBIData(ibiData: IBIData) {
-    this.ibiData = ibiData;
-  }
-
-  getIBIData(): IBIData {
-    return this.ibiData;
-  }
-
   addLap(lap: LapInterface) {
     this.laps.push(lap);
   }
@@ -130,7 +122,7 @@ export class Activity extends IDClass implements ActivityInterface {
         return jsonPointsArray;
       }, []),
       summary: this.summary.toJSON(),
-      ibiData: this.getIBIData() ? this.getIBIData().toJSON() : [],
+      ibiData: this.ibiData ? this.ibiData.toJSON() : [],
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;
