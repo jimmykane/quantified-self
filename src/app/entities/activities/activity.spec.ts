@@ -23,6 +23,32 @@ describe('Activity', function () {
     expect(activity.getPoints().length).toBe(1);
   });
 
+  it('should get a start point', function () {
+    const point = new Point(new Date());
+    activity.addPoint(point);
+    expect(activity.getStartPoint()).toEqual(point);
+  });
+
+  it('should get an end point', function () {
+    const point = new Point(new Date());
+    activity.addPoint(point);
+    expect(activity.getEndPoint()).toEqual(point);
+  });
+
+  it('should get a start and end point', function () {
+    const pointA = new Point(new Date());
+    const pointB = new Point(new Date());
+    activity.addPoint(pointA);
+    activity.addPoint(pointB);
+    expect(activity.getStartPoint()).toEqual(pointA);
+    expect(activity.getEndPoint()).toEqual(pointB);
+  });
+
+  it('should not get a start or end point', function () {
+    expect(activity.getStartPoint()).toBeFalsy();
+    expect(activity.getEndPoint()).toBeFalsy();
+  });
+
   it('should detect duplicate date points and only have one point for the same date', function () {
     activity.addPoint(new Point(new Date(0)));
     activity.addPoint(new Point(new Date(0)));
