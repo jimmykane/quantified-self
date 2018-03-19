@@ -33,7 +33,6 @@ script:
 
 after_success:
   - codecov
-  - codeclimate-test-reporter < coverage/lcov.info
 
 notifications:
   email:
