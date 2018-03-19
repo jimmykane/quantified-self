@@ -3,12 +3,12 @@ import {PointInterface} from '../points/point.interface';
 import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {SummaryInterface} from '../summary/summary.interface';
-import {LapInterface} from "../laps/lap.interface";
-import {IBIData} from "../data/ibi/data.ibi";
+import {LapInterface} from '../laps/lap.interface';
+import {IBIData} from '../data/ibi/data.ibi';
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
-  setType(type: string);
-  getType(): string;
+  type: string;
+
   getStartDate(): Date;
   setStartDate(startDate: Date);
   getEndDate(): Date;

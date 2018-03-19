@@ -14,7 +14,7 @@
       activityCheckbox.activity.getSummary().totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss'
       }}
       <app-activity-icon [activity]="activityCheckbox.activity"></app-activity-icon>
-      {{ activityCheckbox.activity.getType() }}
+      {{ activityCheckbox.activity.type }}
       <mat-icon>trending_flat</mat-icon>
       {{ (activityCheckbox.activity.getSummary().totalDistanceInMeters / 1000).toFixed(1) }} Km
     </mat-card>

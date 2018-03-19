@@ -35,7 +35,7 @@ export class EventImporterSuuntoJSON {
     // @todo iterate over activities
     const activity = new Activity();
     activity.setStartDate(new Date(eventJSONObject.DeviceLog.Header.DateTime));
-    activity.setType(this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType));
+    activity.type = this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType);
     const activitySummary = new Summary();
     activitySummary.totalDistanceInMeters = eventJSONObject.DeviceLog.Header.Distance;
     activitySummary.totalDurationInSeconds = eventJSONObject.DeviceLog.Header.Duration;

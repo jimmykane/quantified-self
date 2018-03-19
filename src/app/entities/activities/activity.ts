@@ -13,7 +13,7 @@ export class Activity extends IDClass implements ActivityInterface {
 
   private startDate;
   private endDate;
-  private type: string;
+  public type: string;
   private creator: CreatorInterface;
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: SummaryInterface;
@@ -25,13 +25,6 @@ export class Activity extends IDClass implements ActivityInterface {
     super();
   }
 
-  setType(type: string) {
-    this.type = type;
-  }
-
-  getType(): string {
-    return this.type;
-  }
 
   getStartDate(): Date {
     return this.startDate;
@@ -163,7 +156,7 @@ export class Activity extends IDClass implements ActivityInterface {
       id: this.getID(),
       startDate: this.getStartDate(),
       endDate: this.getEndDate(),
-      type: this.getType(),
+      type: this.type,
       creator: this.getCreator().toJSON(),
       points: this.getPoints().reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());

@@ -43,7 +43,7 @@ export class EventImporterJSON {
       const activity = new Activity();
       activity.setStartDate(new Date(activityObject.startDate));
       activity.setEndDate(new Date(activityObject.endDate));
-      activity.setType(activityObject.type);
+      activity.type = activityObject.type;
       const activitySummary = new Summary();
       activitySummary.totalDistanceInMeters = activityObject.summary.totalDistanceInMeters;
       activitySummary.totalDurationInSeconds = activityObject.summary.totalDurationInSeconds;

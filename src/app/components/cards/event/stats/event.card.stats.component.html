@@ -6,7 +6,7 @@
           {{ activity.getStartDate() | date:'medium' }}
         </mat-panel-title>
         <mat-panel-description>
-          {{ activity.getType() }}
+          {{ activity.type }}
         </mat-panel-description>
       </mat-expansion-panel-header>
       <app-event-card-activity-stats [activity]="activity" [event]="event"></app-event-card-activity-stats>

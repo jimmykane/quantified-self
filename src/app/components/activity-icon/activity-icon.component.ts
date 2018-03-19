@@ -12,16 +12,16 @@ export class ActivityIconComponent {
 
   getActivityIcon() {
     // @todo optimize
-    if (this.activity.getType().toLocaleLowerCase().includes('running')) {
+    if (this.activity.type.toLocaleLowerCase().includes('running')) {
       return 'directions_run';
     }
-    if (this.activity.getType().toLocaleLowerCase().includes('biking')) {
+    if (this.activity.type.toLocaleLowerCase().includes('biking')) {
       return 'directions_bike';
     }
-    if (this.activity.getType().toLocaleLowerCase().includes('cycling')) {
+    if (this.activity.type.toLocaleLowerCase().includes('cycling')) {
       return 'directions_bike';
     }
-    if (this.activity.getType().toLocaleLowerCase().includes('swimming')) {
+    if (this.activity.type.toLocaleLowerCase().includes('swimming')) {
       return 'pool';
     }
   }
