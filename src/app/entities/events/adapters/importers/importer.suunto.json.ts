@@ -141,7 +141,7 @@ export class EventImporterSuuntoJSON {
     event.summary = eventSummary;
 
     const creator = new Creator();
-    creator.setName(this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name)); // Should show model
+    creator.name = this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name);
     creator.setSerialNumber(eventJSONObject.DeviceLog.Device.SerialNumber);
     creator.setHWInfo(eventJSONObject.DeviceLog.Device.Info.HW);
     creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);

@@ -17,7 +17,7 @@ describe('Creator', function () {
   });
 
   it('should export correctly to JSON', function () {
-    creator.setName('name');
+    creator.name = 'name';
     creator.setHWInfo('HWInfo');
     creator.setSWInfo('SWInfo');
     creator.setSerialNumber('SerialNumber');

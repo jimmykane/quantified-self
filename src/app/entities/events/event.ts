@@ -10,17 +10,10 @@ import {SummaryInterface} from '../summary/summary.interface';
 export class Event extends IDClass implements EventInterface {
   public summary: SummaryInterface;
 
-  private name: string;
+  public name: string;
   private activities: ActivityInterface[] = [];
   private _hasPointsWithPosition;
 
-  setName(name: string) {
-    this.name = name;
-  }
-
-  getName() {
-    return this.name;
-  }
 
   addActivity(activity: ActivityInterface) {
     this.activities.push(activity);
@@ -93,7 +86,7 @@ export class Event extends IDClass implements EventInterface {
   toJSON(): any {
     return {
       id: this.getID(),
-      name: this.getName(),
+      name: this.name,
       activities: this.getActivities().reduce((jsonActivitiesArray: any[], activity: ActivityInterface) => {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;

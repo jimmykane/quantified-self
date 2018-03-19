@@ -9,10 +9,7 @@ import {SummaryInterface} from '../summary/summary.interface';
 export interface EventInterface extends IDClassInterface, SerializableClassInterface {
 
   summary: SummaryInterface;
-
-  setName(name: string);
-
-  getName(): string;
+  name: string;
 
   addActivity(activity: ActivityInterface);
 

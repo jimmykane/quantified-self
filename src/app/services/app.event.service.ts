@@ -315,7 +315,7 @@ export class EventService {
         (totalDistance, activity) => activity.summary.totalDistanceInMeters + totalDistance, 0
       );
       mergeEvent.summary = eventSummary;
-      mergeEvent.setName('Merged at ' + (new Date()).toISOString());
+      mergeEvent.name = 'Merged at ' + (new Date()).toISOString();
       return resolve(mergeEvent);
     });
   }

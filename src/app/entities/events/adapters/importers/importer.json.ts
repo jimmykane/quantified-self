@@ -33,7 +33,7 @@ export class EventImporterJSON {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
     event.setID(eventJSONObject.id);
-    event.setName(eventJSONObject.name);
+    event.name = eventJSONObject.name;
     event.summary = new Summary();
 
     event.summary.totalDistanceInMeters = eventJSONObject.summary.totalDistanceInMeters;
@@ -167,7 +167,7 @@ export class EventImporterJSON {
       event.addActivity(activity);
 
       const creator = new Creator();
-      creator.setName(activityObject.creator.name);
+      creator.name = activityObject.creator.name;
       creator.setHWInfo(activityObject.creator.hwInfo);
       creator.setSWInfo(activityObject.creator.swInfo);
       creator.setSerialNumber(activityObject.creator.serialNumber);
