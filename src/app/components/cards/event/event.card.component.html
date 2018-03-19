@@ -40,12 +40,12 @@
       conditions
     </mat-card-subtitle>
     <mat-card-subtitle *ngFor="let activity of event.getActivities(); let i = index;">
-      <span *ngIf=" activity.getCreator().getName()">
+      <span *ngIf=" activity.creator.getName()">
           <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch</mat-icon>
-          <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.getCreator().getName() }}</mat-chip></mat-chip-list></span>
+          <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.creator.getName() }}</mat-chip></mat-chip-list></span>
           <span class="mat-body-2"
-                *ngIf=" activity.getCreator().getSWInfo()">v{{ activity.getCreator().getSWInfo() }}</span>
-          <span *ngIf=" activity.getCreator().getSerialNumber()">{{ activity.getCreator().getSerialNumber() }}</span>
+                *ngIf=" activity.creator.getSWInfo()">v{{ activity.creator.getSWInfo() }}</span>
+          <span *ngIf=" activity.creator.getSerialNumber()">{{ activity.creator.getSerialNumber() }}</span>
         </span>
     </mat-card-subtitle>
   </mat-card-header>

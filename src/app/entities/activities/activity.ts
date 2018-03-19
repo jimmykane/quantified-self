@@ -13,7 +13,8 @@ export class Activity extends IDClass implements ActivityInterface {
   public startDate;
   public endDate;
   public type: string;
-  private creator: CreatorInterface;
+  public creator: CreatorInterface;
+
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private summary: SummaryInterface;
   private ibiData: IBIData;
@@ -22,14 +23,6 @@ export class Activity extends IDClass implements ActivityInterface {
 
   constructor() {
     super();
-  }
-
-  setCreator(creator: CreatorInterface) {
-    this.creator = creator;
-  }
-
-  getCreator(): CreatorInterface {
-    return this.creator;
   }
 
   // @todo should do short or somehow
@@ -139,7 +132,7 @@ export class Activity extends IDClass implements ActivityInterface {
       startDate: this.startDate,
       endDate: this.endDate,
       type: this.type,
-      creator: this.getCreator().toJSON(),
+      creator: this.creator.toJSON(),
       points: this.getPoints().reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;

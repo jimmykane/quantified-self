@@ -145,7 +145,7 @@ export class EventImporterSuuntoJSON {
     creator.setSerialNumber(eventJSONObject.DeviceLog.Device.SerialNumber);
     creator.setHWInfo(eventJSONObject.DeviceLog.Device.Info.HW);
     creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);
-    activity.setCreator(creator);
+    activity.creator = creator;
 
     for (const sample of eventJSONObject.DeviceLog.Samples) {
       // Skip unwanted samples

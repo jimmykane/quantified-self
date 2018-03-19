@@ -259,7 +259,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
-            key += ':' + activity.getID() + ':' + index + ':' + activity.getCreator().getName();
+            key += ':' + activity.getID() + ':' + index + ':' + activity.creator.getName();
             const existingDataArray = dataMap.get(key) || [];
             if (!existingDataArray.length) {
               dataMap.set(key, existingDataArray);
