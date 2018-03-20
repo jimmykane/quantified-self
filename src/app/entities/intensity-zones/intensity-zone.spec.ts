@@ -1,6 +1,6 @@
 import {IntensityZones} from './intensity-zone';
 
-describe('Zone', function () {
+describe('Zone', () => {
 
   let zones: IntensityZones;
 
@@ -8,7 +8,7 @@ describe('Zone', function () {
     zones = new IntensityZones();
   });
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     zones.zone1Duration = 0;
     zones.zone2LowerLimit = 1;
     zones.zone2Duration = 2;

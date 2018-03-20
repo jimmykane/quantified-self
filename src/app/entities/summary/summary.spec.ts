@@ -5,7 +5,7 @@ import {WeatherItem} from '../weather/app.weather.item';
 import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 import {IntensityZones} from '../intensity-zones/intensity-zone';
 
-describe('Summary', function () {
+describe('Summary', () => {
 
   let summary: SummaryInterface;
 
@@ -13,7 +13,7 @@ describe('Summary', function () {
     summary = new Summary();
   });
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     summary.totalDistanceInMeters = 1;
     summary.totalDurationInSeconds = 2;
     summary.maxAltitudeInMeters = 3;

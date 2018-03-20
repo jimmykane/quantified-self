@@ -1,7 +1,7 @@
 import {WeatherItem} from './app.weather.item';
 import {Weather} from './app.weather';
 
-describe('Weather', function () {
+describe('Weather', () => {
 
   let weather: Weather;
 
@@ -27,20 +27,20 @@ describe('Weather', function () {
     )
   });
 
-  it('should be able to find the min temperature', function () {
+  it('should be able to find the min temperature', () => {
     expect(weather.getMinTemperatureInCelsius()).toBe(0);
   });
 
-  it('should be able to find the max temperature', function () {
+  it('should be able to find the max temperature', () => {
     expect(weather.getMaxTemperatureInCelsius()).toBe(4);
   });
 
-  it('should be able to find the avg temperature', function () {
+  it('should be able to find the avg temperature', () => {
     expect(weather.getAverageTemperatureInCelsius()).toBe((2 + 4) / 3);
   });
 
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     expect(weather.toJSON()).toEqual({
       'weatherItems': [
         {

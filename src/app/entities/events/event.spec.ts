@@ -7,7 +7,7 @@ import {DataLatitudeDegrees} from '../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../data/data.longitude-degrees';
 import {Summary} from '../summary/summary';
 
-describe('Event', function () {
+describe('Event', () => {
 
   let event: EventInterface;
 
@@ -15,13 +15,13 @@ describe('Event', function () {
     event = new Event();
   });
 
-  it('should add an activity', function () {
+  it('should add an activity', () => {
     expect(event.getActivities().length).toBe(0);
     event.addActivity(new Activity());
     expect(event.getActivities().length).toBe(1);
   });
 
-  it('should remove an activity', function () {
+  it('should remove an activity', () => {
     const activity = new Activity();
     event.addActivity(activity);
     expect(event.getActivities().length).toBe(1);
@@ -30,7 +30,7 @@ describe('Event', function () {
   });
 
 
-  it('should get the first and the last activity', function () {
+  it('should get the first and the last activity', () => {
     const activityA = new Activity();
     activityA.startDate = new Date(10);
     const activityB = new Activity();
@@ -45,7 +45,7 @@ describe('Event', function () {
   });
 
 
-  it('should get an empty point array if no activity points', function () {
+  it('should get an empty point array if no activity points', () => {
     const activityA = new Activity();
     const activityB = new Activity();
 
@@ -57,7 +57,7 @@ describe('Event', function () {
   });
 
 
-  it('should get the correct points', function () {
+  it('should get the correct points', () => {
     const activityA = new Activity();
     activityA.addPoint(new Point(new Date(0)));
     activityA.addPoint(new Point(new Date(10)));
@@ -85,11 +85,11 @@ describe('Event', function () {
   });
 
 
-  it('should get a zero array if no points with position', function () {
+  it('should get a zero array if no points with position', () => {
     expect(event.getPointsWithPosition().length).toBe(0);
   });
 
-  it('should get the points with position', function () {
+  it('should get the points with position', () => {
     const activity = new Activity();
     let point = new Point(new Date(0));
     point.addData(new DataLatitudeDegrees(0));
@@ -106,11 +106,11 @@ describe('Event', function () {
     expect(event.getPointsWithPosition().length).toBe(2);
   });
 
-  it('should get return false if no points with position', function () {
+  it('should get return false if no points with position', () => {
     expect(event.hasPointsWithPosition()).toBe(false);
   });
 
-  it('should get return true if points with position', function () {
+  it('should get return true if points with position', () => {
     const activity = new Activity();
     const point = new Point(new Date());
     point.addData(new DataLatitudeDegrees(0));
@@ -120,7 +120,7 @@ describe('Event', function () {
     expect(event.hasPointsWithPosition()).toBe(true);
   });
 
-  it('should get get the total duration', function () {
+  it('should get get the total duration', () => {
     expect(event.getTotalDurationInSeconds()).toBe(0);
 
     let activity = new Activity();
@@ -139,7 +139,7 @@ describe('Event', function () {
 
   });
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     const activity = new Activity();
     event.addActivity(activity);
     event.setID('123');
