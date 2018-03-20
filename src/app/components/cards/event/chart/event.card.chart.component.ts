@@ -166,35 +166,24 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
-        this.addListenersToChart(t0);
-
+        this.addListenersToChart();
+        this.logger.d('Updated chart after ' +
+          (performance.now() - t0) + ' milliseconds or ' +
+          (performance.now() - t0) / 1000 + ' seconds'
+        );
       });
-
-      this.logger.d('Updated chart after ' +
-        (performance.now() - t0) + ' milliseconds or ' +
-        (performance.now() - t0) / 1000 + ' seconds'
-      );
-
       resolve(true);
     });
   }
 
-  private addListenersToChart(amChart: any) {
+  private addListenersToChart() {
     if (!this.chart.events.rendered.length) {
       this.chart.addListener('rendered', () => {
-        this.logger.d('Chart rendered after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds'
-        );
       });
     }
 
     if (!this.chart.events.init.length) {
       this.chart.addListener('init', () => {
-        this.logger.d('Chart initialized after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds'
-        );
       });
     }
 
@@ -204,51 +193,31 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           valueAxis.guides = this.getZoneGuides();
         });
         event.chart.validateNow();
-        this.logger.d('Chart data updated after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds'
-        );
       });
     }
 
     if (!this.chart.events.resized.length) {
       this.chart.addListener('resized', () => {
-        this.logger.d('Chart resized after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds'
-        );
       });
     }
 
     if (!this.chart.events.zoomed.length) {
       this.chart.addListener('zoomed', (event) => {
-        this.logger.d('Chart zoomed after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds');
       });
     }
 
     if (!this.chart.events.buildStarted.length) {
       this.chart.addListener('buildStarted', () => {
-        this.logger.d('Chart build started after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds');
       });
     }
 
     if (!this.chart.events.changed.length) {
       this.chart.addListener('changed', () => {
-        this.logger.d('Chart changed after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds');
       });
     }
 
     if (!this.chart.events.drawn.length) {
       this.chart.addListener('drawn', () => {
-        this.logger.d('Chart drawn after ' +
-          (performance.now() - amChart) + ' milliseconds or ' +
-          (performance.now() - amChart) / 1000 + ' seconds');
       });
     }
   }
