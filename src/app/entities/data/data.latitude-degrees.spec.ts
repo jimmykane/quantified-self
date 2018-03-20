@@ -1,7 +1,7 @@
 import {DataInterface} from './data.interface';
 import {DataLatitudeDegrees} from './data.latitude-degrees';
 
-describe('DataLatitudeDegrees', function () {
+describe('DataLatitudeDegrees', () => {
 
   let data: DataInterface;
 
@@ -9,15 +9,15 @@ describe('DataLatitudeDegrees', function () {
     data = new DataLatitudeDegrees(60);
   });
 
-  it('should get a value of 60', function () {
+  it('should get a value of 60', () => {
     expect(data.getValue()).toBe(60);
   });
 
-  it('should get the unit of degrees', function () {
+  it('should get the unit of degrees', () => {
     expect(data.getUnit()).toBe('degrees');
   });
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     expect(data.toJSON()).toEqual({
       type: 'Latitude',
       value: 60
