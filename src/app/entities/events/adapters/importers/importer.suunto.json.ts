@@ -25,6 +25,7 @@ import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIFilters} from '../../../data/ibi/data.ibi.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
 import {PointInterface} from "../../../points/point.interface";
+import {SummaryInterface} from "../../../summary/summary.interface";
 
 export class EventImporterSuuntoJSON {
 
@@ -157,8 +158,7 @@ export class EventImporterSuuntoJSON {
     }, []);
   }
 
-  private static getSummary(object: any) {
-
+  private static getSummary(object: any): SummaryInterface {
     const summary = new Summary();
 
     summary.totalDistanceInMeters = object.Distance;

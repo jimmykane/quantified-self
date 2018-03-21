@@ -26,6 +26,7 @@ import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../data/ibi/data.ibi';
+import {SummaryInterface} from "../../../summary/summary.interface";
 
 export class EventImporterJSON {
 
@@ -44,123 +45,14 @@ export class EventImporterJSON {
       activity.startDate = new Date(activityObject.startDate);
       activity.endDate = new Date(activityObject.endDate);
       activity.type = activityObject.type;
-      const activitySummary = new Summary();
-      activitySummary.totalDistanceInMeters = activityObject.summary.totalDistanceInMeters;
-      activitySummary.totalDurationInSeconds = activityObject.summary.totalDurationInSeconds;
-      activitySummary.maxAltitudeInMeters = activityObject.summary.maxAltitudeInMeters;
-      activitySummary.minAltitudeInMeters = activityObject.summary.minAltitudeInMeters;
-      activitySummary.ascentTimeInSeconds = activityObject.summary.ascentTimeInSeconds;
-      activitySummary.descentTimeInSeconds = activityObject.summary.descentTimeInSeconds;
-      activitySummary.ascentInMeters = activityObject.summary.ascentInMeters;
-      activitySummary.descentInMeters = activityObject.summary.descentInMeters;
-      activitySummary.epoc = activityObject.summary.epoc;
-      activitySummary.energyInCal = activityObject.summary.energyInCal;
-      activitySummary.feeling = activityObject.summary.feeling;
-      activitySummary.peakTrainingEffect = activityObject.summary.peakTrainingEffect;
-      activitySummary.pauseDurationInSeconds = activityObject.summary.pauseDurationInSeconds;
-      activitySummary.recoveryTimeInSeconds = activityObject.summary.recoveryTimeInSeconds;
-      activitySummary.maxVO2 = activityObject.summary.maxVO2;
-      activitySummary.avgHR = activityObject.summary.avgHR;
-      activitySummary.maxHR = activityObject.summary.maxHR;
-      activitySummary.minHR = activityObject.summary.minHR;
-      activitySummary.minPower = activityObject.summary.minPower;
-      activitySummary.avgPower = activityObject.summary.avgPower;
-      activitySummary.maxPower = activityObject.summary.maxPower;
-      activitySummary.minCadence = activityObject.summary.minCadence;
-      activitySummary.maxCadence = activityObject.summary.maxCadence;
-      activitySummary.avgCadence = activityObject.summary.avgCadence;
-      activitySummary.maxSpeed = activityObject.summary.maxSpeed;
-      activitySummary.minSpeed = activityObject.summary.minSpeed;
-      activitySummary.avgSpeed = activityObject.summary.avgSpeed;
-      activitySummary.minVerticalSpeed = activityObject.summary.minVerticalSpeed;
-      activitySummary.maxVerticalSpeed = activityObject.summary.maxVerticalSpeed;
-      activitySummary.avgVerticalSpeed = activityObject.summary.avgVerticalSpeed;
-      activitySummary.minTemperature = activityObject.summary.minTemperature;
-      activitySummary.maxTemperature = activityObject.summary.maxTemperature;
-      activitySummary.avgTemperature = activityObject.summary.avgTemperature;
 
-      if (activityObject.summary.weather) {
-        const weatherItems = [];
-        for (const weatherItemObject of activityObject.summary.weather.weatherItems) {
-          weatherItems.push(
-            new WeatherItem(
-              new Date(weatherItemObject.date),
-              weatherItemObject.conditions,
-              weatherItemObject.temperatureInCelsius
-            )
-          )
-        }
-        activitySummary.weather = new Weather(weatherItems);
-      }
-
-      if (activityObject.summary.geoLocationInfo) {
-        activitySummary.geoLocationInfo = new GeoLocationInfo(
-          activityObject.summary.geoLocationInfo.latitude,
-          activityObject.summary.geoLocationInfo.longitude
-        );
-        activitySummary.geoLocationInfo.city = activityObject.summary.geoLocationInfo.city;
-        activitySummary.geoLocationInfo.country = activityObject.summary.geoLocationInfo.country;
-        activitySummary.geoLocationInfo.province = activityObject.summary.geoLocationInfo.province;
-      }
-
-      if (activityObject.summary.intensityZones) {
-        for (const key in activityObject.summary.intensityZones) {
-          const zones = new IntensityZones();
-          zones.zone1Duration = activityObject.summary.intensityZones[key].zone1Duration;
-          zones.zone2Duration = activityObject.summary.intensityZones[key].zone2Duration;
-          zones.zone2LowerLimit = activityObject.summary.intensityZones[key].zone2LowerLimit;
-          zones.zone3Duration = activityObject.summary.intensityZones[key].zone3Duration;
-          zones.zone3LowerLimit = activityObject.summary.intensityZones[key].zone3LowerLimit;
-          zones.zone4Duration = activityObject.summary.intensityZones[key].zone4Duration;
-          zones.zone4LowerLimit = activityObject.summary.intensityZones[key].zone4LowerLimit;
-          zones.zone5Duration = activityObject.summary.intensityZones[key].zone5Duration;
-          zones.zone5LowerLimit = activityObject.summary.intensityZones[key].zone5LowerLimit;
-          activitySummary.intensityZones.set(key, zones);
-        }
-      }
-
-
-      activity.summary = activitySummary;
+      activity.summary = this.getSummary(activityObject);
       activity.ibiData = new IBIData(activityObject.ibiData);
 
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
         lap.type = lapObject.type;
-        const lapSummary = new Summary();
-        lapSummary.totalDistanceInMeters = lapObject.summary.totalDistanceInMeters;
-        lapSummary.totalDurationInSeconds = lapObject.summary.totalDurationInSeconds;
-        lapSummary.maxAltitudeInMeters = lapObject.summary.maxAltitudeInMeters;
-        lapSummary.minAltitudeInMeters = lapObject.summary.minAltitudeInMeters;
-        lapSummary.ascentTimeInSeconds = lapObject.summary.ascentTimeInSeconds;
-        lapSummary.descentTimeInSeconds = lapObject.summary.descentTimeInSeconds;
-        lapSummary.ascentInMeters = lapObject.summary.ascentInMeters;
-        lapSummary.descentInMeters = lapObject.summary.descentInMeters;
-        lapSummary.epoc = lapObject.summary.epoc;
-        lapSummary.energyInCal = lapObject.summary.energyInCal;
-        lapSummary.feeling = lapObject.summary.feeling;
-        lapSummary.peakTrainingEffect = lapObject.summary.peakTrainingEffect;
-        lapSummary.pauseDurationInSeconds = lapObject.summary.pauseDurationInSeconds;
-        lapSummary.recoveryTimeInSeconds = lapObject.summary.recoveryTimeInSeconds;
-        lapSummary.maxVO2 = lapObject.summary.maxVO2;
-        lapSummary.avgHR = lapObject.summary.avgHR;
-        lapSummary.maxHR = lapObject.summary.maxHR;
-        lapSummary.minHR = lapObject.summary.minHR;
-        lapSummary.minPower = lapObject.summary.minPower;
-        lapSummary.avgPower = lapObject.summary.avgPower;
-        lapSummary.maxPower = lapObject.summary.maxPower;
-        lapSummary.minCadence = lapObject.summary.minCadence;
-        lapSummary.maxCadence  = lapObject.summary.maxCadence;
-        lapSummary.avgCadence = lapObject.summary.avgCadence;
-        lapSummary.maxSpeed = lapObject.summary.maxSpeed;
-        lapSummary.minSpeed = lapObject.summary.minSpeed;
-        lapSummary.avgSpeed = lapObject.summary.avgSpeed;
-        lapSummary.minVerticalSpeed = lapObject.summary.minVerticalSpeed;
-        lapSummary.maxVerticalSpeed = lapObject.summary.maxVerticalSpeed;
-        lapSummary.avgVerticalSpeed = lapObject.summary.avgVerticalSpeed;
-        lapSummary.minTemperature = lapObject.summary.minTemperature;
-        lapSummary.maxTemperature = lapObject.summary.maxTemperature;
-        lapSummary.avgTemperature = lapObject.summary.avgTemperature;
-        lap.summary = lapSummary;
+        lap.summary = this.getSummary(lapObject);
         activity.addLap(lap);
       }
 
@@ -248,5 +140,84 @@ export class EventImporterJSON {
       }
     }
     return event;
+  }
+
+  private static getSummary(object: any): SummaryInterface {
+    const summary = new Summary();
+    summary.totalDistanceInMeters = object.summary.totalDistanceInMeters;
+    summary.totalDurationInSeconds = object.summary.totalDurationInSeconds;
+    summary.maxAltitudeInMeters = object.summary.maxAltitudeInMeters;
+    summary.minAltitudeInMeters = object.summary.minAltitudeInMeters;
+    summary.ascentTimeInSeconds = object.summary.ascentTimeInSeconds;
+    summary.descentTimeInSeconds = object.summary.descentTimeInSeconds;
+    summary.ascentInMeters = object.summary.ascentInMeters;
+    summary.descentInMeters = object.summary.descentInMeters;
+    summary.epoc = object.summary.epoc;
+    summary.energyInCal = object.summary.energyInCal;
+    summary.feeling = object.summary.feeling;
+    summary.peakTrainingEffect = object.summary.peakTrainingEffect;
+    summary.pauseDurationInSeconds = object.summary.pauseDurationInSeconds;
+    summary.recoveryTimeInSeconds = object.summary.recoveryTimeInSeconds;
+    summary.maxVO2 = object.summary.maxVO2;
+    summary.avgHR = object.summary.avgHR;
+    summary.maxHR = object.summary.maxHR;
+    summary.minHR = object.summary.minHR;
+    summary.minPower = object.summary.minPower;
+    summary.avgPower = object.summary.avgPower;
+    summary.maxPower = object.summary.maxPower;
+    summary.minCadence = object.summary.minCadence;
+    summary.maxCadence = object.summary.maxCadence;
+    summary.avgCadence = object.summary.avgCadence;
+    summary.maxSpeed = object.summary.maxSpeed;
+    summary.minSpeed = object.summary.minSpeed;
+    summary.avgSpeed = object.summary.avgSpeed;
+    summary.minVerticalSpeed = object.summary.minVerticalSpeed;
+    summary.maxVerticalSpeed = object.summary.maxVerticalSpeed;
+    summary.avgVerticalSpeed = object.summary.avgVerticalSpeed;
+    summary.minTemperature = object.summary.minTemperature;
+    summary.maxTemperature = object.summary.maxTemperature;
+    summary.avgTemperature = object.summary.avgTemperature;
+
+    if (object.summary.weather) {
+      const weatherItems = [];
+      for (const weatherItemObject of object.summary.weather.weatherItems) {
+        weatherItems.push(
+          new WeatherItem(
+            new Date(weatherItemObject.date),
+            weatherItemObject.conditions,
+            weatherItemObject.temperatureInCelsius
+          )
+        )
+      }
+      summary.weather = new Weather(weatherItems);
+    }
+
+    if (object.summary.geoLocationInfo) {
+      summary.geoLocationInfo = new GeoLocationInfo(
+        object.summary.geoLocationInfo.latitude,
+        object.summary.geoLocationInfo.longitude
+      );
+      summary.geoLocationInfo.city = object.summary.geoLocationInfo.city;
+      summary.geoLocationInfo.country = object.summary.geoLocationInfo.country;
+      summary.geoLocationInfo.province = object.summary.geoLocationInfo.province;
+    }
+
+    if (object.summary.intensityZones) {
+      for (const key in object.summary.intensityZones) {
+        const zones = new IntensityZones();
+        zones.zone1Duration = object.summary.intensityZones[key].zone1Duration;
+        zones.zone2Duration = object.summary.intensityZones[key].zone2Duration;
+        zones.zone2LowerLimit = object.summary.intensityZones[key].zone2LowerLimit;
+        zones.zone3Duration = object.summary.intensityZones[key].zone3Duration;
+        zones.zone3LowerLimit = object.summary.intensityZones[key].zone3LowerLimit;
+        zones.zone4Duration = object.summary.intensityZones[key].zone4Duration;
+        zones.zone4LowerLimit = object.summary.intensityZones[key].zone4LowerLimit;
+        zones.zone5Duration = object.summary.intensityZones[key].zone5Duration;
+        zones.zone5LowerLimit = object.summary.intensityZones[key].zone5LowerLimit;
+        summary.intensityZones.set(key, zones);
+      }
+    }
+
+    return summary;
   }
 }
