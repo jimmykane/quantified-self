@@ -110,8 +110,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       },
       {
         name: 'Pace',
-        value: (new Date(((this.activity.summary.totalDurationInSeconds - this.activity.summary.pauseDurationInSeconds) * 1000) / (this.activity.summary.totalDistanceInMeters / 1000)))
-          .toISOString().substr(14, 5),
+        value: (new Date(((this.activity.summary.totalDurationInSeconds - this.activity.summary.pauseDurationInSeconds) * 1000) / (this.activity.summary.totalDistanceInMeters / 1000))).toISOString().substr(14, 5),
         iconName: 'directions_run',
         units: 'm/km',
         iconType: 'material'
