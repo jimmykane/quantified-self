@@ -250,52 +250,52 @@ export class EventImporterSuuntoJSON {
         return pointsArray;
       }
       const point = new Point(new Date(sample.TimeISO8601));
-      if (sample.HR) {
+      if (sample.hasOwnProperty('HR')) {
         point.addData(new DataHeartRate(sample.HR * 60))
       }
-      if (sample.GPSAltitude) {
+      if (sample.hasOwnProperty('GPSAltitude')) {
         point.addData(new DataGPSAltitude(sample.GPSAltitude))
       }
-      if (sample.Latitude) {
+      if (sample.hasOwnProperty('Latitude')) {
         point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
       }
-      if (sample.Longitude) {
+      if (sample.hasOwnProperty('Longitude')) {
         point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
       }
-      if (sample.AbsPressure) {
+      if (sample.hasOwnProperty('AbsPressure')) {
         point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
       }
-      if (sample.SeaLevelPressure) {
+      if (sample.hasOwnProperty('SeaLevelPressure')) {
         point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
       }
-      if (sample.Altitude) {
+      if (sample.hasOwnProperty('Altitude')) {
         point.addData(new DataAltitude(sample.Altitude))
       }
-      if (sample.Cadence) {
+      if (sample.hasOwnProperty('Cadence')) {
         point.addData(new DataCadence(sample.Cadence * 120))
       }
-      if (sample.Power) {
+      if (sample.hasOwnProperty('Power')) {
         point.addData(new DataPower(sample.Power))
       }
-      if (sample.Speed) {
+      if (sample.hasOwnProperty('Speed')) {
         point.addData(new DataSpeed(sample.Speed))
       }
-      if (sample.Temperature) {
+      if (sample.hasOwnProperty('Temperature')) {
         point.addData(new DataTemperature(sample.Temperature - 273.15))
       }
-      if (sample.VerticalSpeed) {
+      if (sample.hasOwnProperty('VerticalSpeed')) {
         point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
       }
-      if (sample.EHPE) {
+      if (sample.hasOwnProperty('EHPE')) {
         point.addData(new DataEHPE(sample.EHPE));
       }
-      if (sample.EVPE) {
+      if (sample.hasOwnProperty('EVPE')) {
         point.addData(new DataEVPE(sample.EVPE));
       }
-      if (sample.NumberOfSatellites) {
+      if (sample.hasOwnProperty('NumberOfSatellites')) {
         point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
       }
-      if (sample.Satellite5BestSNR) {
+      if (sample.hasOwnProperty('Satellite5BestSNR')) {
         point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
       }
       pointsArray.push(point);
