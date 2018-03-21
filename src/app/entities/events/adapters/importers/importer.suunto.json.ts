@@ -37,107 +37,13 @@ export class EventImporterSuuntoJSON {
     const activity = new Activity();
     activity.startDate = new Date(eventJSONObject.DeviceLog.Header.DateTime);
     activity.type = this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType);
-    const activitySummary = new Summary();
-    activitySummary.totalDistanceInMeters = eventJSONObject.DeviceLog.Header.Distance;
-    activitySummary.totalDurationInSeconds = eventJSONObject.DeviceLog.Header.Duration;
-    activitySummary.maxAltitudeInMeters = eventJSONObject.DeviceLog.Header.Altitude.Max;
-    activitySummary.minAltitudeInMeters = eventJSONObject.DeviceLog.Header.Altitude.Min;
-    activitySummary.ascentTimeInSeconds = eventJSONObject.DeviceLog.Header.AscentTime;
-    activitySummary.descentTimeInSeconds = eventJSONObject.DeviceLog.Header.DescentTime;
-    activitySummary.ascentInMeters = eventJSONObject.DeviceLog.Header.Ascent;
-    activitySummary.descentInMeters = eventJSONObject.DeviceLog.Header.Descent;
-    activitySummary.epoc = eventJSONObject.DeviceLog.Header.EPOC;
-    activitySummary.energyInCal = eventJSONObject.DeviceLog.Header.Energy * 0.239 / 1000;
-    activitySummary.feeling = eventJSONObject.DeviceLog.Header.Feeling;
-    activitySummary.peakTrainingEffect = eventJSONObject.DeviceLog.Header.PeakTrainingEffect;
-    activitySummary.pauseDurationInSeconds = eventJSONObject.DeviceLog.Header.PauseDuration;
-    activitySummary.recoveryTimeInSeconds = eventJSONObject.DeviceLog.Header.RecoveryTime;
-    activitySummary.maxVO2 = eventJSONObject.DeviceLog.Header.MAXVO2;
-    if (eventJSONObject.DeviceLog.Header.HR) {
-      activitySummary.avgHR = eventJSONObject.DeviceLog.Header.HR[0].Avg * 60;
-      activitySummary.maxHR = eventJSONObject.DeviceLog.Header.HR[0].Max * 60;
-      activitySummary.minHR = eventJSONObject.DeviceLog.Header.HR[0].Min * 60;
-    }
 
-    if (eventJSONObject.DeviceLog.Header.Cadence) {
-      activitySummary.avgCadence = eventJSONObject.DeviceLog.Header.Cadence[0].Avg * 60 * 2;
-      activitySummary.maxCadence = eventJSONObject.DeviceLog.Header.Cadence[0].Max * 60 * 2;
-      activitySummary.minCadence = eventJSONObject.DeviceLog.Header.Cadence[0].Min * 60 * 2;
-    }
-
-    if (eventJSONObject.DeviceLog.Header.Power) {
-      activitySummary.avgPower = eventJSONObject.DeviceLog.Header.Power[0].Avg;
-      activitySummary.maxPower = eventJSONObject.DeviceLog.Header.Power[0].Max;
-      activitySummary.minPower = eventJSONObject.DeviceLog.Header.Power[0].Min;
-    }
-
-    if (eventJSONObject.DeviceLog.Header.Speed) {
-      activitySummary.avgSpeed = eventJSONObject.DeviceLog.Header.Speed[0].Avg;
-      activitySummary.maxSpeed = eventJSONObject.DeviceLog.Header.Speed[0].Max;
-      activitySummary.minSpeed = eventJSONObject.DeviceLog.Header.Speed[0].Min;
-    }
-
-    if (eventJSONObject.DeviceLog.Header.Temperature) {
-      activitySummary.avgTemperature = eventJSONObject.DeviceLog.Header.Temperature[0].Avg - 273.15;
-      activitySummary.maxTemperature = eventJSONObject.DeviceLog.Header.Temperature[0].Max - 273.15;
-      activitySummary.minTemperature = eventJSONObject.DeviceLog.Header.Temperature[0].Min - 273.15;
-    }
-
-    if (eventJSONObject.DeviceLog.Header.VerticalSpeed) {
-      activitySummary.avgVerticalSpeed = eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Avg;
-      activitySummary.maxVerticalSpeed = eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Max;
-      activitySummary.minVerticalSpeed = eventJSONObject.DeviceLog.Header.VerticalSpeed[0].Min;
-    }
-
-    if (eventJSONObject.DeviceLog.Header.HrZones) {
-      const zones = new IntensityZones;
-      zones.zone1Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone1Duration;
-      zones.zone2Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone2Duration;
-      zones.zone2LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone2LowerLimit * 60);
-      zones.zone3Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone3Duration;
-      zones.zone3LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone3LowerLimit * 60);
-      zones.zone4Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone4Duration;
-      zones.zone4LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone4LowerLimit * 60);
-      zones.zone5Duration = eventJSONObject.DeviceLog.Header.HrZones.Zone5Duration;
-      zones.zone5LowerLimit = Math.round(eventJSONObject.DeviceLog.Header.HrZones.Zone5LowerLimit * 60);
-      activitySummary.intensityZones.set(DataHeartRate.type, zones);
-    }
-
-    if (eventJSONObject.DeviceLog.Header.PowerZones) {
-      const zones = new IntensityZones;
-      zones.zone1Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone1Duration;
-      zones.zone2Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone2Duration;
-      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone2LowerLimit;
-      zones.zone3Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone3Duration;
-      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone3LowerLimit;
-      zones.zone4Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone4Duration;
-      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone4LowerLimit;
-      zones.zone5Duration = eventJSONObject.DeviceLog.Header.PowerZones.Zone5Duration;
-      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.PowerZones.Zone5LowerLimit;
-      activitySummary.intensityZones.set(DataPower.type, zones);
-    }
-
-    if (eventJSONObject.DeviceLog.Header.SpeedZones) {
-      const zones = new IntensityZones;
-      zones.zone1Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone1Duration;
-      zones.zone2Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone2Duration;
-      zones.zone2LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone2LowerLimit;
-      zones.zone3Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone3Duration;
-      zones.zone3LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone3LowerLimit;
-      zones.zone4Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone4Duration;
-      zones.zone4LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone4LowerLimit;
-      zones.zone5Duration = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5Duration;
-      zones.zone5LowerLimit = eventJSONObject.DeviceLog.Header.SpeedZones.Zone5LowerLimit;
-      activitySummary.intensityZones.set(DataSpeed.type, zones);
-    }
-
-
-    activity.summary = activitySummary;
+    activity.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
     event.addActivity(activity);
 
     const eventSummary = new Summary();
-    eventSummary.totalDurationInSeconds = activitySummary.totalDurationInSeconds;
-    eventSummary.totalDistanceInMeters = activitySummary.totalDistanceInMeters;
+    eventSummary.totalDurationInSeconds = activity.summary.totalDurationInSeconds;
+    eventSummary.totalDistanceInMeters = activity.summary.totalDistanceInMeters;
 
     event.summary = eventSummary;
 
@@ -163,61 +69,9 @@ export class EventImporterSuuntoJSON {
         nextLapStartDate,
         new Date(lapObj.TimeISO8601)
       );
-      const lapSummary = new Summary();
       lap.type = lapObj.Type;
-      lapSummary.totalDistanceInMeters = lapObj.Distance;
-      lapSummary.totalDurationInSeconds = lapObj.Duration;
-      lapSummary.maxAltitudeInMeters = lapObj.Altitude[0].Max;
-      lapSummary.minAltitudeInMeters = lapObj.Altitude[0].Min;
-      lapSummary.ascentTimeInSeconds = lapObj.AscentTime;
-      lapSummary.descentTimeInSeconds = lapObj.DescentTime;
-      lapSummary.ascentInMeters = lapObj.Ascent;
-      lapSummary.descentInMeters = lapObj.Descent;
-      lapSummary.epoc = lapObj.EPOC;
-      lapSummary.energyInCal = lapObj.Energy * 0.239 / 1000;
-      lapSummary.feeling = lapObj.Feeling;
-      lapSummary.peakTrainingEffect = lapObj.PeakTrainingEffect;
-      lapSummary.pauseDurationInSeconds = lapObj.PauseDuration;
-      lapSummary.recoveryTimeInSeconds = lapObj.RecoveryTime;
-      lapSummary.maxVO2 = lapObj.MAXVO2;
 
-      if (lapObj.HR) {
-        lapSummary.avgHR = lapObj.HR[0].Avg * 60;
-        lapSummary.maxHR = lapObj.HR[0].Max * 60;
-        lapSummary.minHR = lapObj.HR[0].Min * 60;
-      }
-
-      if (lapObj.Cadence) {
-        lapSummary.avgCadence = lapObj.Cadence[0].Avg * 60 * 2;
-        lapSummary.maxCadence = lapObj.Cadence[0].Max * 60 * 2;
-        lapSummary.minCadence = lapObj.Cadence[0].Min * 60 * 2;
-      }
-
-      if (lapObj.Power) {
-        lapSummary.avgPower = lapObj.Power[0].Avg;
-        lapSummary.maxPower = lapObj.Power[0].Max;
-        lapSummary.minPower = lapObj.Power[0].Min;
-      }
-
-      if (lapObj.Speed) {
-        lapSummary.avgSpeed = lapObj.Speed[0].Avg;
-        lapSummary.maxSpeed = lapObj.Speed[0].Max;
-        lapSummary.minSpeed = lapObj.Speed[0].Min;
-      }
-
-      if (lapObj.Temperature) {
-        lapSummary.avgTemperature = lapObj.Temperature[0].Avg - 273.15;
-        lapSummary.maxTemperature = lapObj.Temperature[0].Max - 273.15;
-        lapSummary.minTemperature = lapObj.Temperature[0].Min - 273.15;
-      }
-
-      if (lapObj.VerticalSpeed) {
-        lapSummary.avgVerticalSpeed = lapObj.VerticalSpeed[0].Avg;
-        lapSummary.maxVerticalSpeed = lapObj.VerticalSpeed[0].Max;
-        lapSummary.minVerticalSpeed = lapObj.VerticalSpeed[0].Min;
-      }
-
-      lap.summary = lapSummary;
+      lap.summary = this.getSummary(lapObj);
       activity.addLap(lap);
       nextLapStartDate = lap.endDate;
     }
@@ -301,6 +155,106 @@ export class EventImporterSuuntoJSON {
       pointsArray.push(point);
       return pointsArray;
     }, []);
+  }
+
+  private static getSummary(object: any) {
+
+    const summary = new Summary();
+
+    summary.totalDistanceInMeters = object.Distance;
+    summary.totalDurationInSeconds = object.Duration;
+    summary.maxAltitudeInMeters = object.Altitude.Max;
+    summary.minAltitudeInMeters = object.Altitude.Min;
+    summary.ascentTimeInSeconds = object.AscentTime;
+    summary.descentTimeInSeconds = object.DescentTime;
+    summary.ascentInMeters = object.Ascent;
+    summary.descentInMeters = object.Descent;
+    summary.epoc = object.EPOC;
+    summary.energyInCal = object.Energy * 0.239 / 1000;
+    summary.feeling = object.Feeling;
+    summary.peakTrainingEffect = object.PeakTrainingEffect;
+    summary.pauseDurationInSeconds = object.PauseDuration;
+    summary.recoveryTimeInSeconds = object.RecoveryTime;
+    summary.maxVO2 = object.MAXVO2;
+
+    if (object.HR) {
+      summary.avgHR = object.HR[0].Avg * 60;
+      summary.maxHR = object.HR[0].Max * 60;
+      summary.minHR = object.HR[0].Min * 60;
+    }
+
+    if (object.Cadence) {
+      summary.avgCadence = object.Cadence[0].Avg * 60 * 2;
+      summary.maxCadence = object.Cadence[0].Max * 60 * 2;
+      summary.minCadence = object.Cadence[0].Min * 60 * 2;
+    }
+
+    if (object.Power) {
+      summary.avgPower = object.Power[0].Avg;
+      summary.maxPower = object.Power[0].Max;
+      summary.minPower = object.Power[0].Min;
+    }
+
+    if (object.Speed) {
+      summary.avgSpeed = object.Speed[0].Avg;
+      summary.maxSpeed = object.Speed[0].Max;
+      summary.minSpeed = object.Speed[0].Min;
+    }
+
+    if (object.Temperature) {
+      summary.avgTemperature = object.Temperature[0].Avg - 273.15;
+      summary.maxTemperature = object.Temperature[0].Max - 273.15;
+      summary.minTemperature = object.Temperature[0].Min - 273.15;
+    }
+
+    if (object.VerticalSpeed) {
+      summary.avgVerticalSpeed = object.VerticalSpeed[0].Avg;
+      summary.maxVerticalSpeed = object.VerticalSpeed[0].Max;
+      summary.minVerticalSpeed = object.VerticalSpeed[0].Min;
+    }
+
+    if (object.HrZones) {
+      const zones = new IntensityZones;
+      zones.zone1Duration = object.HrZones.Zone1Duration;
+      zones.zone2Duration = object.HrZones.Zone2Duration;
+      zones.zone2LowerLimit = Math.round(object.HrZones.Zone2LowerLimit * 60);
+      zones.zone3Duration = object.HrZones.Zone3Duration;
+      zones.zone3LowerLimit = Math.round(object.HrZones.Zone3LowerLimit * 60);
+      zones.zone4Duration = object.HrZones.Zone4Duration;
+      zones.zone4LowerLimit = Math.round(object.HrZones.Zone4LowerLimit * 60);
+      zones.zone5Duration = object.HrZones.Zone5Duration;
+      zones.zone5LowerLimit = Math.round(object.HrZones.Zone5LowerLimit * 60);
+      summary.intensityZones.set(DataHeartRate.type, zones);
+    }
+
+    if (object.PowerZones) {
+      const zones = new IntensityZones;
+      zones.zone1Duration = object.PowerZones.Zone1Duration;
+      zones.zone2Duration = object.PowerZones.Zone2Duration;
+      zones.zone2LowerLimit = object.PowerZones.Zone2LowerLimit;
+      zones.zone3Duration = object.PowerZones.Zone3Duration;
+      zones.zone3LowerLimit = object.PowerZones.Zone3LowerLimit;
+      zones.zone4Duration = object.PowerZones.Zone4Duration;
+      zones.zone4LowerLimit = object.PowerZones.Zone4LowerLimit;
+      zones.zone5Duration = object.PowerZones.Zone5Duration;
+      zones.zone5LowerLimit = object.PowerZones.Zone5LowerLimit;
+      summary.intensityZones.set(DataPower.type, zones);
+    }
+
+    if (object.SpeedZones) {
+      const zones = new IntensityZones;
+      zones.zone1Duration = object.SpeedZones.Zone1Duration;
+      zones.zone2Duration = object.SpeedZones.Zone2Duration;
+      zones.zone2LowerLimit = object.SpeedZones.Zone2LowerLimit;
+      zones.zone3Duration = object.SpeedZones.Zone3Duration;
+      zones.zone3LowerLimit = object.SpeedZones.Zone3LowerLimit;
+      zones.zone4Duration = object.SpeedZones.Zone4Duration;
+      zones.zone4LowerLimit = object.SpeedZones.Zone4LowerLimit;
+      zones.zone5Duration = object.SpeedZones.Zone5Duration;
+      zones.zone5LowerLimit = object.SpeedZones.Zone5LowerLimit;
+      summary.intensityZones.set(DataSpeed.type, zones);
+    }
+    return summary;
   }
 
   private static getActivityTypeFromID(id: number): string {
