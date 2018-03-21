@@ -24,6 +24,7 @@ import {Summary} from '../../../summary/summary';
 import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIFilters} from '../../../data/ibi/data.ibi.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
+import {PointInterface} from "../../../points/point.interface";
 
 export class EventImporterSuuntoJSON {
 
@@ -147,64 +148,9 @@ export class EventImporterSuuntoJSON {
     creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);
     activity.creator = creator;
 
-    for (const sample of eventJSONObject.DeviceLog.Samples) {
-      // Skip unwanted samples
-      if (sample.Debug || sample.Events) {
-        continue;
-      }
-      const point = new Point(new Date(sample.TimeISO8601));
+    this.getPointsFromSamples(eventJSONObject.DeviceLog.Samples).map((point) => {
       activity.addPoint(point);
-      if (sample.HR) {
-        point.addData(new DataHeartRate(sample.HR * 60))
-      }
-      if (sample.GPSAltitude) {
-        point.addData(new DataGPSAltitude(sample.GPSAltitude))
-      }
-      if (sample.Latitude) {
-        point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
-      }
-      if (sample.Longitude) {
-        point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
-      }
-      if (sample.AbsPressure) {
-        point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
-      }
-      if (sample.SeaLevelPressure) {
-        point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
-      }
-      if (sample.Altitude) {
-        point.addData(new DataAltitude(sample.Altitude))
-      }
-      if (sample.Cadence) {
-        point.addData(new DataCadence(sample.Cadence * 120))
-      }
-      if (sample.Power) {
-        point.addData(new DataPower(sample.Power))
-      }
-      if (sample.Speed) {
-        point.addData(new DataSpeed(sample.Speed))
-      }
-      if (sample.Temperature) {
-        point.addData(new DataTemperature(sample.Temperature - 273.15))
-      }
-      if (sample.VerticalSpeed) {
-        point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
-      }
-      if (sample.EHPE) {
-        point.addData(new DataEHPE(sample.EHPE));
-      }
-      if (sample.EVPE) {
-        point.addData(new DataEVPE(sample.EVPE));
-      }
-      if (sample.NumberOfSatellites) {
-        point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
-      }
-      if (sample.Satellite5BestSNR) {
-        point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
-      }
-    }
-
-    // Important
+    });
 
     // Parse the laps
     let nextLapStartDate = event.getFirstActivity().startDate;
@@ -220,7 +166,7 @@ export class EventImporterSuuntoJSON {
       const lapSummary = new Summary();
       lap.type = lapObj.Type;
       lapSummary.totalDistanceInMeters = lapObj.Distance;
-      lapSummary.totalDurationInSeconds =  lapObj.Duration;
+      lapSummary.totalDurationInSeconds = lapObj.Duration;
       lapSummary.maxAltitudeInMeters = lapObj.Altitude[0].Max;
       lapSummary.minAltitudeInMeters = lapObj.Altitude[0].Min;
       lapSummary.ascentTimeInSeconds = lapObj.AscentTime;
@@ -295,6 +241,66 @@ export class EventImporterSuuntoJSON {
       });
     }
     return event;
+  }
+
+  private static getPointsFromSamples(samples: any[]): PointInterface[] {
+    return samples.reduce((pointsArray, sample) => {
+      // Skip unwanted samples
+      if (sample.Debug || sample.Events) {
+        return pointsArray;
+      }
+      const point = new Point(new Date(sample.TimeISO8601));
+      if (sample.HR) {
+        point.addData(new DataHeartRate(sample.HR * 60))
+      }
+      if (sample.GPSAltitude) {
+        point.addData(new DataGPSAltitude(sample.GPSAltitude))
+      }
+      if (sample.Latitude) {
+        point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
+      }
+      if (sample.Longitude) {
+        point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
+      }
+      if (sample.AbsPressure) {
+        point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
+      }
+      if (sample.SeaLevelPressure) {
+        point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
+      }
+      if (sample.Altitude) {
+        point.addData(new DataAltitude(sample.Altitude))
+      }
+      if (sample.Cadence) {
+        point.addData(new DataCadence(sample.Cadence * 120))
+      }
+      if (sample.Power) {
+        point.addData(new DataPower(sample.Power))
+      }
+      if (sample.Speed) {
+        point.addData(new DataSpeed(sample.Speed))
+      }
+      if (sample.Temperature) {
+        point.addData(new DataTemperature(sample.Temperature - 273.15))
+      }
+      if (sample.VerticalSpeed) {
+        point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
+      }
+      if (sample.EHPE) {
+        point.addData(new DataEHPE(sample.EHPE));
+      }
+      if (sample.EVPE) {
+        point.addData(new DataEVPE(sample.EVPE));
+      }
+      if (sample.NumberOfSatellites) {
+        point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
+      }
+      if (sample.Satellite5BestSNR) {
+        point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
+      }
+      pointsArray.push(point);
+      return pointsArray;
+    }, []);
   }
 
   private static getActivityTypeFromID(id: number): string {
