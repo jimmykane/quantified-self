@@ -32,6 +32,7 @@ export class EventImporterJSON {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
+    debugger;
     const event = new Event();
     event.setID(eventJSONObject.id);
     event.name = eventJSONObject.name;
