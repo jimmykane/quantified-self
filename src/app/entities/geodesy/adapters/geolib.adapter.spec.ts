@@ -5,24 +5,24 @@ import {Point} from "../../points/point";
 import {DataLatitudeDegrees} from "../../data/data.latitude-degrees";
 import {DataLongitudeDegrees} from "../../data/data.longitude-degrees";
 
-describe('GeoLibAdapter', function () {
+describe('GeoLibAdapter', () => {
 
   let geoLibAdapter: GeoLibAdapter;
 
   beforeEach(() => {
   });
 
-  it('should instantiate a non simple distance adapter', function () {
+  it('should instantiate a non simple distance adapter', () => {
     geoLibAdapter = new GeoLibAdapter();
     expect(geoLibAdapter.distanceAdapter instanceof DistanceVincenty).toBe(true);
   });
 
-  it('should instantiate a simple distance adapter', function () {
+  it('should instantiate a simple distance adapter', () => {
     geoLibAdapter = new GeoLibAdapter(true);
     expect(geoLibAdapter.distanceAdapter instanceof DistanceSimple).toBe(true);
   });
 
-  it('should get a correct distance for simple adapter', function () {
+  it('should get a correct distance for simple adapter', () => {
     geoLibAdapter = new GeoLibAdapter(true);
 
     const pointA = new Point(new Date());
@@ -37,7 +37,7 @@ describe('GeoLibAdapter', function () {
   });
 
 
-  it('should get a correct distance for simple adapter and changed accuracy', function () {
+  it('should get a correct distance for simple adapter and changed accuracy', () => {
     geoLibAdapter = new GeoLibAdapter(true);
 
     const pointA = new Point(new Date());
@@ -52,7 +52,7 @@ describe('GeoLibAdapter', function () {
   });
 
 
-  it('should get distance for simple adapter and changed precision but not have any effect', function () {
+  it('should get distance for simple adapter and changed precision but not have any effect', () => {
     geoLibAdapter = new GeoLibAdapter(true);
 
     const pointA = new Point(new Date());
@@ -66,7 +66,7 @@ describe('GeoLibAdapter', function () {
     expect(geoLibAdapter.getDistance([pointA, pointB], null, 100)).toBe(157426);
   });
 
-  it('should get a correct distance for Vincety adapter', function () {
+  it('should get a correct distance for Vincety adapter', () => {
     geoLibAdapter = new GeoLibAdapter();
 
     const pointA = new Point(new Date());
@@ -80,7 +80,7 @@ describe('GeoLibAdapter', function () {
     expect(geoLibAdapter.getDistance([pointA, pointB])).toBe(156900);
   });
 
-  it('should get a correct distance for Vincety adapter and changed accuracy', function () {
+  it('should get a correct distance for Vincety adapter and changed accuracy', () => {
     geoLibAdapter = new GeoLibAdapter();
 
     const pointA = new Point(new Date());
@@ -94,7 +94,7 @@ describe('GeoLibAdapter', function () {
     expect(geoLibAdapter.getDistance([pointA, pointB], 2000)).toBe(156000);
   });
 
-  it('should get a correct distance for Vincety adapter and changed precision', function () {
+  it('should get a correct distance for Vincety adapter and changed precision', () => {
     geoLibAdapter = new GeoLibAdapter();
 
     const pointA = new Point(new Date());
@@ -109,7 +109,7 @@ describe('GeoLibAdapter', function () {
   });
 
 
-  it('should get a correct distance for Vincety adapter with changed accuracy and changed precision', function () {
+  it('should get a correct distance for Vincety adapter with changed accuracy and changed precision', () => {
     geoLibAdapter = new GeoLibAdapter();
 
     const pointA = new Point(new Date());

@@ -1,6 +1,6 @@
 import {GeoLocationInfo} from './geo-location-info';
 
-describe('GeoLocationInfo', function () {
+describe('GeoLocationInfo', () => {
 
   let geoLocationInfo: GeoLocationInfo;
 
@@ -8,7 +8,7 @@ describe('GeoLocationInfo', function () {
     geoLocationInfo = new GeoLocationInfo(0, 0);
   });
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     geoLocationInfo.city = 'Buzan';
     geoLocationInfo.province = 'Ariege';
     geoLocationInfo.country = 'France';

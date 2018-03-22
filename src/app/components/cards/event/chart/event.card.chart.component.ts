@@ -166,87 +166,60 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
-        if (!this.chart.events.rendered.length) {
-          this.chart.addListener('rendered', () => {
-            this.logger.d('Chart rendered after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds'
-            );
-          });
-        }
-
-        if (!this.chart.events.init.length) {
-          this.chart.addListener('init', () => {
-            this.logger.d('Chart initialized after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds'
-            );
-          });
-        }
-
-        if (!this.chart.events.dataUpdated.length) {
-          this.chart.addListener('dataUpdated', (event) => {
-            event.chart.valueAxes.forEach((valueAxis) => {
-              valueAxis.guides = this.getZoneGuides();
-            });
-            event.chart.validateNow();
-            this.logger.d('Chart data updated after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds'
-            );
-          });
-        }
-
-        if (!this.chart.events.resized.length) {
-          this.chart.addListener('resized', () => {
-            this.logger.d('Chart resized after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds'
-            );
-          });
-        }
-
-        if (!this.chart.events.zoomed.length) {
-          this.chart.addListener('zoomed', (event) => {
-            this.logger.d('Chart zoomed after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
-          });
-        }
-
-        if (!this.chart.events.buildStarted.length) {
-          this.chart.addListener('buildStarted', () => {
-            this.logger.d('Chart build started after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
-          });
-        }
-
-        if (!this.chart.events.changed.length) {
-          this.chart.addListener('changed', () => {
-            this.logger.d('Chart changed after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
-          });
-        }
-
-        if (!this.chart.events.drawn.length) {
-          this.chart.addListener('drawn', (a) => {
-            this.logger.d('Chart drawn after ' +
-              (performance.now() - t0) + ' milliseconds or ' +
-              (performance.now() - t0) / 1000 + ' seconds');
-          });
-        }
-
+        this.addListenersToChart();
+        this.logger.d('Updated chart after ' +
+          (performance.now() - t0) + ' milliseconds or ' +
+          (performance.now() - t0) / 1000 + ' seconds'
+        );
       });
-
-      this.logger.d('Updated chart after ' +
-        (performance.now() - t0) + ' milliseconds or ' +
-        (performance.now() - t0) / 1000 + ' seconds'
-      );
-
       resolve(true);
     });
+  }
+
+  private addListenersToChart() {
+    if (!this.chart.events.rendered.length) {
+      this.chart.addListener('rendered', () => {
+      });
+    }
+
+    if (!this.chart.events.init.length) {
+      this.chart.addListener('init', () => {
+      });
+    }
+
+    if (!this.chart.events.dataUpdated.length) {
+      this.chart.addListener('dataUpdated', (event) => {
+        event.chart.valueAxes.forEach((valueAxis) => {
+          valueAxis.guides = this.getZoneGuides();
+        });
+        event.chart.validateNow();
+      });
+    }
+
+    if (!this.chart.events.resized.length) {
+      this.chart.addListener('resized', () => {
+      });
+    }
+
+    if (!this.chart.events.zoomed.length) {
+      this.chart.addListener('zoomed', (event) => {
+      });
+    }
+
+    if (!this.chart.events.buildStarted.length) {
+      this.chart.addListener('buildStarted', () => {
+      });
+    }
+
+    if (!this.chart.events.changed.length) {
+      this.chart.addListener('changed', () => {
+      });
+    }
+
+    if (!this.chart.events.drawn.length) {
+      this.chart.addListener('drawn', () => {
+      });
+    }
   }
 
   private getAllData(): Map<string, DataInterface[]> {

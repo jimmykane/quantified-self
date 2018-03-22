@@ -6,7 +6,7 @@ import {DataAltitude} from '../data/data.altitude';
 import {DataTemperature} from '../data/data.temperature';
 import {Lap} from "../laps/lap";
 
-describe('Activity', function () {
+describe('Activity', () => {
 
   let activity: ActivityInterface;
 
@@ -14,28 +14,28 @@ describe('Activity', function () {
     activity = new Activity();
   });
 
-  it('should have no points', function () {
+  it('should have no points', () => {
     expect(activity.getPoints().length).toBe(0);
   });
 
-  it('should add a point', function () {
+  it('should add a point', () => {
     activity.addPoint(new Point(new Date()));
     expect(activity.getPoints().length).toBe(1);
   });
 
-  it('should get a start point', function () {
+  it('should get a start point', () => {
     const point = new Point(new Date());
     activity.addPoint(point);
     expect(activity.getStartPoint()).toEqual(point);
   });
 
-  it('should get an end point', function () {
+  it('should get an end point', () => {
     const point = new Point(new Date());
     activity.addPoint(point);
     expect(activity.getEndPoint()).toEqual(point);
   });
 
-  it('should get a start and end point', function () {
+  it('should get a start and end point', () => {
     const pointA = new Point(new Date());
     const pointB = new Point(new Date());
     activity.addPoint(pointA);
@@ -44,18 +44,18 @@ describe('Activity', function () {
     expect(activity.getEndPoint()).toEqual(pointB);
   });
 
-  it('should not get a start or end point', function () {
+  it('should not get a start or end point', () => {
     expect(activity.getStartPoint()).toBeFalsy();
     expect(activity.getEndPoint()).toBeFalsy();
   });
 
-  it('should detect duplicate date points and only have one point for the same date', function () {
+  it('should detect duplicate date points and only have one point for the same date', () => {
     activity.addPoint(new Point(new Date(0)));
     activity.addPoint(new Point(new Date(0)));
     expect(activity.getPoints().length).toBe(1);
   });
 
-  it('should detect duplicate date points and only add new data overwritting the first if existing', function () {
+  it('should detect duplicate date points and only add new data overwritting the first if existing', () => {
     const pointA = new Point(new Date(0));
     pointA.addData(new DataHeartRate(60));
     pointA.addData(new DataTemperature(10));
@@ -69,7 +69,7 @@ describe('Activity', function () {
     expect(activity.getPoints()[0].getDataByType(DataTemperature.type).getValue()).toBe(10);
   });
 
-  it('should detect duplicate date points but not add new data if keepNewPointDataTypeValue is false', function () {
+  it('should detect duplicate date points but not add new data if keepNewPointDataTypeValue is false', () => {
     const pointA = new Point(new Date(0));
     pointA.addData(new DataHeartRate(60));
     pointA.addData(new DataTemperature(10));
@@ -83,14 +83,14 @@ describe('Activity', function () {
     expect(activity.getPoints()[0].getDataByType(DataTemperature.type)).toBeFalsy();
   });
 
-  it('should remove a point', function () {
+  it('should remove a point', () => {
     activity.addPoint(new Point(new Date(0)));
     activity.removePoint(new Point(new Date(0)));
     expect(activity.getPoints().length).toBe(0);
   });
 
 
-  it('should get points seq after 1s intervals', function () {
+  it('should get points seq after 1s intervals', () => {
     const now = new Date();
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
     const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
@@ -105,7 +105,7 @@ describe('Activity', function () {
   });
 
 
-  it('should get points based on startDate', function () {
+  it('should get points based on startDate', () => {
     const now = new Date();
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
     const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
@@ -122,7 +122,7 @@ describe('Activity', function () {
     expect(activity.getPoints(nowAfter4Second).length).toBe(1);
   });
 
-  it('should get points based on endDate', function () {
+  it('should get points based on endDate', () => {
     const now = new Date();
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
     const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
@@ -139,7 +139,7 @@ describe('Activity', function () {
     expect(activity.getPoints(null, nowAfter4Second).length).toBe(4);
   });
 
-  it('should get points based on startDate and endDate', function () {
+  it('should get points based on startDate and endDate', () => {
     const now = new Date();
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
     const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
@@ -170,7 +170,7 @@ describe('Activity', function () {
     expect(activity.getPoints(nowAfter1Second, nowAfter4Second).length).toBe(4);
   });
 
-  it('should not get points when out of/invalid range', function () {
+  it('should not get points when out of/invalid range', () => {
     const now = new Date();
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
     const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
@@ -184,7 +184,7 @@ describe('Activity', function () {
     expect(activity.getPoints(nowAfter4Second, nowAfter1Second).length).toBe(0);
   });
 
-  it('should get points sanitized to the second and merge their data correctly', function () {
+  it('should get points sanitized to the second and merge their data correctly', () => {
     // Create a date based on now and make the ms 200 regardless of the time
     const now = new Date((new Date()).setMilliseconds(200));
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
@@ -223,7 +223,7 @@ describe('Activity', function () {
   });
 
 
-  it('should sort points by date', function () {
+  it('should sort points by date', () => {
     const now = new Date();
     const nowAfter1Second = new Date(now.setSeconds(now.getSeconds() + 1));
     const nowAfter2Second = new Date(now.setSeconds(now.getSeconds() + 2));
@@ -251,7 +251,7 @@ describe('Activity', function () {
   });
 
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     const point = new Point(new Date());
     activity.addPoint(point);
     const lap = new Lap(new Date(), new Date());

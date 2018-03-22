@@ -1,7 +1,7 @@
 import {DataInterface} from './data.interface';
 import {DataAltitude} from './data.altitude';
 
-describe('DataAltitude', function () {
+describe('DataAltitude', () => {
 
   let data: DataInterface;
 
@@ -9,15 +9,15 @@ describe('DataAltitude', function () {
     data = new DataAltitude(60);
   });
 
-  it('should get a value of 60', function () {
+  it('should get a value of 60', () => {
     expect(data.getValue()).toBe(60);
   });
 
-  it('should get the unit of meters', function () {
+  it('should get the unit of meters', () => {
     expect(data.getUnit()).toBe('meters');
   });
 
-  it('should export correctly to JSON', function () {
+  it('should export correctly to JSON', () => {
     expect(data.toJSON()).toEqual({
       type: 'Altitude',
       value: 60
