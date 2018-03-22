@@ -67,7 +67,7 @@ export class EventService {
       // Activities Summaries
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
-        if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
+        if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
           continue;
         }
 
@@ -83,7 +83,7 @@ export class EventService {
         let index = 0;
         for (const activity of event.getActivities()) {
           // If indoors
-          if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
+          if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
             index += 2;
             continue;
           }

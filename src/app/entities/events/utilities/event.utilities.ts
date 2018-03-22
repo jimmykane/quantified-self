@@ -38,7 +38,7 @@ export class EventUtilities {
         activity.summary = activitySummary;
 
         // If indoors
-        if (!event.hasPointsWithPosition(void 0, void 0, void 0, [activity])) {
+        if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
           continue;
         }
 
