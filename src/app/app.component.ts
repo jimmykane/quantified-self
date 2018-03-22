@@ -6,7 +6,7 @@ import {ActionButtonService} from './services/action-buttons/app.action-button.s
 import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatSidenav} from '@angular/material';
 import {Subscription} from 'rxjs/Subscription';
-import {ListService} from './services/info-list/list.service';
+import {ListService, NotificationItem} from './services/info-list/list.service';
 
 @Component({
   selector: 'app-root',
@@ -19,7 +19,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public title = 'Quantified Self';
   public actionButtons: ActionButton[] = [];
   private actionButtonsSubscription: Subscription;
-  public activitiesInProcess: Array;
+  public notificationList: NotificationItem[] = [];
 
 
   constructor(private changeDetectorRef: ChangeDetectorRef, private actionButtonService: ActionButtonService, private listService: ListService) {
@@ -29,7 +29,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
       this.sideNav.toggle();
     }, 'material'));
-    this.activitiesInProcess = listService.items;
+    this.notificationList = listService.items;
   }
 
   ngOnInit() {

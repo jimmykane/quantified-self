@@ -27,7 +27,7 @@ export class ListService {
 /**
  * Represent a single notification item
  */
-class NotificationItem{
+export class NotificationItem{
 
   public label: string;
   private service: ListService;
