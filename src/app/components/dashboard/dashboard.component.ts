@@ -7,6 +7,7 @@ import {ActivatedRoute, Params, Router} from '@angular/router';
 import {List} from 'immutable';
 import {Subscription} from 'rxjs/Subscription';
 import {EventInterface} from '../../entities/events/event.interface';
+import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 
 @Component({
   selector: 'app-dashboard',
@@ -33,7 +34,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   mergeEvents($event, event: EventInterface) {
     $event.stopPropagation();
-    this.eventService.mergeEvents([this.selectedEvent, event]).then((mergedEvent: EventInterface) => {
+    EventUtilities.mergeEvents([this.selectedEvent, event]).then((mergedEvent: EventInterface) => {
         this.eventService.addAndSaveEvent(mergedEvent);
     });
     return false;

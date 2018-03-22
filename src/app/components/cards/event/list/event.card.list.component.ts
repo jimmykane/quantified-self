@@ -4,7 +4,8 @@ import {ActionButtonService} from '../../../../services/action-buttons/app.actio
 import {ActionButton} from '../../../../services/action-buttons/app.action-button';
 import {EventService} from '../../../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatSnackBar} from "@angular/material";
+import {MatSnackBar} from '@angular/material';
+import {EventUtilities} from '../../../../entities/events/utilities/event.utilities';
 
 
 @Component({
@@ -48,7 +49,7 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
         'compare_arrows',
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
-          this.eventService.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
+          EventUtilities.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
             this.actionButtonService.removeActionButton('mergeEvents');
             this.eventService.addAndSaveEvent(mergedEvent);
             this.eventSelectionMap.clear();

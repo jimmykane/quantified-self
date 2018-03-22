@@ -4,9 +4,9 @@ import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataPower} from '../../../../entities/data/data.power';
 import {DataTemperature} from '../../../../entities/data/data.temperature';
-import {DataAltitude} from '../../../../entities/data/data.altitude';
 import {EventService} from '../../../../services/app.event.service';
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
+import {EventUtilities} from '../../../../entities/events/utilities/event.utilities';
 
 
 @Component({
@@ -65,7 +65,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
 
   ngOnChanges() {
     this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = Number(this.eventService.getEventDataTypeAverage(
+      dataTypeAverage.value = Number(EventUtilities.getEventDataTypeAverage(
         this.event,
         dataTypeAverage.name,
         void 0,
@@ -74,7 +74,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       ).toFixed(0));
     });
     this.dataTypeGains.forEach((dataTypeGain) => {
-      dataTypeGain.value = Number(this.eventService.getEventDataTypeGain(
+      dataTypeGain.value = Number(EventUtilities.getEventDataTypeGain(
         this.event,
         dataTypeGain.name,
         void 0,
@@ -82,7 +82,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         [this.activity]).toFixed(0));
     });
     this.dataTypeLosses.forEach((dataTypeLoss) => {
-      dataTypeLoss.value = Number(this.eventService.getEventDataTypeLoss(this.event, dataTypeLoss.name,
+      dataTypeLoss.value = Number(EventUtilities.getEventDataTypeLoss(this.event, dataTypeLoss.name,
         void 0,
         void 0,
         [this.activity]
