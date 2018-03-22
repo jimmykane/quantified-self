@@ -160,8 +160,8 @@ export class EventImporterSuuntoJSON {
   }
 
   private static getSummary(object: any): SummaryInterface {
-    const summary = new Summary();
 
+    const summary = new Summary();
     summary.totalDistanceInMeters = object.Distance;
     summary.totalDurationInSeconds = object.Duration;
     summary.maxAltitudeInMeters = object.Altitude.Max;
