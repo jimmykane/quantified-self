@@ -4,8 +4,8 @@ import {Event} from '../event';
 import {PointInterface} from "../../points/point.interface";
 import {LapInterface} from "../../laps/lap.interface";
 
-const example1 = require('../../../../../samples/track_examples/example.json');
-const example2 = require('../../../../../samples/track_examples/suunto.json');
+const example1 = require('../../../../../samples/example.json');
+const example2 = require('../../../../../samples/suunto.json');
 
 describe('EventAdapters', () => {
 
