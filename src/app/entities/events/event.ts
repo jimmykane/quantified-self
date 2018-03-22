@@ -58,7 +58,7 @@ export class Event extends IDClass implements EventInterface {
   }
 
   // @todo proper implementation for this query
-  hasPointsWithPosition(startDate?: Date, endDate?: Date, step?: number, activities?: ActivityInterface[]): boolean {
+  hasPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): boolean {
     // If not bool = not set
     if (this._hasPointsWithPosition !== true && this._hasPointsWithPosition !== false) {
       this._hasPointsWithPosition = this.getPointsWithPosition(startDate, endDate, activities).length > 0;
