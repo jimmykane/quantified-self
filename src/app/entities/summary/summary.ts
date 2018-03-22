@@ -81,7 +81,7 @@ export class Summary implements SummaryInterface {
       maxCadence: this.maxCadence,
       maxVerticalSpeed: this.maxVerticalSpeed,
       minVerticalSpeed: this.minVerticalSpeed,
-      avgVerticalSpeed: this.maxVerticalSpeed,
+      avgVerticalSpeed: this.avgVerticalSpeed,
       maxSpeed: this.maxSpeed,
       avgSpeed: this.avgSpeed,
       minSpeed: this.minSpeed,
