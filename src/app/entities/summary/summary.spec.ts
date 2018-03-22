@@ -119,7 +119,7 @@ describe('Summary', () => {
       'maxCadence': 23,
       'maxVerticalSpeed': 29,
       'minVerticalSpeed': 28,
-      'avgVerticalSpeed': 29,
+      'avgVerticalSpeed': 30,
       'maxSpeed': 25,
       'avgSpeed': 27,
       'minSpeed': 26,
