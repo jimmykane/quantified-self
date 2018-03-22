@@ -1,0 +1,32 @@
+.info-list{
+    position: fixed;
+    bottom:5px;
+    left: 5px;
+    max-height: 150px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1;
+}
+
+.info-list ul{
+    padding: 0;
+    margin: 0;
+}
+
+.info-list li {
+    list-style: none;
+    background: rgb(60, 109, 209);
+    color: #fff;
+    line-height: 2em;
+    margin: 0;
+    padding: 0 0.5em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    width: 600px;
+}
+
+.info-list li.show {
+    height: 2em;
+    margin: 2px 0;
+}

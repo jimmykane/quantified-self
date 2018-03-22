@@ -1,8 +1,7 @@
 import {Component} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {UPLOAD_STATUS} from './status';
-import {MatSnackBar} from "@angular/material";
+import {ListService} from '../../services/info-list/list.service';
 
 @Component({
   selector: 'app-upload',
@@ -16,7 +15,8 @@ export class UploadComponent {
   isUploadActive = false;
   activitiesProcessed = [];
 
-  constructor(private snackBar: MatSnackBar, private eventService: EventService, private router: Router) {
+  constructor(private eventService: EventService,
+              private router: Router, private listService: ListService) {
   }
 
   /**
@@ -30,27 +30,25 @@ export class UploadComponent {
       const {name} = file,
         nameParts = name.split('.'),
         extension = nameParts.pop(),
-        activityName = nameParts.join('.'),
-        metaData = {
-          name: activityName,
-          status: UPLOAD_STATUS.PROCESSING
-        };
-      this.activitiesProcessed.push(metaData);
+        activityName = nameParts.join('.');
+      const item = this.listService.addItem(`Processing ${activityName}`);
       fileReader.onload = async () => {
         if (extension === 'json') {
           let newEvent;
           try {
             newEvent = await this.eventService.createEventFromSuuntoJSONString(fileReader.result);
           } catch (error) {
-            metaData.status = UPLOAD_STATUS.ERROR;
             console.error('Could not load event from file' + file.name, error);
+            item.update(`Error while processing ${activityName}`);
             reject(error);
+            item.remove();
             return;
           }
           newEvent.name = activityName;
           await this.eventService.generateGeoAndWeather(newEvent);
           this.eventService.addAndSaveEvent(newEvent);
-          metaData.status = UPLOAD_STATUS.PROCESSED;
+          item.update(`Finished ${activityName}`);
+          item.remove();
           resolve();
         }
       };
@@ -69,9 +67,6 @@ export class UploadComponent {
     try {
       await Promise.all(processPromises);
       this.router.navigate(['dashboard']);
-      this.snackBar.open('Processing complete!', null, {
-        duration: 5000,
-      });
     } catch (error) {
       console.error('Some of the files could not be processed', error);
     } finally {
