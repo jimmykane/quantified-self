@@ -2,7 +2,7 @@ import {Component, OnInit, Input} from '@angular/core';
 import {UPLOAD_STATUS} from '../upload/status';
 
 /**
- * Component responsible for displaying a progree bar
+ * Component responsible for displaying a progress bar
  * until the activity has finished being processed
  */
 @Component({

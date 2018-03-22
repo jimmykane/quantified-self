@@ -7,9 +7,10 @@ import { Injectable } from '@angular/core';
 export class ListService {
 
   public items:NotificationItem[] = [];
+
   constructor() { }
 
-  addItem(label){
+  addItem(label):NotificationItem{
     const item = new NotificationItem(label, this);
     this.items.push(item);
     return item;
