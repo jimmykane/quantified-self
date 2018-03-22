@@ -40,3 +40,4 @@ notifications:
   email:
     on_failure: change
     on_success: change
+  slack: quantified-self-io:gWxqdRGo14eo9MoBMtIPX6ME
