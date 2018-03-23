@@ -39,7 +39,7 @@ export class UploadComponent {
             newEvent = await this.eventService.createEventFromSuuntoJSONString(fileReader.result);
           } catch (error) {
             console.error('Could not load event from file' + file.name, error);
-            item.update(`Error while processing ${activityName}`);
+            item.update({label: `Error while processing ${activityName}`, status: 'error'});
             reject(error);
             item.remove();
             return;
@@ -47,7 +47,7 @@ export class UploadComponent {
           newEvent.name = activityName;
           await this.eventService.generateGeoAndWeather(newEvent);
           this.eventService.addAndSaveEvent(newEvent);
-          item.update(`Finished ${activityName}`);
+          item.update({label: `Finished ${activityName}`, status: 'success'});
           item.remove();
           resolve();
         }

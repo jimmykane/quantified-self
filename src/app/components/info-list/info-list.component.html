@@ -1,5 +1,8 @@
-<div class="info-list">
-  <ul>
-    <li [@itemAnim]="items.length" *ngFor="let activity of items"> {{activity.label }}</li>
-  </ul>
+<div class="ncf-container nfc-bottom-left">
+  <div class="ncf" *ngFor="let activity of items"
+       [class.success]="activity.status == 'success'"
+       [class.info]="activity.status == 'info'"
+       [class.error]="activity.status == 'error'">
+    <p class="nfc-message">{{activity.label}}</p>
+  </div>
 </div>
