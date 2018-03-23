@@ -30,15 +30,13 @@ describe('EventAdapters', () => {
     ) instanceof Event).toBe(true);
   });
 
-  it('should be get the same result from any adapter', () => {
-    const event1 = EventImporterJSON.getFromJSONString(JSON.stringify(example1));
-    const event2 = EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(example2));
+  it('should import and export correctly from Suunto adapter', () => {
+    // First get it from adapter 1
+    const event1 = EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(example2));
+    const event2 = EventImporterJSON.getFromJSONString(JSON.stringify(event1));
 
-    // This is clearly a hack
-    event2.name = event1.name;
-    event1.setID('123');
-    event1.getActivities().map((activity) => {
-      activity.setID('123');
+    event1.name = event2.name;
+    event2.getActivities().map((activity) => {
       delete activity.summary.avgHR;
       delete activity.summary.maxHR;
       delete activity.summary.minHR;
@@ -57,15 +55,6 @@ describe('EventAdapters', () => {
       delete activity.summary.minTemperature;
       delete activity.summary.maxTemperature;
       delete activity.summary.avgTemperature;
-      delete activity.summary.weather;
-      delete activity.summary.geoLocationInfo;
-      activity.getLaps().sort((lapA: LapInterface, lapB: LapInterface) => {
-        return lapA.startDate.getTime() - lapB.startDate.getTime();
-      });
-    });
-    event2.setID('123');
-    event2.getActivities().map((activity) => {
-      activity.setID('123')
     });
     expect(event1).toEqual(event2);
   });
