@@ -188,19 +188,4 @@ export class EventUtilities {
 // }
 
 
-// public createEventFromXMLString(data: string): Promise<EventInterface> {
-//   return new Promise((resolve, reject) => {
-//     // Read the xml
-//     try {
-//       const xml = this.parser.parseFromString(data, 'application/xml');
-//       if (xml.getElementsByTagName('gpx')[0]) {
-//         return resolve(EventImporterGPX.getFromXML(xml));
-//       } else if (xml.getElementsByTagName('TrainingCenterDatabase')[0]) {
-//         return resolve(EventImporterTCX.getFromXML(xml));
-//       }
-//     } catch (e) {
-//       return reject(e);
-//     }
-//     return reject('Could not fund an encoder for this file format');
-//   });
-// }
+

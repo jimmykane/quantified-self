@@ -1,4 +1,3 @@
-/*
 import {Event} from '../../event';
 import {Activity} from '../../../activities/activity';
 import {Creator} from '../../../creators/creator';
@@ -21,17 +20,19 @@ export class EventImporterTCX {
     const event = new Event();
     event.setID(id || event.getID());
 
+
+
     // Iterate over activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
       const activity = new Activity();
-      activity.setType(activityElement.getAttribute('Sport'));
+      activity.type = activityElement.getAttribute('Sport');
       event.addActivity(activity);
 
       // Setup the creators
       for (const creatorElement of <any>activityElement.getElementsByTagName('Creator')) {
         const creator = new Creator();
-        creator.setName(creatorElement.getElementsByTagName('Name')[0].textContent);
-        activity.setCreator(creator);
+        creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
+        activity.creator = creator;
       }
 
       // Setup the laps
@@ -56,7 +57,7 @@ export class EventImporterTCX {
         //   lap.setIntensity(lapElement.getElementsByTagName('Intensity')[0].textContent);
         // }
         if (lapElement.getElementsByTagName('TriggerMethod')[0]) {
-          lap.setType(lapElement.getElementsByTagName('TriggerMethod')[0].textContent);
+          lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
         }
 
         // Go over the points and append them to the track
@@ -109,4 +110,3 @@ export class EventImporterTCX {
     return event;
   }
 }
-*/
