@@ -22,10 +22,9 @@ import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
 import {Summary} from '../../../summary/summary';
 import {IntensityZones} from '../../../intensity-zones/intensity-zone';
-import {IBIFilters} from '../../../data/ibi/data.ibi.filters';
 import {IBIData} from '../../../data/ibi/data.ibi';
-import {PointInterface} from "../../../points/point.interface";
-import {SummaryInterface} from "../../../summary/summary.interface";
+import {PointInterface} from '../../../points/point.interface';
+import {SummaryInterface} from '../../../summary/summary.interface';
 
 export class EventImporterSuuntoJSON {
 

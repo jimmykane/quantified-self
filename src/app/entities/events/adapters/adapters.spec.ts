@@ -5,6 +5,7 @@ import {EventImporterTCX} from './importers/importer.tcx';
 
 const json = require('../../../../../samples/example.json');
 const suuntoJSON = require('../../../../../samples/suunto.json');
+const tcxJSON = require('../../../../../samples/movescount_tcx.json');
 
 describe('EventAdapters', () => {
 
@@ -31,7 +32,7 @@ describe('EventAdapters', () => {
   });
 
   it('should be able to decode tcx', () => {
-    // EventImporterTCX.getFromXML((new DOMParser()).parseFromString('', 'application/xml'));
+    EventImporterTCX.getFromXML((new DOMParser()).parseFromString(tcxJSON.tcx, 'application/xml'));
   });
 
 
