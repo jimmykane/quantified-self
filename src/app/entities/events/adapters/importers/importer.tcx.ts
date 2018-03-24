@@ -11,6 +11,7 @@ import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from '../../../data/data.power';
+import {PointInterface} from '../../../points/point.interface';
 
 export class EventImporterTCX {
 
@@ -18,9 +19,6 @@ export class EventImporterTCX {
 
     // Create an event
     const event = new Event();
-    event.setID(id || event.getID());
-
-
 
     // Iterate over activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
@@ -47,8 +45,10 @@ export class EventImporterTCX {
           new Date(
             +(new Date(lapElement.getAttribute('StartTime'))) +
             1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
-        ));
+          ));
         activity.addLap(lap);
+
+        this.getPointsFromLapTrackPoints(lapElement.getElementsByTagName('Trackpoint'));
 
         // if (lapElement.getElementsByTagName('Calories')[0]) {
         //   lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));
@@ -60,53 +60,57 @@ export class EventImporterTCX {
           lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
         }
 
-        // Go over the points and append them to the track
-        for (const pointElement of <any>lapElement.getElementsByTagName('Trackpoint')) {
-          const point = new Point(new Date(pointElement.getElementsByTagName('Time')[0].textContent));
-          activity.addPoint(point);
-          for (const dataElement of <any>pointElement.children) {
-            switch (dataElement.tagName) {
-              case 'Position': {
-                point.addData(new DataLatitudeDegrees(dataElement.getElementsByTagName('LatitudeDegrees')[0].textContent));
-                point.addData(new DataLongitudeDegrees(dataElement.getElementsByTagName('LongitudeDegrees')[0].textContent));
-                break;
-              }
-              case 'AltitudeMeters': {
-                point.addData(new DataAltitude(dataElement.textContent));
-                break;
-              }
-              case 'Cadence': {
-                point.addData(new DataCadence(dataElement.textContent));
-                break;
-              }
-              case 'HeartRateBpm': {
-                point.addData(new DataHeartRate(dataElement.getElementsByTagName('Value')[0].textContent));
-                break;
-              }
-              case 'Extensions': {
-                for (const dataExtensionElement of <any>dataElement.getElementsByTagName('TPX')[0].children) {
-                  switch (dataExtensionElement.tagName) {
-                    case 'Speed': {
-                      point.addData(new DataSpeed(dataExtensionElement.textContent));
-                      break;
-                    }
-                    case 'RunCadence': {
-                      point.addData(new DataCadence(dataExtensionElement.textContent));
-                      break;
-                    }
-                    case 'Watts': {
-                      point.addData(new DataPower(dataExtensionElement.textContent));
-                      break;
-                    }
-                  }
-                }
-                break;
-              }
-            }
-          }
-        }
+
       }
     }
     return event;
+  }
+
+  private static getPointsFromLapTrackPoints(trackPointsElements: HTMLElement[]): PointInterface[] {
+    return Array.from(trackPointsElements).reduce((pointsArray: PointInterface[], trackPointElement) => {
+      const point = new Point(new Date(trackPointElement.getElementsByTagName('Time')[0].textContent));
+      pointsArray.push(point);
+      for (const dataElement of <any>trackPointElement.children) {
+        switch (dataElement.tagName) {
+          case 'Position': {
+            point.addData(new DataLatitudeDegrees(dataElement.getElementsByTagName('LatitudeDegrees')[0].textContent));
+            point.addData(new DataLongitudeDegrees(dataElement.getElementsByTagName('LongitudeDegrees')[0].textContent));
+            break;
+          }
+          case 'AltitudeMeters': {
+            point.addData(new DataAltitude(dataElement.textContent));
+            break;
+          }
+          case 'Cadence': {
+            point.addData(new DataCadence(dataElement.textContent));
+            break;
+          }
+          case 'HeartRateBpm': {
+            point.addData(new DataHeartRate(dataElement.getElementsByTagName('Value')[0].textContent));
+            break;
+          }
+          case 'Extensions': {
+            for (const dataExtensionElement of <any>dataElement.getElementsByTagName('TPX')[0].children) {
+              switch (dataExtensionElement.tagName) {
+                case 'Speed': {
+                  point.addData(new DataSpeed(dataExtensionElement.textContent));
+                  break;
+                }
+                case 'RunCadence': {
+                  point.addData(new DataCadence(dataExtensionElement.textContent));
+                  break;
+                }
+                case 'Watts': {
+                  point.addData(new DataPower(dataExtensionElement.textContent));
+                  break;
+                }
+              }
+            }
+            break;
+          }
+        }
+      }
+      return pointsArray;
+    }, []);
   }
 }
