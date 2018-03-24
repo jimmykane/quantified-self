@@ -48,7 +48,9 @@ export class EventImporterTCX {
           ));
         activity.addLap(lap);
 
-        this.getPointsFromLapTrackPoints(lapElement.getElementsByTagName('Trackpoint'));
+        this.getPointsFromLapTrackPoints(lapElement.getElementsByTagName('Trackpoint')).map((point) => {
+          activity.addPoint(point);
+        });
 
         // if (lapElement.getElementsByTagName('Calories')[0]) {
         //   lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));
