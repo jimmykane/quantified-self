@@ -12,28 +12,31 @@ import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from '../../../data/data.power';
 import {PointInterface} from '../../../points/point.interface';
+import {CreatorInterface} from '../../../creators/creatorInterface';
+import {Summary} from "../../../summary/summary";
 
 export class EventImporterTCX {
 
-  static getFromXML(xml: Document, id?: string): EventInterface {
+  static getFromXML(xml: Document): EventInterface {
 
-    // Create an event
     const event = new Event();
 
-    // Iterate over activities
+    // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
       const activity = new Activity();
       activity.type = activityElement.getAttribute('Sport');
       event.addActivity(activity);
+      // First element must exist
+      activity.startDate = new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime'));
+      // Setup the creator
+      activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
 
-      // Setup the creators
-      for (const creatorElement of <any>activityElement.getElementsByTagName('Creator')) {
-        const creator = new Creator();
-        creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
-        activity.creator = creator;
-      }
+      const activitySummary = new Summary();
+      activity.summary = activitySummary;
 
-      // Setup the laps
+      // Go over the laps and start filling up the summary and creating the points
+      // @todo
+      activitySummary.totalDurationInSeconds = 0;
       for (const lapElement of <any>activityElement.getElementsByTagName('Lap')) {
         // If the lap does not have any elapsed time or distance dont add it
         if (Math.round(Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)) === 0) {
@@ -114,5 +117,22 @@ export class EventImporterTCX {
       }
       return pointsArray;
     }, []);
+  }
+
+  private static getCreator(creatorElement?: HTMLElement): CreatorInterface {
+    const creator = new Creator();
+    if (!creatorElement) {
+      creator.name = 'Unknown device';
+      return creator;
+    }
+    creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
+    creator.setSerialNumber(creatorElement.getElementsByTagName('ProductID')[0].textContent);
+    if (creatorElement.getElementsByTagName('Version')) {
+      creator.setHWInfo(creatorElement.getElementsByTagName('Version')[0].textContent);
+    }
+    if (creatorElement.getElementsByTagName('Version')) {
+      creator.setSWInfo(creatorElement.getElementsByTagName('Version')[0].textContent);
+    }
+    return creator;
   }
 }
