@@ -65,7 +65,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
 
   ngOnChanges() {
     this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = Number(EventUtilities.getEventDataTypeAverage(
+      dataTypeAverage.value = Number(EventUtilities.getDataTypeAverage(
         this.event,
         dataTypeAverage.name,
         void 0,

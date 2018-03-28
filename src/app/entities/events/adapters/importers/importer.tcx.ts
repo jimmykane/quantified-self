@@ -13,7 +13,9 @@ import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from '../../../data/data.power';
 import {PointInterface} from '../../../points/point.interface';
 import {CreatorInterface} from '../../../creators/creatorInterface';
-import {Summary} from "../../../summary/summary";
+import {Summary} from '../../../summary/summary';
+import {LapInterface} from '../../../laps/lap.interface';
+import {EventUtilities} from "../../utilities/event.utilities";
 
 export class EventImporterTCX {
 
@@ -31,47 +33,27 @@ export class EventImporterTCX {
       // Setup the creator
       activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
 
-      const activitySummary = new Summary();
-      activity.summary = activitySummary;
+      activity.summary = new Summary();
 
       // Go over the laps and start filling up the summary and creating the points
       // @todo
-      activitySummary.totalDurationInSeconds = 0;
-      for (const lapElement of <any>activityElement.getElementsByTagName('Lap')) {
-        // If the lap does not have any elapsed time or distance dont add it
-        if (Math.round(Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)) === 0) {
-          continue;
-        }
+      activity.summary.totalDurationInSeconds = 0;
 
-        const lap = new Lap(
-          new Date(lapElement.getAttribute('StartTime')),
-          new Date(
-            +(new Date(lapElement.getAttribute('StartTime'))) +
-            1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
-          ));
+      // Get the laps
+      this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
-
-        this.getPointsFromLapTrackPoints(lapElement.getElementsByTagName('Trackpoint')).map((point) => {
+      });
+      Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
+        this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
           activity.addPoint(point);
         });
-
-        // if (lapElement.getElementsByTagName('Calories')[0]) {
-        //   lap.setCalories(Number(lapElement.getElementsByTagName('Calories')[0].textContent));
-        // }
-        // if (lapElement.getElementsByTagName('Intensity')[0]) {
-        //   lap.setIntensity(lapElement.getElementsByTagName('Intensity')[0].textContent);
-        // }
-        if (lapElement.getElementsByTagName('TriggerMethod')[0]) {
-          lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
-        }
-
-
-      }
+      });
     }
+    EventUtilities.generateSummaries(event);
     return event;
   }
 
-  private static getPointsFromLapTrackPoints(trackPointsElements: HTMLElement[]): PointInterface[] {
+  private static getPoints(trackPointsElements: HTMLElement[]): PointInterface[] {
     return Array.from(trackPointsElements).reduce((pointsArray: PointInterface[], trackPointElement) => {
       const point = new Point(new Date(trackPointElement.getElementsByTagName('Time')[0].textContent));
       pointsArray.push(point);
@@ -135,4 +117,47 @@ export class EventImporterTCX {
     }
     return creator;
   }
+
+  private static getLaps(lapElements: HTMLElement[]): LapInterface[] {
+    return Array.from(lapElements).reduce((lapArray, lapElement) => {
+      // Create the lap
+        const lap = new Lap(
+          new Date(lapElement.getAttribute('StartTime')),
+          new Date(
+            +(new Date(lapElement.getAttribute('StartTime'))) +
+            1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
+          ));
+        lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
+
+        // Create a summary (required TCX fields)
+        lap.summary = new Summary();
+        lap.summary.energyInCal = Number(lapElement.getElementsByTagName('Calories')[0].textContent);
+        lap.summary.totalDurationInSeconds = Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent);
+        lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
+
+        // Optionals
+        if (lapElement.getElementsByTagName('MaximumSpeed')[0]) {
+          lap.summary.maxSpeed = Number(lapElement.getElementsByTagName('MaximumSpeed')[0]);
+        }
+
+        if (lapElement.getElementsByTagName('AverageHeartRateBpm')[0]) {
+          lap.summary.avgHR = Number(
+            lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
+          );
+        }
+
+        if (lapElement.getElementsByTagName('MaximumHeartRateBpm')[0]) {
+          lap.summary.maxHR = Number(
+            lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
+          );
+        }
+
+        // Generate missing max,min,avg
+
+      lapArray.push(lap);
+      return lapArray;
+    }, []);
+  }
+
+
 }

@@ -169,6 +169,16 @@ export class EventUtilities {
     });
   }
 
+  public static generateSummaries(event: EventInterface) {
+    // Todo should also work for event
+    event.getActivities().map((activity: ActivityInterface) => {
+      activity.getLaps().map((lap: LapInterface) => {
+        lap.summary.maxHR = this.getDateTypeMaximum(event, DataHeartRate.type, lap.startDate, lap.endDate);
+        lap.summary.minHR = this.getDateTypeMinimum(event, DataHeartRate.type, lap.startDate, lap.endDate);
+        lap.summary.avgHR = this.getDataTypeAverage(event, DataHeartRate.type, lap.startDate, lap.endDate);
+      })
+    })
+  }
 }
 
 
