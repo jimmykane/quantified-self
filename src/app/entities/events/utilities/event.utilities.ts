@@ -7,6 +7,8 @@ import {GeoLibAdapter} from '../../geodesy/adapters/geolib.adapter';
 import {EventExporterTCX} from '../adapters/exporters/exporter.tcx';
 import {PointInterface} from "../../points/point.interface";
 import {Event} from "../event";
+import {LapInterface} from "../../laps/lap.interface";
+import {DataHeartRate} from "../../data/data.heart-rate";
 
 export class EventUtilities {
 
@@ -23,40 +25,6 @@ export class EventUtilities {
     return new Promise((resolve, reject) => {
       return resolve(EventImporterJSON.getFromJSONString(data));
     });
-  }
-
-  public static generateEventSummaries(event: EventInterface): Promise<EventInterface> {
-    return new Promise(((resolve, reject) => {
-
-      for (const activity of event.getActivities()) {
-        const activitySummary = new Summary();
-        activitySummary.totalDistanceInMeters = this.getEventDistanceInMeters(
-          event, void 0, void 0, [activity]
-        );
-
-        activitySummary.totalDurationInSeconds = (+activity.endDate - +activity.startDate) / 1000;
-        activity.summary = activitySummary;
-
-        // If indoors
-        if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
-          continue;
-        }
-
-        // Lap summaries
-        for (const lap of activity.getLaps()) {
-          const lapSummary = new Summary();
-          lapSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event, lap.startDate, lap.endDate);
-          lapSummary.totalDurationInSeconds = (+lap.endDate - +lap.startDate) / 1000;
-          lap.summary = lapSummary;
-        }
-      }
-
-      // Event Summary
-      const eventSummary = new Summary();
-      eventSummary.totalDurationInSeconds = event.getTotalDurationInSeconds();
-      eventSummary.totalDistanceInMeters = this.getEventDistanceInMeters(event);
-      event.summary = eventSummary;
-    }));
   }
 
   public static getEventDistanceInMeters(event: EventInterface,
@@ -80,11 +48,11 @@ export class EventUtilities {
     });
   }
 
-  public static getEventDataTypeAverage(event: EventInterface,
-                                        dataType: string,
-                                        startDate?: Date,
-                                        endDate?: Date,
-                                        activities?: ActivityInterface[]): number {
+  public static getDataTypeAverage(event: EventInterface,
+                                   dataType: string,
+                                   startDate?: Date,
+                                   endDate?: Date,
+                                   activities?: ActivityInterface[]): number {
     let count = 1;
     const averageForDataType = event.getPoints(startDate, endDate, activities).reduce((average: number, point: PointInterface) => {
       if (!point.getDataByType(dataType)) {
@@ -95,6 +63,36 @@ export class EventUtilities {
       return average;
     }, 0);
     return averageForDataType / count;
+  }
+
+  public static getDateTypeMaximum(event: EventInterface,
+                                   dataType: string,
+                                   startDate?: Date,
+                                   endDate?: Date,
+                                   activities?: ActivityInterface[]): number {
+
+    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
+      if (point.getDataByType(dataType)) {
+        dataValues.push(point.getDataByType(dataType).getValue());
+      }
+      return dataValues;
+    }, []);
+    return Math.max(...dataValuesArray);
+  }
+
+  public static getDateTypeMinimum(event: EventInterface,
+                                   dataType: string,
+                                   startDate?: Date,
+                                   endDate?: Date,
+                                   activities?: ActivityInterface[]): number {
+
+    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
+      if (point.getDataByType(dataType)) {
+        dataValues.push(point.getDataByType(dataType).getValue());
+      }
+      return dataValues;
+    }, []);
+    return Math.min(...dataValuesArray);
   }
 
   public static getEventDataTypeGain(event: EventInterface,
