@@ -4,6 +4,5 @@ describe('EventUtilities', () => {
   });
 
   it('should get the correct minimum for a datatype', () => {
-
   });
 });

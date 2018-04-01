@@ -5,6 +5,7 @@ import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interfa
 
 export class Summary implements SummaryInterface {
 
+  // @todo use vector base class
   public totalDurationInSeconds: number;
   public totalDistanceInMeters: number;
   public maxAltitudeInMeters: number;

@@ -9,6 +9,11 @@ import {PointInterface} from "../../points/point.interface";
 import {Event} from "../event";
 import {LapInterface} from "../../laps/lap.interface";
 import {DataHeartRate} from "../../data/data.heart-rate";
+import {DataCadence} from "../../data/data.cadence";
+import {DataSpeed} from "../../data/data.speed";
+import {DataVerticalSpeed} from "../../data/data.verticalspeed";
+import {DataTemperature} from "../../data/data.temperature";
+import {DataAltitude} from "../../data/data.altitude";
 
 export class EventUtilities {
 
@@ -53,7 +58,7 @@ export class EventUtilities {
                                    startDate?: Date,
                                    endDate?: Date,
                                    activities?: ActivityInterface[]): number {
-    let count = 1;
+    let count = 0;
     const averageForDataType = event.getPoints(startDate, endDate, activities).reduce((average: number, point: PointInterface) => {
       if (!point.getDataByType(dataType)) {
         return average;
@@ -62,7 +67,7 @@ export class EventUtilities {
       count++;
       return average;
     }, 0);
-    return averageForDataType / count;
+    return count ?  averageForDataType / (count + 1) : void 0;
   }
 
   public static getDateTypeMaximum(event: EventInterface,
@@ -77,7 +82,7 @@ export class EventUtilities {
       }
       return dataValues;
     }, []);
-    return Math.max(...dataValuesArray);
+    return dataValuesArray.length ? Math.max(...dataValuesArray) : void 0;
   }
 
   public static getDateTypeMinimum(event: EventInterface,
@@ -92,7 +97,7 @@ export class EventUtilities {
       }
       return dataValues;
     }, []);
-    return Math.min(...dataValuesArray);
+    return dataValuesArray.length ? Math.min(...dataValuesArray) : void 0;
   }
 
   public static getEventDataTypeGain(event: EventInterface,
@@ -172,12 +177,41 @@ export class EventUtilities {
   public static generateSummaries(event: EventInterface) {
     // Todo should also work for event
     event.getActivities().map((activity: ActivityInterface) => {
+      this.generateSummaryForActivityOrLap(event, activity);
       activity.getLaps().map((lap: LapInterface) => {
-        lap.summary.maxHR = this.getDateTypeMaximum(event, DataHeartRate.type, lap.startDate, lap.endDate);
-        lap.summary.minHR = this.getDateTypeMinimum(event, DataHeartRate.type, lap.startDate, lap.endDate);
-        lap.summary.avgHR = this.getDataTypeAverage(event, DataHeartRate.type, lap.startDate, lap.endDate);
+        this.generateSummaryForActivityOrLap(event, lap);
       })
     })
+  }
+
+  private static generateSummaryForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
+    // Altitude
+    subject.summary.maxAltitudeInMeters = this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    subject.summary.minAltitudeInMeters = this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    // Heart Rate
+    subject.summary.maxHR = this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    subject.summary.minHR = this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    subject.summary.avgHR = this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    // Cadence
+    subject.summary.maxCadence = this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate);
+    subject.summary.minCadence = this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate);
+    subject.summary.avgCadence = this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate);
+    // Speed
+    subject.summary.maxSpeed = this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate);
+    subject.summary.minSpeed = this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate);
+    subject.summary.avgSpeed = this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate);
+    // Vertical Speed
+    subject.summary.maxVerticalSpeed = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    subject.summary.minVerticalSpeed = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    subject.summary.avgVerticalSpeed = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    // Power
+    subject.summary.maxPower = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    subject.summary.minPower = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    subject.summary.avgPower = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    // Temperature
+    subject.summary.maxTemperature = this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate);
+    subject.summary.minTemperature = this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate);
+    subject.summary.avgTemperature = this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate);
   }
 }
 

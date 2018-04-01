@@ -38,10 +38,13 @@ export class EventImporterTCX {
       // Go over the laps and start filling up the summary and creating the points
       // @todo
       activity.summary.totalDurationInSeconds = 0;
+      activity.summary.totalDistanceInMeters = 0;
 
-      // Get the laps
+      // Get the laps and add the total distance to the activity
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
+        activity.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
+        activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
@@ -50,6 +53,7 @@ export class EventImporterTCX {
       });
     }
     EventUtilities.generateSummaries(event);
+
     return event;
   }
 
@@ -136,17 +140,17 @@ export class EventImporterTCX {
         lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
 
         // Optionals
-        if (lapElement.getElementsByTagName('MaximumSpeed')[0]) {
+        if (lapElement.getElementsByTagName('MaximumSpeed')) {
           lap.summary.maxSpeed = Number(lapElement.getElementsByTagName('MaximumSpeed')[0]);
         }
 
-        if (lapElement.getElementsByTagName('AverageHeartRateBpm')[0]) {
+        if (lapElement.getElementsByTagName('AverageHeartRateBpm')) {
           lap.summary.avgHR = Number(
             lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
           );
         }
 
-        if (lapElement.getElementsByTagName('MaximumHeartRateBpm')[0]) {
+        if (lapElement.getElementsByTagName('MaximumHeartRateBpm')) {
           lap.summary.maxHR = Number(
             lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
           );
