@@ -216,13 +216,13 @@ export class EventImporterSuuntoJSON {
       const zones = new IntensityZones;
       zones.zone1Duration = object.HrZones.Zone1Duration;
       zones.zone2Duration = object.HrZones.Zone2Duration;
-      zones.zone2LowerLimit = Math.round(object.HrZones.Zone2LowerLimit * 60);
+      zones.zone2LowerLimit = object.HrZones.Zone2LowerLimit * 60;
       zones.zone3Duration = object.HrZones.Zone3Duration;
-      zones.zone3LowerLimit = Math.round(object.HrZones.Zone3LowerLimit * 60);
+      zones.zone3LowerLimit = object.HrZones.Zone3LowerLimit * 60;
       zones.zone4Duration = object.HrZones.Zone4Duration;
-      zones.zone4LowerLimit = Math.round(object.HrZones.Zone4LowerLimit * 60);
+      zones.zone4LowerLimit = object.HrZones.Zone4LowerLimit * 60;
       zones.zone5Duration = object.HrZones.Zone5Duration;
-      zones.zone5LowerLimit = Math.round(object.HrZones.Zone5LowerLimit * 60);
+      zones.zone5LowerLimit = object.HrZones.Zone5LowerLimit * 60;
       summary.intensityZones.set(DataHeartRate.type, zones);
     }
 
