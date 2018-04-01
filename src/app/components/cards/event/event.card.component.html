@@ -45,7 +45,7 @@
           <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.creator.name }}</mat-chip></mat-chip-list></span>
           <span class="mat-body-2"
                 *ngIf=" activity.creator.getSWInfo()">v{{ activity.creator.getSWInfo() }}</span>
-          <span *ngIf=" activity.creator.getSerialNumber()">{{ activity.creator.getSerialNumber() }}</span>
+          <span *ngIf=" activity.creator.getSerialNumber()"> - sn {{ activity.creator.getSerialNumber() }}</span>
         </span>
     </mat-card-subtitle>
   </mat-card-header>
