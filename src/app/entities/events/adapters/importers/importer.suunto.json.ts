@@ -213,47 +213,31 @@ export class EventImporterSuuntoJSON {
     }
 
     if (object.HrZones) {
-      const zones = new IntensityZones;
-      zones.zone1Duration = object.HrZones.Zone1Duration;
-      zones.zone2Duration = object.HrZones.Zone2Duration;
-      zones.zone2LowerLimit = object.HrZones.Zone2LowerLimit * 60;
-      zones.zone3Duration = object.HrZones.Zone3Duration;
-      zones.zone3LowerLimit = object.HrZones.Zone3LowerLimit * 60;
-      zones.zone4Duration = object.HrZones.Zone4Duration;
-      zones.zone4LowerLimit = object.HrZones.Zone4LowerLimit * 60;
-      zones.zone5Duration = object.HrZones.Zone5Duration;
-      zones.zone5LowerLimit = object.HrZones.Zone5LowerLimit * 60;
-      summary.intensityZones.set(DataHeartRate.type, zones);
+      summary.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
     }
 
     if (object.PowerZones) {
-      const zones = new IntensityZones;
-      zones.zone1Duration = object.PowerZones.Zone1Duration;
-      zones.zone2Duration = object.PowerZones.Zone2Duration;
-      zones.zone2LowerLimit = object.PowerZones.Zone2LowerLimit;
-      zones.zone3Duration = object.PowerZones.Zone3Duration;
-      zones.zone3LowerLimit = object.PowerZones.Zone3LowerLimit;
-      zones.zone4Duration = object.PowerZones.Zone4Duration;
-      zones.zone4LowerLimit = object.PowerZones.Zone4LowerLimit;
-      zones.zone5Duration = object.PowerZones.Zone5Duration;
-      zones.zone5LowerLimit = object.PowerZones.Zone5LowerLimit;
-      summary.intensityZones.set(DataPower.type, zones);
+      summary.intensityZones.set(DataPower.type, this.getZones(object.PowerZones));
     }
 
     if (object.SpeedZones) {
-      const zones = new IntensityZones;
-      zones.zone1Duration = object.SpeedZones.Zone1Duration;
-      zones.zone2Duration = object.SpeedZones.Zone2Duration;
-      zones.zone2LowerLimit = object.SpeedZones.Zone2LowerLimit;
-      zones.zone3Duration = object.SpeedZones.Zone3Duration;
-      zones.zone3LowerLimit = object.SpeedZones.Zone3LowerLimit;
-      zones.zone4Duration = object.SpeedZones.Zone4Duration;
-      zones.zone4LowerLimit = object.SpeedZones.Zone4LowerLimit;
-      zones.zone5Duration = object.SpeedZones.Zone5Duration;
-      zones.zone5LowerLimit = object.SpeedZones.Zone5LowerLimit;
-      summary.intensityZones.set(DataSpeed.type, zones);
+      summary.intensityZones.set(DataSpeed.type, this.getZones(object.SpeedZones));
     }
     return summary;
+  }
+
+  private static getZones(zonesObj: any): IntensityZones {
+    const zones = new IntensityZones;
+    zones.zone1Duration = zonesObj.Zone1Duration;
+    zones.zone2Duration = zonesObj.Zone2Duration;
+    zones.zone2LowerLimit = zonesObj.Zone2LowerLimit;
+    zones.zone3Duration = zonesObj.Zone3Duration;
+    zones.zone3LowerLimit = zonesObj.Zone3LowerLimit;
+    zones.zone4Duration = zonesObj.Zone4Duration;
+    zones.zone4LowerLimit = zonesObj.Zone4LowerLimit;
+    zones.zone5Duration = zonesObj.Zone5Duration;
+    zones.zone5LowerLimit = zonesObj.Zone5LowerLimit;
+    return zones;
   }
 
   private static getActivityTypeFromID(id: number): string {
