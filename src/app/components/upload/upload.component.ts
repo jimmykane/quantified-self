@@ -44,7 +44,6 @@ export class UploadComponent {
             newEvent = await EventUtilities.createEventFromSuuntoJSONString(fileReader.result);
           } else if (extension === 'tcx') {
             newEvent = await EventUtilities.createEventFromTCXString(fileReader.result);
-            debugger;
           }
           newEvent.name = activityName;
           await this.eventService.generateGeoAndWeather(newEvent);
