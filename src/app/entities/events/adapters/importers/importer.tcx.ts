@@ -16,12 +16,16 @@ import {CreatorInterface} from '../../../creators/creatorInterface';
 import {Summary} from '../../../summary/summary';
 import {LapInterface} from '../../../laps/lap.interface';
 import {EventUtilities} from "../../utilities/event.utilities";
+import {ActivityInterface} from "../../../activities/activity.interface";
 
 export class EventImporterTCX {
 
   static getFromXML(xml: Document): EventInterface {
 
     const event = new Event();
+    event.summary = new Summary();
+    event.summary.totalDurationInSeconds = 0;
+    event.summary.totalDistanceInMeters = 0;
 
     // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
@@ -43,8 +47,11 @@ export class EventImporterTCX {
       // Get the laps and add the total distance to the activity
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
+        // Increment wrapper summaries
         activity.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
         activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
+        event.summary.totalDistanceInMeters += activity.summary.totalDistanceInMeters;
+        event.summary.totalDurationInSeconds += activity.summary.totalDurationInSeconds;
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
@@ -53,7 +60,6 @@ export class EventImporterTCX {
       });
     }
     EventUtilities.generateSummaries(event);
-
     return event;
   }
 
@@ -112,10 +118,6 @@ export class EventImporterTCX {
       return creator;
     }
     creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
-    creator.setSerialNumber(creatorElement.getElementsByTagName('ProductID')[0].textContent);
-    if (creatorElement.getElementsByTagName('Version')) {
-      creator.setHWInfo(creatorElement.getElementsByTagName('Version')[0].textContent);
-    }
     if (creatorElement.getElementsByTagName('Version')) {
       creator.setSWInfo(creatorElement.getElementsByTagName('Version')[0].textContent);
     }
@@ -125,38 +127,38 @@ export class EventImporterTCX {
   private static getLaps(lapElements: HTMLElement[]): LapInterface[] {
     return Array.from(lapElements).reduce((lapArray, lapElement) => {
       // Create the lap
-        const lap = new Lap(
-          new Date(lapElement.getAttribute('StartTime')),
-          new Date(
-            +(new Date(lapElement.getAttribute('StartTime'))) +
-            1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
-          ));
-        lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
+      const lap = new Lap(
+        new Date(lapElement.getAttribute('StartTime')),
+        new Date(
+          +(new Date(lapElement.getAttribute('StartTime'))) +
+          1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
+        ));
+      lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
 
-        // Create a summary (required TCX fields)
-        lap.summary = new Summary();
-        lap.summary.energyInCal = Number(lapElement.getElementsByTagName('Calories')[0].textContent);
-        lap.summary.totalDurationInSeconds = Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent);
-        lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
+      // Create a summary (required TCX fields)
+      lap.summary = new Summary();
+      lap.summary.energyInCal = Number(lapElement.getElementsByTagName('Calories')[0].textContent);
+      lap.summary.totalDurationInSeconds = Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent);
+      lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
 
-        // Optionals
-        if (lapElement.getElementsByTagName('MaximumSpeed')) {
-          lap.summary.maxSpeed = Number(lapElement.getElementsByTagName('MaximumSpeed')[0]);
-        }
+      // Optionals
+      if (lapElement.getElementsByTagName('MaximumSpeed')) {
+        lap.summary.maxSpeed = Number(lapElement.getElementsByTagName('MaximumSpeed')[0]);
+      }
 
-        if (lapElement.getElementsByTagName('AverageHeartRateBpm')) {
-          lap.summary.avgHR = Number(
-            lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
-          );
-        }
+      if (lapElement.getElementsByTagName('AverageHeartRateBpm')) {
+        lap.summary.avgHR = Number(
+          lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
+        );
+      }
 
-        if (lapElement.getElementsByTagName('MaximumHeartRateBpm')) {
-          lap.summary.maxHR = Number(
-            lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
-          );
-        }
+      if (lapElement.getElementsByTagName('MaximumHeartRateBpm')) {
+        lap.summary.maxHR = Number(
+          lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
+        );
+      }
 
-        // Generate missing max,min,avg
+      // Generate missing max,min,avg
 
       lapArray.push(lap);
       return lapArray;

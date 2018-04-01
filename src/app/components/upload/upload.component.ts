@@ -38,21 +38,25 @@ export class UploadComponent {
         };
       this.activitiesProcessed.push(metaData);
       fileReader.onload = async () => {
-        if (extension === 'json') {
-          let newEvent;
-          try {
+        let newEvent;
+        try {
+          if (extension === 'json') {
             newEvent = await EventUtilities.createEventFromSuuntoJSONString(fileReader.result);
-          } catch (error) {
-            metaData.status = UPLOAD_STATUS.ERROR;
-            console.error('Could not load event from file' + file.name, error);
-            reject(error);
-            return;
+          } else if (extension === 'tcx') {
+            newEvent = await EventUtilities.createEventFromTCXString(fileReader.result);
+            debugger;
           }
           newEvent.name = activityName;
           await this.eventService.generateGeoAndWeather(newEvent);
-          this.eventService.addAndSaveEvent(newEvent);
           metaData.status = UPLOAD_STATUS.PROCESSED;
+          this.eventService.addAndSaveEvent(newEvent);
           resolve();
+
+        } catch (error) {
+          metaData.status = UPLOAD_STATUS.ERROR;
+          console.error('Could not load event from file' + file.name, error);
+          reject(error);
+          return;
         }
       };
       // Read it

@@ -14,6 +14,7 @@ import {DataSpeed} from "../../data/data.speed";
 import {DataVerticalSpeed} from "../../data/data.verticalspeed";
 import {DataTemperature} from "../../data/data.temperature";
 import {DataAltitude} from "../../data/data.altitude";
+import {EventImporterTCX} from "../adapters/importers/importer.tcx";
 
 export class EventUtilities {
 
@@ -29,6 +30,12 @@ export class EventUtilities {
   public static createEventFromJSONString(data: string): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
       return resolve(EventImporterJSON.getFromJSONString(data));
+    });
+  }
+
+  public static createEventFromTCXString(data: string): Promise<EventInterface> {
+    return new Promise((resolve, reject) => {
+      return resolve(EventImporterTCX.getFromXML((new DOMParser()).parseFromString(data, 'application/xml')));
     });
   }
 
@@ -67,7 +74,7 @@ export class EventUtilities {
       count++;
       return average;
     }, 0);
-    return count ?  averageForDataType / (count + 1) : void 0;
+    return count ? averageForDataType / (count + 1) : void 0;
   }
 
   public static getDateTypeMaximum(event: EventInterface,

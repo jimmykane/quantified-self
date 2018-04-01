@@ -7,8 +7,8 @@
       <app-upload-info [activitiesCompleted]="activitiesProcessed" [isVisible]="isUploadActive"></app-upload-info>
       <div *ngIf="!isUploadActive">
         <p></p>
-        <button mat-button (click)="inputFile.click()">Open JSON</button>
-        <input #inputFile type="file" accept=".json" multiple [style.display]="'none'" (change)="openFile($event)">
+        <button mat-button (click)="inputFile.click()">Open JSON or TCX file</button>
+        <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'" (change)="openFile($event)">
       </div>
     </mat-card-content>
   </mat-card>

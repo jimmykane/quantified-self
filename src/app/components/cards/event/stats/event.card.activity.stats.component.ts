@@ -21,78 +21,13 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   public stats = [];
 
-  public dataTypeAverages = [
-    {
-      name: DataHeartRate.type,
-      value: null,
-      iconName: 'heartbeat',
-      units: 'BPM',
-      iconType: 'fontAwesome'
-    },
-    {
-      name: DataCadence.type,
-      value: null,
-      iconName: 'circle-o-notch',
-      units: 'SPM',
-      iconType: 'fontAwesome'
-    },
-    {
-      name: DataTemperature.type,
-      value: null,
-      iconName: 'thermometer',
-      units: 'Celsius',
-      iconType: 'fontAwesome'
-    },
-    {
-      name: DataPower.type,
-      value: null,
-      iconName: 'flash',
-      units: 'WATTS',
-      iconType: 'fontAwesome'
-    }
-  ];
-
-  public dataTypeGains = [];
-
-  public dataTypeLosses = [];
-
   constructor(public eventService: EventService) {
-
   }
 
   ngOnInit() {
   }
 
   ngOnChanges() {
-    this.dataTypeAverages.forEach((dataTypeAverage) => {
-      dataTypeAverage.value = Number(EventUtilities.getDataTypeAverage(
-        this.event,
-        dataTypeAverage.name,
-        void 0,
-        void 0,
-        [this.activity]
-      ).toFixed(0));
-    });
-    this.dataTypeGains.forEach((dataTypeGain) => {
-      dataTypeGain.value = Number(EventUtilities.getEventDataTypeGain(
-        this.event,
-        dataTypeGain.name,
-        void 0,
-        void 0,
-        [this.activity]).toFixed(0));
-    });
-    this.dataTypeLosses.forEach((dataTypeLoss) => {
-      dataTypeLoss.value = Number(EventUtilities.getEventDataTypeLoss(this.event, dataTypeLoss.name,
-        void 0,
-        void 0,
-        [this.activity]
-      ).toFixed(0));
-    });
-
-    this.stats = this.dataTypeGains.concat(
-      this.dataTypeLosses,
-      this.dataTypeAverages
-    );
     this.stats.push(
       {
         name: 'Distance',
@@ -108,76 +43,105 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         units: '',
         iconType: 'fontAwesome'
       },
-      {
+    );
+    if (this.activity.summary.totalDistanceInMeters) {
+      this.stats.push({
         name: 'Pace',
-        value: (new Date(((this.activity.summary.totalDurationInSeconds - this.activity.summary.pauseDurationInSeconds) * 1000) / (this.activity.summary.totalDistanceInMeters / 1000))).toISOString().substr(14, 5),
+        value: (new Date(((this.activity.summary.totalDurationInSeconds - (this.activity.summary.pauseDurationInSeconds || 0)) * 1000) / (this.activity.summary.totalDistanceInMeters / 1000))).toISOString().substr(14, 5),
         iconName: 'directions_run',
         units: 'm/km',
         iconType: 'material'
-      },
-      {
+      });
+    }
+    if (this.activity.summary.avgSpeed) {
+      this.stats.push({
         name: 'Speed',
         value: ((this.activity.summary.totalDistanceInMeters / 1000) / ((this.activity.summary.totalDurationInSeconds - this.activity.summary.pauseDurationInSeconds) / 60 / 60)).toFixed(1),
         iconName: 'directions_bike',
         units: 'km/h',
         iconType: 'material'
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.ascentInMeters) {
+      this.stats.push({
         name: 'Ascent',
         value: this.activity.summary.ascentInMeters.toFixed(0),
         iconName: 'trending_up',
         units: 'm',
         iconType: 'material'
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.ascentTimeInSeconds) {
+      this.stats.push({
         name: 'Ascent Time',
         value: new Date(this.activity.summary.ascentTimeInSeconds * 1000).toISOString().substr(11, 8),
         iconName: null,
         units: null,
         iconType: null
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.descentInMeters) {
+      this.stats.push({
         name: 'Descent',
         value: this.activity.summary.descentInMeters.toFixed(0),
         iconName: 'trending_down',
         units: 'm',
         iconType: 'material'
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.descentTimeInSeconds) {
+      this.stats.push({
         name: 'Descent Time',
         value: new Date(this.activity.summary.descentTimeInSeconds * 1000).toISOString().substr(11, 8),
         iconName: null,
         units: null,
         iconType: null
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.recoveryTimeInSeconds) {
+      this.stats.push({
         name: 'Recovery Time',
         value: Math.floor(this.activity.summary.recoveryTimeInSeconds / 60 / 60),
         iconName: 'restore',
         units: 'hours',
         iconType: 'material'
-      },
-      {
+      });
+    }
+
+
+    if (this.activity.summary.energyInCal) {
+      this.stats.push({
         name: 'KCal',
         value: this.activity.summary.energyInCal.toFixed(0),
         iconName: null,
         units: null,
         iconType: null
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.peakTrainingEffect) {
+      this.stats.push({
         name: 'PTE',
         value: this.activity.summary.peakTrainingEffect.toFixed(1),
         iconName: null,
         units: null,
         iconType: null
-      },
-      {
+      });
+    }
+
+    if (this.activity.summary.peakTrainingEffect) {
+      this.stats.push({
         name: 'EPOC',
         value: this.activity.summary.epoc,
         iconName: null,
         units: null,
         iconType: null
-      },
-    );
+      });
+    }
   }
 }
