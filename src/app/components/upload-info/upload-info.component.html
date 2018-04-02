@@ -3,10 +3,7 @@
     Shouldn't take long</span>
   <mat-list class="list">
     <mat-list-item *ngFor="let activity of activitiesMetaData">
-    <span [class.success]="activity.status == UPLOAD_STATUS.PROCESSED"
-          [class.error]="activity.status == UPLOAD_STATUS.ERROR">
-      <span class="badge">{{activity.name}}</span>&nbsp;&nbsp;{{getActivityLabel(activity.status)}}
-    </span>
+      <mat-icon>{{getActivityStatusIcon(activity)}}</mat-icon>{{activity.name}}
     </mat-list-item>
   </mat-list>
   <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>

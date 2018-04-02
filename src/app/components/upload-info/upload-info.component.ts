@@ -13,24 +13,23 @@ import {UPLOAD_STATUS} from '../upload/status';
 export class UploadInfoComponent implements OnInit {
   @Input() isVisible: boolean;
   @Input() activitiesMetaData = [];
-  UPLOAD_STATUS = UPLOAD_STATUS;
 
   constructor() {
   }
 
   /**
-   * return the activity process status
+   * return the activity process icon
    * @param {number} status
    * @returns {string}
    */
-  getActivityLabel(status: number): string {
-    switch (status) {
+  getActivityStatusIcon(activity): string {
+    switch (activity.status) {
       case UPLOAD_STATUS.PROCESSED:
-        return 'Processed';
+        return 'done';
       case UPLOAD_STATUS.PROCESSING:
-        return 'Processing';
+        return 'autorenew';
       default:
-        return 'Error occurred while processing activity';
+        return 'sync_problem';
     }
   }
 
