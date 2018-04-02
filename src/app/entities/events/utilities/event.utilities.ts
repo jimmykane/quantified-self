@@ -15,6 +15,7 @@ import {DataVerticalSpeed} from "../../data/data.verticalspeed";
 import {DataTemperature} from "../../data/data.temperature";
 import {DataAltitude} from "../../data/data.altitude";
 import {EventImporterTCX} from "../adapters/importers/importer.tcx";
+import {DataPower} from "../../data/data.power";
 
 export class EventUtilities {
 
@@ -243,13 +244,13 @@ export class EventUtilities {
     }
     // Power
     if (!subject.summary.maxPower || subject.summary.maxPower === null) {
-      subject.summary.maxPower = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+      subject.summary.maxPower = this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate);
     }
     if (!subject.summary.minPower || subject.summary.minPower === null) {
-      subject.summary.minPower = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+      subject.summary.minPower = this.getDateTypeMinimum(event, DataPower.type, subject.startDate, subject.endDate);
     }
     if (!subject.summary.avgPower || subject.summary.avgPower === null) {
-      subject.summary.avgPower = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+      subject.summary.avgPower = this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate);
     }
     // Temperature
     if (!subject.summary.maxTemperature || subject.summary.maxTemperature === null) {
