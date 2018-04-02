@@ -75,7 +75,7 @@ export class EventUtilities {
       count++;
       return average;
     }, 0);
-    return count ? averageForDataType / (count + 1) : void 0;
+    return count ? averageForDataType / (count + 1) : null;
   }
 
   public static getDateTypeMaximum(event: EventInterface,
@@ -90,7 +90,7 @@ export class EventUtilities {
       }
       return dataValues;
     }, []);
-    return dataValuesArray.length ? Math.max(...dataValuesArray) : void 0;
+    return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
   }
 
   public static getDateTypeMinimum(event: EventInterface,
@@ -105,7 +105,7 @@ export class EventUtilities {
       }
       return dataValues;
     }, []);
-    return dataValuesArray.length ? Math.min(...dataValuesArray) : void 0;
+    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
   }
 
   public static getEventDataTypeGain(event: EventInterface,
