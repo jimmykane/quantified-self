@@ -42,26 +42,6 @@ describe('EventAdapters', () => {
     const event2 = EventImporterJSON.getFromJSONString(JSON.stringify(event1));
 
     event1.name = event2.name;
-    event2.getActivities().map((activity) => {
-      delete activity.summary.avgHR;
-      delete activity.summary.maxHR;
-      delete activity.summary.minHR;
-      delete activity.summary.minPower;
-      delete activity.summary.avgPower;
-      delete activity.summary.maxPower;
-      delete activity.summary.minCadence;
-      delete activity.summary.maxCadence;
-      delete activity.summary.avgCadence;
-      delete activity.summary.maxSpeed;
-      delete activity.summary.minSpeed;
-      delete activity.summary.avgSpeed;
-      delete activity.summary.minVerticalSpeed;
-      delete activity.summary.maxVerticalSpeed;
-      delete activity.summary.avgVerticalSpeed;
-      delete activity.summary.minTemperature;
-      delete activity.summary.maxTemperature;
-      delete activity.summary.avgTemperature;
-    });
     expect(event1).toEqual(event2);
   });
 });
