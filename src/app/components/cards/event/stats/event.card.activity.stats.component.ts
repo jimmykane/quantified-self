@@ -4,9 +4,7 @@ import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataPower} from '../../../../entities/data/data.power';
 import {DataTemperature} from '../../../../entities/data/data.temperature';
-import {EventService} from '../../../../services/app.event.service';
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
-import {EventUtilities} from '../../../../entities/events/utilities/event.utilities';
 
 
 @Component({
@@ -20,9 +18,6 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
   @Input() activity: ActivityInterface;
   @Input() event: EventInterface;
   public stats = [];
-
-  constructor(public eventService: EventService) {
-  }
 
   ngOnInit() {
   }
@@ -60,6 +55,46 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
         iconName: 'directions_bike',
         units: 'km/h',
         iconType: 'material'
+      });
+    }
+
+    if (this.activity.summary.avgHR) {
+      this.stats.push({
+        name: DataHeartRate.type,
+        value: Math.round(this.activity.summary.avgHR),
+        iconName: 'heartbeat',
+        units: DataHeartRate.unit,
+        iconType: 'fontAwesome'
+      });
+    }
+
+    if (this.activity.summary.avgCadence) {
+      this.stats.push({
+        name: DataCadence.type,
+        value: Math.round(this.activity.summary.avgCadence),
+        iconName: 'loop',
+        units: DataCadence.unit,
+        iconType: 'material'
+      });
+    }
+
+    if (this.activity.summary.avgPower) {
+      this.stats.push({
+        name: DataPower.type,
+        value: Math.round(this.activity.summary.avgCadence),
+        iconName: 'flash',
+        units: DataPower.unit,
+        iconType: 'fontAwesome'
+      });
+    }
+
+    if (this.activity.summary.avgTemperature) {
+      this.stats.push({
+        name: DataTemperature.type,
+        value: Math.round(this.activity.summary.avgCadence),
+        iconName: 'thermometer',
+        units: DataTemperature.unit,
+        iconType: 'fontAwesome'
       });
     }
 
