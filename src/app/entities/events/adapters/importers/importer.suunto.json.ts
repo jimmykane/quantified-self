@@ -25,6 +25,7 @@ import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../points/point.interface';
 import {SummaryInterface} from '../../../summary/summary.interface';
+import {EventUtilities} from "../../utilities/event.utilities";
 
 export class EventImporterSuuntoJSON {
 
@@ -94,6 +95,8 @@ export class EventImporterSuuntoJSON {
         activity.addPoint(point);
       });
     }
+
+    EventUtilities.generateSummaries(event);
     return event;
   }
 
