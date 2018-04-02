@@ -192,33 +192,75 @@ export class EventUtilities {
   }
 
   private static generateSummaryForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
+    debugger;
     // Altitude
-    subject.summary.maxAltitudeInMeters = this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate);
-    subject.summary.minAltitudeInMeters = this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxAltitudeInMeters || subject.summary.maxAltitudeInMeters === null) {
+      subject.summary.maxAltitudeInMeters = this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minAltitudeInMeters || subject.summary.minAltitudeInMeters === null) {
+      subject.summary.minAltitudeInMeters = this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    }
+
     // Heart Rate
-    subject.summary.maxHR = this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate);
-    subject.summary.minHR = this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate);
-    subject.summary.avgHR = this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxHR || subject.summary.maxHR === null) {
+      subject.summary.maxHR = this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minHR || subject.summary.minHR === null) {
+      subject.summary.minHR = this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.avgHR || subject.summary.avgHR === null) {
+      subject.summary.avgHR = this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    }
     // Cadence
-    subject.summary.maxCadence = this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate);
-    subject.summary.minCadence = this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate);
-    subject.summary.avgCadence = this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxCadence || subject.summary.maxCadence === null) {
+      subject.summary.maxCadence = this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minCadence || subject.summary.minCadence === null) {
+      subject.summary.minCadence = this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.avgCadence || subject.summary.avgCadence === null) {
+      subject.summary.avgCadence = this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate);
+    }
     // Speed
-    subject.summary.maxSpeed = this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate);
-    subject.summary.minSpeed = this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate);
-    subject.summary.avgSpeed = this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxSpeed || subject.summary.maxSpeed === null) {
+      subject.summary.maxSpeed = this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minSpeed || subject.summary.minSpeed === null) {
+      subject.summary.minSpeed = this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.avgSpeed || subject.summary.avgSpeed === null) {
+      subject.summary.avgSpeed = this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate);
+    }
     // Vertical Speed
-    subject.summary.maxVerticalSpeed = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
-    subject.summary.minVerticalSpeed = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
-    subject.summary.avgVerticalSpeed = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxVerticalSpeed || subject.summary.maxVerticalSpeed === null) {
+      subject.summary.maxVerticalSpeed = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minVerticalSpeed || subject.summary.minVerticalSpeed === null) {
+      subject.summary.minVerticalSpeed = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.avgVerticalSpeed || subject.summary.avgVerticalSpeed === null) {
+      subject.summary.avgVerticalSpeed = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    }
     // Power
-    subject.summary.maxPower = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
-    subject.summary.minPower = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
-    subject.summary.avgPower = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxPower || subject.summary.maxPower === null) {
+      subject.summary.maxPower = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minPower || subject.summary.minPower === null) {
+      subject.summary.minPower = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.avgPower || subject.summary.avgPower === null) {
+      subject.summary.avgPower = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    }
     // Temperature
-    subject.summary.maxTemperature = this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate);
-    subject.summary.minTemperature = this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate);
-    subject.summary.avgTemperature = this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate);
+    if (!subject.summary.maxTemperature || subject.summary.maxTemperature === null) {
+      subject.summary.maxTemperature = this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.minTemperature || subject.summary.minTemperature === null) {
+      subject.summary.minTemperature = this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate);
+    }
+    if (!subject.summary.avgTemperature || subject.summary.avgTemperature === null) {
+      subject.summary.avgTemperature = this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate);
+    }
   }
 }
 
