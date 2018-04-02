@@ -6,8 +6,8 @@ import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interfa
 export class Summary implements SummaryInterface {
 
   // @todo use vector base class
-  public totalDurationInSeconds: number;
-  public totalDistanceInMeters: number;
+  public totalDurationInSeconds: number = null;
+  public totalDistanceInMeters: number = null;
   public maxAltitudeInMeters: number = null;
   public minAltitudeInMeters: number = null;
   public ascentTimeInSeconds: number = null;
