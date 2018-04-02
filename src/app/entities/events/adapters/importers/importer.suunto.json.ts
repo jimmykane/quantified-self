@@ -79,7 +79,7 @@ export class EventImporterSuuntoJSON {
     activity.sortPointsByDate();
     activity.endDate = activity.getEndPoint().getDate();
 
-    // If no IBI return
+    // If IBI
     if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
       activity.ibiData = new IBIData(eventJSONObject.DeviceLog['R-R'].Data);
       // Create a second IBIData so we can have filtering on those with keeping the original
@@ -104,52 +104,52 @@ export class EventImporterSuuntoJSON {
         return pointsArray;
       }
       const point = new Point(new Date(sample.TimeISO8601));
-      if (sample.hasOwnProperty('HR')) {
+      if (sample.hasOwnProperty('HR') && sample.HR !== null) {
         point.addData(new DataHeartRate(sample.HR * 60))
       }
-      if (sample.hasOwnProperty('GPSAltitude')) {
+      if (sample.hasOwnProperty('GPSAltitude') && sample.GPSAltitude !== null) {
         point.addData(new DataGPSAltitude(sample.GPSAltitude))
       }
-      if (sample.hasOwnProperty('Latitude')) {
+      if (sample.hasOwnProperty('Latitude') && sample.Latitude !== null) {
         point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
       }
-      if (sample.hasOwnProperty('Longitude')) {
+      if (sample.hasOwnProperty('Longitude') && sample.Longitude !== null) {
         point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
       }
-      if (sample.hasOwnProperty('AbsPressure')) {
+      if (sample.hasOwnProperty('AbsPressure') && sample.AbsPressure !== null) {
         point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
       }
-      if (sample.hasOwnProperty('SeaLevelPressure')) {
+      if (sample.hasOwnProperty('SeaLevelPressure') && sample.SeaLevelPressure !== null) {
         point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
       }
-      if (sample.hasOwnProperty('Altitude')) {
+      if (sample.hasOwnProperty('Altitude') && sample.Altitude !== null) {
         point.addData(new DataAltitude(sample.Altitude))
       }
-      if (sample.hasOwnProperty('Cadence')) {
+      if (sample.hasOwnProperty('Cadence') && sample.Cadence !== null) {
         point.addData(new DataCadence(sample.Cadence * 120))
       }
-      if (sample.hasOwnProperty('Power')) {
+      if (sample.hasOwnProperty('Power') && sample.Power !== null) {
         point.addData(new DataPower(sample.Power))
       }
-      if (sample.hasOwnProperty('Speed')) {
+      if (sample.hasOwnProperty('Speed') && sample.Speed !== null) {
         point.addData(new DataSpeed(sample.Speed))
       }
-      if (sample.hasOwnProperty('Temperature')) {
+      if (sample.hasOwnProperty('Temperature') && sample.Temperature !== null) {
         point.addData(new DataTemperature(sample.Temperature - 273.15))
       }
-      if (sample.hasOwnProperty('VerticalSpeed')) {
+      if (sample.hasOwnProperty('VerticalSpeed') && sample.VerticalSpeed !== null) {
         point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
       }
-      if (sample.hasOwnProperty('EHPE')) {
+      if (sample.hasOwnProperty('EHPE') && sample.EHPE !== null) {
         point.addData(new DataEHPE(sample.EHPE));
       }
-      if (sample.hasOwnProperty('EVPE')) {
+      if (sample.hasOwnProperty('EVPE') && sample.EVPE !== null) {
         point.addData(new DataEVPE(sample.EVPE));
       }
-      if (sample.hasOwnProperty('NumberOfSatellites')) {
+      if (sample.hasOwnProperty('NumberOfSatellites') && sample.NumberOfSatellites !== null) {
         point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
       }
-      if (sample.hasOwnProperty('Satellite5BestSNR')) {
+      if (sample.hasOwnProperty('Satellite5BestSNR') && sample.Satellite5BestSNR !== null) {
         point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
       }
       pointsArray.push(point);
