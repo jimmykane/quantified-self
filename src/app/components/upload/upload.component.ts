@@ -15,7 +15,7 @@ export class UploadComponent {
 
   // Whether an upload is currently active
   isUploadActive = false;
-  activitiesProcessed = [];
+  activitiesMetaData = [];
 
   constructor(private snackBar: MatSnackBar, private eventService: EventService, private router: Router) {
   }
@@ -36,7 +36,7 @@ export class UploadComponent {
           name: activityName,
           status: UPLOAD_STATUS.PROCESSING
         };
-      this.activitiesProcessed.push(metaData);
+      this.activitiesMetaData.push(metaData);
       fileReader.onload = async () => {
         let newEvent;
         try {

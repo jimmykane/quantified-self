@@ -1,13 +1,13 @@
 <div *ngIf="isVisible">
   <span>Please wait while we are processing your activity. <br/>
     Shouldn't take long</span>
-  <ul class="list">
-    <li *ngFor="let activity of activitiesCompleted"
-        [class.success]="activity.status == UPLOAD_STATUS.PROCESSED"
-        [class.error]="activity.status == UPLOAD_STATUS.ERROR"
-    >
+  <mat-list class="list">
+    <mat-list-item *ngFor="let activity of activitiesMetaData">
+    <span [class.success]="activity.status == UPLOAD_STATUS.PROCESSED"
+          [class.error]="activity.status == UPLOAD_STATUS.ERROR">
       <span class="badge">{{activity.name}}</span>&nbsp;&nbsp;{{getActivityLabel(activity.status)}}
-    </li>
-  </ul>
-  <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+    </span>
+    </mat-list-item>
+  </mat-list>
+  <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>
 </div>

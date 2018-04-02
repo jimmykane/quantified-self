@@ -12,7 +12,7 @@ import {UPLOAD_STATUS} from '../upload/status';
 })
 export class UploadInfoComponent implements OnInit {
   @Input() isVisible: boolean;
-  @Input() activitiesCompleted = [];
+  @Input() activitiesMetaData = [];
   UPLOAD_STATUS = UPLOAD_STATUS;
 
   constructor() {
@@ -32,6 +32,16 @@ export class UploadInfoComponent implements OnInit {
       default:
         return 'Error occurred while processing activity';
     }
+  }
+
+  getOverallProgress() {
+    return this.getProcessedActivities().length ? 100 * this.getProcessedActivities().length / this.activitiesMetaData.length : 0;
+  }
+
+  getProcessedActivities() {
+    return this.activitiesMetaData.filter((activity) => {
+      return activity.status === UPLOAD_STATUS.PROCESSED;
+    })
   }
 
   ngOnInit() {

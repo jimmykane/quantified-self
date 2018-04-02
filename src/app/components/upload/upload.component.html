@@ -4,7 +4,7 @@
       <h1>
         JSON ONLY<br/>
       </h1>
-      <app-upload-info [activitiesCompleted]="activitiesProcessed" [isVisible]="isUploadActive"></app-upload-info>
+      <app-upload-info [activitiesMetaData]="activitiesMetaData" [isVisible]="isUploadActive"></app-upload-info>
       <div *ngIf="!isUploadActive">
         <p></p>
         <button mat-button (click)="inputFile.click()">Open JSON or TCX file</button>
