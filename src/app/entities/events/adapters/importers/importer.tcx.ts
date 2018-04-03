@@ -50,8 +50,8 @@ export class EventImporterTCX {
         // Increment wrapper summaries
         activity.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
         activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
-        event.summary.totalDistanceInMeters += activity.summary.totalDistanceInMeters;
-        event.summary.totalDurationInSeconds += activity.summary.totalDurationInSeconds;
+        event.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
+        event.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
