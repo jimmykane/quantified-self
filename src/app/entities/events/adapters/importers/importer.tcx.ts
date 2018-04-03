@@ -118,7 +118,7 @@ export class EventImporterTCX {
       return creator;
     }
     creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
-    if (creatorElement.getElementsByTagName('Version')) {
+    if (creatorElement.getElementsByTagName('Version')[0]) {
       creator.setSWInfo(creatorElement.getElementsByTagName('Version')[0].textContent);
     }
     return creator;
@@ -142,17 +142,17 @@ export class EventImporterTCX {
       lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
 
       // Optionals
-      if (lapElement.getElementsByTagName('MaximumSpeed')) {
+      if (lapElement.getElementsByTagName('MaximumSpeed')[0]) {
         lap.summary.maxSpeed = Number(lapElement.getElementsByTagName('MaximumSpeed')[0]);
       }
 
-      if (lapElement.getElementsByTagName('AverageHeartRateBpm')) {
+      if (lapElement.getElementsByTagName('AverageHeartRateBpm')[0]) {
         lap.summary.avgHR = Number(
           lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
         );
       }
 
-      if (lapElement.getElementsByTagName('MaximumHeartRateBpm')) {
+      if (lapElement.getElementsByTagName('MaximumHeartRateBpm')[0]) {
         lap.summary.maxHR = Number(
           lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
         );
