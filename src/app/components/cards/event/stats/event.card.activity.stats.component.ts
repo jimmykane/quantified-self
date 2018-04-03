@@ -101,7 +101,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
     if (this.activity.summary.ascentInMeters) {
       this.stats.push({
         name: 'Ascent',
-        value: this.activity.summary.ascentInMeters.toFixed(0),
+        value: Math.round(this.activity.summary.ascentInMeters),
         iconName: 'trending_up',
         units: 'm',
         iconType: 'material'
@@ -121,7 +121,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
     if (this.activity.summary.descentInMeters) {
       this.stats.push({
         name: 'Descent',
-        value: this.activity.summary.descentInMeters.toFixed(0),
+        value: Math.round(this.activity.summary.descentInMeters),
         iconName: 'trending_down',
         units: 'm',
         iconType: 'material'
@@ -148,11 +148,10 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
       });
     }
 
-
     if (this.activity.summary.energyInCal) {
       this.stats.push({
         name: 'KCal',
-        value: this.activity.summary.energyInCal.toFixed(0),
+        value: Math.round(this.activity.summary.energyInCal),
         iconName: null,
         units: null,
         iconType: null
