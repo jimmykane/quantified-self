@@ -1,4 +1,3 @@
-import {Event} from '../../event';
 import {EventExporterInterface} from './exporter.interface';
 import {DataAltitude} from '../../../data/data.altitude';
 import {DataCadence} from '../../../data/data.cadence';
@@ -10,6 +9,7 @@ import {DataInterface} from '../../../data/data.interface';
 import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {PointInterface} from '../../../points/point.interface';
 import {LapInterface} from '../../../laps/lap.interface';
+import {DataPower} from '../../../data/data.power';
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -133,9 +133,7 @@ export class EventExporterTCX implements EventExporterInterface {
           positionElement.appendChild(positionLongitudeDegreesElement);
           pointElement.appendChild(positionElement);
 
-
           // Go over the Data
-
 
           const extensionsElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Extensions');
           const tpxElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX');
@@ -153,11 +151,16 @@ export class EventExporterTCX implements EventExporterInterface {
               heartRateValueElement.textContent = data.getValue().toFixed(0).toString();
               heartRateElement.appendChild(heartRateValueElement);
               pointElement.appendChild(heartRateElement);
-            } else if (data instanceof DataSpeed || data instanceof DataCadence) {
+            } else if (data instanceof DataSpeed || data instanceof DataCadence || data instanceof DataPower) {
               if (data instanceof DataSpeed) {
                 const speedElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'Speed');
                 speedElement.textContent = data.getValue().toString();
                 tpxElement.appendChild(speedElement);
+              }
+              if (data instanceof DataPower) {
+                const poweElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'Watts');
+                poweElement.textContent = data.getValue().toString();
+                tpxElement.appendChild(poweElement);
               }
               if (data instanceof DataCadence) {
                 const cadenceElement = document.createElementNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'RunCadence');
