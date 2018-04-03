@@ -85,7 +85,7 @@
         </app-event-card-laps>
       </mat-tab>
       <mat-tab label="Tools"
-               *ngIf="event.getFirstActivity().ibiData && event.getFirstActivity().ibiData.getIBIDataMap().size">
+               *ngIf="hasIBIData(event)">
         <ng-template matTabLabel>
           <mat-icon>build</mat-icon>
         </ng-template>

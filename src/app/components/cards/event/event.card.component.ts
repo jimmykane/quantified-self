@@ -3,6 +3,7 @@ import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {AppEventColorService} from "../../../services/app.event.color.service";
+import {ActivityInterface} from "../../../entities/activities/activity.interface";
 
 
 @Component({
@@ -34,5 +35,11 @@ export class EventCardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.parametersSubscription.unsubscribe();
+  }
+
+  hasIBIData(event: EventInterface) {
+    return event.getActivities().find((activity: ActivityInterface) => {
+      return activity.ibiData && !!activity.ibiData.getIBIDataMap().size;
+    })
   }
 }
