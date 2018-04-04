@@ -11,22 +11,22 @@ export class AppEventColorService {
     });
     switch (index) {
       case 0: {
-        return '#263238';
+        return '#FFA500';
       }
       case 1: {
-        return '#1565c0';
+        return '#00008B';
       }
       case 2: {
-        return '#558b2f';
+        return '#FF00FF';
       }
       case 3: {
-        return '#a51e38';
+        return '#00FF00';
       }
       case 4: {
-        return '#f57f17';
+        return '#800080';
       }
       case 5: {
-        return '#2dd86d';
+        return '#a4a8f5';
       }
     }
     // Do random else
