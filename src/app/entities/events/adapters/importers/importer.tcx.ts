@@ -62,6 +62,7 @@ export class EventImporterTCX {
         // Same for event
         event.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
         event.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
+        event.summary.pauseDurationInSeconds += lap.summary.pauseDurationInSeconds;
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
