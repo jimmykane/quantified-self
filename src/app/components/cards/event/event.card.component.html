@@ -18,7 +18,7 @@
     <mat-card-subtitle>
       <mat-icon>filter_{{ event.getActivities().length }}</mat-icon>
       Activities of total
-      <span class="mat-body-2">{{ (event.summary.totalDistanceInMeters/1000).toFixed(1) }}</span> km
+      <span class="mat-body-2">{{ (event.summary.totalDistanceInMeters/1000).toFixed(2) }}</span> km
       in
       <span class="mat-body-2">{{ event.summary.totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</span>
     </mat-card-subtitle>

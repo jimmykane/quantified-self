@@ -25,17 +25,24 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
   ngOnChanges() {
     this.stats.push(
       {
+        name: 'Time',
+        value: (new Date(this.activity.summary.totalDurationInSeconds * 1000)).toISOString().substr(11, 8),
+        iconName: 'timer',
+        units: '',
+        iconType: 'material'
+      },
+      {
+        name: 'Pause Time',
+        value: (new Date(this.activity.summary.pauseDurationInSeconds * 1000)).toISOString().substr(11, 8),
+        iconName: 'timer_off',
+        units: '',
+        iconType: 'material'
+      },
+      {
         name: 'Distance',
         value: (this.activity.summary.totalDistanceInMeters / 1000).toFixed(2),
         iconName: 'arrows-h',
         units: 'km',
-        iconType: 'fontAwesome'
-      },
-      {
-        name: 'Time',
-        value: (new Date(this.activity.summary.totalDurationInSeconds * 1000)).toISOString().substr(11, 8),
-        iconName: 'clock-o',
-        units: '',
         iconType: 'fontAwesome'
       },
     );

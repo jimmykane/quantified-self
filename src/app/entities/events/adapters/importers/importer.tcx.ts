@@ -43,14 +43,22 @@ export class EventImporterTCX {
       // @todo
       activity.summary.totalDurationInSeconds = 0;
       activity.summary.totalDistanceInMeters = 0;
+      activity.summary.pauseDurationInSeconds = 0;
 
       // Get the laps and add the total distance to the activity
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
         // Increment wrapper summaries
         activity.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
-        activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
+        activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds + lap.summary.pauseDurationInSeconds;
+        activity.summary.pauseDurationInSeconds += lap.summary.pauseDurationInSeconds;
         activity.summary.energyInCal += lap.summary.energyInCal;
+        // If the lap has no distance it's probably a pause
+        // if (lap.summary.totalDistanceInMeters === 0) {
+        //   lap.type = 'Pause';
+        //   activity.summary.pauseDurationInSeconds += lap.summary.totalDurationInSeconds;
+        // }
+
         // Same for event
         event.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
         event.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
@@ -142,6 +150,7 @@ export class EventImporterTCX {
       lap.summary.energyInCal = Number(lapElement.getElementsByTagName('Calories')[0].textContent);
       lap.summary.totalDurationInSeconds = Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent);
       lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
+      lap.summary.pauseDurationInSeconds = 0;
 
       // Optionals
       if (lapElement.getElementsByTagName('MaximumSpeed')[0]) {
@@ -160,7 +169,29 @@ export class EventImporterTCX {
         );
       }
 
-      // Generate missing max,min,avg
+      // Should check the track
+      let lastPointFromPreviousTrack;
+      // Get all the tracks and find the lap pause for this one
+      Array.from(lapElement.getElementsByTagName('Track')).forEach((trackElement) => {
+        // Get the last
+        const firstPointFromCurrentTrack = trackElement.getElementsByTagName('Trackpoint')[0];
+        // If there is no first point then no need to iterate it's empty
+        if (!firstPointFromCurrentTrack) {
+          return;
+        }
+        // if we do not have a last point of a previous parsed track set it to this one
+        if (!lastPointFromPreviousTrack) {
+          lastPointFromPreviousTrack = trackElement.getElementsByTagName('Trackpoint')[trackElement.getElementsByTagName('Trackpoint').length - 1];
+          return;
+        }
+        // Here we should have the current first point and the last point from the previous track
+        const lastPointTime = (new Date(lastPointFromPreviousTrack.getElementsByTagName('Time')[0].textContent)).getTime();
+        const firstPointTime = (new Date(firstPointFromCurrentTrack.getElementsByTagName('Time')[0].textContent)).getTime();
+        lap.summary.pauseDurationInSeconds += (firstPointTime - lastPointTime) / 1000;
+        // Set the last to this one (will become the previous track on next track)
+        lastPointFromPreviousTrack = trackElement.getElementsByTagName('Trackpoint')[trackElement.getElementsByTagName('Trackpoint').length - 1];
+      });
+
 
       lapArray.push(lap);
       return lapArray;
