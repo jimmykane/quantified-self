@@ -50,6 +50,8 @@ export class EventImporterTCX {
         // Increment wrapper summaries
         activity.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
         activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
+        activity.summary.energyInCal += lap.summary.energyInCal;
+        // Same for event
         event.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
         event.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
       });
