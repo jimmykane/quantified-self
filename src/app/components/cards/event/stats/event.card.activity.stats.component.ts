@@ -98,7 +98,7 @@ export class EventCardActivityStatsComponent implements OnChanges, OnInit {
     if (this.activity.summary.avgTemperature) {
       this.stats.push({
         name: DataTemperature.type,
-        value: Math.round(this.activity.summary.avgCadence),
+        value: Math.round(this.activity.summary.avgTemperature),
         iconName: 'thermometer',
         units: DataTemperature.unit,
         iconType: 'fontAwesome'
