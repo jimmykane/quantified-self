@@ -71,22 +71,26 @@ export class EventImporterSuuntoJSON {
 
     // If IBI
     if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
-      activity.ibiData = new IBIData(eventJSONObject.DeviceLog['R-R'].Data);
-      // Create a second IBIData so we can have filtering on those with keeping the original
-      (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
-        .lowLimitBPMFilter()
-        .highLimitBPMFilter()
-        .lowPassFilter()
-        .movingMedianFilter()
-        .getAsBPM().forEach((value, key, map) => {
-        const point = new Point(new Date(activity.startDate.getTime() + key));
-        point.addData(new DataHeartRate(value));
-        activity.addPoint(point);
-      });
+      this.setIBIData(activity, eventJSONObject);
     }
 
     EventUtilities.generateSummaries(event);
     return event;
+  }
+
+  private static setIBIData(activity: Activity, eventJSONObject: any) {
+    activity.ibiData = new IBIData(eventJSONObject.DeviceLog['R-R'].Data);
+    // Create a second IBIData so we can have filtering on those with keeping the original
+    (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
+      .lowLimitBPMFilter()
+      .highLimitBPMFilter()
+      .lowPassFilter()
+      .movingMedianFilter()
+      .getAsBPM().forEach((value, key, map) => {
+      const point = new Point(new Date(activity.startDate.getTime() + key));
+      point.addData(new DataHeartRate(value));
+      activity.addPoint(point);
+    });
   }
 
   private static getLaps(activity: ActivityInterface, windows): LapInterface[] {
