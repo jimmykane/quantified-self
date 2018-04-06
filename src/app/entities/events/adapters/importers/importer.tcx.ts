@@ -130,7 +130,7 @@ export class EventImporterTCX {
     }
     creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
     if (creatorElement.getElementsByTagName('Version')[0]) {
-      creator.setSWInfo(creatorElement.getElementsByTagName('Version')[0].textContent);
+      creator.swInfo = creatorElement.getElementsByTagName('Version')[0].textContent;
     }
     return creator;
   }

@@ -50,9 +50,9 @@ export class EventImporterSuuntoJSON {
 
     const creator = new Creator();
     creator.name = this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name);
-    creator.setSerialNumber(eventJSONObject.DeviceLog.Device.SerialNumber);
-    creator.setHWInfo(eventJSONObject.DeviceLog.Device.Info.HW);
-    creator.setSWInfo(eventJSONObject.DeviceLog.Device.Info.SW);
+    creator.serialNumber = eventJSONObject.DeviceLog.Device.SerialNumber;
+    creator.hwInfo = eventJSONObject.DeviceLog.Device.Info.HW;
+    creator.swInfo = eventJSONObject.DeviceLog.Device.Info.SW;
     activity.creator = creator;
 
     this.getPointsFromSamples(eventJSONObject.DeviceLog.Samples).map((point) => {

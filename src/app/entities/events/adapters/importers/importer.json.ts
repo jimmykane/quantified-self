@@ -61,9 +61,9 @@ export class EventImporterJSON {
 
       const creator = new Creator();
       creator.name = activityObject.creator.name;
-      creator.setHWInfo(activityObject.creator.hwInfo);
-      creator.setSWInfo(activityObject.creator.swInfo);
-      creator.setSerialNumber(activityObject.creator.serialNumber);
+      creator.hwInfo = activityObject.creator.hwInfo;
+      creator.swInfo = activityObject.creator.swInfo;
+      creator.serialNumber = activityObject.creator.serialNumber;
       activity.creator = creator;
 
       for (const pointObject of activityObject.points) {
