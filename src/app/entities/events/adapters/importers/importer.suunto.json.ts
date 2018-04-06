@@ -30,7 +30,6 @@ import {EventUtilities} from "../../utilities/event.utilities";
 export class EventImporterSuuntoJSON {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
-
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
