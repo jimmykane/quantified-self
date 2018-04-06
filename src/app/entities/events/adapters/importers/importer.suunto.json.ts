@@ -25,7 +25,9 @@ import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../points/point.interface';
 import {SummaryInterface} from '../../../summary/summary.interface';
-import {EventUtilities} from "../../utilities/event.utilities";
+import {EventUtilities} from '../../utilities/event.utilities';
+import {ActivityInterface} from '../../../activities/activity.interface';
+import {LapInterface} from '../../../laps/lap.interface';
 
 export class EventImporterSuuntoJSON {
 
@@ -59,23 +61,11 @@ export class EventImporterSuuntoJSON {
     });
 
     // Parse the laps
-    let nextLapStartDate = event.getFirstActivity().startDate;
-    for (const lapWindow of eventJSONObject.DeviceLog.Windows) {
-      const lapObj = lapWindow.Window;
-      if (lapObj.Type !== 'Autolap') {
-        continue;
-      }
-      const lap = new Lap(
-        nextLapStartDate,
-        new Date(lapObj.TimeISO8601)
-      );
-      lap.type = lapObj.Type;
-
-      lap.summary = this.getSummary(lapObj);
+    this.getLaps(activity, eventJSONObject.DeviceLog.Windows).forEach((lap: LapInterface) => {
       activity.addLap(lap);
-      nextLapStartDate = lap.endDate;
-    }
+    });
 
+    // Sort the points
     activity.sortPointsByDate();
     activity.endDate = activity.getEndPoint().getDate();
 
@@ -97,6 +87,25 @@ export class EventImporterSuuntoJSON {
 
     EventUtilities.generateSummaries(event);
     return event;
+  }
+
+  private static getLaps(activity: ActivityInterface, windows): LapInterface[] {
+    let nextLapStartDate = activity.startDate;
+    return windows.reduce((lapArray, lapWindow) => {
+      const lapObj = lapWindow.Window;
+      if (lapObj.Type !== 'Autolap' && lapObj.Type !== 'Lap') {
+        return lapArray;
+      }
+      const lap = new Lap(
+        nextLapStartDate,
+        new Date(lapObj.TimeISO8601)
+      );
+      lap.type = lapObj.Type;
+      lap.summary = this.getSummary(lapObj);
+      nextLapStartDate = lap.endDate;
+      lapArray.push(lap);
+      return lapArray
+    }, []);
   }
 
   private static getPointsFromSamples(samples: any[]): PointInterface[] {
