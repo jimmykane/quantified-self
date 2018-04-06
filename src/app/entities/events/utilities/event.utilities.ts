@@ -1,44 +1,22 @@
-import {EventImporterSuuntoJSON} from '../adapters/importers/importer.suunto.json';
 import {EventInterface} from '../event.interface';
-import {EventImporterJSON} from '../adapters/importers/importer.json';
 import {Summary} from '../../summary/summary';
 import {ActivityInterface} from '../../activities/activity.interface';
 import {GeoLibAdapter} from '../../geodesy/adapters/geolib.adapter';
 import {EventExporterTCX} from '../adapters/exporters/exporter.tcx';
-import {PointInterface} from "../../points/point.interface";
-import {Event} from "../event";
-import {LapInterface} from "../../laps/lap.interface";
-import {DataHeartRate} from "../../data/data.heart-rate";
-import {DataCadence} from "../../data/data.cadence";
-import {DataSpeed} from "../../data/data.speed";
-import {DataVerticalSpeed} from "../../data/data.verticalspeed";
-import {DataTemperature} from "../../data/data.temperature";
-import {DataAltitude} from "../../data/data.altitude";
-import {EventImporterTCX} from "../adapters/importers/importer.tcx";
-import {DataPower} from "../../data/data.power";
+import {PointInterface} from '../../points/point.interface';
+import {Event} from '../event';
+import {LapInterface} from '../../laps/lap.interface';
+import {DataHeartRate} from '../../data/data.heart-rate';
+import {DataCadence} from '../../data/data.cadence';
+import {DataSpeed} from '../../data/data.speed';
+import {DataVerticalSpeed} from '../../data/data.verticalspeed';
+import {DataTemperature} from '../../data/data.temperature';
+import {DataAltitude} from '../../data/data.altitude';
+import {DataPower} from '../../data/data.power';
 
 export class EventUtilities {
 
   private static geodesyAdapter = new GeoLibAdapter();
-
-
-  public static createEventFromSuuntoJSONString(data: string): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      return resolve(EventImporterSuuntoJSON.getFromJSONString(data));
-    });
-  }
-
-  public static createEventFromJSONString(data: string): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      return resolve(EventImporterJSON.getFromJSONString(data));
-    });
-  }
-
-  public static createEventFromTCXString(data: string): Promise<EventInterface> {
-    return new Promise((resolve, reject) => {
-      return resolve(EventImporterTCX.getFromXML((new DOMParser()).parseFromString(data, 'application/xml')));
-    });
-  }
 
   public static getEventDistanceInMeters(event: EventInterface,
                                          startDate?: Date,

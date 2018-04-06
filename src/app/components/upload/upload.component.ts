@@ -4,6 +4,8 @@ import {Router} from '@angular/router';
 import {UPLOAD_STATUS} from './status';
 import {MatSnackBar} from '@angular/material';
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
+import {EventImporterSuuntoJSON} from "../../entities/events/adapters/importers/importer.suunto.json";
+import {EventImporterTCX} from "../../entities/events/adapters/importers/importer.tcx";
 
 @Component({
   selector: 'app-upload',
@@ -41,9 +43,9 @@ export class UploadComponent {
         let newEvent;
         try {
           if (extension === 'json') {
-            newEvent = await EventUtilities.createEventFromSuuntoJSONString(fileReader.result);
+            newEvent = EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
           } else if (extension === 'tcx') {
-            newEvent = await EventUtilities.createEventFromTCXString(fileReader.result);
+            newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
           }
           newEvent.name = activityName;
           await this.eventService.generateGeoAndWeather(newEvent);

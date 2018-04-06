@@ -9,7 +9,7 @@ import {WeatherUndergroundWeatherService} from './weather/app.weather-undergroun
 import 'rxjs/add/observable/forkJoin';
 import {GeoLocationInfo} from '../entities/geo-location-info/geo-location-info';
 import {Weather} from '../entities/weather/app.weather';
-import {EventUtilities} from '../entities/events/utilities/event.utilities';
+import {EventImporterJSON} from '../entities/events/adapters/importers/importer.json';
 
 @Injectable()
 export class EventService {
@@ -26,9 +26,7 @@ export class EventService {
   private getInitialData() {
     for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
       this.eventLocalStorageService.getItem(localStorageKey).then((localStorageData) => {
-        EventUtilities.createEventFromJSONString(localStorageData).then((event: EventInterface) => {
-          this.events.next(this.events.getValue().push(event));
-        });
+        this.events.next(this.events.getValue().push(EventImporterJSON.getFromJSONString(localStorageData)));
       });
     }
   }
