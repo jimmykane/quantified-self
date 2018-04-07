@@ -35,6 +35,8 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
+    debugger;
+
     // @todo iterate over activities
     const activity = new Activity();
     activity.startDate = new Date(eventJSONObject.DeviceLog.Header.DateTime);
@@ -61,7 +63,7 @@ export class EventImporterSuuntoJSON {
     });
 
     // Parse the laps
-    this.getLaps(activity, eventJSONObject.DeviceLog.Windows).forEach((lap: LapInterface) => {
+    this.getLaps(activity, eventJSONObject.DeviceLog.Windows, ['AutoLap', 'Lap']).forEach((lap: LapInterface) => {
       activity.addLap(lap);
     });
 
@@ -93,11 +95,11 @@ export class EventImporterSuuntoJSON {
     });
   }
 
-  private static getLaps(activity: ActivityInterface, windows): LapInterface[] {
+  private static getLaps(activity: ActivityInterface, windows, types: string[]): LapInterface[] {
     let nextLapStartDate = activity.startDate;
     return windows.reduce((lapArray, lapWindow) => {
       const lapObj = lapWindow.Window;
-      if (lapObj.Type !== 'Autolap' && lapObj.Type !== 'Lap') {
+      if (types.indexOf(lapObj.Type)) {
         return lapArray;
       }
       const lap = new Lap(
