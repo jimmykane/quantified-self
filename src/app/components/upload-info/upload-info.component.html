@@ -1,10 +1,8 @@
 <div *ngIf="isVisible">
-  <span>Please wait while we are processing your activity. <br/>
-    Shouldn't take long</span>
+  <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>
   <mat-list class="list">
     <mat-list-item *ngFor="let activity of activitiesMetaData">
       <mat-icon>{{getActivityStatusIcon(activity)}}</mat-icon>{{activity.name}}
     </mat-list-item>
   </mat-list>
-  <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>
 </div>
