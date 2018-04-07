@@ -16,20 +16,6 @@ import {DataPower} from '../../data/data.power';
 
 export class EventUtilities {
 
-  private static geodesyAdapter = new GeoLibAdapter();
-
-  public static getEventDistanceInMeters(event: EventInterface,
-                                         startDate?: Date,
-                                         endDate?: Date,
-                                         activities?: ActivityInterface[]): number {
-    if (!event.hasPointsWithPosition()) {
-      return 0;
-    }
-    return event.getActivities().reduce((distance: number, activity: ActivityInterface) => {
-      return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, [activity]));
-    }, 0);
-  }
-
   public static getEventAsTCXBloB(event: EventInterface): Promise<Blob> {
     return new Promise((resolve, reject) => {
       resolve(new Blob(
@@ -85,57 +71,6 @@ export class EventUtilities {
     }, []);
     return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
   }
-
-  public static getEventDataTypeGain(event: EventInterface,
-                                     dataType: string,
-                                     startDate?: Date,
-                                     endDate?: Date,
-                                     activities?: ActivityInterface[],
-                                     precision?: number,
-                                     minDiff?: number): number {
-    precision = precision || 1;
-    minDiff = minDiff || 1.5;
-    let gain = 0;
-    event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataByType(dataType)) {
-        return next;
-      }
-      if (!next.getDataByType(dataType)) {
-        return previous;
-      }
-      if ((previous.getDataByType(dataType).getValue() + minDiff) < (Number(next.getDataByType(dataType).getValue()))) {
-        gain += Number(next.getDataByType(dataType).getValue().toFixed(precision)) - Number(previous.getDataByType(dataType).getValue().toFixed(precision));
-      }
-      return next;
-    });
-    return gain;
-  }
-
-  public static getEventDataTypeLoss(event: EventInterface,
-                                     dataType: string,
-                                     startDate?: Date,
-                                     endDate?: Date,
-                                     activities?: ActivityInterface[],
-                                     precision?: number,
-                                     minDiff?: number): number {
-    precision = precision || 1;
-    minDiff = minDiff || 1.5;
-    let loss = 0;
-    event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataByType(dataType)) {
-        return next;
-      }
-      if (!next.getDataByType(dataType)) {
-        return previous;
-      }
-      if ((Number(next.getDataByType(dataType).getValue().toFixed(precision)) - minDiff) < Number(previous.getDataByType(dataType).getValue().toFixed(precision))) {
-        loss += Number(previous.getDataByType(dataType).getValue().toFixed(precision)) - Number(next.getDataByType(dataType).getValue().toFixed(precision));
-      }
-      return next;
-    });
-    return loss;
-  }
-
 
   public static mergeEvents(events: EventInterface[]): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
@@ -240,6 +175,72 @@ export class EventUtilities {
       subject.summary.avgTemperature = this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate);
     }
   }
+
+  // public static getEventDataTypeGain(event: EventInterface,
+  //                                    dataType: string,
+  //                                    startDate?: Date,
+  //                                    endDate?: Date,
+  //                                    activities?: ActivityInterface[],
+  //                                    precision?: number,
+  //                                    minDiff?: number): number {
+  //   precision = precision || 1;
+  //   minDiff = minDiff || 1.5;
+  //   let gain = 0;
+  //   event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
+  //     if (!previous.getDataByType(dataType)) {
+  //       return next;
+  //     }
+  //     if (!next.getDataByType(dataType)) {
+  //       return previous;
+  //     }
+  //     if ((previous.getDataByType(dataType).getValue() + minDiff) < (Number(next.getDataByType(dataType).getValue()))) {
+  //       gain += Number(next.getDataByType(dataType).getValue().toFixed(precision)) - Number(previous.getDataByType(dataType).getValue().toFixed(precision));
+  //     }
+  //     return next;
+  //   });
+  //   return gain;
+  // }
+  //
+  // public static getEventDataTypeLoss(event: EventInterface,
+  //                                    dataType: string,
+  //                                    startDate?: Date,
+  //                                    endDate?: Date,
+  //                                    activities?: ActivityInterface[],
+  //                                    precision?: number,
+  //                                    minDiff?: number): number {
+  //   precision = precision || 1;
+  //   minDiff = minDiff || 1.5;
+  //   let loss = 0;
+  //   event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
+  //     if (!previous.getDataByType(dataType)) {
+  //       return next;
+  //     }
+  //     if (!next.getDataByType(dataType)) {
+  //       return previous;
+  //     }
+  //     if ((Number(next.getDataByType(dataType).getValue().toFixed(precision)) - minDiff) < Number(previous.getDataByType(dataType).getValue().toFixed(precision))) {
+  //       loss += Number(previous.getDataByType(dataType).getValue().toFixed(precision)) - Number(next.getDataByType(dataType).getValue().toFixed(precision));
+  //     }
+  //     return next;
+  //   });
+  //   return loss;
+  // }
+
+  // private static geodesyAdapter = new GeoLibAdapter();
+  //
+  // public static getEventDistanceInMeters(event: EventInterface,
+  //                                        startDate?: Date,
+  //                                        endDate?: Date,
+  //                                        activities?: ActivityInterface[]): number {
+  //   if (!event.hasPointsWithPosition()) {
+  //     return 0;
+  //   }
+  //   return event.getActivities().reduce((distance: number, activity: ActivityInterface) => {
+  //     return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, [activity]));
+  //   }, 0);
+  // }
+
+
 }
 
 

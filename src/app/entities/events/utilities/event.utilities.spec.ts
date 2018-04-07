@@ -5,6 +5,7 @@ import {DataHeartRate} from '../../data/data.heart-rate';
 import {DataAltitude} from '../../data/data.altitude';
 import {EventUtilities} from './event.utilities';
 import {DataAbsolutePressure} from '../../data/data.absolute-pressure';
+import {Summary} from '../../summary/summary';
 
 describe('EventUtilities', () => {
 
@@ -12,6 +13,12 @@ describe('EventUtilities', () => {
 
   beforeEach(() => {
     const activity = new Activity();
+    activity.startDate = new Date();
+    activity.summary = new Summary();
+    activity.summary.totalDurationInSeconds = 10;
+    activity.summary.totalDistanceInMeters = 10;
+    activity.summary.energyInCal = 10;
+
     event.addActivity(activity);
     const pointA = new Point(new Date(0));
     const pointB = new Point(new Date(1));
@@ -42,9 +49,17 @@ describe('EventUtilities', () => {
     expect(EventUtilities.getDateTypeMaximum(event, DataAbsolutePressure.type)).toBe(null);
   });
 
-   it('should get the correct average for a DataType', () => {
+  it('should get the correct average for a DataType', () => {
     expect(EventUtilities.getDataTypeAverage(event, DataHeartRate.type)).toBe(50);
     expect(EventUtilities.getDataTypeAverage(event, DataAltitude.type)).toBe(300);
     expect(EventUtilities.getDataTypeAverage(event, DataAbsolutePressure.type)).toBe(null);
   });
+
+  it('should get an event as tcx blob', (done) => {
+    EventUtilities.getEventAsTCXBloB(event).then((blob) => {
+      expect(blob instanceof Blob).toBe(true);
+    });
+    done();
+  });
+
 });
