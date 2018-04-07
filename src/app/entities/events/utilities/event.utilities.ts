@@ -53,7 +53,7 @@ export class EventUtilities {
       count++;
       return average;
     }, 0);
-    return count ? averageForDataType / (count + 1) : null;
+    return count ? (averageForDataType / count) : null;
   }
 
   public static getDateTypeMaximum(event: EventInterface,
