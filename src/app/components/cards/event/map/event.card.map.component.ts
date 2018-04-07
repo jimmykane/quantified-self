@@ -17,10 +17,7 @@ import {Log} from 'ng2-logger';
 
 export class EventCardMapComponent implements OnInit {
   @Input() event: EventInterface;
-  @Input() resize: boolean;
 
-  public gridListColumnCount = 1;
-  public mapRowSpan = 1;
 
   ngOnInit() {
     // this.gridListColumnCount = (window.innerWidth) > 640 ? 2 : 1;
