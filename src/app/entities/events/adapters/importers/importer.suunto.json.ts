@@ -31,7 +31,7 @@ import {LapInterface} from '../../../laps/lap.interface';
 
 export class EventImporterSuuntoJSON {
 
-  static getFromJSONString(jsonString: string, id?: string): EventInterface {
+  static getFromJSONString(jsonString: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
     const event = new Event();
 
