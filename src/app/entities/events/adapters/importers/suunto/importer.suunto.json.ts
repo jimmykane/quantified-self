@@ -28,6 +28,7 @@ import {SummaryInterface} from '../../../../summary/summary.interface';
 import {EventUtilities} from '../../../utilities/event.utilities';
 import {ActivityInterface} from '../../../../activities/activity.interface';
 import {LapInterface} from '../../../../laps/lap.interface';
+import {ImporterSuuntoActivityIds} from './import.suunto.activity.ids';
 
 export class EventImporterSuuntoJSON {
 
@@ -40,7 +41,7 @@ export class EventImporterSuuntoJSON {
     // @todo iterate over activities
     const activity = new Activity();
     activity.startDate = new Date(eventJSONObject.DeviceLog.Header.DateTime);
-    activity.type = this.getActivityTypeFromID(eventJSONObject.DeviceLog.Header.ActivityType);
+    activity.type = ImporterSuuntoActivityIds[eventJSONObject.DeviceLog.Header.ActivityType];
 
     activity.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
     event.addActivity(activity);
@@ -255,21 +256,6 @@ export class EventImporterSuuntoJSON {
     zones.zone5Duration = zonesObj.Zone5Duration;
     zones.zone5LowerLimit = zonesObj.Zone5LowerLimit;
     return zones;
-  }
-
-  private static getActivityTypeFromID(id: number): string {
-    switch (id) {
-      case 3: {
-        return 'Running';
-      }
-      case 23: {
-        return 'Weight Training'
-      }
-      case 82: {
-        return 'Trail Running'
-      }
-    }
-    return 'Unknown'
   }
 
   private static getDeviceModelFromCodeName(codeName: string): string {
