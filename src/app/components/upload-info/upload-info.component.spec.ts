@@ -2,6 +2,7 @@ import {async, ComponentFixture, TestBed} from '@angular/core/testing';
 
 import {UploadInfoComponent} from './upload-info.component';
 import {
+  MatCard,
   MatIcon,
   MatList, MatListItem, MatProgressBar,
   MatRipple
@@ -14,7 +15,7 @@ describe('UploadInfoComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon
+      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard,
       ]
     })
       .compileComponents();
