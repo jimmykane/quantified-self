@@ -1,4 +1,4 @@
-import {EventImporterSuuntoJSON} from './importers/importer.suunto.json';
+import {EventImporterSuuntoJSON} from './importers/suunto/importer.suunto.json';
 import {EventImporterJSON} from './importers/importer.json';
 import {Event} from '../event';
 import {EventImporterTCX} from './importers/importer.tcx';

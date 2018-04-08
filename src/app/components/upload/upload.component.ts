@@ -4,7 +4,7 @@ import {Router} from '@angular/router';
 import {UPLOAD_STATUS} from './status';
 import {MatSnackBar} from '@angular/material';
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
-import {EventImporterSuuntoJSON} from "../../entities/events/adapters/importers/importer.suunto.json";
+import {EventImporterSuuntoJSON} from "../../entities/events/adapters/importers/suunto/importer.suunto.json";
 import {EventImporterTCX} from "../../entities/events/adapters/importers/importer.tcx";
 
 @Component({
