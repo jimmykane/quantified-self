@@ -35,10 +35,7 @@ export class EventImporterJSON {
     const event = new Event();
     event.setID(eventJSONObject.id);
     event.name = eventJSONObject.name;
-    event.summary = new Summary();
-
-    event.summary.totalDistanceInMeters = eventJSONObject.summary.totalDistanceInMeters;
-    event.summary.totalDurationInSeconds = eventJSONObject.summary.totalDurationInSeconds;
+    event.summary = this.getSummary(eventJSONObject);
 
     for (const activityObject of eventJSONObject.activities) {
       const activity = new Activity();

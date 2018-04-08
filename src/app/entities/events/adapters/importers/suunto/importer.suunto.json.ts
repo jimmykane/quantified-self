@@ -26,63 +26,90 @@ import {IBIData} from '../../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../../points/point.interface';
 import {SummaryInterface} from '../../../../summary/summary.interface';
 import {EventUtilities} from '../../../utilities/event.utilities';
-import {ActivityInterface} from '../../../../activities/activity.interface';
-import {LapInterface} from '../../../../laps/lap.interface';
 import {ImporterSuuntoActivityIds} from './import.suunto.activity.ids';
 
 export class EventImporterSuuntoJSON {
 
   static getFromJSONString(jsonString: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
-    const event = new Event();
-
     debugger;
 
-    // @todo iterate over activities
-    const activity = new Activity();
-    activity.startDate = new Date(eventJSONObject.DeviceLog.Header.DateTime);
-    activity.type = ImporterSuuntoActivityIds[eventJSONObject.DeviceLog.Header.ActivityType];
+    // Populate the event summary from the Header Object
+    const event = new Event();
+    event.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
 
-    activity.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
-    event.addActivity(activity);
-
-    const eventSummary = new Summary();
-    eventSummary.totalDurationInSeconds = activity.summary.totalDurationInSeconds;
-    eventSummary.totalDistanceInMeters = activity.summary.totalDistanceInMeters;
-
-    event.summary = eventSummary;
-
+    // Create a creator and pass it to all activities (later)
     const creator = new Creator();
     creator.name = this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name);
     creator.serialNumber = eventJSONObject.DeviceLog.Device.SerialNumber;
     creator.hwInfo = eventJSONObject.DeviceLog.Device.Info.HW;
     creator.swInfo = eventJSONObject.DeviceLog.Device.Info.SW;
-    activity.creator = creator;
 
-    this.getPointsFromSamples(eventJSONObject.DeviceLog.Samples).map((point) => {
-      activity.addPoint(point);
+    // Find the activity windows and generate their summaries from there
+    eventJSONObject.DeviceLog.Windows.filter((windowObj) => {
+      return windowObj.Window.Type === 'Activity';
+    }).forEach((activityObj) => {
+      activityObj = activityObj.Window;
+
+      // Set the activity props
+      const activity = new Activity();
+      activity.creator = creator;
+      activity.summary = this.getSummary(activityObj);
+      activity.endDate = new Date(activityObj.TimeISO8601);
+
+      // Find the start date
+      for (const sample of eventJSONObject.DeviceLog.Samples){
+        if (sample.Events && sample.Events[0].Activity && sample.Events[0].Activity.ActivityType === activityObj.ActivityId) {
+          activity.startDate = new Date(sample.TimeISO8601);
+          break;
+        }
+      }
+
+      // Now that we know the start date we can set the pause time on the summary
+      activity.summary.pauseDurationInSeconds = (
+        (activity.endDate.getTime() - activity.startDate.getTime() - activity.summary.totalDurationInSeconds * 1000)
+        / 1000);
+      // Increase the total duration since it missed the pause time
+      activity.summary.totalDurationInSeconds += activity.summary.pauseDurationInSeconds;
+      // Set the type
+      activity.type = ImporterSuuntoActivityIds[activityObj.ActivityId];
+
+      debugger;
+
+      // Add the points for this activity from samples
+      this.getPointsFromSamples(eventJSONObject.DeviceLog.Samples).filter((point) => {
+        return point.getDate() >= activity.startDate && point.getDate() <= activity.endDate;
+      }).forEach((point) => {
+        activity.addPoint(point);
+      });
+
+      // Go over the laps of this activity
+      eventJSONObject.DeviceLog.Windows.filter((windowObj) => {
+        return (['Lap', 'Autolap'].indexOf(windowObj.Window.Type) !== -1) && activityObj.ActivityId === windowObj.Window.ActivityId;
+      }).forEach((lapObj) => {
+        lapObj = lapObj.Window;
+        const lap = new Lap(
+          new Date((new Date(lapObj.TimeISO8601)).getTime() - (lapObj.Duration * 1000)),
+          new Date(lapObj.TimeISO8601)
+        );
+        lap.type = lapObj.Type;
+        lap.summary = this.getSummary(lapObj);
+        activity.addLap(lap);
+      });
+
+      if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
+        this.setIBIData(activity, eventJSONObject);
+      }
+
+      event.addActivity(activity);
     });
 
-    // Parse the laps
-    this.getLaps(activity, eventJSONObject.DeviceLog.Windows, ['AutoLap', 'Lap']).forEach((lap: LapInterface) => {
-      activity.addLap(lap);
-    });
-
-    // Sort the points
-    activity.sortPointsByDate();
-    activity.endDate = activity.getEndPoint().getDate();
-
-    // If IBI
-    if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
-      this.setIBIData(activity, eventJSONObject);
-    }
-
-    EventUtilities.generateSummaries(event);
     return event;
   }
 
   private static setIBIData(activity: Activity, eventJSONObject: any) {
     activity.ibiData = new IBIData(eventJSONObject.DeviceLog['R-R'].Data);
+    // @todo optimize
     // Create a second IBIData so we can have filtering on those with keeping the original
     (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
       .lowLimitBPMFilter()
@@ -92,33 +119,19 @@ export class EventImporterSuuntoJSON {
       .getAsBPM().forEach((value, key, map) => {
       const point = new Point(new Date(activity.startDate.getTime() + key));
       point.addData(new DataHeartRate(value));
-      activity.addPoint(point);
-    });
-  }
 
-  private static getLaps(activity: ActivityInterface, windows, types: string[]): LapInterface[] {
-    let nextLapStartDate = activity.startDate;
-    return windows.reduce((lapArray, lapWindow) => {
-      const lapObj = lapWindow.Window;
-      if (types.indexOf(lapObj.Type)) {
-        return lapArray;
+      // If it belongs to the activity add it
+      if (point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
+        activity.addPoint(point);
       }
-      const lap = new Lap(
-        nextLapStartDate,
-        new Date(lapObj.TimeISO8601)
-      );
-      lap.type = lapObj.Type;
-      lap.summary = this.getSummary(lapObj);
-      nextLapStartDate = lap.endDate;
-      lapArray.push(lap);
-      return lapArray
-    }, []);
+    });
   }
 
   private static getPointsFromSamples(samples: any[]): PointInterface[] {
     return samples.reduce((pointsArray, sample) => {
       // Skip unwanted samples
       if (sample.Debug || sample.Events) {
+        debugger;
         return pointsArray;
       }
       const point = new Point(new Date(sample.TimeISO8601));
@@ -190,9 +203,14 @@ export class EventImporterSuuntoJSON {
     summary.energyInCal = object.Energy * 0.239 / 1000;
     summary.feeling = object.Feeling;
     summary.peakTrainingEffect = object.PeakTrainingEffect;
-    summary.pauseDurationInSeconds = object.PauseDuration;
     summary.recoveryTimeInSeconds = object.RecoveryTime;
     summary.maxVO2 = object.MAXVO2;
+
+    if (object.PauseDuration) {
+      summary.pauseDurationInSeconds = object.PauseDuration;
+      summary.totalDurationInSeconds += object.PauseDuration;
+    }
+
 
     if (object.HR) {
       summary.avgHR = object.HR[0].Avg * 60;
