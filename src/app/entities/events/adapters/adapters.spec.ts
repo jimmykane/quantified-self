@@ -4,7 +4,7 @@ import {Event} from '../event';
 import {EventImporterTCX} from './importers/importer.tcx';
 
 const json = require('../../../../../samples/example.json');
-const suuntoJSON = require('../../../../../samples/suunto.json');
+const suuntoJSON = require('../../../../../samples/suunto/suunto.json');
 const tcxJSON = require('../../../../../samples/movescount_tcx.json');
 
 describe('EventAdapters', () => {

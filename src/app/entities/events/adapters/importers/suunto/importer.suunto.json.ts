@@ -25,8 +25,9 @@ import {IntensityZones} from '../../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../../points/point.interface';
 import {SummaryInterface} from '../../../../summary/summary.interface';
-import {EventUtilities} from '../../../utilities/event.utilities';
 import {ImporterSuuntoActivityIds} from './import.suunto.activity.ids';
+import {ActivityInterface} from '../../../../activities/activity.interface';
+import {LapInterface} from '../../../../laps/lap.interface';
 
 export class EventImporterSuuntoJSON {
 
@@ -45,73 +46,132 @@ export class EventImporterSuuntoJSON {
     creator.hwInfo = eventJSONObject.DeviceLog.Device.Info.HW;
     creator.swInfo = eventJSONObject.DeviceLog.Device.Info.SW;
 
-    // Find the activity windows and generate their summaries from there
-    eventJSONObject.DeviceLog.Windows.filter((windowObj) => {
+    // Go over the samples and get the ones with activity start times
+    const activityStartEventSamples = eventJSONObject.DeviceLog.Samples.filter((sample) => {
+      return sample.Events && sample.Events[0].Activity;
+    });
+
+    // Get the lap start events
+    const lapEventSamples = eventJSONObject.DeviceLog.Samples.filter((sample) => {
+      return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type !== 'Start' && sample.Events[0].Lap.Type !== 'Stop';
+    });
+
+    // Get the stop event
+    const stopEventSample = eventJSONObject.DeviceLog.Samples.find((sample) => {
+      return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type === 'Stop';
+    });
+
+    // Add the stop event to the laps since it's also a lap stop event
+    lapEventSamples.push(stopEventSample);
+
+    // Get the activity windows
+    const activityWindows = eventJSONObject.DeviceLog.Windows.filter((windowObj) => {
       return windowObj.Window.Type === 'Activity';
-    }).forEach((activityObj) => {
-      activityObj = activityObj.Window;
+    }).map(activityWindow => {
+      return activityWindow.Window
+    });
 
-      // Set the activity props
+    // Get the lap windows
+    const lapWindows = eventJSONObject.DeviceLog.Windows.filter((windowObj) => {
+      return windowObj.Window.Type === 'Lap' || windowObj.Window.Type === 'Autolap';
+    }).map(lapWindow => {
+      return lapWindow.Window
+    });
+
+    // Get the move window
+    const moveWindow = eventJSONObject.DeviceLog.Windows.find((windowObj) => {
+      return windowObj.Window.Type === 'Move';
+    }).Window;
+
+    // Create the activities
+    const activities = activityStartEventSamples.map((activityStartEventSample, index): ActivityInterface => {
       const activity = new Activity();
+      activity.startDate = new Date(activityStartEventSample.TimeISO8601);
+      activity.type = ImporterSuuntoActivityIds[activityStartEventSample.Events[0].Activity.ActivityType];
       activity.creator = creator;
-      activity.summary = this.getSummary(activityObj);
-      activity.endDate = new Date(activityObj.TimeISO8601);
+      // Set the end date to the stop event time if the activity is the last or the only one else set it on the next itery time
+      activity.endDate = activityStartEventSamples.length - 1 === index ?
+        new Date(stopEventSample.TimeISO8601) :
+        new Date(activityStartEventSamples[index + 1].TimeISO8601);
+      // Create a summary these are a 1:1 ref arrays
+      activity.summary = this.getSummary(activityWindows[index]);
+      return activity;
+    });
 
-      // Find the start date
-      for (const sample of eventJSONObject.DeviceLog.Samples){
-        if (sample.Events && sample.Events[0].Activity && sample.Events[0].Activity.ActivityType === activityObj.ActivityId) {
-          activity.startDate = new Date(sample.TimeISO8601);
-          break;
+    // Create the laps
+    const laps = lapEventSamples.map((lapEventSample, index): LapInterface => {
+      const lapStartDate = index === 0 ? activities[0].startDate : new Date(lapEventSamples[index - 1].TimeISO8601);
+      const lapEndDate = new Date(lapEventSample.TimeISO8601);
+      const lap = new Lap(lapStartDate, lapEndDate);
+      // if it's only one lap there is no summary as it's the whole activity
+      if (lapEventSamples.length !== 1) {
+        lap.summary = this.getSummary(lapWindows[index]);
+      }
+      return lap;
+    });
+
+    // Add the laps to the belonging activity. If a lap starts or stops at the activity date delta then it belong to the acitvity
+    // @todo move laps to event so we don't have cross border laps to acivities and decouple them
+    activities.forEach((activity: ActivityInterface) => {
+      laps.filter((lap: LapInterface) => {
+        // If the lap start belongs to the activity
+        if (lap.startDate <= activity.endDate && lap.startDate >= activity.startDate) {
+          return true;
         }
-      }
-
-      // Now that we know the start date we can set the pause time on the summary
-      activity.summary.pauseDurationInSeconds = (
-        (activity.endDate.getTime() - activity.startDate.getTime() - activity.summary.totalDurationInSeconds * 1000)
-        / 1000);
-      // Increase the total duration since it missed the pause time
-      activity.summary.totalDurationInSeconds += activity.summary.pauseDurationInSeconds;
-      // Set the type
-      activity.type = ImporterSuuntoActivityIds[activityObj.ActivityId];
-
-      debugger;
-
-      // Add the points for this activity from samples
-      this.getPointsFromSamples(eventJSONObject.DeviceLog.Samples).filter((point) => {
-        return point.getDate() >= activity.startDate && point.getDate() <= activity.endDate;
-      }).forEach((point) => {
-        activity.addPoint(point);
+        // if the lap end belongs also...
+        if (lap.endDate >= activity.startDate && lap.endDate <= activity.endDate) {
+          return true
+        }
+        return false;
+      }).forEach((activityLap, index, activityLapArray) => {
+        // Fix the summary if only one lap (whole activity) @todo fix later
+        if (activityLapArray.length === 1) {
+          activityLap.summary = Object.create(activity.summary);
+          activityLap.type = 'Total';
+        }
+        activity.addLap(activityLap);
       });
+    });
 
-      // Go over the laps of this activity
-      eventJSONObject.DeviceLog.Windows.filter((windowObj) => {
-        return (['Lap', 'Autolap'].indexOf(windowObj.Window.Type) !== -1) && activityObj.ActivityId === windowObj.Window.ActivityId;
-      }).forEach((lapObj) => {
-        lapObj = lapObj.Window;
-        const lap = new Lap(
-          new Date((new Date(lapObj.TimeISO8601)).getTime() - (lapObj.Duration * 1000)),
-          new Date(lapObj.TimeISO8601)
-        );
-        lap.type = lapObj.Type;
-        lap.summary = this.getSummary(lapObj);
-        activity.addLap(lap);
+    // Add the samples that belong to the activity and the ibi data.
+    activities.every((activity) => {
+      eventJSONObject.DeviceLog.Samples.forEach((sample) => {
+        const point = this.getPointFromSample(sample);
+        if (point && point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
+          activity.addPoint(point)
+        }
       });
+    });
 
-      if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
-        this.setIBIData(activity, eventJSONObject);
-      }
+    // Add the ibiData
+    if (eventJSONObject.DeviceLog['R-R'] && eventJSONObject.DeviceLog['R-R'].Data) {
+      // prepare the data array per activity removing the offset
+      activities.forEach((activity, activityIndex) => {
+        let timeSum = 0;
+        const ibiData = eventJSONObject.DeviceLog['R-R'].Data.filter((ibi) => {
+          timeSum += ibi;
+          const ibiDataDate = new Date(activities[0].startDate.getTime() + timeSum);
+          return ibiDataDate >= activity.startDate && ibiDataDate <= activity.endDate;
+        });
+        this.setIBIData(activity, ibiData)
+      });
+    }
 
+    // Add the activities to the event
+    activities.forEach((activity) => {
       event.addActivity(activity);
     });
+
+    debugger;
 
     return event;
   }
 
-  private static setIBIData(activity: Activity, eventJSONObject: any) {
-    activity.ibiData = new IBIData(eventJSONObject.DeviceLog['R-R'].Data);
+  private static setIBIData(activity: Activity, ibiData: number[]) {
+    activity.ibiData = new IBIData(ibiData);
     // @todo optimize
     // Create a second IBIData so we can have filtering on those with keeping the original
-    (new IBIData(eventJSONObject.DeviceLog['R-R'].Data))
+    (new IBIData(ibiData))
       .lowLimitBPMFilter()
       .highLimitBPMFilter()
       .lowPassFilter()
@@ -127,65 +187,61 @@ export class EventImporterSuuntoJSON {
     });
   }
 
-  private static getPointsFromSamples(samples: any[]): PointInterface[] {
-    return samples.reduce((pointsArray, sample) => {
-      // Skip unwanted samples
-      if (sample.Debug || sample.Events) {
-        debugger;
-        return pointsArray;
-      }
-      const point = new Point(new Date(sample.TimeISO8601));
-      if (sample.hasOwnProperty('HR') && sample.HR !== null) {
-        point.addData(new DataHeartRate(sample.HR * 60))
-      }
-      if (sample.hasOwnProperty('GPSAltitude') && sample.GPSAltitude !== null) {
-        point.addData(new DataGPSAltitude(sample.GPSAltitude))
-      }
-      if (sample.hasOwnProperty('Latitude') && sample.Latitude !== null) {
-        point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
-      }
-      if (sample.hasOwnProperty('Longitude') && sample.Longitude !== null) {
-        point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
-      }
-      if (sample.hasOwnProperty('AbsPressure') && sample.AbsPressure !== null) {
-        point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
-      }
-      if (sample.hasOwnProperty('SeaLevelPressure') && sample.SeaLevelPressure !== null) {
-        point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
-      }
-      if (sample.hasOwnProperty('Altitude') && sample.Altitude !== null) {
-        point.addData(new DataAltitude(sample.Altitude))
-      }
-      if (sample.hasOwnProperty('Cadence') && sample.Cadence !== null) {
-        point.addData(new DataCadence(sample.Cadence * 120))
-      }
-      if (sample.hasOwnProperty('Power') && sample.Power !== null) {
-        point.addData(new DataPower(sample.Power))
-      }
-      if (sample.hasOwnProperty('Speed') && sample.Speed !== null) {
-        point.addData(new DataSpeed(sample.Speed))
-      }
-      if (sample.hasOwnProperty('Temperature') && sample.Temperature !== null) {
-        point.addData(new DataTemperature(sample.Temperature - 273.15))
-      }
-      if (sample.hasOwnProperty('VerticalSpeed') && sample.VerticalSpeed !== null) {
-        point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
-      }
-      if (sample.hasOwnProperty('EHPE') && sample.EHPE !== null) {
-        point.addData(new DataEHPE(sample.EHPE));
-      }
-      if (sample.hasOwnProperty('EVPE') && sample.EVPE !== null) {
-        point.addData(new DataEVPE(sample.EVPE));
-      }
-      if (sample.hasOwnProperty('NumberOfSatellites') && sample.NumberOfSatellites !== null) {
-        point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
-      }
-      if (sample.hasOwnProperty('Satellite5BestSNR') && sample.Satellite5BestSNR !== null) {
-        point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
-      }
-      pointsArray.push(point);
-      return pointsArray;
-    }, []);
+  private static getPointFromSample(sample: any): PointInterface {
+    // Skip unwanted sample
+    if (sample.Debug || sample.Events) {
+      return null;
+    }
+    const point = new Point(new Date(sample.TimeISO8601));
+    if (sample.hasOwnProperty('HR') && sample.HR !== null) {
+      point.addData(new DataHeartRate(sample.HR * 60))
+    }
+    if (sample.hasOwnProperty('GPSAltitude') && sample.GPSAltitude !== null) {
+      point.addData(new DataGPSAltitude(sample.GPSAltitude))
+    }
+    if (sample.hasOwnProperty('Latitude') && sample.Latitude !== null) {
+      point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
+    }
+    if (sample.hasOwnProperty('Longitude') && sample.Longitude !== null) {
+      point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
+    }
+    if (sample.hasOwnProperty('AbsPressure') && sample.AbsPressure !== null) {
+      point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
+    }
+    if (sample.hasOwnProperty('SeaLevelPressure') && sample.SeaLevelPressure !== null) {
+      point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
+    }
+    if (sample.hasOwnProperty('Altitude') && sample.Altitude !== null) {
+      point.addData(new DataAltitude(sample.Altitude))
+    }
+    if (sample.hasOwnProperty('Cadence') && sample.Cadence !== null) {
+      point.addData(new DataCadence(sample.Cadence * 120))
+    }
+    if (sample.hasOwnProperty('Power') && sample.Power !== null) {
+      point.addData(new DataPower(sample.Power))
+    }
+    if (sample.hasOwnProperty('Speed') && sample.Speed !== null) {
+      point.addData(new DataSpeed(sample.Speed))
+    }
+    if (sample.hasOwnProperty('Temperature') && sample.Temperature !== null) {
+      point.addData(new DataTemperature(sample.Temperature - 273.15))
+    }
+    if (sample.hasOwnProperty('VerticalSpeed') && sample.VerticalSpeed !== null) {
+      point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
+    }
+    if (sample.hasOwnProperty('EHPE') && sample.EHPE !== null) {
+      point.addData(new DataEHPE(sample.EHPE));
+    }
+    if (sample.hasOwnProperty('EVPE') && sample.EVPE !== null) {
+      point.addData(new DataEVPE(sample.EVPE));
+    }
+    if (sample.hasOwnProperty('NumberOfSatellites') && sample.NumberOfSatellites !== null) {
+      point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
+    }
+    if (sample.hasOwnProperty('Satellite5BestSNR') && sample.Satellite5BestSNR !== null) {
+      point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
+    }
+    return point;
   }
 
   private static getSummary(object: any): SummaryInterface {
