@@ -43,7 +43,6 @@ export class EventImporterSuuntoJSON {
     // Create a creator and pass it to all activities (later)
     const creator = new Creator();
     creator.name = ImporterSuuntoDeviceNames[eventJSONObject.DeviceLog.Device.Name];
-    debugger
     creator.serialNumber = eventJSONObject.DeviceLog.Device.SerialNumber;
     creator.hwInfo = eventJSONObject.DeviceLog.Device.Info.HW;
     creator.swInfo = eventJSONObject.DeviceLog.Device.Info.SW;
@@ -105,9 +104,11 @@ export class EventImporterSuuntoJSON {
       const lapStartDate = index === 0 ? activities[0].startDate : new Date(lapEventSamples[index - 1].TimeISO8601);
       const lapEndDate = new Date(lapEventSample.TimeISO8601);
       const lap = new Lap(lapStartDate, lapEndDate);
+      lap.type = lapEventSample;
       // if it's only one lap there is no summary as it's the whole activity
       if (lapEventSamples.length !== 1) {
         lap.summary = this.getSummary(lapWindows[index]);
+        lap.type = lapWindows[index].Type;
       }
       return lap;
     });
