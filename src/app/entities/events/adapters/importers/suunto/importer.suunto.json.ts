@@ -25,7 +25,8 @@ import {IntensityZones} from '../../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../../points/point.interface';
 import {SummaryInterface} from '../../../../summary/summary.interface';
-import {ImporterSuuntoActivityIds} from './import.suunto.activity.ids';
+import {ImporterSuuntoActivityIds} from './importer.suunto.activity.ids';
+import {ImporterSuuntoDeviceNames} from './importer.suunto.device.names';
 import {ActivityInterface} from '../../../../activities/activity.interface';
 import {LapInterface} from '../../../../laps/lap.interface';
 
@@ -41,7 +42,8 @@ export class EventImporterSuuntoJSON {
 
     // Create a creator and pass it to all activities (later)
     const creator = new Creator();
-    creator.name = this.getDeviceModelFromCodeName(eventJSONObject.DeviceLog.Device.Name);
+    creator.name = ImporterSuuntoDeviceNames[eventJSONObject.DeviceLog.Device.Name];
+    debugger
     creator.serialNumber = eventJSONObject.DeviceLog.Device.SerialNumber;
     creator.hwInfo = eventJSONObject.DeviceLog.Device.Info.HW;
     creator.swInfo = eventJSONObject.DeviceLog.Device.Info.SW;
@@ -335,29 +337,5 @@ export class EventImporterSuuntoJSON {
     zones.zone5Duration = zonesObj.Zone5Duration;
     zones.zone5LowerLimit = zonesObj.Zone5LowerLimit;
     return zones;
-  }
-
-  private static getDeviceModelFromCodeName(codeName: string): string {
-    switch (codeName) {
-      case 'Amsterdam': {
-        return 'Spartan Ultra';
-      }
-      case 'Brighton': {
-        return 'Spartan Sport'
-      }
-      case 'Cairo': {
-        return 'Spartan WHR'
-      }
-      case 'Forssa': {
-        return 'Spartan Trainer'
-      }
-      case 'Gdansk': {
-        return 'Spartan WHR Baro'
-      }
-      case 'Helsinki': {
-        return '3 Fitness'
-      }
-    }
-    return codeName;
   }
 }
