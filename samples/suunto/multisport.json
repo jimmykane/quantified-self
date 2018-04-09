@@ -1,0 +1,878 @@
+{
+  "DeviceLog": {
+    "Header": {
+      "Activity": "Multisport",
+      "ActivityType": 2,
+      "Altitude": {
+        "Max": 706.39999999999998,
+        "Min": 706.29999999999995
+      },
+      "Ascent": 0,
+      "AscentTime": 0,
+      "DateTime": "2018-04-09T18:03:13.368+02:00",
+      "Descent": 0,
+      "DescentTime": 0,
+      "Device": {
+        "Info": {
+          "HW": "xx",
+          "SW": "xx"
+        },
+        "Name": "xx",
+        "SerialNumber": "xxx"
+      },
+      "Distance": 0,
+      "DownhillCount": null,
+      "DownhillDescent": null,
+      "DownhillDistance": null,
+      "DownhillDuration": null,
+      "DownhillGrade": {
+        "Avg": null,
+        "Max": null
+      },
+      "DownhillMaxDescent": null,
+      "DownhillMaxLength": null,
+      "DownhillSpeed": {
+        "Avg": null,
+        "Max": null
+      },
+      "Duration": 17.001999999999999,
+      "EPOC": 0,
+      "Energy": 1256,
+      "Feeling": null,
+      "HrZones": {
+        "Zone1Duration": 0,
+        "Zone2Duration": 0,
+        "Zone2LowerLimit": 2.2200000000000002,
+        "Zone3Duration": 0,
+        "Zone3LowerLimit": 2.3740000000000001,
+        "Zone4Duration": 0,
+        "Zone4LowerLimit": 2.528,
+        "Zone5Duration": 0,
+        "Zone5LowerLimit": 2.6819999999999999
+      },
+      "MAXVO2": null,
+      "MoveType": null,
+      "Notes": "",
+      "PauseDuration": 0,
+      "PeakTrainingEffect": 1,
+      "Personal": {
+        "MaxHR": 3.0830000000000002
+      },
+      "PoolLength": 25,
+      "PoolLengths": 0,
+      "PowerZones": {
+        "Zone1Duration": 0,
+        "Zone2Duration": 0,
+        "Zone2LowerLimit": null,
+        "Zone3Duration": 0,
+        "Zone3LowerLimit": null,
+        "Zone4Duration": 0,
+        "Zone4LowerLimit": null,
+        "Zone5Duration": 0,
+        "Zone5LowerLimit": null
+      },
+      "RecoveryTime": 0,
+      "SgeeEpoTimestamp": "2018-04-09T00:05:02.000+00:00",
+      "SpeedZones": {
+        "Zone1Duration": 10.420999999999999,
+        "Zone2Duration": 0,
+        "Zone2LowerLimit": null,
+        "Zone3Duration": 0,
+        "Zone3LowerLimit": null,
+        "Zone4Duration": 0,
+        "Zone4LowerLimit": null,
+        "Zone5Duration": 0,
+        "Zone5LowerLimit": null
+      },
+      "Targets": {
+        "Distance": null,
+        "Duration": null,
+        "HeartRateZone": "None",
+        "PowerZone": "None",
+        "SpeedZone": "None"
+      },
+      "TraingingLoadPeak": null,
+      "VerticalSpeed": -0,
+      "TimeISO8601": "2018-04-09T18:03:30.370+02:00"
+    },
+    "Windows": [
+      {
+        "Window": {
+          "ActivityId": 82,
+          "Altitude": [
+            {
+              "Avg": 706.29999999999995,
+              "Max": 706.29999999999995,
+              "Min": 706.29999999999995
+            }
+          ],
+          "Ascent": 0,
+          "AscentTime": 0,
+          "Cadence": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Descent": 0,
+          "DescentMax": 0,
+          "DescentTime": 0,
+          "Distance": 0,
+          "DistanceMax": 0,
+          "DownhillGrade": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Duration": 1.6000000000000001,
+          "Energy": 0,
+          "HR": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Power": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "RecoveryTime": 0,
+          "Speed": [
+            {
+              "Avg": 0,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "StrokeRate": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Strokes": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "SwimStyle": null,
+          "Swolf": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Temperature": [
+            {
+              "Avg": 296.10000000000002,
+              "Max": 296.10000000000002,
+              "Min": 296.10000000000002
+            }
+          ],
+          "Type": "Lap",
+          "VerticalSpeed": [
+            {
+              "Avg": 0,
+              "Max": 0,
+              "Min": 0
+            }
+          ],
+          "TimeISO8601": "2018-04-09T18:03:15.050+02:00"
+        }
+      },
+      {
+        "Window": {
+          "ActivityId": 82,
+          "Altitude": [
+            {
+              "Avg": 706.29999999999995,
+              "Max": 706.39999999999998,
+              "Min": 706.29999999999995
+            }
+          ],
+          "Ascent": 0,
+          "AscentTime": 0,
+          "Cadence": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Descent": 0,
+          "DescentMax": 0,
+          "DescentTime": 0,
+          "Distance": 0,
+          "DistanceMax": 0,
+          "DownhillGrade": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Duration": 10.4,
+          "Energy": 0,
+          "HR": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Power": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "RecoveryTime": 0,
+          "Speed": [
+            {
+              "Avg": 0,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "StrokeRate": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Strokes": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "SwimStyle": null,
+          "Swolf": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Temperature": [
+            {
+              "Avg": 296.10000000000002,
+              "Max": 296.10000000000002,
+              "Min": 296.10000000000002
+            }
+          ],
+          "Type": "Activity",
+          "VerticalSpeed": [
+            {
+              "Avg": -0,
+              "Max": 0,
+              "Min": -0
+            }
+          ],
+          "TimeISO8601": "2018-04-09T18:03:23.892+02:00"
+        }
+      },
+      {
+        "Window": {
+          "ActivityId": 82,
+          "Altitude": [
+            {
+              "Avg": 706.29999999999995,
+              "Max": 706.39999999999998,
+              "Min": 706.29999999999995
+            }
+          ],
+          "Ascent": 0,
+          "AscentTime": 0,
+          "Cadence": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Descent": 0,
+          "DescentMax": 0,
+          "DescentTime": 0,
+          "Distance": 0,
+          "DistanceMax": 0,
+          "DownhillGrade": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Duration": 12.199999999999999,
+          "Energy": 0,
+          "HR": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Power": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "RecoveryTime": 0,
+          "Speed": [
+            {
+              "Avg": 0,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "StrokeRate": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Strokes": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "SwimStyle": null,
+          "Swolf": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Temperature": [
+            {
+              "Avg": 296.10000000000002,
+              "Max": 296.10000000000002,
+              "Min": 296.10000000000002
+            }
+          ],
+          "Type": "Lap",
+          "VerticalSpeed": [
+            {
+              "Avg": -0,
+              "Max": 0,
+              "Min": -0
+            }
+          ],
+          "TimeISO8601": "2018-04-09T18:03:27.165+02:00"
+        }
+      },
+      {
+        "Window": {
+          "ActivityId": 18,
+          "Altitude": [
+            {
+              "Avg": 706.29999999999995,
+              "Max": 706.29999999999995,
+              "Min": 706.29999999999995
+            }
+          ],
+          "Ascent": 0,
+          "AscentTime": 0,
+          "Cadence": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Descent": 0,
+          "DescentMax": 0,
+          "DescentTime": 0,
+          "Distance": 0,
+          "DistanceMax": 0,
+          "DownhillGrade": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Duration": 3.2999999999999998,
+          "Energy": 1256,
+          "HR": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Power": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "RecoveryTime": 0,
+          "Speed": [
+            {
+              "Avg": 0,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "StrokeRate": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Strokes": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "SwimStyle": null,
+          "Swolf": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Temperature": [
+            {
+              "Avg": 296.10000000000002,
+              "Max": 296.10000000000002,
+              "Min": 296.10000000000002
+            }
+          ],
+          "Type": "Lap",
+          "VerticalSpeed": [
+            {
+              "Avg": -0,
+              "Max": -0,
+              "Min": -0
+            }
+          ],
+          "TimeISO8601": "2018-04-09T18:03:31.420+02:00"
+        }
+      },
+      {
+        "Window": {
+          "ActivityId": 18,
+          "Altitude": [
+            {
+              "Avg": 706.29999999999995,
+              "Max": 706.29999999999995,
+              "Min": 706.29999999999995
+            }
+          ],
+          "Ascent": 0,
+          "AscentTime": 0,
+          "Cadence": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Descent": 0,
+          "DescentMax": 0,
+          "DescentTime": 0,
+          "Distance": 0,
+          "DistanceMax": 0,
+          "DownhillGrade": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Duration": 6.5999999999999996,
+          "Energy": 1256,
+          "HR": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Power": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "RecoveryTime": 0,
+          "Speed": [
+            {
+              "Avg": 0,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "StrokeRate": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Strokes": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "SwimStyle": null,
+          "Swolf": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Temperature": [
+            {
+              "Avg": 296.10000000000002,
+              "Max": 296.10000000000002,
+              "Min": 296.10000000000002
+            }
+          ],
+          "Type": "Activity",
+          "VerticalSpeed": [
+            {
+              "Avg": -0,
+              "Max": -0,
+              "Min": -0
+            }
+          ],
+          "TimeISO8601": "2018-04-09T18:03:31.481+02:00"
+        }
+      },
+      {
+        "Window": {
+          "ActivityId": 2,
+          "Altitude": [
+            {
+              "Avg": 706.29999999999995,
+              "Max": 706.39999999999998,
+              "Min": 706.29999999999995
+            }
+          ],
+          "Ascent": 0,
+          "AscentTime": 0,
+          "Cadence": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Descent": 0,
+          "DescentMax": 0,
+          "DescentTime": 0,
+          "Distance": 0,
+          "DistanceMax": 0,
+          "DownhillGrade": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Duration": 17,
+          "Energy": 1256,
+          "HR": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Power": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "RecoveryTime": 0,
+          "Speed": [
+            {
+              "Avg": 0,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "StrokeRate": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Strokes": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "SwimStyle": null,
+          "Swolf": [
+            {
+              "Avg": null,
+              "Max": null,
+              "Min": null
+            }
+          ],
+          "Temperature": [
+            {
+              "Avg": 296.10000000000002,
+              "Max": 296.10000000000002,
+              "Min": 296.10000000000002
+            }
+          ],
+          "Type": "Move",
+          "VerticalSpeed": [
+            {
+              "Avg": -0,
+              "Max": 0,
+              "Min": -0
+            }
+          ],
+          "TimeISO8601": "2018-04-09T18:03:31.929+02:00"
+        }
+      }
+    ],
+    "Device": {
+      "Info": {
+        "HW": "LankkuD",
+        "SW": "2.1.10"
+      },
+      "Name": "Amsterdam",
+      "SerialNumber": "170810000701"
+    },
+    "Samples": [
+      {
+        "Events": [
+          {
+            "ArrayBegin": 0,
+            "Lap": {
+              "Type": "Start"
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:13.368+02:00"
+      },
+      {
+        "Events": [
+          {
+            "Activity": {
+              "ActivityType": 82,
+              "CustomModeId": "82"
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:13.368+02:00"
+      },
+      {
+        "Events": [
+          {
+            "ArrayBegin": 0,
+            "Lap": {
+              "Type": "Manual"
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:15.009+02:00"
+      },
+      {
+        "AbsPressure": null,
+        "Altitude": 706.40000000000009,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": null,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:21.000+02:00"
+      },
+      {
+        "AbsPressure": 92285,
+        "Altitude": 706.40000000000009,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.10000000000002,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:22.010+02:00"
+      },
+      {
+        "AbsPressure": 92280,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.10000000000002,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:23.000+02:00"
+      },
+      {
+        "Events": [
+          {
+            "Activity": {
+              "ActivityType": 18,
+              "CustomModeId": "18"
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:23.854+02:00"
+      },
+      {
+        "AbsPressure": 92280,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.10000000000002,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:24.000+02:00"
+      },
+      {
+        "AbsPressure": 92280,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.11000000000001,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:25.000+02:00"
+      },
+      {
+        "AbsPressure": 92287,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.11000000000001,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:26.000+02:00"
+      },
+      {
+        "AbsPressure": 92278,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.11000000000001,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:27.000+02:00"
+      },
+      {
+        "Events": [
+          {
+            "ArrayBegin": 0,
+            "Lap": {
+              "Type": "Manual"
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:27.131+02:00"
+      },
+      {
+        "AbsPressure": 92283,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.12,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:28.001+02:00"
+      },
+      {
+        "AbsPressure": 92282,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": null,
+        "Temperature": 296.13,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:29.000+02:00"
+      },
+      {
+        "AbsPressure": 92293,
+        "Altitude": 706.20000000000005,
+        "Cadence": null,
+        "Distance": null,
+        "Power": null,
+        "SeaLevelPressure": 100482,
+        "Speed": 0,
+        "Temperature": 296.13,
+        "VerticalSpeed": 0,
+        "TimeISO8601": "2018-04-09T18:03:30.000+02:00"
+      },
+      {
+        "Events": [
+          {
+            "ArrayBegin": 0,
+            "Pause": {
+              "State": true
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:30.370+02:00"
+      },
+      {
+        "Events": [
+          {
+            "ArrayBegin": 0,
+            "Lap": {
+              "Type": "Stop"
+            }
+          }
+        ],
+        "TimeISO8601": "2018-04-09T18:03:31.288+02:00"
+      }
+    ]
+  }
+}
