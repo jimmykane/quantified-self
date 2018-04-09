@@ -242,10 +242,15 @@ export class EventImporterSuuntoJSON {
       summary.minTemperature = object.Temperature[0].Min - 273.15;
     }
 
-    if (object.VerticalSpeed) {
-      summary.avgVerticalSpeed = object.VerticalSpeed[0].Avg;
-      summary.maxVerticalSpeed = object.VerticalSpeed[0].Max;
-      summary.minVerticalSpeed = object.VerticalSpeed[0].Min;
+    if (object.hasOwnProperty('VerticalSpeed')) {
+      // Double action here
+      if (Array.isArray(object.VerticalSpeed)) {
+        summary.avgVerticalSpeed = object.VerticalSpeed[0].Avg;
+        summary.maxVerticalSpeed = object.VerticalSpeed[0].Max;
+        summary.minVerticalSpeed = object.VerticalSpeed[0].Min;
+      } else {
+        summary.avgVerticalSpeed = object.VerticalSpeed;
+      }
     }
 
     if (object.HrZones) {
