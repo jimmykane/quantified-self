@@ -26,7 +26,6 @@ import {
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
-import {EventCardActivityStatsComponent} from './components/cards/event/stats/event.card.activity.stats.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {WeatherUndergroundWeatherService} from './services/weather/app.weather-underground.weather.service';
 import {HttpModule} from '@angular/http';
@@ -94,7 +93,6 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     EventCardMapComponent,
     EventCardMapAGMComponent,
     EventCardStatsComponent,
-    EventCardActivityStatsComponent,
     EventCardActionsMenuComponent,
     EventCardLapsComponent,
     EventLapTableRowComponent,
