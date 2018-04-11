@@ -20,7 +20,6 @@ export class Point implements PointInterface {
 
   addData(data: DataInterface) {
     this.data.set(data.getType(), data);
-    data.setPoint(this);
   }
 
   removeDataByType(dataType: string) {

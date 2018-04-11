@@ -10,13 +10,4 @@ describe('Data', () => {
     data = new DataTemperature(60);
   });
 
-  it('should set a point', () => {
-    data.setPoint(new Point(new Date()));
-    expect(data.getPoint() instanceof Point).toBe(true);
-  });
-
-  it('should miss a point', () => {
-    expect(data.getPoint()).toBeFalsy();
-  });
-
 });
