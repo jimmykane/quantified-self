@@ -158,11 +158,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     });
   }
 
-  private updateChart(startDate?: Date, endDate?: Date): Promise<any> {
+  private updateChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
 
-      const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate)); // I only need the length @todo
+      const dataProvider = this.getDataProvider(this.getDataMap()); // I only need the length @todo
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
@@ -281,7 +281,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     return dataProvider;
   }
 
-  private getDataMapSlice(startDate?: Date, endDate?: Date) {
+  private getDataMap() {
     const t0 = performance.now();
     const dataMap = new Map<number, any>();
     let dataCount = 0;
