@@ -1,10 +1,11 @@
-import {DataInterface} from './data.interface';
+import {DataInterface, UnitSystem} from './data.interface';
 import {PointInterface} from '../points/point.interface';
 
 export abstract class Data implements DataInterface {
 
   static type: string;
   static unit: string;
+  static unitSystem = UnitSystem.Metric;
   private value: number;
 
   constructor(value: string | number) {
@@ -27,10 +28,15 @@ export abstract class Data implements DataInterface {
     return (<typeof Data>this.constructor).unit;
   }
 
+  getUnitSystem(): UnitSystem {
+    return (<typeof Data>this.constructor).unitSystem;
+  }
+
   toJSON(): any {
     return {
       type: this.getType(),
-      value: this.getValue()
+      value: this.getValue(),
+      unitSystem: this.getUnitSystem(),
     };
   }
 }

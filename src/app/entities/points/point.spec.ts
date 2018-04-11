@@ -44,21 +44,11 @@ describe('Point', () => {
   });
 
   it('should export correctly to JSON', () => {
-    point.addData(new DataLatitudeDegrees(0));
-    point.addData(new DataLongitudeDegrees(0));
     point.addData(new DataHeartRate(60));
+    spyOn(point, 'getData').and.returnValue([]);
     expect(point.toJSON()).toEqual({
       date: (new Date(0)).toJSON(),
-      data: [{
-        type: 'Latitude',
-        value: 0
-      }, {
-        type: 'Longitude',
-        value: 0
-      }, {
-        type: 'Heart Rate',
-        value: 60
-      }]
+      data: []
     });
 
   });

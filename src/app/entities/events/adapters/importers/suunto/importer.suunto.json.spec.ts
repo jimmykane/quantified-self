@@ -13,9 +13,8 @@ describe('EventImporterSuuntoJSON', () => {
   });
 
 
-  fit('should import correctly a multisport activity', () => {
+  it('should import correctly a multisport activity', () => {
     event = EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(suuntoMultiSportJSON));
-    debugger;
   });
 
 
