@@ -40,5 +40,4 @@ export interface SummaryInterface extends SerializableClassInterface {
   avgVerticalSpeed: number;
   minVerticalSpeed: number;
   maxVerticalSpeed: number;
-  intensityZones: Map<string, IntensityZonesInterface>;
 }

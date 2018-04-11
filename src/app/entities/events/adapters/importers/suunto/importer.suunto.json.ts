@@ -40,6 +40,7 @@ export class EventImporterSuuntoJSON {
     const event = new Event();
     event.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
 
+
     // Create a creator and pass it to all activities (later)
     const creator = new Creator();
     creator.name = ImporterSuuntoDeviceNames[eventJSONObject.DeviceLog.Device.Name] || eventJSONObject.DeviceLog.Device.Name;
@@ -96,6 +97,9 @@ export class EventImporterSuuntoJSON {
         new Date(activityStartEventSamples[index + 1].TimeISO8601);
       // Create a summary these are a 1:1 ref arrays
       activity.summary = this.getSummary(activityWindows[index]);
+      // Set the zones for the activity @todo fix
+      this.setIntensityZones(activity, eventJSONObject.DeviceLog.Header);
+
       return activity;
     });
 
@@ -170,6 +174,21 @@ export class EventImporterSuuntoJSON {
     return event;
   }
 
+  private static setIntensityZones(activity: ActivityInterface, object) {
+// Create intensity zones from the header
+    if (object.HrZones) {
+      activity.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
+    }
+
+    if (object.PowerZones) {
+      activity.intensityZones.set(DataPower.type, this.getZones(object.PowerZones));
+    }
+
+    if (object.SpeedZones) {
+      activity.intensityZones.set(DataSpeed.type, this.getZones(object.SpeedZones));
+    }
+  }
+
   private static setIBIData(activity: Activity, ibiData: number[]) {
     activity.ibiData = new IBIData(ibiData);
     // @todo optimize
@@ -186,7 +205,7 @@ export class EventImporterSuuntoJSON {
       // If it belongs to the activity add it
       if (point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
         activity.addPoint(point);
-      }else{
+      } else {
         debugger;
       }
     });
@@ -313,21 +332,11 @@ export class EventImporterSuuntoJSON {
       }
     }
 
-    if (object.HrZones) {
-      summary.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
-    }
-
-    if (object.PowerZones) {
-      summary.intensityZones.set(DataPower.type, this.getZones(object.PowerZones));
-    }
-
-    if (object.SpeedZones) {
-      summary.intensityZones.set(DataSpeed.type, this.getZones(object.SpeedZones));
-    }
     return summary;
   }
 
   private static getZones(zonesObj: any): IntensityZones {
+    // @todo fix for HR
     const zones = new IntensityZones;
     zones.zone1Duration = zonesObj.Zone1Duration;
     zones.zone2Duration = zonesObj.Zone2Duration;

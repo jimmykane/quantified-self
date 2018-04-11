@@ -71,7 +71,6 @@ describe('Summary', () => {
     zones.zone4LowerLimit = 7;
     zones.zone5Duration = 8;
     zones.zone5LowerLimit = 9;
-    summary.intensityZones.set('Test', zones);
 
     expect(summary.toJSON()).toEqual({
       'totalDurationInSeconds': 2,
@@ -123,19 +122,6 @@ describe('Summary', () => {
       'maxSpeed': 25,
       'avgSpeed': 27,
       'minSpeed': 26,
-      'intensityZones': {
-        'Test': {
-          'zone1Duration': 1,
-          'zone2Duration': 2,
-          'zone2LowerLimit': 3,
-          'zone3Duration': 4,
-          'zone3LowerLimit': 5,
-          'zone4Duration': 6,
-          'zone4LowerLimit': 7,
-          'zone5Duration': 8,
-          'zone5LowerLimit': 9
-        }
-      }
     });
   });
 });

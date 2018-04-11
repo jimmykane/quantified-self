@@ -19,7 +19,7 @@ export class Lap implements LapInterface {
       startDate: this.startDate.toJSON(),
       endDate: this.endDate.toJSON(),
       type: this.type,
-      summary: this.summary.toJSON(),
+      summary: this.summary,
     };
   }
 }

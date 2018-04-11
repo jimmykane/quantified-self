@@ -63,6 +63,22 @@ export class EventImporterJSON {
       creator.serialNumber = activityObject.creator.serialNumber;
       activity.creator = creator;
 
+      if (activityObject.intensityZones) {
+      for (const key in activityObject.intensityZones) {
+        const zones = new IntensityZones();
+        zones.zone1Duration = activityObject.intensityZones[key].zone1Duration;
+        zones.zone2Duration = activityObject.intensityZones[key].zone2Duration;
+        zones.zone2LowerLimit = activityObject.intensityZones[key].zone2LowerLimit;
+        zones.zone3Duration = activityObject.intensityZones[key].zone3Duration;
+        zones.zone3LowerLimit = activityObject.intensityZones[key].zone3LowerLimit;
+        zones.zone4Duration = activityObject.intensityZones[key].zone4Duration;
+        zones.zone4LowerLimit = activityObject.intensityZones[key].zone4LowerLimit;
+        zones.zone5Duration = activityObject.intensityZones[key].zone5Duration;
+        zones.zone5LowerLimit = activityObject.intensityZones[key].zone5LowerLimit;
+        activity.intensityZones.set(key, zones);
+      }
+    }
+
       for (const pointObject of activityObject.points) {
         const point = new Point(new Date(pointObject.date));
         activity.addPoint(point);
@@ -198,22 +214,6 @@ export class EventImporterJSON {
       summary.geoLocationInfo.city = object.summary.geoLocationInfo.city;
       summary.geoLocationInfo.country = object.summary.geoLocationInfo.country;
       summary.geoLocationInfo.province = object.summary.geoLocationInfo.province;
-    }
-
-    if (object.summary.intensityZones) {
-      for (const key in object.summary.intensityZones) {
-        const zones = new IntensityZones();
-        zones.zone1Duration = object.summary.intensityZones[key].zone1Duration;
-        zones.zone2Duration = object.summary.intensityZones[key].zone2Duration;
-        zones.zone2LowerLimit = object.summary.intensityZones[key].zone2LowerLimit;
-        zones.zone3Duration = object.summary.intensityZones[key].zone3Duration;
-        zones.zone3LowerLimit = object.summary.intensityZones[key].zone3LowerLimit;
-        zones.zone4Duration = object.summary.intensityZones[key].zone4Duration;
-        zones.zone4LowerLimit = object.summary.intensityZones[key].zone4LowerLimit;
-        zones.zone5Duration = object.summary.intensityZones[key].zone5Duration;
-        zones.zone5LowerLimit = object.summary.intensityZones[key].zone5LowerLimit;
-        summary.intensityZones.set(key, zones);
-      }
     }
 
     return summary;

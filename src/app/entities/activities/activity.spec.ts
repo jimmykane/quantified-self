@@ -269,7 +269,8 @@ describe('Activity', () => {
       'points': [{}],
       'summary': undefined,
       'ibiData': [],
-      'laps': [{}]
+      'laps': [{}],
+      'intensityZones': {},
     });
     expect(point.toJSON).toHaveBeenCalled();
     expect(lap.toJSON).toHaveBeenCalled();

@@ -5,6 +5,7 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
+import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
   type: string;
@@ -13,6 +14,8 @@ export interface ActivityInterface extends IDClassInterface, SerializableClassIn
   creator: CreatorInterface;
   summary: SummaryInterface;
   ibiData: IBIData;
+  intensityZones: Map<string, IntensityZonesInterface>;
+
 
   addPoint(point: PointInterface, overrideAllDataOnCollision?: boolean);
   removePoint(point: PointInterface);

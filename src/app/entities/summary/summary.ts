@@ -39,15 +39,10 @@ export class Summary implements SummaryInterface {
   public maxSpeed: number = null;
   public avgSpeed: number = null;
   public minSpeed: number = null;
-  public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
   public geoLocationInfo: GeoLocationInfo;
   public weather: Weather;
 
   toJSON(): any {
-    const intensityZones = {};
-    this.intensityZones.forEach((value: IntensityZonesInterface, key: string, map) => {
-        intensityZones[key] =  value.toJSON();
-    });
 
     // perhaps check this with JSON stringify how it can be optimized to include the starnder props
     return {
@@ -86,7 +81,6 @@ export class Summary implements SummaryInterface {
       maxSpeed: this.maxSpeed,
       avgSpeed: this.avgSpeed,
       minSpeed: this.minSpeed,
-      intensityZones: intensityZones,
     };
   }
 }

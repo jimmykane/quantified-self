@@ -3,11 +3,11 @@ import {CreatorInterface} from '../creators/creatorInterface';
 import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
-import {Log} from 'ng2-logger';
 import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
+import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
 
 export class Activity extends IDClass implements ActivityInterface {
   public startDate;
@@ -16,6 +16,8 @@ export class Activity extends IDClass implements ActivityInterface {
   public creator: CreatorInterface;
   public summary: SummaryInterface;
   public ibiData: IBIData;
+  public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
+
 
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private laps: LapInterface[] = [];
@@ -114,18 +116,23 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   toJSON(): any {
+    const intensityZones = {};
+    this.intensityZones.forEach((value: IntensityZonesInterface, key: string, map) => {
+      intensityZones[key] = value.toJSON();
+    });
     return {
       id: this.getID(),
       startDate: this.startDate,
       endDate: this.endDate,
       type: this.type,
-      creator: this.creator ? this.creator.toJSON() : undefined,
+      creator: this.creator,
       points: Array.from(this.points.values()).reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
-      summary: this.summary ? this.summary.toJSON() : undefined,
-      ibiData: this.ibiData ? this.ibiData.toJSON() : [],
+      summary: this.summary,
+      ibiData: this.ibiData,
+      intensityZones: intensityZones,
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;

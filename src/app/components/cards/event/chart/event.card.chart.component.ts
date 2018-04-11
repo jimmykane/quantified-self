@@ -121,9 +121,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           valueText: '[[value]]',
           clickLabel: (graph) => {
             graph.hidden = !graph.hidden;
-            graph.chart.valueAxes.forEach((valueAxis) => {
-              valueAxis.guides = this.getZoneGuides();
-            });
+            // graph.chart.valueAxes.forEach((valueAxis) => {
+            //   valueAxis.guides = this.getZoneGuides();
+            // });
             if (!graph.hidden) {
               graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
             }
@@ -188,12 +188,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     }
 
     if (!this.chart.events.dataUpdated.length) {
-      this.chart.addListener('dataUpdated', (event) => {
-        event.chart.valueAxes.forEach((valueAxis) => {
-          valueAxis.guides = this.getZoneGuides();
-        });
-        event.chart.validateNow();
-      });
+      // this.chart.addListener('dataUpdated', (event) => {
+      //   event.chart.valueAxes.forEach((valueAxis) => {
+      //     valueAxis.guides = this.getZoneGuides();
+      //   });
+      //   event.chart.validateNow();
+      // });
     }
 
     if (!this.chart.events.resized.length) {
@@ -393,7 +393,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // Check if there is an intensity zone
       const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
         return activity.getID() === graph.id.split(':')[1];
-      }).summary.intensityZones.get(graph.id.split(':')[0]);
+      }).intensityZones.get(graph.id.split(':')[0]);
       if (!activityIntensityZones) {
         return zoneGuides
       }
