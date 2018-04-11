@@ -186,6 +186,8 @@ export class EventImporterSuuntoJSON {
       // If it belongs to the activity add it
       if (point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
         activity.addPoint(point);
+      }else{
+        debugger;
       }
     });
   }
@@ -269,7 +271,6 @@ export class EventImporterSuuntoJSON {
       summary.pauseDurationInSeconds = object.PauseDuration;
       summary.totalDurationInSeconds += object.PauseDuration;
     }
-
 
     if (object.HR) {
       summary.avgHR = object.HR[0].Avg * 60;
