@@ -79,7 +79,8 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     MatListModule,
     FormsModule,
     Angular2FontawesomeModule,
-    MatProgressBarModule
+    MatProgressBarModule,
+    MatTableModule,
   ],
   declarations: [
     AppComponent,
