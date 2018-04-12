@@ -2,13 +2,10 @@ import {EventInterface} from './event.interface';
 import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
-import {DataInterface} from '../data/data.interface';
-import {LapInterface} from '../laps/lap.interface';
-import {Log} from 'ng2-logger'
-import {SummaryInterface} from '../summary/summary.interface';
+import {Summary} from '../summary/summary';
 
 export class Event extends IDClass implements EventInterface {
-  public summary: SummaryInterface;
+  public summary = new Summary();
 
   public name: string;
   private activities: ActivityInterface[] = [];

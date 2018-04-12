@@ -1,23 +1,21 @@
 import {ActivityInterface} from './activity.interface';
-import {CreatorInterface} from '../creators/creatorInterface';
 import {PointInterface} from '../points/point.interface';
 import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
-import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
 import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
-import {Summary} from "../summary/summary";
-import {Creator} from "../creators/creator";
+import {Summary} from '../summary/summary';
+import {Creator} from '../creators/creator';
 
 export class Activity extends IDClass implements ActivityInterface {
   public startDate;
   public endDate;
   public type: string;
-  public creator: CreatorInterface = new Creator();
-  public summary: SummaryInterface = new Summary();
-  public ibiData: IBIData = new IBIData();
+  public creator = new Creator();
+  public summary = new Summary();
+  public ibiData = new IBIData();
   public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
 
 

@@ -144,11 +144,12 @@ describe('Event', () => {
     event.addActivity(activity);
     event.setID('123');
     spyOn(activity, 'toJSON').and.returnValue({});
+    spyOn(event.summary, 'toJSON').and.returnValue({});
     expect(event.toJSON()).toEqual({
       'id': '123',
       'name': undefined,
       'activities': [{}],
-      'summary': undefined
+      'summary': {}
     });
   });
 });
