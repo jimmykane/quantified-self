@@ -1,5 +1,4 @@
 import {DataInterface, UnitSystem} from './data.interface';
-import {PointInterface} from '../points/point.interface';
 
 export abstract class Data implements DataInterface {
 
