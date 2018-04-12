@@ -18,16 +18,13 @@ export class Activity extends IDClass implements ActivityInterface {
   public ibiData = new IBIData();
   public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
 
-
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private laps: LapInterface[] = [];
-
 
   constructor() {
     super();
   }
 
-  // @todo should do short or somehow
   addPoint(point: PointInterface, overrideAllDataOnCollision: boolean = false) {
     // @todo should do dateguard check
     const existingPoint = this.points.get(point.getDate().getTime());
