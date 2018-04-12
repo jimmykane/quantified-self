@@ -15,8 +15,14 @@ import {PointInterface} from '../../../points/point.interface';
 import {CreatorInterface} from '../../../creators/creatorInterface';
 import {Summary} from '../../../summary/summary';
 import {LapInterface} from '../../../laps/lap.interface';
-import {EventUtilities} from "../../utilities/event.utilities";
-import {ActivityInterface} from "../../../activities/activity.interface";
+import {EventUtilities} from '../../utilities/event.utilities';
+import {DataEnergy} from '../../../data/data.energy';
+import {DataDuration} from '../../../data/data.duration';
+import {DataDistance} from '../../../data/data.distance';
+import {DataPause} from '../../../data/data.pause';
+import {DataSpeedMax} from '../../../data/data.speed-max';
+import {DataHeartRateAvg} from '../../../data/data.heart-rate-avg';
+import {DataHeartRateMax} from '../../../data/data.heart-rate-max';
 
 export class EventImporterTCX {
 
@@ -49,10 +55,10 @@ export class EventImporterTCX {
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
         // Increment wrapper summaries
-        activity.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
-        activity.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds + lap.summary.pauseDurationInSeconds;
-        activity.summary.pauseDurationInSeconds += lap.summary.pauseDurationInSeconds;
-        activity.summary.energyInCal += lap.summary.energyInCal;
+        activity.summary.totalDistanceInMeters += lap.getDistance().getValue();
+        activity.summary.totalDurationInSeconds += lap.getDuration().getValue() + lap.getPause().getValue();
+        activity.summary.pauseDurationInSeconds += lap.getPause().getValue();
+        activity.summary.energyInCal += lap.getStat(DataEnergy.className).getValue();
         // If the lap has no distance it's probably a pause
         // if (lap.summary.totalDistanceInMeters === 0) {
         //   lap.type = 'Pause';
@@ -60,9 +66,9 @@ export class EventImporterTCX {
         // }
 
         // Same for event
-        event.summary.totalDistanceInMeters += lap.summary.totalDistanceInMeters;
-        event.summary.totalDurationInSeconds += lap.summary.totalDurationInSeconds;
-        event.summary.pauseDurationInSeconds += lap.summary.pauseDurationInSeconds;
+        event.summary.totalDistanceInMeters += activity.summary.totalDistanceInMeters;
+        event.summary.totalDurationInSeconds += activity.summary.totalDurationInSeconds;
+        event.summary.pauseDurationInSeconds += activity.summary.pauseDurationInSeconds;
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
@@ -147,27 +153,22 @@ export class EventImporterTCX {
       lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
 
       // Create a summary (required TCX fields)
-      lap.summary = new Summary();
-      lap.summary.energyInCal = Number(lapElement.getElementsByTagName('Calories')[0].textContent);
-      lap.summary.totalDurationInSeconds = Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent);
-      lap.summary.totalDistanceInMeters = Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent);
-      lap.summary.pauseDurationInSeconds = 0;
+      lap.addStat(new DataEnergy(Number(lapElement.getElementsByTagName('Calories')[0].textContent)));
+      lap.addStat(new DataDuration(Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)));
+      lap.addStat(new DataDistance(Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent)));
+      lap.setPause(new DataPause(0));
 
       // Optionals
       if (lapElement.getElementsByTagName('MaximumSpeed')[0]) {
-        lap.summary.maxSpeed = Number(lapElement.getElementsByTagName('MaximumSpeed')[0]);
+        lap.addStat(new DataSpeedMax(Number(lapElement.getElementsByTagName('MaximumSpeed')[0])));
       }
 
       if (lapElement.getElementsByTagName('AverageHeartRateBpm')[0]) {
-        lap.summary.avgHR = Number(
-          lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
-        );
+        lap.addStat(new DataHeartRateAvg(Number(lapElement.getElementsByTagName('AverageHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent)));
       }
 
       if (lapElement.getElementsByTagName('MaximumHeartRateBpm')[0]) {
-        lap.summary.maxHR = Number(
-          lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent
-        );
+        lap.addStat(new DataHeartRateMax(Number(lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent)));
       }
 
       // Should check the track
@@ -188,7 +189,7 @@ export class EventImporterTCX {
         // Here we should have the current first point and the last point from the previous track
         const lastPointTime = (new Date(lastPointFromPreviousTrack.getElementsByTagName('Time')[0].textContent)).getTime();
         const firstPointTime = (new Date(firstPointFromCurrentTrack.getElementsByTagName('Time')[0].textContent)).getTime();
-        lap.summary.pauseDurationInSeconds += (firstPointTime - lastPointTime) / 1000;
+        lap.setPause(new DataPause(lap.getPause().getValue() + (firstPointTime - lastPointTime) / 1000));
         // Set the last to this one (will become the previous track on next track)
         lastPointFromPreviousTrack = trackElement.getElementsByTagName('Trackpoint')[trackElement.getElementsByTagName('Trackpoint').length - 1];
       });

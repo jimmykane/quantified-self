@@ -11,14 +11,14 @@ describe('Lap', () => {
     lap.type = 'Auto';
   });
 
+  // Todo should test stats
 
   it('should export correctly to JSON', () => {
-    spyOn(lap.summary, 'toJSON').and.returnValue({});
     expect(lap.toJSON()).toEqual({
       'startDate': '1970-01-01T00:00:00.000Z',
       'endDate': '1970-01-01T00:00:00.100Z',
       'type': 'Auto',
-      'summary': {},
+      'stats': {},
     });
 
   });

@@ -29,6 +29,41 @@ import {ImporterSuuntoActivityIds} from './importer.suunto.activity.ids';
 import {ImporterSuuntoDeviceNames} from './importer.suunto.device.names';
 import {ActivityInterface} from '../../../../activities/activity.interface';
 import {LapInterface} from '../../../../laps/lap.interface';
+import {DataInterface} from '../../../../data/data.interface';
+import {DataDuration} from '../../../../data/data.duration';
+import {DataAltitudeMax} from '../../../../data/data.altitude-max';
+import {DataDistance} from '../../../../data/data.distance';
+import {DataAscentTime} from '../../../../data/data.ascent-time';
+import {DataDescentTime} from '../../../../data/data.descent-time';
+import {DataDescent} from '../../../../data/data.descent';
+import {DataAscent} from '../../../../data/data.ascent';
+import {DataEPOC} from '../../../../data/data.epoc';
+import {DataEnergy} from '../../../../data/data.energy';
+import {DataFeeling} from '../../../../data/data.feeling';
+import {DataPeakTrainingEffect} from '../../../../data/data.peak-training-effect';
+import {DataRecovery} from '../../../../data/data.recovery';
+import {DataVO2Max} from '../../../../data/data.vo2-max';
+import {DataPause} from '../../../../data/data.pause';
+import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
+import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
+import {DataHeartRateMin} from '../../../../data/data.heart-rate-min';
+import {DataCadenceAvg} from '../../../../data/data.cadence-avg';
+import {DataCadenceMax} from '../../../../data/data.cadence-max';
+import {DataCadenceMin} from '../../../../data/data.cadence-min';
+import {DataPowerAvg} from '../../../../data/data.power-avg';
+import {DataPowerMax} from '../../../../data/data.power-max';
+import {DataPowerMin} from '../../../../data/data.power-min';
+import {DataSpeedAvg} from '../../../../data/data.speed-avg';
+import {DataSpeedMax} from '../../../../data/data.speed-max';
+import {DataSpeedMin} from '../../../../data/data.speed-min';
+import {DataTemperatureAvg} from '../../../../data/data.temperature-avg';
+import {DataTemperatureMax} from '../../../../data/data.temperature-max';
+import {DataTemperatureMin} from '../../../../data/data.temperature-min';
+import {DataVerticalSpeedAvg} from '../../../../data/data.vertical-speed-avg';
+import {DataVerticalSpeedMax} from '../../../../data/data.vertical-speed-max';
+import {DataVerticalSpeedMin} from '../../../../data/data.vertical-speed-min';
+import {DataAltitudeAvg} from '../../../../data/data.altitude-avg';
+import {DataAltitudeMin} from '../../../../data/data.altitude-min';
 
 export class EventImporterSuuntoJSON {
 
@@ -111,7 +146,9 @@ export class EventImporterSuuntoJSON {
       lap.type = lapEventSample;
       // if it's only one lap there is no summary as it's the whole activity
       if (lapEventSamples.length !== 1) {
-        lap.summary = this.getSummary(lapWindows[index]);
+        this.getStats(lapWindows[index]).forEach((stat) => {
+          lap.addStat(stat);
+        });
         lap.type = lapWindows[index].Type;
       }
       return lap;
@@ -130,12 +167,7 @@ export class EventImporterSuuntoJSON {
           return true
         }
         return false;
-      }).forEach((activityLap, index, activityLapArray) => {
-        // Fix the summary if only one lap (whole activity) @todo fix later
-        if (activityLapArray.length === 1) {
-          activityLap.summary = Object.create(activity.summary);
-          activityLap.type = 'Total';
-        }
+      }).forEach((activityLap: LapInterface, index, activityLapArray) => {
         activity.addLap(activityLap);
       });
     });
@@ -348,5 +380,110 @@ export class EventImporterSuuntoJSON {
     zones.zone5Duration = zonesObj.Zone5Duration;
     zones.zone5LowerLimit = zonesObj.Zone5LowerLimit;
     return zones;
+  }
+
+  private static getStats(object: any): DataInterface[] {
+    const stats = [];
+    if (object.hasOwnProperty('Distance') && object.Distance !== null) {
+      stats.push(new DataDistance(object.Distance));
+    }
+    if (object.hasOwnProperty('AscentTime') && object.AscentTime !== null) {
+      stats.push(new DataAscentTime(object.AscentTime));
+    }
+
+    if (object.hasOwnProperty('DescentTime') && object.DescentTime !== null) {
+      stats.push(new DataDescentTime(object.DescentTime));
+    }
+
+    if (object.hasOwnProperty('Ascent') && object.Ascent !== null) {
+      stats.push(new DataAscent(object.Ascent));
+    }
+
+    if (object.hasOwnProperty('Descent') && object.Descent !== null) {
+      stats.push(new DataDescent(object.Descent));
+    }
+
+    if (object.hasOwnProperty('EPOC') && object.EPOC !== null) {
+      stats.push(new DataEPOC(object.EPOC));
+    }
+
+    if (object.hasOwnProperty('Energy') && object.Energy !== null) {
+      stats.push(new DataEnergy(object.Energy * 0.239 / 1000));
+    }
+
+    if (object.hasOwnProperty('Feeling') && object.Feeling !== null) {
+      stats.push(new DataFeeling(object.Feeling));
+    }
+
+    if (object.hasOwnProperty('PeakTrainingEffect') && object.PeakTrainingEffect !== null) {
+      stats.push(new DataPeakTrainingEffect(object.PeakTrainingEffect));
+    }
+    if (object.hasOwnProperty('RecoveryTime') && object.RecoveryTime !== null) {
+      stats.push(new DataRecovery(object.RecoveryTime));
+    }
+    if (object.hasOwnProperty('MAXVO2') && object.MAXVO2 !== null) {
+      stats.push(new DataVO2Max(object.MAXVO2));
+    }
+
+    let durationInSeconds = object.Duration;
+    if (object.hasOwnProperty('PauseDuration') && object.PauseDuration !== null) {
+      stats.push(new DataPause(object.PauseDuration));
+      durationInSeconds += object.PauseDuration;
+    }
+    stats.push(new DataDuration(durationInSeconds));
+
+    debugger;
+
+    // double case
+    if (Array.isArray(object.Altitude)) {
+      stats.push(new DataAltitudeAvg(object.Altitude[0].Avg));
+      stats.push(new DataAltitudeMax(object.Altitude[0].Max));
+      stats.push(new DataAltitudeMin(object.Altitude[0].Min));
+    } else if (object.Altitude) {
+      stats.push(new DataAltitudeMax(object.Altitude.Max));
+      stats.push(new DataAltitudeMin(object.Altitude.Min));
+    }
+
+    if (object.HR) {
+      stats.push(new DataHeartRateAvg(object.HR[0].Avg * 60));
+      stats.push(new DataHeartRateMax(object.HR[0].Max * 60));
+      stats.push(new DataHeartRateMin(object.HR[0].Min * 60));
+    }
+
+    if (object.Cadence) {
+      stats.push(new DataCadenceAvg(object.Cadence[0].Avg * 60 * 2));
+      stats.push(new DataCadenceMax(object.Cadence[0].Max * 60 * 2));
+      stats.push(new DataCadenceMin(object.Cadence[0].Min * 60 * 2));
+    }
+
+    if (object.Power) {
+      stats.push(new DataPowerAvg(object.Power[0].Avg));
+      stats.push(new DataPowerMax(object.Power[0].Max));
+      stats.push(new DataPowerMin(object.Power[0].Min));
+    }
+
+    if (object.Speed) {
+      stats.push(new DataSpeedAvg(object.Speed[0].Avg));
+      stats.push(new DataSpeedMax(object.Speed[0].Max));
+      stats.push(new DataSpeedMin(object.Speed[0].Min));
+    }
+
+    if (object.Temperature) {
+      stats.push(new DataTemperatureAvg(object.Temperature[0].Avg - 273.15));
+      stats.push(new DataTemperatureMax(object.Temperature[0].Max - 273.15));
+      stats.push(new DataTemperatureMin(object.Temperature[0].Min - 273.15));
+    }
+
+    if (object.hasOwnProperty('VerticalSpeed')) {
+      // Double action here
+      if (Array.isArray(object.VerticalSpeed)) {
+        stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed[0].Avg));
+        stats.push(new DataVerticalSpeedMax(object.VerticalSpeed[0].Max));
+        stats.push(new DataVerticalSpeedMin(object.VerticalSpeed[0].Min));
+      } else {
+        stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed));
+      }
+    }
+    return stats;
   }
 }

@@ -100,12 +100,12 @@ export class EventUtilities {
     event.getActivities().map((activity: ActivityInterface) => {
       this.generateSummaryForActivityOrLap(event, activity);
       activity.getLaps().map((lap: LapInterface) => {
-        this.generateSummaryForActivityOrLap(event, lap);
+        // this.generateSummaryForActivityOrLap(event, lap);
       })
     })
   }
 
-  private static generateSummaryForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
+  private static generateSummaryForActivityOrLap(event: EventInterface, subject: ActivityInterface) {
     // Altitude
     if (subject.summary.maxAltitudeInMeters === null) {
       subject.summary.maxAltitudeInMeters = this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate);

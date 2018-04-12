@@ -1,7 +1,7 @@
 <td>{{ index+1 }}</td>
-<td>{{ (lap.summary.totalDistanceInMeters/1000).toFixed(2) }} km</td>
-<td>{{ lap.summary.totalDurationInSeconds * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</td>
+<td>{{ (lap.getDistance().getValue()/1000).toFixed(2) }} km</td>
+<td>{{ lap.getDuration().getValue() * 1000 | amFromUtc | amDateFormat: 'HH:mm:ss' }}</td>
 <td>{{ lap.startDate | date:'mediumTime' }}</td>
 <td>{{ lap.endDate | date:'mediumTime' }}</td>
 <td>{{ lap.type }}</td>
-<td *ngIf="lap.summary.avgHR"> {{lap.summary.avgHR.toFixed(0) }} bpm</td>
+<td *ngIf="lap.getStat('DataHeartRateAvg')"> {{lap.getStat('DataHeartRateAvg').getValue().toFixed(0) }} bpm</td>
