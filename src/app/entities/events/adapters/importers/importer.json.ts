@@ -35,8 +35,8 @@ export class EventImporterJSON {
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
         lap.type = lapObject.type;
-        Object.keys(lapObject.stats).forEach((key) => {
-          lap.addStat(DynamicDataLoader.createData(lapObject.stats[key].className, lapObject.stats[key].value))
+        lapObject.stats.forEach((stat) => {
+          lap.addStat(DynamicDataLoader.createData(stat.className, stat.value))
         });
         activity.addLap(lap);
       }

@@ -54,9 +54,9 @@ export class Lap implements LapInterface {
   }
 
   toJSON(): any {
-    const stats = {};
+    const stats = [];
     this.stats.forEach((value: DataInterface, key: string) => {
-      stats[key] = value.toJSON();
+       stats.push(value.toJSON());
     });
     return {
       startDate: this.startDate.toJSON(),
