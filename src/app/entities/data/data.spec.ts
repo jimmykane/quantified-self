@@ -14,6 +14,10 @@ describe('Data', () => {
     expect(data.getType()).toBe('Temperature');
   });
 
+  it('should get the class name correctly', () => {
+    expect(data.getClassName()).toBe('DataTemperature');
+  });
+
   it('should get the value correctly', () => {
     expect(data.getValue()).toBe(60);
   });
@@ -26,7 +30,7 @@ describe('Data', () => {
 
   it('should export correctly to JSON', () => {
     expect(data.toJSON()).toEqual({
-      type: 'Temperature',
+      className: 'DataTemperature',
       value: 60,
     });
   });

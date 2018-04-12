@@ -5,6 +5,7 @@ import {DataHeartRate} from '../data/data.heart-rate';
 import {DataAltitude} from '../data/data.altitude';
 import {DataTemperature} from '../data/data.temperature';
 import {Lap} from "../laps/lap";
+import {IBIData} from "../data/ibi/data.ibi";
 
 describe('Activity', () => {
 
@@ -259,15 +260,18 @@ describe('Activity', () => {
 
     spyOn(point, 'toJSON').and.returnValue({});
     spyOn(lap, 'toJSON').and.returnValue({});
+    spyOn(activity.ibiData, 'toJSON').and.returnValue([]);
+    spyOn(activity.creator, 'toJSON').and.returnValue({});
+    spyOn(activity.summary, 'toJSON').and.returnValue({});
     activity.setID('123');
     expect(activity.toJSON()).toEqual({
       'id': '123',
       'startDate': undefined,
       'endDate': undefined,
       'type': undefined,
-      'creator': undefined,
+      'creator': {},
       'points': [{}],
-      'summary': undefined,
+      'summary': {},
       'ibiData': [],
       'laps': [{}],
       'intensityZones': {},

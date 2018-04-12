@@ -4,6 +4,7 @@ export interface DataInterface extends SerializableClassInterface {
   getValue(): number;
   getType(): string;
   getUnit(): string;
+  getClassName(): string;
   getUnitSystem(): UnitSystem;
 }
 

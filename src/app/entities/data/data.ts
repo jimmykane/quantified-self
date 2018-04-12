@@ -3,6 +3,7 @@ import {PointInterface} from '../points/point.interface';
 
 export abstract class Data implements DataInterface {
 
+  static className: string;
   static type: string;
   static unit: string;
   static unitSystem = UnitSystem.Metric;
@@ -32,10 +33,16 @@ export abstract class Data implements DataInterface {
     return (<typeof Data>this.constructor).unitSystem;
   }
 
+  getClassName(): string {
+    return (<typeof Data>this.constructor).className;
+  }
+
   toJSON(): any {
     return {
-      type: this.getType(),
+      className: this.getClassName(),
       value: this.getValue(),
     };
   }
+
+
 }

@@ -8,14 +8,16 @@ import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
 import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
+import {Summary} from "../summary/summary";
+import {Creator} from "../creators/creator";
 
 export class Activity extends IDClass implements ActivityInterface {
   public startDate;
   public endDate;
   public type: string;
-  public creator: CreatorInterface;
-  public summary: SummaryInterface;
-  public ibiData: IBIData;
+  public creator: CreatorInterface = new Creator();
+  public summary: SummaryInterface = new Summary();
+  public ibiData: IBIData = new IBIData();
   public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
 
 
@@ -125,13 +127,13 @@ export class Activity extends IDClass implements ActivityInterface {
       startDate: this.startDate,
       endDate: this.endDate,
       type: this.type,
-      creator: this.creator,
+      creator: this.creator.toJSON(),
       points: Array.from(this.points.values()).reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
-      summary: this.summary,
-      ibiData: this.ibiData,
+      summary: this.summary.toJSON(),
+      ibiData: this.ibiData.toJSON(),
       intensityZones: intensityZones,
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());

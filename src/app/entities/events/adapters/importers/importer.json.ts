@@ -2,31 +2,16 @@ import {Event} from '../../event';
 import {Activity} from '../../../activities/activity';
 import {Lap} from '../../../laps/lap';
 import {Point} from '../../../points/point';
-import {DataAltitude} from '../../../data/data.altitude';
-import {DataCadence} from '../../../data/data.cadence';
-import {DataHeartRate} from '../../../data/data.heart-rate';
-import {DataSpeed} from '../../../data/data.speed';
 import {EventInterface} from '../../event.interface';
-import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
-import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
-import {DataSeaLevelPressure} from '../../../data/data.sea-level-pressure';
-import {DataTemperature} from '../../../data/data.temperature';
-import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
-import {DataPower} from '../../../data/data.power';
-import {DataEHPE} from '../../../data/data.ehpe';
-import {DataAbsolutePressure} from '../../../data/data.absolute-pressure';
-import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {WeatherItem} from '../../../weather/app.weather.item';
 import {Weather} from '../../../weather/app.weather';
 import {GeoLocationInfo} from '../../../geo-location-info/geo-location-info';
 import {Summary} from '../../../summary/summary';
-import {DataEVPE} from '../../../data/data.evpe';
-import {DataSatellite5BestSNR} from '../../../data/data.satellite-5-best-snr';
-import {DataNumberOfSatellites} from '../../../data/data.number-of-satellites';
 import {IntensityZones} from '../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../data/ibi/data.ibi';
-import {SummaryInterface} from "../../../summary/summary.interface";
+import {SummaryInterface} from '../../../summary/summary.interface';
+import {DynamicDataLoader} from '../../../data/data.store';
 
 export class EventImporterJSON {
 
@@ -64,92 +49,26 @@ export class EventImporterJSON {
       activity.creator = creator;
 
       if (activityObject.intensityZones) {
-      for (const key in activityObject.intensityZones) {
-        const zones = new IntensityZones();
-        zones.zone1Duration = activityObject.intensityZones[key].zone1Duration;
-        zones.zone2Duration = activityObject.intensityZones[key].zone2Duration;
-        zones.zone2LowerLimit = activityObject.intensityZones[key].zone2LowerLimit;
-        zones.zone3Duration = activityObject.intensityZones[key].zone3Duration;
-        zones.zone3LowerLimit = activityObject.intensityZones[key].zone3LowerLimit;
-        zones.zone4Duration = activityObject.intensityZones[key].zone4Duration;
-        zones.zone4LowerLimit = activityObject.intensityZones[key].zone4LowerLimit;
-        zones.zone5Duration = activityObject.intensityZones[key].zone5Duration;
-        zones.zone5LowerLimit = activityObject.intensityZones[key].zone5LowerLimit;
-        activity.intensityZones.set(key, zones);
+        for (const key in activityObject.intensityZones) {
+          const zones = new IntensityZones();
+          zones.zone1Duration = activityObject.intensityZones[key].zone1Duration;
+          zones.zone2Duration = activityObject.intensityZones[key].zone2Duration;
+          zones.zone2LowerLimit = activityObject.intensityZones[key].zone2LowerLimit;
+          zones.zone3Duration = activityObject.intensityZones[key].zone3Duration;
+          zones.zone3LowerLimit = activityObject.intensityZones[key].zone3LowerLimit;
+          zones.zone4Duration = activityObject.intensityZones[key].zone4Duration;
+          zones.zone4LowerLimit = activityObject.intensityZones[key].zone4LowerLimit;
+          zones.zone5Duration = activityObject.intensityZones[key].zone5Duration;
+          zones.zone5LowerLimit = activityObject.intensityZones[key].zone5LowerLimit;
+          activity.intensityZones.set(key, zones);
+        }
       }
-    }
 
       for (const pointObject of activityObject.points) {
         const point = new Point(new Date(pointObject.date));
         activity.addPoint(point);
         for (const dataObject of pointObject.data) {
-          // @todo make this dynamic
-          switch (dataObject.type) {
-            case DataAltitude.type: {
-              point.addData(new DataAltitude(dataObject.value));
-              break;
-            }
-            case DataGPSAltitude.type: {
-              point.addData(new DataGPSAltitude(dataObject.value));
-              break;
-            }
-            case DataEHPE.type: {
-              point.addData(new DataEHPE(dataObject.value));
-              break;
-            }
-            case DataEVPE.type: {
-              point.addData(new DataEVPE(dataObject.value));
-              break;
-            }
-            case DataSatellite5BestSNR.type: {
-              point.addData(new DataSatellite5BestSNR(dataObject.value));
-              break;
-            }
-            case DataNumberOfSatellites.type: {
-              point.addData(new DataNumberOfSatellites(dataObject.value));
-              break;
-            }
-            case DataAbsolutePressure.type: {
-              point.addData(new DataAbsolutePressure(dataObject.value));
-              break;
-            }
-            case DataCadence.type: {
-              point.addData(new DataCadence(dataObject.value));
-              break;
-            }
-            case DataHeartRate.type: {
-              point.addData(new DataHeartRate(dataObject.value));
-              break;
-            }
-            case DataLatitudeDegrees.type: {
-              point.addData(new DataLatitudeDegrees(dataObject.value));
-              break;
-            }
-            case DataLongitudeDegrees.type: {
-              point.addData(new DataLongitudeDegrees(dataObject.value));
-              break;
-            }
-            case DataSeaLevelPressure.type: {
-              point.addData(new DataSeaLevelPressure(dataObject.value));
-              break;
-            }
-            case DataSpeed.type: {
-              point.addData(new DataSpeed(dataObject.value));
-              break;
-            }
-            case DataTemperature.type: {
-              point.addData(new DataTemperature(dataObject.value));
-              break;
-            }
-            case DataVerticalSpeed.type: {
-              point.addData(new DataVerticalSpeed(dataObject.value));
-              break;
-            }
-            case DataPower.type: {
-              point.addData(new DataPower(dataObject.value));
-              break;
-            }
-          }
+          point.addData(DynamicDataLoader.createData(dataObject.className, dataObject.value));
         }
       }
     }
