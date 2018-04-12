@@ -28,7 +28,6 @@ describe('Data', () => {
     expect(data.toJSON()).toEqual({
       type: 'Temperature',
       value: 60,
-      unitSystem: UnitSystem.Metric,
     });
   });
 

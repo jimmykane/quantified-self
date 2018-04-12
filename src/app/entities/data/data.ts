@@ -36,7 +36,6 @@ export abstract class Data implements DataInterface {
     return {
       type: this.getType(),
       value: this.getValue(),
-      unitSystem: this.getUnitSystem(),
     };
   }
 }

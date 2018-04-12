@@ -31,7 +31,7 @@ export class Point implements PointInterface {
   }
 
   getDataByType(dataType: string): DataInterface {
-    return this.getData().get(dataType);
+    return this.data.get(dataType);
   }
 
   getPosition(): DataPositionInterface {
