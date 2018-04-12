@@ -22,6 +22,10 @@ describe('Data', () => {
     expect(data.getValue()).toBe(60);
   });
 
+  it('should get the unit correctly', () => {
+    expect(data.getUnit()).toBe('°C');
+  });
+
 
   it('should get the unit system correctly', () => {
     expect(data.getUnitSystem()).toBe(UnitSystem.Metric);
