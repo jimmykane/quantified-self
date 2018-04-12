@@ -43,6 +43,4 @@ export abstract class Data implements DataInterface {
       value: this.getValue(),
     };
   }
-
-
 }
