@@ -9,7 +9,7 @@ import {LapInterface} from '../../laps/lap.interface';
 import {DataHeartRate} from '../../data/data.heart-rate';
 import {DataCadence} from '../../data/data.cadence';
 import {DataSpeed} from '../../data/data.speed';
-import {DataVerticalSpeed} from '../../data/data.verticalspeed';
+import {DataVerticalSpeed} from '../../data/data.vertical-speed';
 import {DataTemperature} from '../../data/data.temperature';
 import {DataAltitude} from '../../data/data.altitude';
 import {DataPower} from '../../data/data.power';

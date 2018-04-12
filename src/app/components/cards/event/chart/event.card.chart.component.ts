@@ -10,7 +10,7 @@ import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataAltitude} from '../../../../entities/data/data.altitude';
 import {DataSpeed} from '../../../../entities/data/data.speed';
-import {DataVerticalSpeed} from '../../../../entities/data/data.verticalspeed';
+import {DataVerticalSpeed} from '../../../../entities/data/data.vertical-speed';
 import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pressure';
 import {Log, Level} from 'ng2-logger'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';

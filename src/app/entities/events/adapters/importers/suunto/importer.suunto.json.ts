@@ -7,7 +7,7 @@ import {DataAltitude} from '../../../../data/data.altitude';
 import {DataCadence} from '../../../../data/data.cadence';
 import {DataHeartRate} from '../../../../data/data.heart-rate';
 import {DataSpeed} from '../../../../data/data.speed';
-import {DataVerticalSpeed} from '../../../../data/data.verticalspeed';
+import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
 import {DataTemperature} from '../../../../data/data.temperature';
 import {DataSeaLevelPressure} from '../../../../data/data.sea-level-pressure';
 import {EventInterface} from '../../../event.interface';
