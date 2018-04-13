@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
-import {MatTableDataSource} from "@angular/material";
-import {DataInterface} from "../../../../entities/data/data.interface";
+import {MatTableDataSource} from '@angular/material';
+import {DataInterface} from '../../../../entities/data/data.interface';
 
 @Component({
   selector: 'app-event-card-stats',
@@ -28,7 +28,7 @@ export class EventCardStatsComponent implements OnChanges {
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
         this.event.getActivities().reduce((rowObj, activity, index) => {
-          rowObj['Activity ' + (index + 1)] = activity.getStat(stat.getClassName()).getValue() + activity.getStat(stat.getClassName()).getUnit();
+          rowObj['Activity ' + (index + 1)] = activity.getStat(stat.getClassName()).getDisplayValue() + ' ' + activity.getStat(stat.getClassName()).getDisplayUnit();
           return rowObj;
         }, {Name: stat.getType()})
       );

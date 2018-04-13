@@ -1,7 +1,6 @@
-import {DataMax} from './data.max';
+import {DataTemperature} from './data.temperature';
 
-export class DataTemperatureMax extends DataMax {
+export class DataTemperatureMax extends DataTemperature {
   static className = 'DataTemperatureMax';
   static type = 'Max Temperature';
-  static unit = '°C';
 }

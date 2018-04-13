@@ -1,7 +1,6 @@
-import {DataMin} from './data.min';
+import {DataVerticalSpeed} from './data.vertical-speed';
 
-export class DataVerticalSpeedMin extends DataMin {
+export class DataVerticalSpeedMin extends DataVerticalSpeed {
   static className = 'DataVerticalSpeedMin';
   static type = 'Min Vertical Speed';
-  static unit = 'm/s';
 }

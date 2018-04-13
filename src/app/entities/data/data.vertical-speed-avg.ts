@@ -1,7 +1,6 @@
-import {DataAvg} from './data.avg';
+import {DataVerticalSpeed} from './data.vertical-speed';
 
-export class DataVerticalSpeedAvg extends DataAvg {
+export class DataVerticalSpeedAvg extends DataVerticalSpeed {
   static className = 'DataVerticalSpeedAvg';
   static type = 'Avg Vertical Speed';
-  static unit = 'm/s';
 }

@@ -1,6 +1,6 @@
-import {DataMax} from './data.max';
+import {DataAltitude} from './data.altitude';
 
-export class DataAltitudeMax extends DataMax {
+export class DataAltitudeMax extends DataAltitude {
   static className = 'DataAltitudeMax';
   static type = 'Max Altitude';
   static unit = 'm';

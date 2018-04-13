@@ -1,7 +1,6 @@
-import {DataMax} from './data.max';
+import {DataPower} from './data.power';
 
-export class DataPowerMax extends DataMax {
+export class DataPowerMax extends DataPower {
   static className = 'DataPowerMax';
   static type = 'Max Power';
-  static unit = 'watts';
 }

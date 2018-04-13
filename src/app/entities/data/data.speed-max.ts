@@ -1,7 +1,6 @@
-import {DataMax} from './data.max';
+import {DataSpeed} from './data.speed';
 
-export class DataSpeedMax extends DataMax {
+export class DataSpeedMax extends DataSpeed {
   static className = 'DataSpeedMax';
   static type = 'Max Speed';
-  static unit = 'm/s';
 }

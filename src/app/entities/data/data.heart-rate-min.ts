@@ -1,7 +1,6 @@
-import {DataMin} from './data.min';
+import {DataHeartRate} from './data.heart-rate';
 
-export class DataHeartRateMin extends DataMin {
+export class DataHeartRateMin extends DataHeartRate {
   static className = 'DataHeartRateMin';
   static type = 'Min Heart Rate';
-  static unit = 'bpm';
 }

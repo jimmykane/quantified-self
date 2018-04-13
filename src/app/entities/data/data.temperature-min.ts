@@ -1,7 +1,6 @@
-import {DataMin} from './data.min';
+import {DataTemperature} from './data.temperature';
 
-export class DataTemperatureMin extends DataMin {
+export class DataTemperatureMin extends DataTemperature {
   static className = 'DataTemperatureMin';
   static type = 'Min Temperature';
-  static unit = '°C';
 }

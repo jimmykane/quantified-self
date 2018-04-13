@@ -1,7 +1,6 @@
-import {DataMin} from './data.min';
+import {DataSpeed} from './data.speed';
 
-export class DataSpeedMin extends DataMin {
+export class DataSpeedMin extends DataSpeed {
   static className = 'DataSpeedMin';
   static type = 'Min Speed';
-  static unit = 'm/s';
 }

@@ -1,7 +1,6 @@
-import {DataMin} from './data.min';
+import {DataPower} from './data.power';
 
-export class DataPowerMin extends DataMin {
+export class DataPowerMin extends DataPower {
   static className = 'DataPowerMin';
   static type = 'Min Power';
-  static unit = 'watts';
 }

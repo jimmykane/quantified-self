@@ -1,7 +1,6 @@
-import {DataAvg} from './data.avg';
+import {DataHeartRate} from './data.heart-rate';
 
-export class DataHeartRateAvg extends DataAvg {
+export class DataHeartRateAvg extends DataHeartRate {
   static className = 'DataHeartRateAvg';
   static type = 'Avg Heart Rate';
-  static unit = 'bpm';
 }

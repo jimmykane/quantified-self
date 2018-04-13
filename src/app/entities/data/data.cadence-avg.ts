@@ -1,7 +1,6 @@
-import {DataAvg} from './data.avg';
+import {DataCadence} from './data.cadence';
 
-export class DataCadenceAvg extends DataAvg {
+export class DataCadenceAvg extends DataCadence {
   static className = 'DataCadenceAvg';
   static type = 'Avg Cadence';
-  static unit = 'spm';
 }

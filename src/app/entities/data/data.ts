@@ -24,12 +24,20 @@ export abstract class Data implements DataInterface {
     return this.value;
   }
 
+  getDisplayValue(): number | string {
+    return this.getValue();
+  }
+
   getType(): string {
     return (<typeof Data>this.constructor).type;
   }
 
   getUnit(): string {
     return (<typeof Data>this.constructor).unit;
+  }
+
+  getDisplayUnit(): string {
+    return this.getUnit();
   }
 
   getUnitSystem(): UnitSystem {

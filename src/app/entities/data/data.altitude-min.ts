@@ -1,7 +1,6 @@
-import {DataMin} from './data.min';
+import {DataAltitude} from './data.altitude';
 
-export class DataAltitudeMin extends DataMin {
+export class DataAltitudeMin extends DataAltitude {
   static className = 'DataAltitudeMin';
   static type = 'Min Altitude';
-  static unit = 'm';
 }

@@ -1,7 +1,6 @@
-import {DataMax} from './data.max';
+import {DataCadence} from './data.cadence';
 
-export class DataCadenceMax extends DataMax {
+export class DataCadenceMax extends DataCadence {
   static className = 'DataCadenceMax';
   static type = 'Max Cadence';
-  static unit = 'spm';
 }
