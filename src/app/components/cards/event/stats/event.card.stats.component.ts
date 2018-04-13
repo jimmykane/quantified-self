@@ -1,8 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {MatTableDataSource} from "@angular/material";
-import {SummaryInterface} from "../../../../entities/summary/summary.interface";
-import {Summary} from "../../../../entities/summary/summary";
+import {DataInterface} from "../../../../entities/data/data.interface";
 
 @Component({
   selector: 'app-event-card-stats',
@@ -17,26 +16,28 @@ export class EventCardStatsComponent implements OnChanges {
   columns: Array<Object>;
 
   ngOnChanges() {
-    // Create table data
+    // Collect all the stat types from all the activities
+    const stats = this.event.getActivities().reduce((statsSet, activity) => {
+      Array.from(activity.getStats().values()).forEach((stat) => {
+        statsSet.add(stat);
+      });
+      return statsSet;
+    }, new Set<DataInterface>());
 
-    const data = [];
-    // Create a summary object to get the keys
-    const rows = Object.keys(new Summary())
-    // Filter out the intensityZones
-      .filter(key => key !== 'intensityZones')
-      // Create an array with rows of keys and cols of the event activities stats for the keys
-      .reduce((array, key) => {
-        array.push(
-          this.event.getActivities().reduce((rowObj, activity, index) => {
-            rowObj['Activity ' + (index + 1)] = activity.summary[key];
-            return rowObj;
-          }, {name: key})
-        );
-        return array;
-      }, []);
+    // Create the data as rows
+    const data = Array.from(stats.values()).reduce((array, stat) => {
+      array.push(
+        this.event.getActivities().reduce((rowObj, activity, index) => {
+          rowObj['Activity ' + (index + 1)] = activity.getStat(stat.getClassName()).getValue() + activity.getStat(stat.getClassName()).getUnit();
+          return rowObj;
+        }, {Name: stat.getType()})
+      );
+      return array;
+    }, []);
 
-    this.columns = (Object.keys(rows[0]));
-    this.data = new MatTableDataSource(rows);
+    // Get the columns
+    this.columns = (Object.keys(data[0]));
+    this.data = new MatTableDataSource(data);
   }
 
 }
