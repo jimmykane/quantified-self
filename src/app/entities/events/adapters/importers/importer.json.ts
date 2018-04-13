@@ -17,6 +17,7 @@ export class EventImporterJSON {
 
   static getFromJSONString(jsonString: string, id?: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
+    debugger;
     const event = new Event();
     event.setID(eventJSONObject.id);
     event.name = eventJSONObject.name;
@@ -35,6 +36,7 @@ export class EventImporterJSON {
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
         lap.type = lapObject.type;
+        lap.setID(lapObject.id);
         lapObject.stats.forEach((stat) => {
           lap.addStat(DynamicDataLoader.createData(stat.className, stat.value))
         });

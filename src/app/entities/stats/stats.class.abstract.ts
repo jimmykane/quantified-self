@@ -5,7 +5,7 @@ import {DataDistance} from '../data/data.distance';
 import {DataInterface} from '../data/data.interface';
 import {DataPause} from '../data/data.pause';
 
-export abstract class StatsClassAbstract implements StatsClassInterface {
+export abstract class StatsClassAbstract extends IDClass implements StatsClassInterface {
   public stats = new Map<string, DataInterface>();
 
   getDistance(): DataInterface {

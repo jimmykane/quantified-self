@@ -22,6 +22,7 @@ export class Lap extends StatsClassAbstract implements LapInterface {
       stats.push(value.toJSON());
     });
     return {
+      id: this.getID(),
       startDate: this.startDate.toJSON(),
       endDate: this.endDate.toJSON(),
       type: this.type,
