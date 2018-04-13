@@ -100,7 +100,7 @@ export class EventImporterTCX {
             break;
           }
           case 'Extensions': {
-            for (const dataExtensionElement of <any>dataElement.getElementsByTagName('TPX')[0].children) {
+            for (const dataExtensionElement of <any>dataElement.getElementsByTagNameNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX')[0].children) {
               switch (dataExtensionElement.tagName) {
                 case 'Speed': {
                   point.addData(new DataSpeed(dataExtensionElement.textContent));
