@@ -370,52 +370,100 @@ export class EventImporterSuuntoJSON {
 
     // double case
     if (Array.isArray(object.Altitude)) {
-      stats.push(new DataAltitudeAvg(object.Altitude[0].Avg));
-      stats.push(new DataAltitudeMax(object.Altitude[0].Max));
-      stats.push(new DataAltitudeMin(object.Altitude[0].Min));
+      if (object.Altitude[0].Avg !== null) {
+        stats.push(new DataAltitudeAvg(object.Altitude[0].Avg));
+      }
+      if (object.Altitude[0].Max !== null) {
+        stats.push(new DataAltitudeMax(object.Altitude[0].Max));
+      }
+      if (object.Altitude[0].Min !== null) {
+        stats.push(new DataAltitudeMin(object.Altitude[0].Min));
+      }
     } else if (object.Altitude) {
-      stats.push(new DataAltitudeMax(object.Altitude.Max));
-      stats.push(new DataAltitudeMin(object.Altitude.Min));
+      if (object.Altitude.Max !== null) {
+        stats.push(new DataAltitudeMax(object.Altitude.Max));
+      }
+      if (object.Altitude.Min !== null) {
+        stats.push(new DataAltitudeMin(object.Altitude.Min));
+      }
     }
 
     if (object.HR) {
-      stats.push(new DataHeartRateAvg(object.HR[0].Avg * 60));
-      stats.push(new DataHeartRateMax(object.HR[0].Max * 60));
-      stats.push(new DataHeartRateMin(object.HR[0].Min * 60));
+      if (object.HR[0].Avg !== null) {
+        stats.push(new DataHeartRateAvg(object.HR[0].Avg * 60));
+      }
+      if (object.HR[0].Max !== null) {
+        stats.push(new DataHeartRateMax(object.HR[0].Max * 60));
+      }
+      if (object.HR[0].Min !== null) {
+        stats.push(new DataHeartRateMin(object.HR[0].Min * 60));
+      }
     }
 
     if (object.Cadence) {
-      stats.push(new DataCadenceAvg(object.Cadence[0].Avg * 60 * 2));
-      stats.push(new DataCadenceMax(object.Cadence[0].Max * 60 * 2));
-      stats.push(new DataCadenceMin(object.Cadence[0].Min * 60 * 2));
+      if (object.Cadence[0].Avg !== null) {
+        stats.push(new DataCadenceAvg(object.Cadence[0].Avg * 60 * 2));
+      }
+      if (object.Cadence[0].Max !== null) {
+        stats.push(new DataCadenceMax(object.Cadence[0].Max * 60 * 2));
+      }
+      if (object.Cadence[0].Min !== null) {
+        stats.push(new DataCadenceMin(object.Cadence[0].Min * 60 * 2));
+      }
     }
 
     if (object.Power) {
-      stats.push(new DataPowerAvg(object.Power[0].Avg));
-      stats.push(new DataPowerMax(object.Power[0].Max));
-      stats.push(new DataPowerMin(object.Power[0].Min));
+      if (object.Power[0].Avg !== null) {
+        stats.push(new DataPowerAvg(object.Power[0].Avg));
+      }
+      if (object.Power[0].Max !== null) {
+        stats.push(new DataPowerMax(object.Power[0].Max));
+      }
+      if (object.Power[0].Min !== null) {
+        stats.push(new DataPowerMin(object.Power[0].Min));
+      }
     }
 
     if (object.Speed) {
-      stats.push(new DataSpeedAvg(object.Speed[0].Avg));
-      stats.push(new DataSpeedMax(object.Speed[0].Max));
-      stats.push(new DataSpeedMin(object.Speed[0].Min));
+      if (object.Speed[0].Avg !== null) {
+        stats.push(new DataSpeedAvg(object.Speed[0].Avg));
+      }
+      if (object.Speed[0].Max !== null) {
+        stats.push(new DataSpeedMax(object.Speed[0].Max));
+      }
+      if (object.Speed[0].Min !== null) {
+        stats.push(new DataSpeedMin(object.Speed[0].Min));
+      }
     }
 
     if (object.Temperature) {
-      stats.push(new DataTemperatureAvg(object.Temperature[0].Avg - 273.15));
-      stats.push(new DataTemperatureMax(object.Temperature[0].Max - 273.15));
-      stats.push(new DataTemperatureMin(object.Temperature[0].Min - 273.15));
+      if (object.Temperature[0].Avg !== null) {
+        stats.push(new DataTemperatureAvg(object.Temperature[0].Avg - 273.15));
+      }
+      if (object.Temperature[0].Max !== null) {
+        stats.push(new DataTemperatureMax(object.Temperature[0].Max - 273.15));
+      }
+      if (object.Temperature[0].Min !== null) {
+        stats.push(new DataTemperatureMin(object.Temperature[0].Min - 273.15));
+      }
     }
 
     if (object.hasOwnProperty('VerticalSpeed')) {
       // Double action here
       if (Array.isArray(object.VerticalSpeed)) {
-        stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed[0].Avg));
-        stats.push(new DataVerticalSpeedMax(object.VerticalSpeed[0].Max));
-        stats.push(new DataVerticalSpeedMin(object.VerticalSpeed[0].Min));
+        if (object.VerticalSpeed[0].Avg !== null) {
+          stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed[0].Avg));
+        }
+        if (object.VerticalSpeed[0].Max !== null) {
+          stats.push(new DataVerticalSpeedMax(object.VerticalSpeed[0].Max));
+        }
+        if (object.VerticalSpeed[0].Min !== null) {
+          stats.push(new DataVerticalSpeedMin(object.VerticalSpeed[0].Min));
+        }
       } else {
-        stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed));
+        if (object.VerticalSpeed !== null) {
+          stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed));
+        }
       }
     }
     return stats;

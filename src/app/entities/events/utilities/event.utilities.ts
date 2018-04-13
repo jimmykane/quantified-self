@@ -131,79 +131,79 @@ export class EventUtilities {
 
   private static generateStatsForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
     // Altitude
-    if (subject.getStat(DataAltitudeMax.className) === undefined) {
+    if (subject.getStat(DataAltitudeMax.className) === undefined && this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataAltitudeMax(this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataAltitudeMin.className) === undefined) {
+    if (subject.getStat(DataAltitudeMin.className) === undefined && this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataAltitudeMin(this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataAltitudeAvg.className) === undefined) {
+    if (subject.getStat(DataAltitudeAvg.className) === undefined && this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataAltitudeAvg(this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
 
     // Heart Rate
-    if (subject.getStat(DataHeartRateMax.className) === undefined) {
+    if (subject.getStat(DataHeartRateMax.className) === undefined && this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateMax(this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataHeartRateMin.className) === undefined) {
+    if (subject.getStat(DataHeartRateMin.className) === undefined && this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateMin(this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataHeartRateAvg.className) === undefined) {
+    if (subject.getStat(DataHeartRateAvg.className) === undefined && this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateAvg(this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
 
     // Cadence
-    if (subject.getStat(DataCadenceMax.className) === undefined) {
+    if (subject.getStat(DataCadenceMax.className) === undefined && this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceMax(this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataCadenceMin.className) === undefined) {
+    if (subject.getStat(DataCadenceMin.className) === undefined && this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceMin(this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataCadenceAvg.className) === undefined) {
+    if (subject.getStat(DataCadenceAvg.className) === undefined && this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceAvg(this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
 
     // Speed
-    if (subject.getStat(DataSpeedMax.className) === undefined) {
+    if (subject.getStat(DataSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedMax(this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataSpeedMin.className) === undefined) {
+    if (subject.getStat(DataSpeedMin.className) === undefined && this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedMin(this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataSpeedAvg.className) === undefined) {
+    if (subject.getStat(DataSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedAvg(this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
 
     // Vertical Speed
-    if (subject.getStat(DataVerticalSpeedMax.className) === undefined) {
+    if (subject.getStat(DataVerticalSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedMax(this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataVerticalSpeedMin.className) === undefined) {
+    if (subject.getStat(DataVerticalSpeedMin.className) === undefined && this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedMin(this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataVerticalSpeedAvg.className) === undefined) {
+    if (subject.getStat(DataVerticalSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedAvg(this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
 
     // Power
-    if (subject.getStat(DataPowerMax.className) === undefined) {
+    if (subject.getStat(DataPowerMax.className) === undefined && this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerMax(this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataPowerMin.className) === undefined) {
+    if (subject.getStat(DataPowerMin.className) === undefined && this.getDateTypeMinimum(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerMin(this.getDateTypeMinimum(event, DataPower.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataPowerAvg.className) === undefined) {
+    if (subject.getStat(DataPowerAvg.className) === undefined && this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerAvg(this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate)));
     }
 
     // Temperature
-    if (subject.getStat(DataTemperatureMax.className) === undefined) {
+    if (subject.getStat(DataTemperatureMax.className) === undefined && this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureMax(this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataTemperatureMin.className) === undefined) {
+    if (subject.getStat(DataTemperatureMin.className) === undefined && this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureMin(this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
-    if (subject.getStat(DataTemperatureAvg.className) === undefined) {
+    if (subject.getStat(DataTemperatureAvg.className) === undefined && this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureAvg(this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
   }
