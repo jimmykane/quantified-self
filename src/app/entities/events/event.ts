@@ -1,11 +1,10 @@
 import {EventInterface} from './event.interface';
 import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
-import {IDClass} from '../id/id.abstract.class';
-import {Summary} from '../summary/summary';
+import {StatsClassAbstract} from '../stats/stats.class.abstract';
+import {DataInterface} from '../data/data.interface';
 
-export class Event extends IDClass implements EventInterface {
-  public summary = new Summary();
+export class Event extends StatsClassAbstract implements EventInterface {
 
   public name: string;
   private activities: ActivityInterface[] = [];
@@ -63,21 +62,19 @@ export class Event extends IDClass implements EventInterface {
     return this._hasPointsWithPosition;
   }
 
-  getTotalDurationInSeconds(): number {
-    return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
-      return durationInSeconds + activity.getDuration().getValue();
-    }, 0);
-  }
-
   toJSON(): any {
+    const stats = [];
+    this.stats.forEach((value: DataInterface, key: string) => {
+      stats.push(value.toJSON());
+    });
     return {
       id: this.getID(),
       name: this.name,
+      stats: stats,
       activities: this.getActivities().reduce((jsonActivitiesArray: any[], activity: ActivityInterface) => {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;
       }, []),
-      summary: this.summary ? this.summary.toJSON() : undefined
     };
   }
 }

@@ -2,11 +2,8 @@ import {EventInterface} from './event.interface';
 import {Event} from './event';
 import {Activity} from '../activities/activity';
 import {Point} from '../points/point';
-import {DataHeartRate} from '../data/data.heart-rate';
 import {DataLatitudeDegrees} from '../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../data/data.longitude-degrees';
-import {Summary} from '../summary/summary';
-import {DataDuration} from "../data/data.duration";
 
 describe('Event', () => {
 
@@ -121,32 +118,16 @@ describe('Event', () => {
     expect(event.hasPointsWithPosition()).toBe(true);
   });
 
-  it('should get get the total duration', () => {
-    expect(event.getTotalDurationInSeconds()).toBe(0);
-
-    let activity = new Activity();
-    activity.setDuration(new DataDuration(10));
-    event.addActivity(activity);
-    expect(event.getTotalDurationInSeconds()).toBe(10);
-
-    activity = new Activity();
-    activity.setDuration(new DataDuration(20));
-    event.addActivity(activity);
-    expect(event.getTotalDurationInSeconds()).toBe(30);
-
-  });
-
   it('should export correctly to JSON', () => {
     const activity = new Activity();
     event.addActivity(activity);
     event.setID('123');
     spyOn(activity, 'toJSON').and.returnValue({});
-    spyOn(event.summary, 'toJSON').and.returnValue({});
     expect(event.toJSON()).toEqual({
       'id': '123',
       'name': undefined,
       'activities': [{}],
-      'summary': {}
+      'stats': []
     });
   });
 });

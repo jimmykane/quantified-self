@@ -13,7 +13,6 @@ import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
 import {DataPower} from '../../../data/data.power';
 import {PointInterface} from '../../../points/point.interface';
 import {CreatorInterface} from '../../../creators/creatorInterface';
-import {Summary} from '../../../summary/summary';
 import {LapInterface} from '../../../laps/lap.interface';
 import {EventUtilities} from '../../utilities/event.utilities';
 import {DataEnergy} from '../../../data/data.energy';
@@ -29,9 +28,9 @@ export class EventImporterTCX {
   static getFromXML(xml: Document): EventInterface {
 
     const event = new Event();
-    event.summary = new Summary();
-    event.summary.totalDurationInSeconds = 0;
-    event.summary.totalDistanceInMeters = 0;
+    event.setDistance(new DataDistance(0));
+    event.setDuration(new DataDuration(0));
+    event.setPause(new DataPause(0));
 
     // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
@@ -44,7 +43,7 @@ export class EventImporterTCX {
       activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
 
 
-      // Go over the laps and start filling up the summary and creating the points
+      // Go over the laps and start filling up the stats and creating the points
       // @todo
       activity.setDuration(new DataDuration(0));
       activity.setDistance(new DataDistance(0));
@@ -54,22 +53,18 @@ export class EventImporterTCX {
       // Get the laps and add the total distance to the activity
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
-        // Increment wrapper summaries
+        // Increment wrapper stats
         activity.setDistance(new DataDistance(activity.getDistance().getValue() + lap.getDistance().getValue()));
         activity.setDuration(new DataDuration(activity.getDuration().getValue() + lap.getDuration().getValue() + lap.getPause().getValue()));
         activity.setPause(new DataPause(activity.getPause().getValue() + lap.getPause().getValue()));
         activity.addStat(new DataEnergy(activity.getStat(DataEnergy.className).getValue() + lap.getStat(DataEnergy.className).getValue()))
 
-        // If the lap has no distance it's probably a pause
-        // if (lap.summary.totalDistanceInMeters === 0) {
-        //   lap.type = 'Pause';
-        //   activity.summary.pauseDurationInSeconds += lap.summary.totalDurationInSeconds;
-        // }
+        // Todo perhaps think about distance if 0 to add the lap as pause
 
         // Same for event
-        event.summary.totalDistanceInMeters += activity.getDistance().getValue();
-        event.summary.totalDurationInSeconds += activity.getDuration().getValue();
-        event.summary.pauseDurationInSeconds += activity.getPause().getValue();
+        event.setDistance(new DataDistance(event.getDistance().getValue() + activity.getDistance().getValue()));
+        event.setDuration(new DataDuration(event.getDuration().getValue() + activity.getDuration().getValue()));
+        event.setPause(new DataPause(event.getPause().getValue() + activity.getPause().getValue()));
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
@@ -77,7 +72,7 @@ export class EventImporterTCX {
         });
       });
     }
-    EventUtilities.generateSummaries(event);
+    EventUtilities.generateStats(event);
     return event;
   }
 
@@ -153,7 +148,7 @@ export class EventImporterTCX {
         ));
       lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
 
-      // Create a summary (required TCX fields)
+      // Create a stats (required TCX fields)
       lap.addStat(new DataEnergy(Number(lapElement.getElementsByTagName('Calories')[0].textContent)));
       lap.addStat(new DataDuration(Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)));
       lap.addStat(new DataDistance(Number(lapElement.getElementsByTagName('DistanceMeters')[0].textContent)));

@@ -1,16 +1,14 @@
 import {ActivityInterface} from './activity.interface';
 import {PointInterface} from '../points/point.interface';
-import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
 import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
-import {Summary} from '../summary/summary';
 import {Creator} from '../creators/creator';
 import {StatsClassAbstract} from '../stats/stats.class.abstract';
-import {Weather} from "../weather/app.weather";
-import {GeoLocationInfo} from "../geo-location-info/geo-location-info";
+import {Weather} from '../weather/app.weather';
+import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 
 export class Activity extends StatsClassAbstract implements ActivityInterface {
   public startDate;

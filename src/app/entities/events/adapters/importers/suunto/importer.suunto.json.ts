@@ -20,11 +20,9 @@ import {DataEHPE} from '../../../../data/data.ehpe';
 import {DataEVPE} from '../../../../data/data.evpe';
 import {DataNumberOfSatellites} from '../../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../../data/data.satellite-5-best-snr';
-import {Summary} from '../../../../summary/summary';
 import {IntensityZones} from '../../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../../points/point.interface';
-import {SummaryInterface} from '../../../../summary/summary.interface';
 import {ImporterSuuntoActivityIds} from './importer.suunto.activity.ids';
 import {ImporterSuuntoDeviceNames} from './importer.suunto.device.names';
 import {ActivityInterface} from '../../../../activities/activity.interface';
@@ -71,10 +69,13 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     debugger;
 
-    // Populate the event summary from the Header Object
+    // Create an event
     const event = new Event();
-    event.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
 
+    // Populate the event stats from the Header Object
+    this.getStats(eventJSONObject.DeviceLog.Header).forEach((stat) => {
+      event.addStat(stat)
+    });
 
     // Create a creator and pass it to all activities (later)
     const creator = new Creator();
@@ -130,7 +131,7 @@ export class EventImporterSuuntoJSON {
       activity.endDate = activityStartEventSamples.length - 1 === index ?
         new Date(stopEventSample.TimeISO8601) :
         new Date(activityStartEventSamples[index + 1].TimeISO8601);
-      // Create a summary these are a 1:1 ref arrays
+      // Create the stats these are a 1:1 ref arrays
       this.getStats(activityWindows[index]).forEach((stat) => {
         activity.addStat(stat)
       });
@@ -146,7 +147,7 @@ export class EventImporterSuuntoJSON {
       const lapEndDate = new Date(lapEventSample.TimeISO8601);
       const lap = new Lap(lapStartDate, lapEndDate);
       lap.type = lapEventSample;
-      // if it's only one lap there is no summary as it's the whole activity
+      // if it's only one lap there is no stats as it's the whole activity
       if (lapEventSamples.length !== 1) {
         this.getStats(lapWindows[index]).forEach((stat) => {
           lap.addStat(stat);
@@ -300,73 +301,6 @@ export class EventImporterSuuntoJSON {
       point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
     }
     return point;
-  }
-
-  private static getSummary(object: any): SummaryInterface {
-
-    const summary = new Summary();
-    summary.totalDistanceInMeters = object.Distance;
-    summary.totalDurationInSeconds = object.Duration;
-    summary.maxAltitudeInMeters = object.Altitude.Max;
-    summary.minAltitudeInMeters = object.Altitude.Min;
-    summary.ascentTimeInSeconds = object.AscentTime;
-    summary.descentTimeInSeconds = object.DescentTime;
-    summary.ascentInMeters = object.Ascent;
-    summary.descentInMeters = object.Descent;
-    summary.epoc = object.EPOC;
-    summary.energyInCal = object.Energy * 0.239 / 1000;
-    summary.feeling = object.Feeling;
-    summary.peakTrainingEffect = object.PeakTrainingEffect;
-    summary.recoveryTimeInSeconds = object.RecoveryTime;
-    summary.maxVO2 = object.MAXVO2;
-
-    if (object.PauseDuration) {
-      summary.pauseDurationInSeconds = object.PauseDuration;
-      summary.totalDurationInSeconds += object.PauseDuration;
-    }
-
-    if (object.HR) {
-      summary.avgHR = object.HR[0].Avg * 60;
-      summary.maxHR = object.HR[0].Max * 60;
-      summary.minHR = object.HR[0].Min * 60;
-    }
-
-    if (object.Cadence) {
-      summary.avgCadence = object.Cadence[0].Avg * 60 * 2;
-      summary.maxCadence = object.Cadence[0].Max * 60 * 2;
-      summary.minCadence = object.Cadence[0].Min * 60 * 2;
-    }
-
-    if (object.Power) {
-      summary.avgPower = object.Power[0].Avg;
-      summary.maxPower = object.Power[0].Max;
-      summary.minPower = object.Power[0].Min;
-    }
-
-    if (object.Speed) {
-      summary.avgSpeed = object.Speed[0].Avg;
-      summary.maxSpeed = object.Speed[0].Max;
-      summary.minSpeed = object.Speed[0].Min;
-    }
-
-    if (object.Temperature) {
-      summary.avgTemperature = object.Temperature[0].Avg - 273.15;
-      summary.maxTemperature = object.Temperature[0].Max - 273.15;
-      summary.minTemperature = object.Temperature[0].Min - 273.15;
-    }
-
-    if (object.hasOwnProperty('VerticalSpeed')) {
-      // Double action here
-      if (Array.isArray(object.VerticalSpeed)) {
-        summary.avgVerticalSpeed = object.VerticalSpeed[0].Avg;
-        summary.maxVerticalSpeed = object.VerticalSpeed[0].Max;
-        summary.minVerticalSpeed = object.VerticalSpeed[0].Min;
-      } else {
-        summary.avgVerticalSpeed = object.VerticalSpeed;
-      }
-    }
-
-    return summary;
   }
 
   private static getZones(zonesObj: any): IntensityZones {

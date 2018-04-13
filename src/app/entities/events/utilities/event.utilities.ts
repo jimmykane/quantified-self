@@ -1,7 +1,5 @@
 import {EventInterface} from '../event.interface';
-import {Summary} from '../../summary/summary';
 import {ActivityInterface} from '../../activities/activity.interface';
-import {GeoLibAdapter} from '../../geodesy/adapters/geolib.adapter';
 import {EventExporterTCX} from '../adapters/exporters/exporter.tcx';
 import {PointInterface} from '../../points/point.interface';
 import {Event} from '../event';
@@ -34,6 +32,9 @@ import {DataPowerAvg} from '../../data/data.power-avg';
 import {DataTemperatureMax} from '../../data/data.temperature-max';
 import {DataTemperatureMin} from '../../data/data.temperature-min';
 import {DataTemperatureAvg} from '../../data/data.temperature-avg';
+import {DataDistance} from "../../data/data.distance";
+import {DataDuration} from "../../data/data.duration";
+import {DataPause} from "../../data/data.pause";
 
 export class EventUtilities {
 
@@ -103,30 +104,29 @@ export class EventUtilities {
       for (const event of events) {
         for (const activity of event.getActivities()) {
           mergeEvent.addActivity(activity);
+          mergeEvent.setDistance(new DataDistance(mergeEvent.getDistance().getValue() + activity.getDistance().getValue()));
+          mergeEvent.setDuration(new DataDuration(mergeEvent.getDuration().getValue() + activity.getDuration().getValue()));
+          mergeEvent.setPause(new DataPause(mergeEvent.getPause().getValue() + activity.getPause().getValue()));
+          // @todo merge the rest of the stats
         }
       }
-      const eventSummary = new Summary();
-      eventSummary.totalDurationInSeconds = mergeEvent.getTotalDurationInSeconds();
-      eventSummary.totalDistanceInMeters = mergeEvent.getActivities().reduce(
-        (totalDistance, activity) => activity.getDistance().getValue() + totalDistance, 0
-      );
-      mergeEvent.summary = eventSummary;
+
       mergeEvent.name = 'Merged at ' + (new Date()).toISOString();
       return resolve(mergeEvent);
     });
   }
 
-  public static generateSummaries(event: EventInterface) {
+  public static generateStats(event: EventInterface) {
     // Todo should also work for event
     event.getActivities().map((activity: ActivityInterface) => {
-      this.generateSummaryForActivityOrLap(event, activity);
+      this.generateStatsForActivityOrLap(event, activity);
       activity.getLaps().map((lap: LapInterface) => {
-        this.generateSummaryForActivityOrLap(event, lap);
+        this.generateStatsForActivityOrLap(event, lap);
       })
     })
   }
 
-  private static generateSummaryForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
+  private static generateStatsForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
     // Altitude
     if (subject.getStat(DataAltitudeMax.className) === undefined) {
       subject.addStat(new DataAltitudeMax(this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate)));

@@ -1,6 +1,5 @@
 import {LapInterface} from './lap.interface';
 import {Lap} from './lap';
-import {Summary} from '../summary/summary';
 
 describe('Lap', () => {
 
