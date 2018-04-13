@@ -6,7 +6,7 @@ export abstract class Data implements DataInterface {
   static type: string;
   static unit: string;
   static unitSystem = UnitSystem.Metric;
-  private value: number;
+  protected value: number;
 
   constructor(value: string | number) {
     this.setValue(value);
