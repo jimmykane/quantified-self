@@ -361,11 +361,14 @@ export class EventImporterSuuntoJSON {
       stats.push(new DataVO2Max(object.MAXVO2));
     }
 
+    // Detect pause and overall duration
     let durationInSeconds = object.Duration;
+    let pauseDuration = 0;
     if (object.hasOwnProperty('PauseDuration') && object.PauseDuration !== null) {
-      stats.push(new DataPause(object.PauseDuration));
+      pauseDuration = object.PauseDuration;
       durationInSeconds += object.PauseDuration;
     }
+    stats.push(new DataPause(pauseDuration));
     stats.push(new DataDuration(durationInSeconds));
 
     // double case
