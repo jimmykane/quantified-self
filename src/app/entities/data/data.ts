@@ -13,8 +13,9 @@ export abstract class Data implements DataInterface {
   }
 
   setValue(value: string | number) {
-    if (value === null || value === void 0) {
-      throw new Error('Null is not a correct value for data. Use a string or number');
+    if (value === null || value === void 0 || isNaN(Number(value))) {
+      // Todo allow strings
+      throw new Error('Null, undefined, void 0 or NaN is not a correct value for data. Use a string or number');
     }
     this.value = Number(value);
   }
