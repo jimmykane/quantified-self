@@ -54,17 +54,17 @@ export class EventImporterTCX {
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
         // Increment wrapper stats
-        activity.setDistance(new DataDistance(activity.getDistance().getValue() + lap.getDistance().getValue()));
-        activity.setDuration(new DataDuration(activity.getDuration().getValue() + lap.getDuration().getValue() + lap.getPause().getValue()));
-        activity.setPause(new DataPause(activity.getPause().getValue() + lap.getPause().getValue()));
-        activity.addStat(new DataEnergy(activity.getStat(DataEnergy.className).getValue() + lap.getStat(DataEnergy.className).getValue()))
+        activity.getDistance().setValue(activity.getDistance().getValue() + lap.getDistance().getValue());
+        activity.getDuration().setValue(activity.getDuration().getValue() + lap.getDuration().getValue() + lap.getPause().getValue());
+        activity.getPause().setValue(activity.getPause().getValue() + lap.getPause().getValue());
+        activity.getStat(DataEnergy.className).setValue(activity.getStat(DataEnergy.className).getValue() + lap.getStat(DataEnergy.className).getValue())
 
         // Todo perhaps think about distance if 0 to add the lap as pause
 
         // Same for event
-        event.setDistance(new DataDistance(event.getDistance().getValue() + lap.getDistance().getValue()));
+        event.getDistance().setValue(event.getDistance().getValue() + lap.getDistance().getValue());
         event.setDuration(new DataDuration(event.getDuration().getValue() + lap.getDuration().getValue()));
-        event.setPause(new DataPause(event.getPause().getValue() + lap.getPause().getValue()));
+        event.getPause().setValue(event.getPause().getValue() + lap.getPause().getValue());
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {

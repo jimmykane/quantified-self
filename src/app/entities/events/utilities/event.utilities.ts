@@ -101,12 +101,15 @@ export class EventUtilities {
         return +eventA.getFirstActivity().startDate - +eventB.getFirstActivity().startDate;
       });
       const mergeEvent = new Event();
+      mergeEvent.setDistance(new DataDistance(0));
+      mergeEvent.setDuration(new DataDuration(0));
+      mergeEvent.setPause(new DataPause(0));
       for (const event of events) {
         for (const activity of event.getActivities()) {
           mergeEvent.addActivity(activity);
-          mergeEvent.setDistance(new DataDistance(mergeEvent.getDistance().getValue() + activity.getDistance().getValue()));
-          mergeEvent.setDuration(new DataDuration(mergeEvent.getDuration().getValue() + activity.getDuration().getValue()));
-          mergeEvent.setPause(new DataPause(mergeEvent.getPause().getValue() + activity.getPause().getValue()));
+          mergeEvent.getDistance().setValue(mergeEvent.getDistance().getValue() + activity.getDistance().getValue());
+          mergeEvent.getDuration().setValue(mergeEvent.getDuration().getValue() + activity.getDuration().getValue());
+          mergeEvent.getPause().setValue(mergeEvent.getPause().getValue() + activity.getPause().getValue());
           // @todo merge the rest of the stats
         }
       }
