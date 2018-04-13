@@ -94,6 +94,8 @@ export class EventImporterSuuntoJSON {
       return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type !== 'Start' && sample.Events[0].Lap.Type !== 'Stop';
     });
 
+
+
     // Get the stop event
     const stopEventSample = eventJSONObject.DeviceLog.Samples.find((sample) => {
       return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type === 'Stop';
@@ -143,12 +145,19 @@ export class EventImporterSuuntoJSON {
       return activity;
     });
 
-    // Create the laps
+     // set the start dates of all lap types to the start of the first activity
+    const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample) => {
+       lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = activities[0].startDate;
+       return lapStartDatesByTypeObject;
+    }, {});
     const laps = lapEventSamples.map((lapEventSample, index): LapInterface => {
-      const lapStartDate = index === 0 ? activities[0].startDate : new Date(lapEventSamples[index - 1].TimeISO8601);
+      // Set the end date
       const lapEndDate = new Date(lapEventSample.TimeISO8601);
-      const lap = new Lap(lapStartDate, lapEndDate);
-      lap.type = lapEventSample;
+      // Set the start date. For the current
+      const lap = new Lap(lapStartDatesByType[lapEventSample.Events[0].Lap.Type], lapEndDate);
+      // Set it for the next run
+      lapStartDatesByType[lapEventSample.Events[0].Lap.Type] = lapEndDate;
+      lap.type = lapEventSample.Events[0].Lap.Type;
       // if it's only one lap there is no stats as it's the whole activity
       if (lapEventSamples.length !== 1) {
         this.getStats(lapWindows[index]).forEach((stat) => {
