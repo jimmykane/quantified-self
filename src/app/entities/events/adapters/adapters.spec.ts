@@ -19,11 +19,11 @@ describe('EventAdapters', () => {
     expect(EventImporterJSON.getFromJSONString(JSON.stringify(json)) instanceof Event).toBe(true);
   });
 
-  it('should be able to decode from s', () => {
+  it('should be able to decode from suunto', () => {
     expect(EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(suuntoJSON)) instanceof Event).toBe(true);
   });
 
-  it('should be able to decode from s and then create a json that will create a same object', () => {
+  it('should be able to decode from suunto and then create a json that will create a same object', () => {
     expect(EventImporterJSON.getFromJSONString(
       JSON.stringify(
         EventImporterSuuntoJSON.getFromJSONString(
