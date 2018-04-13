@@ -10,7 +10,7 @@ import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {DataCadence} from '../../../../entities/data/data.cadence';
 import {DataAltitude} from '../../../../entities/data/data.altitude';
 import {DataSpeed} from '../../../../entities/data/data.speed';
-import {DataVerticalSpeed} from '../../../../entities/data/data.verticalspeed';
+import {DataVerticalSpeed} from '../../../../entities/data/data.vertical-speed';
 import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pressure';
 import {Log, Level} from 'ng2-logger'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
@@ -27,7 +27,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 
-  private dataMap: Map<string, DataInterface[]>;
+  private dataMap: Map<string, Map<number, DataInterface[]>>;
   private categories = [];
   private chart: any;
   private selectedActivities = [];
@@ -121,9 +121,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           valueText: '[[value]]',
           clickLabel: (graph) => {
             graph.hidden = !graph.hidden;
-            graph.chart.valueAxes.forEach((valueAxis) => {
-              valueAxis.guides = this.getZoneGuides();
-            });
+            // graph.chart.valueAxes.forEach((valueAxis) => {
+            //   valueAxis.guides = this.getZoneGuides();
+            // });
             if (!graph.hidden) {
               graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
             }
@@ -158,11 +158,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     });
   }
 
-  private updateChart(startDate?: Date, endDate?: Date): Promise<any> {
+  private updateChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
 
-      const dataProvider = this.getDataProvider(this.getDataMapSlice(startDate, endDate)); // I only need the length @todo
+      const dataProvider = this.getDataProvider(this.getDataMap()); // I only need the length @todo
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
         this.chart.dataProvider = dataProvider;
@@ -188,12 +188,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     }
 
     if (!this.chart.events.dataUpdated.length) {
-      this.chart.addListener('dataUpdated', (event) => {
-        event.chart.valueAxes.forEach((valueAxis) => {
-          valueAxis.guides = this.getZoneGuides();
-        });
-        event.chart.validateNow();
-      });
+      // this.chart.addListener('dataUpdated', (event) => {
+      //   event.chart.valueAxes.forEach((valueAxis) => {
+      //     valueAxis.guides = this.getZoneGuides();
+      //   });
+      //   event.chart.validateNow();
+      // });
     }
 
     if (!this.chart.events.resized.length) {
@@ -222,22 +222,26 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     }
   }
 
-  private getAllData(): Map<string, DataInterface[]> {
+  private getAllData(): Map<string, Map<number, DataInterface[]>> {
     const t0 = performance.now();
     if (!this.dataMap) {
-      this.dataMap = new Map<string, DataInterface[]>();
+      this.dataMap = new Map<string, Map<number, DataInterface[]>>();
       this.selectedActivities.forEach((activity: ActivityInterface, index) => {
-        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, DataInterface[]>, point: PointInterface, currentIndex) => {
+        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataInterface[]>>, point: PointInterface, currentIndex) => {
           point.getData().forEach((pointData: DataInterface, key: string) => {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
             key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
-            const existingDataArray = dataMap.get(key) || [];
-            if (!existingDataArray.length) {
-              dataMap.set(key, existingDataArray);
+            const DataMapArray = dataMap.get(key) || new Map<number, DataInterface[]>();
+            if (!DataMapArray.size) {
+              dataMap.set(key, DataMapArray);
             }
-            existingDataArray.push(pointData)
+            const existingDataArray = DataMapArray.get(point.getDate().getTime()) || [];
+            if (!existingDataArray.length) {
+              DataMapArray.set(point.getDate().getTime(), existingDataArray)
+            }
+            existingDataArray.push(pointData);
           });
           return dataMap;
         }, this.dataMap);
@@ -252,9 +256,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   private getAllCategoryTypes(): any[] {
     if (this.categories.length < 1) {
-      this.getAllData().forEach((dataArray, category, eventData) => {
+      this.getAllData().forEach((dataMapArray, category, eventData) => {
         // Hack here to add the units unfortunately
-        this.categories.push({id: category, unit: dataArray[0].getUnit()});
+        this.categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
       });
     }
     return this.categories;
@@ -281,24 +285,25 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     return dataProvider;
   }
 
-  private getDataMapSlice(startDate?: Date, endDate?: Date) {
+  private getDataMap() {
     const t0 = performance.now();
     const dataMap = new Map<number, any>();
     let dataCount = 0;
-    this.getAllData().forEach((dataArray: DataInterface[], dataType: string) => {
-      dataArray.reduce((dataAccumulator: Map<number, any>, data: DataInterface) => {
-        dataCount++;
-        const dateData = dataAccumulator.get(data.getPoint().getDate().getTime()) || {};
-        let value = data.getValue().toFixed(1);
-        if (dataType.split(':')[0] === DataHeartRate.type) {
-          value = data.getValue().toFixed(0)
-        }
-        dataAccumulator.set(data.getPoint().getDate().getTime(), Object.assign(dateData, {
-          [dataType]: value,
-        }));
-        return dataAccumulator;
-      }, dataMap);
-
+    this.getAllData().forEach((dataArrayMap: Map<number, DataInterface[]>, dataType: string) => {
+      dataArrayMap.forEach((dataArray: DataInterface[], time) => {
+        dataArray.reduce((dataAccumulator: Map<number, any>, data: DataInterface) => {
+          dataCount++;
+          const dateData = dataAccumulator.get(time) || {};
+          let value = data.getValue().toFixed(1);
+          if (dataType.split(':')[0] === DataHeartRate.type) {
+            value = data.getValue().toFixed(0)
+          }
+          dataAccumulator.set(time, Object.assign(dateData, {
+            [dataType]: value,
+          }));
+          return dataAccumulator;
+        }, dataMap);
+      })
     });
     const t1 = performance.now();
     this.logger.d('Grouped ' + dataCount + ' data after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
@@ -358,8 +363,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     });
     // Check if any is visible and if not make visible the first one
     if (!graphs.find((graph) => {
-        return graph.hidden !== true
-      })) {
+      return graph.hidden !== true
+    })) {
       graphs[0].hidden = false;
     }
     this.logger.d('Got graphs after ' +
@@ -388,7 +393,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
       // Check if there is an intensity zone
       const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
         return activity.getID() === graph.id.split(':')[1];
-      }).summary.intensityZones.get(graph.id.split(':')[0]);
+      }).intensityZones.get(graph.id.split(':')[0]);
       if (!activityIntensityZones) {
         return zoneGuides
       }

@@ -10,6 +10,7 @@ import {DataGPSAltitude} from '../../../data/data.altitude-gps';
 import {PointInterface} from '../../../points/point.interface';
 import {LapInterface} from '../../../laps/lap.interface';
 import {DataPower} from '../../../data/data.power';
+import {DataEnergy} from '../../../data/data.energy';
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -62,11 +63,12 @@ export class EventExporterTCX implements EventExporterInterface {
 
 
       // If there are no laps create one and clone it from the activity
-      if (!activityLaps.length) {
-        const lap = new Lap(activity.startDate, activity.endDate);
-        lap.summary = activity.summary;
-        activityLaps.push(lap);
-      }
+      // @todo fix
+      // if (!activityLaps.length) {
+      //   const lap = new Lap(activity.startDate, activity.endDate);
+      //   lap.summary = activity.summary;
+      //   activityLaps.push(lap);
+      // }
 
 
       // Create the element
@@ -87,15 +89,15 @@ export class EventExporterTCX implements EventExporterInterface {
         lapElement.setAttribute('StartTime', lap.startDate.toISOString().substring(0, 19) + 'Z');
 
         const totalTimeInSecondsElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'TotalTimeSeconds');
-        totalTimeInSecondsElement.textContent = lap.summary.totalDurationInSeconds.toString();
+        totalTimeInSecondsElement.textContent = lap.getDuration().getValue().toString();
         lapElement.appendChild(totalTimeInSecondsElement);
 
         const distanceInMetersElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'DistanceMeters');
-        distanceInMetersElement.textContent = lap.summary.totalDistanceInMeters.toString();
+        distanceInMetersElement.textContent = lap.getDistance().getValue().toString();
         lapElement.appendChild(distanceInMetersElement);
 
         const caloriesInKCALElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Calories');
-        caloriesInKCALElement.textContent = lap.summary.energyInCal.toFixed(0).toString();
+        caloriesInKCALElement.textContent = lap.getStat(DataEnergy.className).getValue().toFixed(0).toString();
         lapElement.appendChild(caloriesInKCALElement);
 
         activityElement.appendChild(lapElement);
@@ -171,20 +173,13 @@ export class EventExporterTCX implements EventExporterInterface {
                 // Apend a normal and an extension one
                 pointElement.appendChild(cadenceElementNoNS);
               }
-
             }
-
-
           });
-
-
         }
       }
-
     }
     return '<?xml version="1.0" encoding="UTF-8"?>' + this.xmlSerializer.serializeToString(xmlDocument);
   }
-
 
   getfileExtension(): string {
     return this.fileExtension;

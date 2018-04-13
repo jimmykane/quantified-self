@@ -3,9 +3,11 @@ import {EventImporterJSON} from './importers/importer.json';
 import {Event} from '../event';
 import {EventImporterTCX} from './importers/importer.tcx';
 
-const json = require('../../../../../samples/example.json');
+const json = require('../../../../../samples/json/app.json');
 const suuntoJSON = require('../../../../../samples/suunto/suunto.json');
-const tcxJSON = require('../../../../../samples/movescount_tcx.json');
+const movescountTCXJSON = require('../../../../../samples/tcx/movescount.tcx.json');
+const polarTCXJSON = require('../../../../../samples/tcx/polar.tcx.json');
+const garminTCXJSON = require('../../../../../samples/tcx/garmin.tcx.json');
 
 describe('EventAdapters', () => {
 
@@ -17,11 +19,11 @@ describe('EventAdapters', () => {
     expect(EventImporterJSON.getFromJSONString(JSON.stringify(json)) instanceof Event).toBe(true);
   });
 
-  it('should be able to decode from s', () => {
+  it('should be able to decode from suunto', () => {
     expect(EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(suuntoJSON)) instanceof Event).toBe(true);
   });
 
-  it('should be able to decode from s and then create a json that will create a same object', () => {
+  it('should be able to decode from suunto and then create a json that will create a same object', () => {
     expect(EventImporterJSON.getFromJSONString(
       JSON.stringify(
         EventImporterSuuntoJSON.getFromJSONString(
@@ -31,10 +33,17 @@ describe('EventAdapters', () => {
     ) instanceof Event).toBe(true);
   });
 
-  it('should be able to decode tcx', () => {
-    EventImporterTCX.getFromXML((new DOMParser()).parseFromString(tcxJSON.tcx, 'application/xml'));
+  it('should be able to decode tcx from Movescount', () => {
+    expect(EventImporterTCX.getFromXML((new DOMParser()).parseFromString(movescountTCXJSON.tcx, 'application/xml')) instanceof Event).toBe(true);
   });
 
+  it('should be able to decode tcx from Polar', () => {
+    expect(EventImporterTCX.getFromXML((new DOMParser()).parseFromString(polarTCXJSON.tcx, 'application/xml')) instanceof Event).toBe(true);
+  });
+
+  it('should be able to decode tcx from Garmin', () => {
+    expect(EventImporterTCX.getFromXML((new DOMParser()).parseFromString(garminTCXJSON.tcx, 'application/xml')) instanceof Event).toBe(true);
+  });
 
   it('should import and export correctly from Suunto adapter', () => {
     // First get it from adapter 1

@@ -1,11 +1,15 @@
-import {PointInterface} from '../points/point.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 
 export interface DataInterface extends SerializableClassInterface {
-  setPoint(point: PointInterface);
-  getPoint(): PointInterface;
-  setValue(value: string|number);
+  setValue(value: number | string);
   getValue(): number;
   getType(): string;
   getUnit(): string;
+  getClassName(): string;
+  getUnitSystem(): UnitSystem;
+}
+
+export enum UnitSystem {
+  Metric,
+  Imperial
 }

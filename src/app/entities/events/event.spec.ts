@@ -2,10 +2,8 @@ import {EventInterface} from './event.interface';
 import {Event} from './event';
 import {Activity} from '../activities/activity';
 import {Point} from '../points/point';
-import {DataHeartRate} from '../data/data.heart-rate';
 import {DataLatitudeDegrees} from '../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../data/data.longitude-degrees';
-import {Summary} from '../summary/summary';
 
 describe('Event', () => {
 
@@ -120,25 +118,6 @@ describe('Event', () => {
     expect(event.hasPointsWithPosition()).toBe(true);
   });
 
-  it('should get get the total duration', () => {
-    expect(event.getTotalDurationInSeconds()).toBe(0);
-
-    let activity = new Activity();
-    let summary = new Summary();
-    summary.totalDurationInSeconds = 10;
-    activity.summary = summary;
-    event.addActivity(activity);
-    expect(event.getTotalDurationInSeconds()).toBe(10);
-
-    activity = new Activity();
-    summary = new Summary();
-    summary.totalDurationInSeconds = 20;
-    activity.summary = summary;
-    event.addActivity(activity);
-    expect(event.getTotalDurationInSeconds()).toBe(30);
-
-  });
-
   it('should export correctly to JSON', () => {
     const activity = new Activity();
     event.addActivity(activity);
@@ -148,7 +127,7 @@ describe('Event', () => {
       'id': '123',
       'name': undefined,
       'activities': [{}],
-      'summary': undefined
+      'stats': []
     });
   });
 });

@@ -20,7 +20,6 @@ export class Point implements PointInterface {
 
   addData(data: DataInterface) {
     this.data.set(data.getType(), data);
-    data.setPoint(this);
   }
 
   removeDataByType(dataType: string) {
@@ -32,7 +31,7 @@ export class Point implements PointInterface {
   }
 
   getDataByType(dataType: string): DataInterface {
-    return this.getData().get(dataType);
+    return this.data.get(dataType);
   }
 
   getPosition(): DataPositionInterface {

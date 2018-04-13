@@ -1,15 +1,12 @@
 <mat-card>
-  <mat-accordion [displayMode]="'flat'" [multi]="true">
-    <mat-expansion-panel *ngFor="let activity of event.getActivities(); let i = index;" [expanded]="'true'">
-      <mat-expansion-panel-header>
-        <mat-panel-title>
-          {{ activity.startDate | date:'medium' }}
-        </mat-panel-title>
-        <mat-panel-description>
-          {{ activity.type }}
-        </mat-panel-description>
-      </mat-expansion-panel-header>
-      <app-event-card-activity-stats [activity]="activity" [event]="event"></app-event-card-activity-stats>
-    </mat-expansion-panel>
-  </mat-accordion>
+  <mat-card>
+    <mat-table *ngIf="data" [dataSource]="data">
+      <ng-container *ngFor="let column of columns" [matColumnDef]="column">
+        <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
+        <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+      </ng-container>
+      <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
+      <mat-row *matRowDef="let row; columns: columns;"></mat-row>
+    </mat-table>
+  </mat-card>
 </mat-card>

@@ -1,18 +1,22 @@
 import {CreatorInterface} from '../creators/creatorInterface';
 import {PointInterface} from '../points/point.interface';
-import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
-import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
+import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
+import {StatsClassInterface} from '../stats/stats.class.interface';
+import {Weather} from '../weather/app.weather';
+import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 
-export interface ActivityInterface extends IDClassInterface, SerializableClassInterface {
+export interface ActivityInterface extends StatsClassInterface, SerializableClassInterface {
   type: string;
   startDate: Date;
   endDate: Date;
   creator: CreatorInterface;
-  summary: SummaryInterface;
   ibiData: IBIData;
+  intensityZones: Map<string, IntensityZonesInterface>;
+  geoLocationInfo: GeoLocationInfo;
+  weather: Weather;
 
   addPoint(point: PointInterface, overrideAllDataOnCollision?: boolean);
   removePoint(point: PointInterface);

@@ -1,25 +1,32 @@
 import {LapInterface} from './lap.interface';
-import {EventInterface} from '../events/event.interface';
-import {Summary} from '../summary/summary';
+import {DataInterface} from '../data/data.interface';
+import {StatsClassAbstract} from '../stats/stats.class.abstract';
 
-export class Lap implements LapInterface {
+export class Lap extends StatsClassAbstract implements LapInterface {
 
   public startDate: Date;
   public endDate: Date;
-  public type: string;
-  public summary: Summary;
+  public type: string; // @todo make Enum
+
+  public stats = new Map<string, DataInterface>();
 
   constructor(startDate: Date, endDate: Date) {
+    super();
     this.startDate = startDate;
     this.endDate = endDate;
   }
 
   toJSON(): any {
+    const stats = [];
+    this.stats.forEach((value: DataInterface, key: string) => {
+      stats.push(value.toJSON());
+    });
     return {
+      id: this.getID(),
       startDate: this.startDate.toJSON(),
       endDate: this.endDate.toJSON(),
       type: this.type,
-      summary: this.summary.toJSON(),
+      stats: stats
     };
   }
 }

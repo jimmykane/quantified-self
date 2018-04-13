@@ -7,7 +7,7 @@ import {DataAltitude} from '../../../../data/data.altitude';
 import {DataCadence} from '../../../../data/data.cadence';
 import {DataHeartRate} from '../../../../data/data.heart-rate';
 import {DataSpeed} from '../../../../data/data.speed';
-import {DataVerticalSpeed} from '../../../../data/data.verticalspeed';
+import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
 import {DataTemperature} from '../../../../data/data.temperature';
 import {DataSeaLevelPressure} from '../../../../data/data.sea-level-pressure';
 import {EventInterface} from '../../../event.interface';
@@ -20,15 +20,48 @@ import {DataEHPE} from '../../../../data/data.ehpe';
 import {DataEVPE} from '../../../../data/data.evpe';
 import {DataNumberOfSatellites} from '../../../../data/data.number-of-satellites';
 import {DataSatellite5BestSNR} from '../../../../data/data.satellite-5-best-snr';
-import {Summary} from '../../../../summary/summary';
 import {IntensityZones} from '../../../../intensity-zones/intensity-zone';
 import {IBIData} from '../../../../data/ibi/data.ibi';
 import {PointInterface} from '../../../../points/point.interface';
-import {SummaryInterface} from '../../../../summary/summary.interface';
 import {ImporterSuuntoActivityIds} from './importer.suunto.activity.ids';
 import {ImporterSuuntoDeviceNames} from './importer.suunto.device.names';
 import {ActivityInterface} from '../../../../activities/activity.interface';
 import {LapInterface} from '../../../../laps/lap.interface';
+import {DataInterface} from '../../../../data/data.interface';
+import {DataDuration} from '../../../../data/data.duration';
+import {DataAltitudeMax} from '../../../../data/data.altitude-max';
+import {DataDistance} from '../../../../data/data.distance';
+import {DataAscentTime} from '../../../../data/data.ascent-time';
+import {DataDescentTime} from '../../../../data/data.descent-time';
+import {DataDescent} from '../../../../data/data.descent';
+import {DataAscent} from '../../../../data/data.ascent';
+import {DataEPOC} from '../../../../data/data.epoc';
+import {DataEnergy} from '../../../../data/data.energy';
+import {DataFeeling} from '../../../../data/data.feeling';
+import {DataPeakTrainingEffect} from '../../../../data/data.peak-training-effect';
+import {DataRecovery} from '../../../../data/data.recovery';
+import {DataVO2Max} from '../../../../data/data.vo2-max';
+import {DataPause} from '../../../../data/data.pause';
+import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
+import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
+import {DataHeartRateMin} from '../../../../data/data.heart-rate-min';
+import {DataCadenceAvg} from '../../../../data/data.cadence-avg';
+import {DataCadenceMax} from '../../../../data/data.cadence-max';
+import {DataCadenceMin} from '../../../../data/data.cadence-min';
+import {DataPowerAvg} from '../../../../data/data.power-avg';
+import {DataPowerMax} from '../../../../data/data.power-max';
+import {DataPowerMin} from '../../../../data/data.power-min';
+import {DataSpeedAvg} from '../../../../data/data.speed-avg';
+import {DataSpeedMax} from '../../../../data/data.speed-max';
+import {DataSpeedMin} from '../../../../data/data.speed-min';
+import {DataTemperatureAvg} from '../../../../data/data.temperature-avg';
+import {DataTemperatureMax} from '../../../../data/data.temperature-max';
+import {DataTemperatureMin} from '../../../../data/data.temperature-min';
+import {DataVerticalSpeedAvg} from '../../../../data/data.vertical-speed-avg';
+import {DataVerticalSpeedMax} from '../../../../data/data.vertical-speed-max';
+import {DataVerticalSpeedMin} from '../../../../data/data.vertical-speed-min';
+import {DataAltitudeAvg} from '../../../../data/data.altitude-avg';
+import {DataAltitudeMin} from '../../../../data/data.altitude-min';
 
 export class EventImporterSuuntoJSON {
 
@@ -36,9 +69,13 @@ export class EventImporterSuuntoJSON {
     const eventJSONObject = JSON.parse(jsonString);
     debugger;
 
-    // Populate the event summary from the Header Object
+    // Create an event
     const event = new Event();
-    event.summary = this.getSummary(eventJSONObject.DeviceLog.Header);
+
+    // Populate the event stats from the Header Object
+    this.getStats(eventJSONObject.DeviceLog.Header).forEach((stat) => {
+      event.addStat(stat)
+    });
 
     // Create a creator and pass it to all activities (later)
     const creator = new Creator();
@@ -94,8 +131,13 @@ export class EventImporterSuuntoJSON {
       activity.endDate = activityStartEventSamples.length - 1 === index ?
         new Date(stopEventSample.TimeISO8601) :
         new Date(activityStartEventSamples[index + 1].TimeISO8601);
-      // Create a summary these are a 1:1 ref arrays
-      activity.summary = this.getSummary(activityWindows[index]);
+      // Create the stats these are a 1:1 ref arrays
+      this.getStats(activityWindows[index]).forEach((stat) => {
+        activity.addStat(stat)
+      });
+      // Set the zones for the activity @todo fix
+      this.setIntensityZones(activity, eventJSONObject.DeviceLog.Header);
+
       return activity;
     });
 
@@ -105,9 +147,11 @@ export class EventImporterSuuntoJSON {
       const lapEndDate = new Date(lapEventSample.TimeISO8601);
       const lap = new Lap(lapStartDate, lapEndDate);
       lap.type = lapEventSample;
-      // if it's only one lap there is no summary as it's the whole activity
+      // if it's only one lap there is no stats as it's the whole activity
       if (lapEventSamples.length !== 1) {
-        lap.summary = this.getSummary(lapWindows[index]);
+        this.getStats(lapWindows[index]).forEach((stat) => {
+          lap.addStat(stat);
+        });
         lap.type = lapWindows[index].Type;
       }
       return lap;
@@ -126,12 +170,7 @@ export class EventImporterSuuntoJSON {
           return true
         }
         return false;
-      }).forEach((activityLap, index, activityLapArray) => {
-        // Fix the summary if only one lap (whole activity) @todo fix later
-        if (activityLapArray.length === 1) {
-          activityLap.summary = Object.create(activity.summary);
-          activityLap.type = 'Total';
-        }
+      }).forEach((activityLap: LapInterface, index, activityLapArray) => {
         activity.addLap(activityLap);
       });
     });
@@ -170,6 +209,21 @@ export class EventImporterSuuntoJSON {
     return event;
   }
 
+  private static setIntensityZones(activity: ActivityInterface, object) {
+// Create intensity zones from the header
+    if (object.HrZones) {
+      activity.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
+    }
+
+    if (object.PowerZones) {
+      activity.intensityZones.set(DataPower.type, this.getZones(object.PowerZones));
+    }
+
+    if (object.SpeedZones) {
+      activity.intensityZones.set(DataSpeed.type, this.getZones(object.SpeedZones));
+    }
+  }
+
   private static setIBIData(activity: Activity, ibiData: number[]) {
     activity.ibiData = new IBIData(ibiData);
     // @todo optimize
@@ -186,7 +240,7 @@ export class EventImporterSuuntoJSON {
       // If it belongs to the activity add it
       if (point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
         activity.addPoint(point);
-      }else{
+      } else {
         debugger;
       }
     });
@@ -249,85 +303,8 @@ export class EventImporterSuuntoJSON {
     return point;
   }
 
-  private static getSummary(object: any): SummaryInterface {
-
-    const summary = new Summary();
-    summary.totalDistanceInMeters = object.Distance;
-    summary.totalDurationInSeconds = object.Duration;
-    summary.maxAltitudeInMeters = object.Altitude.Max;
-    summary.minAltitudeInMeters = object.Altitude.Min;
-    summary.ascentTimeInSeconds = object.AscentTime;
-    summary.descentTimeInSeconds = object.DescentTime;
-    summary.ascentInMeters = object.Ascent;
-    summary.descentInMeters = object.Descent;
-    summary.epoc = object.EPOC;
-    summary.energyInCal = object.Energy * 0.239 / 1000;
-    summary.feeling = object.Feeling;
-    summary.peakTrainingEffect = object.PeakTrainingEffect;
-    summary.recoveryTimeInSeconds = object.RecoveryTime;
-    summary.maxVO2 = object.MAXVO2;
-
-    if (object.PauseDuration) {
-      summary.pauseDurationInSeconds = object.PauseDuration;
-      summary.totalDurationInSeconds += object.PauseDuration;
-    }
-
-    if (object.HR) {
-      summary.avgHR = object.HR[0].Avg * 60;
-      summary.maxHR = object.HR[0].Max * 60;
-      summary.minHR = object.HR[0].Min * 60;
-    }
-
-    if (object.Cadence) {
-      summary.avgCadence = object.Cadence[0].Avg * 60 * 2;
-      summary.maxCadence = object.Cadence[0].Max * 60 * 2;
-      summary.minCadence = object.Cadence[0].Min * 60 * 2;
-    }
-
-    if (object.Power) {
-      summary.avgPower = object.Power[0].Avg;
-      summary.maxPower = object.Power[0].Max;
-      summary.minPower = object.Power[0].Min;
-    }
-
-    if (object.Speed) {
-      summary.avgSpeed = object.Speed[0].Avg;
-      summary.maxSpeed = object.Speed[0].Max;
-      summary.minSpeed = object.Speed[0].Min;
-    }
-
-    if (object.Temperature) {
-      summary.avgTemperature = object.Temperature[0].Avg - 273.15;
-      summary.maxTemperature = object.Temperature[0].Max - 273.15;
-      summary.minTemperature = object.Temperature[0].Min - 273.15;
-    }
-
-    if (object.hasOwnProperty('VerticalSpeed')) {
-      // Double action here
-      if (Array.isArray(object.VerticalSpeed)) {
-        summary.avgVerticalSpeed = object.VerticalSpeed[0].Avg;
-        summary.maxVerticalSpeed = object.VerticalSpeed[0].Max;
-        summary.minVerticalSpeed = object.VerticalSpeed[0].Min;
-      } else {
-        summary.avgVerticalSpeed = object.VerticalSpeed;
-      }
-    }
-
-    if (object.HrZones) {
-      summary.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
-    }
-
-    if (object.PowerZones) {
-      summary.intensityZones.set(DataPower.type, this.getZones(object.PowerZones));
-    }
-
-    if (object.SpeedZones) {
-      summary.intensityZones.set(DataSpeed.type, this.getZones(object.SpeedZones));
-    }
-    return summary;
-  }
-
   private static getZones(zonesObj: any): IntensityZones {
+    // @todo fix for HR
     const zones = new IntensityZones;
     zones.zone1Duration = zonesObj.Zone1Duration;
     zones.zone2Duration = zonesObj.Zone2Duration;
@@ -339,5 +316,159 @@ export class EventImporterSuuntoJSON {
     zones.zone5Duration = zonesObj.Zone5Duration;
     zones.zone5LowerLimit = zonesObj.Zone5LowerLimit;
     return zones;
+  }
+
+  private static getStats(object: any): DataInterface[] {
+    const stats = [];
+    if (object.hasOwnProperty('Distance') && object.Distance !== null) {
+      stats.push(new DataDistance(object.Distance));
+    }
+    if (object.hasOwnProperty('AscentTime') && object.AscentTime !== null) {
+      stats.push(new DataAscentTime(object.AscentTime));
+    }
+
+    if (object.hasOwnProperty('DescentTime') && object.DescentTime !== null) {
+      stats.push(new DataDescentTime(object.DescentTime));
+    }
+
+    if (object.hasOwnProperty('Ascent') && object.Ascent !== null) {
+      stats.push(new DataAscent(object.Ascent));
+    }
+
+    if (object.hasOwnProperty('Descent') && object.Descent !== null) {
+      stats.push(new DataDescent(object.Descent));
+    }
+
+    if (object.hasOwnProperty('EPOC') && object.EPOC !== null) {
+      stats.push(new DataEPOC(object.EPOC));
+    }
+
+    if (object.hasOwnProperty('Energy') && object.Energy !== null) {
+      stats.push(new DataEnergy(object.Energy * 0.239 / 1000));
+    }
+
+    if (object.hasOwnProperty('Feeling') && object.Feeling !== null) {
+      stats.push(new DataFeeling(object.Feeling));
+    }
+
+    if (object.hasOwnProperty('PeakTrainingEffect') && object.PeakTrainingEffect !== null) {
+      stats.push(new DataPeakTrainingEffect(object.PeakTrainingEffect));
+    }
+    if (object.hasOwnProperty('RecoveryTime') && object.RecoveryTime !== null) {
+      stats.push(new DataRecovery(object.RecoveryTime));
+    }
+    if (object.hasOwnProperty('MAXVO2') && object.MAXVO2 !== null) {
+      stats.push(new DataVO2Max(object.MAXVO2));
+    }
+
+    // Detect pause and overall duration
+    let durationInSeconds = object.Duration;
+    let pauseDuration = 0;
+    if (object.hasOwnProperty('PauseDuration') && object.PauseDuration !== null) {
+      pauseDuration = object.PauseDuration;
+      durationInSeconds += object.PauseDuration;
+    }
+    stats.push(new DataPause(pauseDuration));
+    stats.push(new DataDuration(durationInSeconds));
+
+    // double case
+    if (Array.isArray(object.Altitude)) {
+      if (object.Altitude[0].Avg !== null) {
+        stats.push(new DataAltitudeAvg(object.Altitude[0].Avg));
+      }
+      if (object.Altitude[0].Max !== null) {
+        stats.push(new DataAltitudeMax(object.Altitude[0].Max));
+      }
+      if (object.Altitude[0].Min !== null) {
+        stats.push(new DataAltitudeMin(object.Altitude[0].Min));
+      }
+    } else if (object.Altitude) {
+      if (object.Altitude.Max !== null) {
+        stats.push(new DataAltitudeMax(object.Altitude.Max));
+      }
+      if (object.Altitude.Min !== null) {
+        stats.push(new DataAltitudeMin(object.Altitude.Min));
+      }
+    }
+
+    if (object.HR) {
+      if (object.HR[0].Avg !== null) {
+        stats.push(new DataHeartRateAvg(object.HR[0].Avg * 60));
+      }
+      if (object.HR[0].Max !== null) {
+        stats.push(new DataHeartRateMax(object.HR[0].Max * 60));
+      }
+      if (object.HR[0].Min !== null) {
+        stats.push(new DataHeartRateMin(object.HR[0].Min * 60));
+      }
+    }
+
+    if (object.Cadence) {
+      if (object.Cadence[0].Avg !== null) {
+        stats.push(new DataCadenceAvg(object.Cadence[0].Avg * 60 * 2));
+      }
+      if (object.Cadence[0].Max !== null) {
+        stats.push(new DataCadenceMax(object.Cadence[0].Max * 60 * 2));
+      }
+      if (object.Cadence[0].Min !== null) {
+        stats.push(new DataCadenceMin(object.Cadence[0].Min * 60 * 2));
+      }
+    }
+
+    if (object.Power) {
+      if (object.Power[0].Avg !== null) {
+        stats.push(new DataPowerAvg(object.Power[0].Avg));
+      }
+      if (object.Power[0].Max !== null) {
+        stats.push(new DataPowerMax(object.Power[0].Max));
+      }
+      if (object.Power[0].Min !== null) {
+        stats.push(new DataPowerMin(object.Power[0].Min));
+      }
+    }
+
+    if (object.Speed) {
+      if (object.Speed[0].Avg !== null) {
+        stats.push(new DataSpeedAvg(object.Speed[0].Avg));
+      }
+      if (object.Speed[0].Max !== null) {
+        stats.push(new DataSpeedMax(object.Speed[0].Max));
+      }
+      if (object.Speed[0].Min !== null) {
+        stats.push(new DataSpeedMin(object.Speed[0].Min));
+      }
+    }
+
+    if (object.Temperature) {
+      if (object.Temperature[0].Avg !== null) {
+        stats.push(new DataTemperatureAvg(object.Temperature[0].Avg - 273.15));
+      }
+      if (object.Temperature[0].Max !== null) {
+        stats.push(new DataTemperatureMax(object.Temperature[0].Max - 273.15));
+      }
+      if (object.Temperature[0].Min !== null) {
+        stats.push(new DataTemperatureMin(object.Temperature[0].Min - 273.15));
+      }
+    }
+
+    if (object.hasOwnProperty('VerticalSpeed')) {
+      // Double action here
+      if (Array.isArray(object.VerticalSpeed)) {
+        if (object.VerticalSpeed[0].Avg !== null) {
+          stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed[0].Avg));
+        }
+        if (object.VerticalSpeed[0].Max !== null) {
+          stats.push(new DataVerticalSpeedMax(object.VerticalSpeed[0].Max));
+        }
+        if (object.VerticalSpeed[0].Min !== null) {
+          stats.push(new DataVerticalSpeedMin(object.VerticalSpeed[0].Min));
+        }
+      } else {
+        if (object.VerticalSpeed !== null) {
+          stats.push(new DataVerticalSpeedAvg(object.VerticalSpeed));
+        }
+      }
+    }
+    return stats;
   }
 }

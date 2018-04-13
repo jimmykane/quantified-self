@@ -62,7 +62,7 @@ export class EventService {
   public generateGeoAndWeather(event: EventInterface): Promise<EventInterface> {
     // @todo refactor this poc
     return new Promise(((resolve, reject) => {
-      // Activities Summaries
+      // Activities Stats
       const activitiesPromises = [];
       for (const activity of event.getActivities()) {
         if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
@@ -86,10 +86,10 @@ export class EventService {
             continue;
           }
           if (results[index]) {
-            activity.summary.geoLocationInfo = <GeoLocationInfo> results[index];
+            activity.geoLocationInfo = <GeoLocationInfo> results[index];
           }
           if (results[index + 1]) {
-            activity.summary.weather = <Weather> results[index + 1];
+            activity.weather = <Weather> results[index + 1];
           }
           index += 2;
         }

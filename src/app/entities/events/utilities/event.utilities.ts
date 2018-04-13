@@ -1,7 +1,5 @@
 import {EventInterface} from '../event.interface';
-import {Summary} from '../../summary/summary';
 import {ActivityInterface} from '../../activities/activity.interface';
-import {GeoLibAdapter} from '../../geodesy/adapters/geolib.adapter';
 import {EventExporterTCX} from '../adapters/exporters/exporter.tcx';
 import {PointInterface} from '../../points/point.interface';
 import {Event} from '../event';
@@ -9,10 +7,34 @@ import {LapInterface} from '../../laps/lap.interface';
 import {DataHeartRate} from '../../data/data.heart-rate';
 import {DataCadence} from '../../data/data.cadence';
 import {DataSpeed} from '../../data/data.speed';
-import {DataVerticalSpeed} from '../../data/data.verticalspeed';
+import {DataVerticalSpeed} from '../../data/data.vertical-speed';
 import {DataTemperature} from '../../data/data.temperature';
 import {DataAltitude} from '../../data/data.altitude';
 import {DataPower} from '../../data/data.power';
+import {DataAltitudeMax} from '../../data/data.altitude-max';
+import {DataAltitudeMin} from '../../data/data.altitude-min';
+import {DataAltitudeAvg} from '../../data/data.altitude-avg';
+import {DataHeartRateMax} from '../../data/data.heart-rate-max';
+import {DataHeartRateMin} from '../../data/data.heart-rate-min';
+import {DataHeartRateAvg} from '../../data/data.heart-rate-avg';
+import {DataCadenceMax} from '../../data/data.cadence-max';
+import {DataCadenceMin} from '../../data/data.cadence-min';
+import {DataCadenceAvg} from '../../data/data.cadence-avg';
+import {DataSpeedMax} from '../../data/data.speed-max';
+import {DataSpeedMin} from '../../data/data.speed-min';
+import {DataSpeedAvg} from '../../data/data.speed-avg';
+import {DataVerticalSpeedMax} from '../../data/data.vertical-speed-max';
+import {DataVerticalSpeedMin} from '../../data/data.vertical-speed-min';
+import {DataVerticalSpeedAvg} from '../../data/data.vertical-speed-avg';
+import {DataPowerMax} from '../../data/data.power-max';
+import {DataPowerMin} from '../../data/data.power-min';
+import {DataPowerAvg} from '../../data/data.power-avg';
+import {DataTemperatureMax} from '../../data/data.temperature-max';
+import {DataTemperatureMin} from '../../data/data.temperature-min';
+import {DataTemperatureAvg} from '../../data/data.temperature-avg';
+import {DataDistance} from "../../data/data.distance";
+import {DataDuration} from "../../data/data.duration";
+import {DataPause} from "../../data/data.pause";
 
 export class EventUtilities {
 
@@ -79,100 +101,110 @@ export class EventUtilities {
         return +eventA.getFirstActivity().startDate - +eventB.getFirstActivity().startDate;
       });
       const mergeEvent = new Event();
+      mergeEvent.setDistance(new DataDistance(0));
+      mergeEvent.setDuration(new DataDuration(0));
+      mergeEvent.setPause(new DataPause(0));
       for (const event of events) {
         for (const activity of event.getActivities()) {
           mergeEvent.addActivity(activity);
+          mergeEvent.getDistance().setValue(mergeEvent.getDistance().getValue() + activity.getDistance().getValue());
+          mergeEvent.getDuration().setValue(mergeEvent.getDuration().getValue() + activity.getDuration().getValue());
+          mergeEvent.getPause().setValue(mergeEvent.getPause().getValue() + activity.getPause().getValue());
+          // @todo merge the rest of the stats
         }
       }
-      const eventSummary = new Summary();
-      eventSummary.totalDurationInSeconds = mergeEvent.getTotalDurationInSeconds();
-      eventSummary.totalDistanceInMeters = mergeEvent.getActivities().reduce(
-        (totalDistance, activity) => activity.summary.totalDistanceInMeters + totalDistance, 0
-      );
-      mergeEvent.summary = eventSummary;
+
       mergeEvent.name = 'Merged at ' + (new Date()).toISOString();
       return resolve(mergeEvent);
     });
   }
 
-  public static generateSummaries(event: EventInterface) {
+  public static generateStats(event: EventInterface) {
     // Todo should also work for event
     event.getActivities().map((activity: ActivityInterface) => {
-      this.generateSummaryForActivityOrLap(event, activity);
+      this.generateStatsForActivityOrLap(event, activity);
       activity.getLaps().map((lap: LapInterface) => {
-        this.generateSummaryForActivityOrLap(event, lap);
+        this.generateStatsForActivityOrLap(event, lap);
       })
     })
   }
 
-  private static generateSummaryForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
+  private static generateStatsForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
     // Altitude
-    if (subject.summary.maxAltitudeInMeters === null) {
-      subject.summary.maxAltitudeInMeters = this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataAltitudeMax.className) === undefined && this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataAltitudeMax(this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
-    if (!subject.summary.minAltitudeInMeters || subject.summary.minAltitudeInMeters === null) {
-      subject.summary.minAltitudeInMeters = this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataAltitudeMin.className) === undefined && this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataAltitudeMin(this.getDateTypeMinimum(event, DataAltitude.type, subject.startDate, subject.endDate)));
+    }
+    if (subject.getStat(DataAltitudeAvg.className) === undefined && this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataAltitudeAvg(this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
 
     // Heart Rate
-    if (subject.summary.maxHR === null) {
-      subject.summary.maxHR = this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataHeartRateMax.className) === undefined && this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataHeartRateMax(this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.minHR === null) {
-      subject.summary.minHR = this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataHeartRateMin.className) === undefined && this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataHeartRateMin(this.getDateTypeMinimum(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.avgHR === null) {
-      subject.summary.avgHR = this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataHeartRateAvg.className) === undefined && this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataHeartRateAvg(this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
+
     // Cadence
-    if (subject.summary.maxCadence === null) {
-      subject.summary.maxCadence = this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataCadenceMax.className) === undefined && this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataCadenceMax(this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.minCadence === null) {
-      subject.summary.minCadence = this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataCadenceMin.className) === undefined && this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataCadenceMin(this.getDateTypeMinimum(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.avgCadence === null) {
-      subject.summary.avgCadence = this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataCadenceAvg.className) === undefined && this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataCadenceAvg(this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
+
     // Speed
-    if (subject.summary.maxSpeed === null) {
-      subject.summary.maxSpeed = this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataSpeedMax(this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.minSpeed === null) {
-      subject.summary.minSpeed = this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataSpeedMin.className) === undefined && this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataSpeedMin(this.getDateTypeMinimum(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.avgSpeed === null) {
-      subject.summary.avgSpeed = this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataSpeedAvg(this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
+
     // Vertical Speed
-    if (subject.summary.maxVerticalSpeed === null) {
-      subject.summary.maxVerticalSpeed = this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataVerticalSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataVerticalSpeedMax(this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.minVerticalSpeed === null) {
-      subject.summary.minVerticalSpeed = this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataVerticalSpeedMin.className) === undefined && this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataVerticalSpeedMin(this.getDateTypeMinimum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.avgVerticalSpeed === null) {
-      subject.summary.avgVerticalSpeed = this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataVerticalSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataVerticalSpeedAvg(this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
+
     // Power
-    if (subject.summary.maxPower === null) {
-      subject.summary.maxPower = this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataPowerMax.className) === undefined && this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataPowerMax(this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.minPower === null) {
-      subject.summary.minPower = this.getDateTypeMinimum(event, DataPower.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataPowerMin.className) === undefined && this.getDateTypeMinimum(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataPowerMin(this.getDateTypeMinimum(event, DataPower.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.avgPower === null) {
-      subject.summary.avgPower = this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataPowerAvg.className) === undefined && this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataPowerAvg(this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate)));
     }
+
     // Temperature
-    if (subject.summary.maxTemperature === null) {
-      subject.summary.maxTemperature = this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataTemperatureMax.className) === undefined && this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataTemperatureMax(this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.minTemperature === null) {
-      subject.summary.minTemperature = this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataTemperatureMin.className) === undefined && this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataTemperatureMin(this.getDateTypeMinimum(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
-    if (subject.summary.avgTemperature === null) {
-      subject.summary.avgTemperature = this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate);
+    if (subject.getStat(DataTemperatureAvg.className) === undefined && this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataTemperatureAvg(this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
   }
 

@@ -1,14 +1,10 @@
 import {EventInterface} from './event.interface';
 import {ActivityInterface} from '../activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
-import {IDClass} from '../id/id.abstract.class';
+import {StatsClassAbstract} from '../stats/stats.class.abstract';
 import {DataInterface} from '../data/data.interface';
-import {LapInterface} from '../laps/lap.interface';
-import {Log} from 'ng2-logger'
-import {SummaryInterface} from '../summary/summary.interface';
 
-export class Event extends IDClass implements EventInterface {
-  public summary: SummaryInterface;
+export class Event extends StatsClassAbstract implements EventInterface {
 
   public name: string;
   private activities: ActivityInterface[] = [];
@@ -66,21 +62,19 @@ export class Event extends IDClass implements EventInterface {
     return this._hasPointsWithPosition;
   }
 
-  getTotalDurationInSeconds(): number {
-    return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
-      return durationInSeconds + activity.summary.totalDurationInSeconds;
-    }, 0);
-  }
-
   toJSON(): any {
+    const stats = [];
+    this.stats.forEach((value: DataInterface, key: string) => {
+      stats.push(value.toJSON());
+    });
     return {
       id: this.getID(),
       name: this.name,
+      stats: stats,
       activities: this.getActivities().reduce((jsonActivitiesArray: any[], activity: ActivityInterface) => {
         jsonActivitiesArray.push(activity.toJSON());
         return jsonActivitiesArray;
       }, []),
-      summary: this.summary ? this.summary.toJSON() : undefined
     };
   }
 }

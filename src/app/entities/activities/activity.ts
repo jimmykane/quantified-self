@@ -1,31 +1,32 @@
 import {ActivityInterface} from './activity.interface';
-import {CreatorInterface} from '../creators/creatorInterface';
 import {PointInterface} from '../points/point.interface';
-import {IDClass} from '../id/id.abstract.class';
 import {DataInterface} from '../data/data.interface';
-import {Log} from 'ng2-logger';
-import {SummaryInterface} from '../summary/summary.interface';
 import {LapInterface} from '../laps/lap.interface';
 import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
+import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
+import {Creator} from '../creators/creator';
+import {StatsClassAbstract} from '../stats/stats.class.abstract';
+import {Weather} from '../weather/app.weather';
+import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 
-export class Activity extends IDClass implements ActivityInterface {
+export class Activity extends StatsClassAbstract implements ActivityInterface {
   public startDate;
   public endDate;
   public type: string;
-  public creator: CreatorInterface;
-  public summary: SummaryInterface;
-  public ibiData: IBIData;
+  public creator = new Creator();
+  public ibiData = new IBIData();
+  public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
+  public geoLocationInfo: GeoLocationInfo;
+  public weather: Weather;
 
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private laps: LapInterface[] = [];
-
 
   constructor() {
     super();
   }
 
-  // @todo should do short or somehow
   addPoint(point: PointInterface, overrideAllDataOnCollision: boolean = false) {
     // @todo should do dateguard check
     const existingPoint = this.points.get(point.getDate().getTime());
@@ -114,18 +115,29 @@ export class Activity extends IDClass implements ActivityInterface {
   }
 
   toJSON(): any {
+    const intensityZones = {};
+    this.intensityZones.forEach((value: IntensityZonesInterface, key: string, map) => {
+      intensityZones[key] = value.toJSON();
+    });
+    const stats = [];
+    this.stats.forEach((value: DataInterface, key: string) => {
+      stats.push(value.toJSON());
+    });
     return {
       id: this.getID(),
       startDate: this.startDate,
       endDate: this.endDate,
       type: this.type,
-      creator: this.creator ? this.creator.toJSON() : undefined,
+      creator: this.creator.toJSON(),
       points: Array.from(this.points.values()).reduce((jsonPointsArray: any[], point: PointInterface) => {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
-      summary: this.summary ? this.summary.toJSON() : undefined,
-      ibiData: this.ibiData ? this.ibiData.toJSON() : [],
+      ibiData: this.ibiData.toJSON(),
+      intensityZones: intensityZones,
+      stats: stats,
+      geoLocationInfo: this.geoLocationInfo ? this.geoLocationInfo.toJSON() : null,
+      weather: this.weather ? this.weather.toJSON() : null,
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;

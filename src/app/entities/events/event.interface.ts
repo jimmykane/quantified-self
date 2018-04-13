@@ -1,14 +1,10 @@
 import {ActivityInterface} from 'app/entities/activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
-import {IDClassInterface} from '../id/id.class.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
-import {DataInterface} from '../data/data.interface';
-import {LapInterface} from '../laps/lap.interface';
-import {SummaryInterface} from '../summary/summary.interface';
+import {StatsClassInterface} from '../stats/stats.class.interface';
 
-export interface EventInterface extends IDClassInterface, SerializableClassInterface {
+export interface EventInterface extends StatsClassInterface, SerializableClassInterface {
 
-  summary: SummaryInterface;
   name: string;
 
   addActivity(activity: ActivityInterface);
@@ -26,7 +22,4 @@ export interface EventInterface extends IDClassInterface, SerializableClassInter
   getPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): PointInterface[];
 
   hasPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): boolean;
-
-  getTotalDurationInSeconds(): number;
-
 }

@@ -4,7 +4,7 @@ import {Point} from '../points/point';
 import {DataHeartRate} from '../data/data.heart-rate';
 import {DataAltitude} from '../data/data.altitude';
 import {DataTemperature} from '../data/data.temperature';
-import {Lap} from "../laps/lap";
+import {Lap} from '../laps/lap';
 
 describe('Activity', () => {
 
@@ -12,6 +12,7 @@ describe('Activity', () => {
 
   beforeEach(() => {
     activity = new Activity();
+    activity.setID('123');
   });
 
   it('should have no points', () => {
@@ -259,17 +260,21 @@ describe('Activity', () => {
 
     spyOn(point, 'toJSON').and.returnValue({});
     spyOn(lap, 'toJSON').and.returnValue({});
-    activity.setID('123');
+    spyOn(activity.ibiData, 'toJSON').and.returnValue([]);
+    spyOn(activity.creator, 'toJSON').and.returnValue({});
     expect(activity.toJSON()).toEqual({
       'id': '123',
       'startDate': undefined,
       'endDate': undefined,
       'type': undefined,
-      'creator': undefined,
+      'creator': {},
       'points': [{}],
-      'summary': undefined,
+      'stats': [],
       'ibiData': [],
-      'laps': [{}]
+      'laps': [{}],
+      'intensityZones': {},
+      'geoLocationInfo': null,
+      'weather': null
     });
     expect(point.toJSON).toHaveBeenCalled();
     expect(lap.toJSON).toHaveBeenCalled();
