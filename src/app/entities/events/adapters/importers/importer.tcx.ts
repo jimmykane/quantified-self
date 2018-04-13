@@ -157,7 +157,7 @@ export class EventImporterTCX {
 
       // Optionals
       if (lapElement.getElementsByTagName('MaximumSpeed')[0]) {
-        lap.addStat(new DataSpeedMax(Number(lapElement.getElementsByTagName('MaximumSpeed')[0])));
+        lap.addStat(new DataSpeedMax(Number(lapElement.getElementsByTagName('MaximumSpeed')[0].textContent)));
       }
 
       if (lapElement.getElementsByTagName('AverageHeartRateBpm')[0]) {
