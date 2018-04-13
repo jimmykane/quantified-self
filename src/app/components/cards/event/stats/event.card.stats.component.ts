@@ -28,7 +28,10 @@ export class EventCardStatsComponent implements OnChanges {
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
         this.event.getActivities().reduce((rowObj, activity, index) => {
-          rowObj['Activity ' + (index + 1)] = activity.getStat(stat.getClassName()).getDisplayValue() + ' ' + activity.getStat(stat.getClassName()).getDisplayUnit();
+          rowObj['Activity ' + (index + 1)] =
+            activity.getStat(stat.getClassName()).getDisplayValue() +
+            ' ' +
+            activity.getStat(stat.getClassName()).getDisplayUnit();
           return rowObj;
         }, {Name: stat.getType()})
       );
@@ -40,4 +43,9 @@ export class EventCardStatsComponent implements OnChanges {
     this.data = new MatTableDataSource(data);
   }
 
+  applyFilter(filterValue: string) {
+    filterValue = filterValue.trim(); // Remove whitespace
+    filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
+    this.data.filter = filterValue;
+  }
 }
