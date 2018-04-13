@@ -62,9 +62,9 @@ export class EventImporterTCX {
         // Todo perhaps think about distance if 0 to add the lap as pause
 
         // Same for event
-        event.setDistance(new DataDistance(event.getDistance().getValue() + activity.getDistance().getValue()));
-        event.setDuration(new DataDuration(event.getDuration().getValue() + activity.getDuration().getValue()));
-        event.setPause(new DataPause(event.getPause().getValue() + activity.getPause().getValue()));
+        event.setDistance(new DataDistance(event.getDistance().getValue() + lap.getDistance().getValue()));
+        event.setDuration(new DataDuration(event.getDuration().getValue() + lap.getDuration().getValue()));
+        event.setPause(new DataPause(event.getPause().getValue() + lap.getPause().getValue()));
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
@@ -72,6 +72,7 @@ export class EventImporterTCX {
         });
       });
     }
+
     EventUtilities.generateStats(event);
     return event;
   }
@@ -83,35 +84,35 @@ export class EventImporterTCX {
       for (const dataElement of <any>trackPointElement.children) {
         switch (dataElement.tagName) {
           case 'Position': {
-            point.addData(new DataLatitudeDegrees(dataElement.getElementsByTagName('LatitudeDegrees')[0].textContent));
-            point.addData(new DataLongitudeDegrees(dataElement.getElementsByTagName('LongitudeDegrees')[0].textContent));
+            point.addData(new DataLatitudeDegrees(Number(dataElement.getElementsByTagName('LatitudeDegrees')[0].textContent)));
+            point.addData(new DataLongitudeDegrees(Number(dataElement.getElementsByTagName('LongitudeDegrees')[0].textContent)));
             break;
           }
           case 'AltitudeMeters': {
-            point.addData(new DataAltitude(dataElement.textContent));
+            point.addData(new DataAltitude(Number(dataElement.textContent)));
             break;
           }
           case 'Cadence': {
-            point.addData(new DataCadence(dataElement.textContent));
+            point.addData(new DataCadence(Number(dataElement.textContent)));
             break;
           }
           case 'HeartRateBpm': {
-            point.addData(new DataHeartRate(dataElement.getElementsByTagName('Value')[0].textContent));
+            point.addData(new DataHeartRate(Number(dataElement.getElementsByTagName('Value')[0].textContent)));
             break;
           }
           case 'Extensions': {
             for (const dataExtensionElement of <any>dataElement.getElementsByTagNameNS('http://www.garmin.com/xmlschemas/ActivityExtension/v2', 'TPX')[0].children) {
-              switch (dataExtensionElement.tagName) {
+              switch (dataExtensionElement.nodeName.replace(dataExtensionElement.prefix + ':', '')) {
                 case 'Speed': {
-                  point.addData(new DataSpeed(dataExtensionElement.textContent));
+                  point.addData(new DataSpeed(Number(dataExtensionElement.textContent)));
                   break;
                 }
                 case 'RunCadence': {
-                  point.addData(new DataCadence(dataExtensionElement.textContent));
+                  point.addData(new DataCadence(Number(dataExtensionElement.textContent) * 2));
                   break;
                 }
                 case 'Watts': {
-                  point.addData(new DataPower(dataExtensionElement.textContent));
+                  point.addData(new DataPower(Number(dataExtensionElement.textContent)));
                   break;
                 }
               }
