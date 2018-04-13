@@ -13,6 +13,9 @@ export abstract class Data implements DataInterface {
   }
 
   setValue(value: string | number) {
+    if (value === null || value === void 0) {
+      throw new Error('Null is not a correct value for data. Use a string or number');
+    }
     this.value = Number(value);
   }
 
