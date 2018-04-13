@@ -135,6 +135,8 @@ export class EventImporterSuuntoJSON {
       this.getStats(activityWindows[index]).forEach((stat) => {
         activity.addStat(stat)
       });
+      // Add the pause from end date minurs start date and removing the duration as widows do not contain the pause time
+      activity.setPause(new DataPause((activity.endDate.getTime() - activity.startDate.getTime()) / 1000 - activity.getDuration().getValue()));
       // Set the zones for the activity @todo fix
       this.setIntensityZones(activity, eventJSONObject.DeviceLog.Header);
 
@@ -153,6 +155,8 @@ export class EventImporterSuuntoJSON {
           lap.addStat(stat);
         });
         lap.type = lapWindows[index].Type;
+        // Add the pause from end date minurs start date and removing the duration as widows do not contain the pause time
+        lap.setPause(new DataPause((lap.endDate.getTime() - lap.startDate.getTime()) / 1000 - lap.getDuration().getValue()));
       }
       return lap;
     });
