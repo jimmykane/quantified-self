@@ -131,7 +131,9 @@ export class EventImporterSuuntoJSON {
         new Date(stopEventSample.TimeISO8601) :
         new Date(activityStartEventSamples[index + 1].TimeISO8601);
       // Create a summary these are a 1:1 ref arrays
-      activity.summary = this.getSummary(activityWindows[index]);
+      this.getStats(activityWindows[index]).forEach((stat) => {
+        activity.addStat(stat)
+      });
       // Set the zones for the activity @todo fix
       this.setIntensityZones(activity, eventJSONObject.DeviceLog.Header);
 
@@ -431,8 +433,6 @@ export class EventImporterSuuntoJSON {
       durationInSeconds += object.PauseDuration;
     }
     stats.push(new DataDuration(durationInSeconds));
-
-    debugger;
 
     // double case
     if (Array.isArray(object.Altitude)) {

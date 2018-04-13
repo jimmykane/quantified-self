@@ -86,10 +86,10 @@ export class EventService {
             continue;
           }
           if (results[index]) {
-            activity.summary.geoLocationInfo = <GeoLocationInfo> results[index];
+            activity.geoLocationInfo = <GeoLocationInfo> results[index];
           }
           if (results[index + 1]) {
-            activity.summary.weather = <Weather> results[index + 1];
+            activity.weather = <Weather> results[index + 1];
           }
           index += 2;
         }

@@ -65,7 +65,7 @@ export class Event extends IDClass implements EventInterface {
 
   getTotalDurationInSeconds(): number {
     return this.getActivities().reduce((durationInSeconds: number, activity: ActivityInterface) => {
-      return durationInSeconds + activity.summary.totalDurationInSeconds;
+      return durationInSeconds + activity.getDuration().getValue();
     }, 0);
   }
 

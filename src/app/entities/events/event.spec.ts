@@ -6,6 +6,7 @@ import {DataHeartRate} from '../data/data.heart-rate';
 import {DataLatitudeDegrees} from '../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../data/data.longitude-degrees';
 import {Summary} from '../summary/summary';
+import {DataDuration} from "../data/data.duration";
 
 describe('Event', () => {
 
@@ -124,16 +125,12 @@ describe('Event', () => {
     expect(event.getTotalDurationInSeconds()).toBe(0);
 
     let activity = new Activity();
-    let summary = new Summary();
-    summary.totalDurationInSeconds = 10;
-    activity.summary = summary;
+    activity.setDuration(new DataDuration(10));
     event.addActivity(activity);
     expect(event.getTotalDurationInSeconds()).toBe(10);
 
     activity = new Activity();
-    summary = new Summary();
-    summary.totalDurationInSeconds = 20;
-    activity.summary = summary;
+    activity.setDuration(new DataDuration(20));
     event.addActivity(activity);
     expect(event.getTotalDurationInSeconds()).toBe(30);
 

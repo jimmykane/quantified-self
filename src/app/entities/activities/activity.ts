@@ -8,15 +8,19 @@ import {Point} from '../points/point';
 import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
 import {Summary} from '../summary/summary';
 import {Creator} from '../creators/creator';
+import {StatsClassAbstract} from '../stats/stats.class.abstract';
+import {Weather} from "../weather/app.weather";
+import {GeoLocationInfo} from "../geo-location-info/geo-location-info";
 
-export class Activity extends IDClass implements ActivityInterface {
+export class Activity extends StatsClassAbstract implements ActivityInterface {
   public startDate;
   public endDate;
   public type: string;
   public creator = new Creator();
-  public summary = new Summary();
   public ibiData = new IBIData();
   public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();
+  public geoLocationInfo: GeoLocationInfo;
+  public weather: Weather;
 
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private laps: LapInterface[] = [];
@@ -117,6 +121,10 @@ export class Activity extends IDClass implements ActivityInterface {
     this.intensityZones.forEach((value: IntensityZonesInterface, key: string, map) => {
       intensityZones[key] = value.toJSON();
     });
+    const stats = [];
+    this.stats.forEach((value: DataInterface, key: string) => {
+      stats.push(value.toJSON());
+    });
     return {
       id: this.getID(),
       startDate: this.startDate,
@@ -127,9 +135,11 @@ export class Activity extends IDClass implements ActivityInterface {
         jsonPointsArray.push(point.toJSON());
         return jsonPointsArray;
       }, []),
-      summary: this.summary.toJSON(),
       ibiData: this.ibiData.toJSON(),
       intensityZones: intensityZones,
+      stats: stats,
+      geoLocationInfo: this.geoLocationInfo ? this.geoLocationInfo.toJSON() : null,
+      weather: this.weather ? this.weather.toJSON() : null,
       laps: this.getLaps().reduce((jsonLapsArray: any[], lap: LapInterface) => {
         jsonLapsArray.push(lap.toJSON());
         return jsonLapsArray;

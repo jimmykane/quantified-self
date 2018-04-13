@@ -5,7 +5,9 @@ import {DataHeartRate} from '../../data/data.heart-rate';
 import {DataAltitude} from '../../data/data.altitude';
 import {EventUtilities} from './event.utilities';
 import {DataAbsolutePressure} from '../../data/data.absolute-pressure';
-import {Summary} from '../../summary/summary';
+import {DataEnergy} from '../../data/data.energy';
+import {DataDistance} from '../../data/data.distance';
+import {DataDuration} from '../../data/data.duration';
 
 describe('EventUtilities', () => {
 
@@ -14,10 +16,9 @@ describe('EventUtilities', () => {
   beforeEach(() => {
     const activity = new Activity();
     activity.startDate = new Date();
-    activity.summary = new Summary();
-    activity.summary.totalDurationInSeconds = 10;
-    activity.summary.totalDistanceInMeters = 10;
-    activity.summary.energyInCal = 10;
+    activity.setDuration(new DataDuration(10));
+    activity.setDistance(new DataDistance(10));
+    activity.addStat(new DataEnergy(10));
 
     event.addActivity(activity);
     const pointA = new Point(new Date(0));

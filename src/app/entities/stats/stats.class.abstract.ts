@@ -28,6 +28,10 @@ export abstract class StatsClassAbstract extends IDClass implements StatsClassIn
     return this.stats;
   }
 
+  removeStat(statType: string) {
+    this.stats.delete(statType);
+  }
+
   setDistance(distance: DataDistance) {
     this.stats.set(DataDistance.className, distance);
   }

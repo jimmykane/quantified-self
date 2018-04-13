@@ -29,9 +29,16 @@ export class EventImporterJSON {
       activity.startDate = new Date(activityObject.startDate);
       activity.endDate = new Date(activityObject.endDate);
       activity.type = activityObject.type;
-
-      activity.summary = this.getSummary(activityObject);
       activity.ibiData = new IBIData(activityObject.ibiData);
+      if (activityObject.weather) {
+        activity.weather = this.getWeather(activityObject);
+      }
+      if (activityObject.geoLocationInfo) {
+        activity.geoLocationInfo = this.getGeoLocationInfo(activityObject);
+      }
+      activityObject.stats.forEach((stat) => {
+        activity.addStat(DynamicDataLoader.createData(stat.className, stat.value))
+      });
 
       for (const lapObject of activityObject.laps) {
         const lap = new Lap(new Date(lapObject.startDate), new Date(lapObject.endDate));
@@ -140,5 +147,30 @@ export class EventImporterJSON {
     }
 
     return summary;
+  }
+
+  private static getGeoLocationInfo(object: any): GeoLocationInfo {
+    const geoLocationInfo = new GeoLocationInfo(
+      object.geoLocationInfo.latitude,
+      object.geoLocationInfo.longitude
+    );
+    geoLocationInfo.city = object.geoLocationInfo.city;
+    geoLocationInfo.country = object.geoLocationInfo.country;
+    geoLocationInfo.province = object.geoLocationInfo.province;
+    return geoLocationInfo;
+  }
+
+  private static getWeather(object: any): Weather {
+    const weatherItems = [];
+    for (const weatherItemObject of object.weather.weatherItems) {
+      weatherItems.push(
+        new WeatherItem(
+          new Date(weatherItemObject.date),
+          weatherItemObject.conditions,
+          weatherItemObject.temperatureInCelsius
+        )
+      )
+    }
+    return new Weather(weatherItems);
   }
 }

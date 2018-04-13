@@ -43,22 +43,23 @@ export class EventImporterTCX {
       // Setup the creator
       activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
 
-      activity.summary = new Summary();
 
       // Go over the laps and start filling up the summary and creating the points
       // @todo
-      activity.summary.totalDurationInSeconds = 0;
-      activity.summary.totalDistanceInMeters = 0;
-      activity.summary.pauseDurationInSeconds = 0;
+      activity.setDuration(new DataDuration(0));
+      activity.setDistance(new DataDistance(0));
+      activity.setPause(new DataPause(0));
+      activity.addStat(new DataEnergy(0));
 
       // Get the laps and add the total distance to the activity
       this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
         activity.addLap(lap);
         // Increment wrapper summaries
-        activity.summary.totalDistanceInMeters += lap.getDistance().getValue();
-        activity.summary.totalDurationInSeconds += lap.getDuration().getValue() + lap.getPause().getValue();
-        activity.summary.pauseDurationInSeconds += lap.getPause().getValue();
-        activity.summary.energyInCal += lap.getStat(DataEnergy.className).getValue();
+        activity.setDistance(new DataDistance(activity.getDistance().getValue() + lap.getDistance().getValue()));
+        activity.setDuration(new DataDuration(activity.getDuration().getValue() + lap.getDuration().getValue() + lap.getPause().getValue()));
+        activity.setPause(new DataPause(activity.getPause().getValue() + lap.getPause().getValue()));
+        activity.addStat(new DataEnergy(activity.getStat(DataEnergy.className).getValue() + lap.getStat(DataEnergy.className).getValue()))
+
         // If the lap has no distance it's probably a pause
         // if (lap.summary.totalDistanceInMeters === 0) {
         //   lap.type = 'Pause';
@@ -66,9 +67,9 @@ export class EventImporterTCX {
         // }
 
         // Same for event
-        event.summary.totalDistanceInMeters += activity.summary.totalDistanceInMeters;
-        event.summary.totalDurationInSeconds += activity.summary.totalDurationInSeconds;
-        event.summary.pauseDurationInSeconds += activity.summary.pauseDurationInSeconds;
+        event.summary.totalDistanceInMeters += activity.getDistance().getValue();
+        event.summary.totalDurationInSeconds += activity.getDuration().getValue();
+        event.summary.pauseDurationInSeconds += activity.getPause().getValue();
       });
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {

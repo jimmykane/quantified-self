@@ -10,6 +10,7 @@ export interface StatsClassInterface extends IDClassInterface {
   getPause(): DataInterface;
   getStat(statType: string): DataInterface;
   getStats(): Map<string, DataInterface>;
+  removeStat(statType: string);
 
   setDistance(distance: DataDistance);
   setDuration(duration: DataDuration);

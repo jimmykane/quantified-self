@@ -23,10 +23,10 @@
     <span class="mat-body-2">{{ (event.summary.totalDistanceInMeters/1000).toFixed(1) }}</span> km
     in about
     <span class="mat-body-2">{{ event.summary.totalDurationInSeconds | amDuration:'seconds' }}</span>
-    <span *ngIf="event.getFirstActivity().summary.geoLocationInfo">
+    <span *ngIf="event.getFirstActivity().geoLocationInfo">
       nearby
-      <span class="mat-body-2">{{ event.getFirstActivity().summary.geoLocationInfo.city }},</span>
-      <span class="mat-body-2">{{ event.getFirstActivity().summary.geoLocationInfo.country }}</span>.
+      <span class="mat-body-2">{{ event.getFirstActivity().geoLocationInfo.city }},</span>
+      <span class="mat-body-2">{{ event.getFirstActivity().geoLocationInfo.country }}</span>.
     </span>
   </mat-card-content>
   <mat-card-actions>
