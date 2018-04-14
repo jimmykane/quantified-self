@@ -5,4 +5,9 @@ export class DataDistance extends Data {
 
   static type = 'Distance';
   static unit = 'm';
+
+  getDisplayValue() {
+    // @todo convert to KM etc
+    return this.getValue().toFixed(2);
+  }
 }
