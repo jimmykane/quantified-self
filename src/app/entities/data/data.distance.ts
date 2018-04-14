@@ -7,7 +7,10 @@ export class DataDistance extends Data {
   static unit = 'm';
 
   getDisplayValue() {
-    // @todo convert to KM etc
-    return this.getValue().toFixed(2);
+    return this.getValue() >= 1000 ? (this.getValue() / 1000).toFixed(2) : this.getValue();
+  }
+
+  getDisplayUnit() {
+    return this.getValue() >= 1000 ? 'Km' : 'm';
   }
 }
