@@ -7,7 +7,7 @@ export class DataDistance extends Data {
   static unit = 'm';
 
   getDisplayValue() {
-    return this.getValue() >= 1000 ? (this.getValue() / 1000).toFixed(2) : this.getValue();
+    return this.getValue() >= 1000 ? (this.getValue() / 1000).toFixed(2) : this.getValue().toFixed(2);
   }
 
   getDisplayUnit() {
