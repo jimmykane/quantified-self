@@ -29,9 +29,9 @@ export class EventCardStatsComponent implements OnChanges {
       array.push(
         this.event.getActivities().reduce((rowObj, activity, index) => {
           rowObj['Activity ' + (index + 1)] =
-            activity.getStat(stat.getClassName()).getDisplayValue() +
+            (activity.getStat(stat.getClassName()) ? activity.getStat(stat.getClassName()).getDisplayValue() : '') +
             ' ' +
-            activity.getStat(stat.getClassName()).getDisplayUnit();
+              (activity.getStat(stat.getClassName()) ? activity.getStat(stat.getClassName()).getDisplayUnit() : '') ;
           return rowObj;
         }, {Name: stat.getType()})
       );
