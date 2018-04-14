@@ -84,4 +84,41 @@ export class UploadComponent {
       this.isUploadActive = false;
     }
   }
+
+  async dropHandler(event) {
+    console.log('File(s) dropped');
+    // Prevent default behavior (Prevent file from being opened)
+    event.preventDefault();
+
+    const filesToProcess = [];
+
+    if (event.dataTransfer.items) {
+      // Use DataTransferItemList interface to access the file(s)
+      for (let i = 0; i < event.dataTransfer.items.length; i++) {
+        // If dropped items aren't files, reject them
+        if (event.dataTransfer.items[i].kind === 'file') {
+          debugger;
+          const file = event.dataTransfer.items[i].getAsFile();
+          console.log('... file[' + i + '].name = ' + file.name);
+        }
+      }
+    } else {
+      // Use DataTransfer interface to access the file(s)
+      for (let i = 0; i < event.dataTransfer.files.length; i++) {
+        debugger;
+        console.log('... file[' + i + '].name = ' + event.dataTransfer.files[i].name);
+      }
+    }
+
+    // Pass event to removeDragData for cleanup
+    console.log('Removing drag data')
+
+    if (event.dataTransfer.items) {
+      // Use DataTransferItemList interface to remove the drag data
+      event.dataTransfer.items.clear();
+    } else {
+      // Use DataTransfer interface to remove the drag data
+      event.dataTransfer.clearData();
+    }
+  }
 }
