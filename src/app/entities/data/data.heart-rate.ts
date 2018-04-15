@@ -1,11 +1,11 @@
-import {Data} from './data';
+import {DataNumber} from './data.number';
 
-export class DataHeartRate extends Data {
+export class DataHeartRate extends DataNumber {
   static className = 'DataHeartRate';
   static type = 'Heart Rate';
   static unit = 'bpm';
 
-  getDisplayValue(){
+  getDisplayValue() {
     return Math.round(this.getValue());
   }
 }

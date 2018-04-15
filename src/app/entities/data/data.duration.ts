@@ -1,12 +1,12 @@
-import {Data} from './data';
+import {DataNumber} from './data.number';
 
-export class DataDuration extends Data {
+export class DataDuration extends DataNumber {
   static className = 'DataDuration';
   static type = 'Duration';
   static unit = 's';
 
   getDisplayValue() {
-    const d = Number(this.getValue());
+    const d = this.getValue();
     const h = Math.floor(d / 3600);
     const m = Math.floor(d % 3600 / 60);
     const s = Math.floor(d % 3600 % 60);

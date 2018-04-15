@@ -1,5 +1,4 @@
-import {Data} from './data';
-import {DataNumber} from "./data.number";
+import {DataNumber} from './data.number';
 
 export class DataDistance extends DataNumber {
   static className = 'DataDistance';

@@ -1,6 +1,6 @@
-import {Data} from './data';
+import {DataNumber} from './data.number';
 
-export class DataEnergy extends Data {
+export class DataEnergy extends DataNumber {
   static className = 'DataEnergy';
   static type = 'Energy';
   static unit = 'KCal';

@@ -5,9 +5,9 @@ import {DataPause} from '../data/data.pause';
 import {IDClassInterface} from '../id/id.class.interface';
 
 export interface StatsClassInterface extends IDClassInterface {
-  getDistance(): DataInterface;
-  getDuration(): DataInterface;
-  getPause(): DataInterface;
+  getDistance(): DataDistance;
+  getDuration(): DataDuration;
+  getPause(): DataPause;
   getStat(statType: string): DataInterface;
   getStats(): Map<string, DataInterface>;
   removeStat(statType: string);

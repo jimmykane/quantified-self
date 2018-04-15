@@ -8,16 +8,16 @@ import {DataPause} from '../data/data.pause';
 export abstract class StatsClassAbstract extends IDClass implements StatsClassInterface {
   public stats = new Map<string, DataInterface>();
 
-  getDistance(): DataInterface {
-    return this.stats.get(DataDistance.className);
+  getDistance(): DataDistance {
+    return <DataDistance>this.stats.get(DataDistance.className);
   }
 
-  getDuration(): DataInterface {
-    return this.stats.get(DataDuration.className);
+  getDuration(): DataDuration {
+    return <DataDuration>this.stats.get(DataDuration.className);
   }
 
-  getPause(): DataInterface {
-    return this.stats.get(DataPause.className);
+  getPause(): DataPause {
+    return <DataPause>this.stats.get(DataPause.className);
   }
 
   getStat(statType: string): DataInterface {

@@ -1,7 +1,6 @@
-import {Data} from './data';
+import {DataNumber} from './data.number';
 
-export class DataEVPE extends Data {
+export class DataEVPE extends DataNumber {
   static className = 'DataEVPE';
   static type = 'EVPE';
-  static unit = '';
 }

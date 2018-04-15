@@ -6,24 +6,24 @@ export abstract class Data implements DataInterface {
   static type: string;
   static unit: string;
   static unitSystem = UnitSystem.Metric;
-  protected value: number | string | Date;
+  protected value: number | string;
 
-  constructor(value: string | number | Date) {
+  constructor(value: string | number) {
     this.setValue(value);
   }
 
-  setValue(value: string | number | Date) {
+  setValue(value: string | number) {
     if (value === null || value === void 0) {
       throw new Error('Null, undefined, void 0 or not a date is not a correct value for data. Use a string or number');
     }
     this.value = value;
   }
 
-  getValue(): number | string | Date {
+  getValue(): string | number {
     return this.value;
   }
 
-  getDisplayValue(): number | string | Date {
+  getDisplayValue(): number | string {
     return this.getValue();
   }
 
