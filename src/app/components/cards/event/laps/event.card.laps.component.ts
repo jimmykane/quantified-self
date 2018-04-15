@@ -21,7 +21,7 @@ export class EventCardLapsComponent {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
       lapDataArray.push({
         '#': index,
-        'Start': lap.startDate,
+        'Start': lap.startDate.toString(),
         'End': lap.startDate,
       });
       return lapDataArray;
