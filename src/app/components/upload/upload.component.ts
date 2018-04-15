@@ -65,12 +65,20 @@ export class UploadComponent {
     });
   }
 
-  async openFile(event) {
+  /**
+   * Get's the files and resolves their processing promises
+   * @param event
+   * @return {Promise<void>}
+   */
+  async getFiles(event) {
+    event.stopPropagation();
+    event.preventDefault();
+
     this.isUploadActive = true;
-    const input = event.target;
+    const files = event.target.files || event.dataTransfer.files;
     const processPromises = [];
-    for (let index = 0; index < input.files.length; index++) {
-      processPromises.push(this.processFile(input.files[index]));
+    for (let index = 0; index < files.length; index++) {
+      processPromises.push(this.processFile(files[index]));
     }
     try {
       await Promise.all(processPromises);
@@ -82,43 +90,15 @@ export class UploadComponent {
       console.error('Some of the files could not be processed', error);
     } finally {
       this.isUploadActive = false;
-    }
-  }
-
-  async dropHandler(event) {
-    console.log('File(s) dropped');
-    // Prevent default behavior (Prevent file from being opened)
-    event.preventDefault();
-
-    const filesToProcess = [];
-
-    if (event.dataTransfer.items) {
-      // Use DataTransferItemList interface to access the file(s)
-      for (let i = 0; i < event.dataTransfer.items.length; i++) {
-        // If dropped items aren't files, reject them
-        if (event.dataTransfer.items[i].kind === 'file') {
-          debugger;
-          const file = event.dataTransfer.items[i].getAsFile();
-          console.log('... file[' + i + '].name = ' + file.name);
-        }
+      // Pass event to removeDragData for cleanup
+      console.log('Removing drag data');
+      if (event.dataTransfer && event.dataTransfer.items) {
+        // Use DataTransferItemList interface to remove the drag data
+        event.dataTransfer.items.clear();
+      } else if (event.dataTransfer) {
+        // Use DataTransfer interface to remove the drag data
+        event.dataTransfer.clearData();
       }
-    } else {
-      // Use DataTransfer interface to access the file(s)
-      for (let i = 0; i < event.dataTransfer.files.length; i++) {
-        debugger;
-        console.log('... file[' + i + '].name = ' + event.dataTransfer.files[i].name);
-      }
-    }
-
-    // Pass event to removeDragData for cleanup
-    console.log('Removing drag data')
-
-    if (event.dataTransfer.items) {
-      // Use DataTransferItemList interface to remove the drag data
-      event.dataTransfer.items.clear();
-    } else {
-      // Use DataTransfer interface to remove the drag data
-      event.dataTransfer.clearData();
     }
   }
 }
