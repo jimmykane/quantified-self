@@ -1,6 +1,9 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
-import {MatTableDataSource} from "@angular/material";
+import {MatTableDataSource} from '@angular/material';
+import {DataHeartRateAvg} from '../../../../entities/data/data.heart-rate-avg';
+import {DataAscent} from '../../../../entities/data/data.ascent';
+import {DataDescent} from '../../../../entities/data/data.descent';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -22,15 +25,17 @@ export class EventCardLapsComponent {
       lapDataArray.push({
         '#': index,
         'Distance': lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit(),
-        'Start': lap.startDate.toString(),
-        'End': lap.endDate.toString(),
-
+        'Start Time': lap.startDate.toLocaleTimeString(),
+        'End Time': lap.endDate.toLocaleTimeString(),
+        [DataAscent.type]: lap.getStat(DataAscent.className).getDisplayValue() + ' ' + lap.getStat(DataAscent.className).getDisplayUnit(),
+        [DataDescent.type]: lap.getStat(DataDescent.className).getDisplayValue() + ' ' + lap.getStat(DataDescent.className).getDisplayUnit(),
+        [DataHeartRateAvg.type]: lap.getStat(DataHeartRateAvg.className).getDisplayValue() + ' ' + lap.getStat(DataHeartRateAvg.className).getDisplayUnit(),
       });
       return lapDataArray;
     }, []));
   }
 
   getColumns() {
-    return ['#', 'Distance', 'Start', 'End']
+    return ['#', 'Distance', 'Start Time', 'End Time', DataAscent.type, DataDescent.type, DataHeartRateAvg.type]
   }
 }
