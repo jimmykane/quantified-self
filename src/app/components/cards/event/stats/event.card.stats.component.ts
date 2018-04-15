@@ -40,6 +40,7 @@ export class EventCardStatsComponent implements OnChanges {
 
     // Get the columns
     this.columns = (Object.keys(data[0]));
+    // Set the data
     this.data = new MatTableDataSource(data);
   }
 

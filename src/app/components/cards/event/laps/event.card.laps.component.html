@@ -1,28 +1,12 @@
 <mat-card>
   <mat-card *ngFor="let activity of event.getActivities()">
-    <table class="table">
-      <thead>
-      <tr>
-        <th><h4>#</h4></th>
-        <th><h4>Distance</h4></th>
-        <th><h4>Duration</h4></th>
-        <th><h4>Start Time</h4></th>
-        <th><h4>End Time</h4></th>
-        <th><h4>Type</h4></th>
-        <th><h4>Avg HR</h4></th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr app-event-lap-table-row
-          [attr.data-index]="i"
-          *ngFor="let lap of activity.getLaps(); index as index; first as isFirst; last as isLast; count as count;"
-          [index]="index"
-          [isFirst]="isFirst"
-          [isLast]="isLast"
-          [count]="count"
-          [event]="event"
-          [lap]="lap"></tr>
-      </tbody>
-    </table>
+     <mat-table *ngIf="getData(activity)" [dataSource]="getData(activity)">
+      <ng-container *ngFor="let column of getColumns(activity)" [matColumnDef]="column">
+        <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
+        <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+      </ng-container>
+      <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
+      <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+    </mat-table>
   </mat-card>
 </mat-card>

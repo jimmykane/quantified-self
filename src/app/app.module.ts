@@ -16,7 +16,6 @@ import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
-import {EventLapTableRowComponent} from './components/cards/event/laps/event.laps.table.row.component';
 import {
   MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatExpansionModule,
   MatGridListModule, MatIconModule,
@@ -96,7 +95,6 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     EventCardStatsComponent,
     EventCardActionsMenuComponent,
     EventCardLapsComponent,
-    EventLapTableRowComponent,
     EventCardChartComponent,
     EventCardSmallComponent,
     EventCardToolsComponent,
