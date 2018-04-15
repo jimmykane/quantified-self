@@ -1,7 +1,6 @@
-import {Data} from './data';
+import {DataBare} from './data.bare';
 
-export class DataNumberOfSatellites extends Data {
+export class DataNumberOfSatellites extends DataBare {
   static className = 'DataNumberOfSatellites';
   static type = 'Number of Satellites';
-  static unit = '';
 }

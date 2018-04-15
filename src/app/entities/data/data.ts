@@ -6,25 +6,24 @@ export abstract class Data implements DataInterface {
   static type: string;
   static unit: string;
   static unitSystem = UnitSystem.Metric;
-  protected value: number;
+  protected value: number | string | Date;
 
-  constructor(value: string | number) {
+  constructor(value: string | number | Date) {
     this.setValue(value);
   }
 
-  setValue(value: string | number) {
-    if (value === null || value === void 0 || isNaN(Number(value))) {
-      // Todo allow strings
-      throw new Error('Null, undefined, void 0 or NaN is not a correct value for data. Use a string or number');
+  setValue(value: string | number | Date) {
+    if (value === null || value === void 0 || !(value instanceof Date)) {
+      throw new Error('Null, undefined, void 0 or not a date is not a correct value for data. Use a string or number');
     }
-    this.value = Number(value);
+    this.value = value;
   }
 
-  getValue(): number {
+  getValue(): number | string | Date {
     return this.value;
   }
 
-  getDisplayValue(): number | string {
+  getDisplayValue(): number | string | Date {
     return this.getValue();
   }
 

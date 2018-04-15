@@ -1,7 +1,6 @@
-import {Data} from './data';
+import {DataBare} from './data.bare';
 
-export class DataSatellite5BestSNR extends Data {
+export class DataSatellite5BestSNR extends DataBare {
   static className = 'DataSatellite5BestSNR';
   static type = 'Satellite 5 Best SNR';
-  static unit = '';
 }

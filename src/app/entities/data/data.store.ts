@@ -49,6 +49,8 @@ import {DataCadenceAvg} from './data.cadence-avg';
 import {DataAscentTime} from './data.ascent-time';
 import {DataAscent} from './data.ascent';
 import {DataAltitudeAvg} from './data.altitude-avg';
+import {DataStartDate} from './data.start-date';
+import {DataEndDate} from './data.end-date';
 
 /**
  * Only concrete classes no abstracts
@@ -104,6 +106,8 @@ export const DataStore: any = {
   DataAltitudeMin,
   DataAltitudeMax,
   DataAltitudeAvg,
+  DataStartDate,
+  DataEndDate,
 };
 
 export class DynamicDataLoader {
