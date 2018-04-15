@@ -13,7 +13,7 @@ export abstract class Data implements DataInterface {
   }
 
   setValue(value: string | number | Date) {
-    if (value === null || value === void 0 || !(value instanceof Date)) {
+    if (value === null || value === void 0) {
       throw new Error('Null, undefined, void 0 or not a date is not a correct value for data. Use a string or number');
     }
     this.value = value;
