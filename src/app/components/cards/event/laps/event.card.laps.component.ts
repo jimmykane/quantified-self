@@ -22,15 +22,22 @@ export class EventCardLapsComponent {
   //   this.data = new MatTableDataSource(data);
   getData(activity) {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
-      lapDataArray.push({
+      const lapObj = {
         '#': index,
         'Distance': lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit(),
         'Start Time': lap.startDate.toLocaleTimeString(),
         'End Time': lap.endDate.toLocaleTimeString(),
-        [DataAscent.type]: lap.getStat(DataAscent.className).getDisplayValue() + ' ' + lap.getStat(DataAscent.className).getDisplayUnit(),
-        [DataDescent.type]: lap.getStat(DataDescent.className).getDisplayValue() + ' ' + lap.getStat(DataDescent.className).getDisplayUnit(),
-        [DataHeartRateAvg.type]: lap.getStat(DataHeartRateAvg.className).getDisplayValue() + ' ' + lap.getStat(DataHeartRateAvg.className).getDisplayUnit(),
-      });
+      };
+      if (lap.getStat(DataAscent.className)) {
+        lapObj[DataAscent.type] = lap.getStat(DataAscent.className).getDisplayValue() + ' ' + lap.getStat(DataAscent.className).getDisplayUnit();
+      }
+      if (lap.getStat(DataDescent.className)) {
+        lapObj[DataDescent.type] = lap.getStat(DataDescent.className).getDisplayValue() + ' ' + lap.getStat(DataDescent.className).getDisplayUnit();
+      }
+      if (lap.getStat(DataHeartRateAvg.className)) {
+        lapObj[DataHeartRateAvg.type] = lap.getStat(DataHeartRateAvg.className).getDisplayValue() + ' ' + lap.getStat(DataHeartRateAvg.className).getDisplayUnit();
+      }
+      lapDataArray.push(lapObj);
       return lapDataArray;
     }, []));
   }
