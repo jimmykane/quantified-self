@@ -11,7 +11,6 @@ import {UPLOAD_STATUS} from '../upload/status';
   styleUrls: ['./upload-info.component.css']
 })
 export class UploadInfoComponent implements OnInit {
-  @Input() isVisible: boolean;
   @Input() activitiesMetaData = [];
 
   constructor() {

@@ -65,12 +65,20 @@ export class UploadComponent {
     });
   }
 
-  async openFile(event) {
+  /**
+   * Get's the files and resolves their processing promises
+   * @param event
+   * @return {Promise<void>}
+   */
+  async getFiles(event) {
+    event.stopPropagation();
+    event.preventDefault();
+
     this.isUploadActive = true;
-    const input = event.target;
+    const files = event.target.files || event.dataTransfer.files;
     const processPromises = [];
-    for (let index = 0; index < input.files.length; index++) {
-      processPromises.push(this.processFile(input.files[index]));
+    for (let index = 0; index < files.length; index++) {
+      processPromises.push(this.processFile(files[index]));
     }
     try {
       await Promise.all(processPromises);
@@ -82,6 +90,15 @@ export class UploadComponent {
       console.error('Some of the files could not be processed', error);
     } finally {
       this.isUploadActive = false;
+      // Pass event to removeDragData for cleanup
+      console.log('Removing drag data');
+      if (event.dataTransfer && event.dataTransfer.items) {
+        // Use DataTransferItemList interface to remove the drag data
+        event.dataTransfer.items.clear();
+      } else if (event.dataTransfer) {
+        // Use DataTransfer interface to remove the drag data
+        event.dataTransfer.clearData();
+      }
     }
   }
 }
