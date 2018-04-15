@@ -21,14 +21,16 @@ export class EventCardLapsComponent {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
       lapDataArray.push({
         '#': index,
+        'Distance': lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit(),
         'Start': lap.startDate.toString(),
-        'End': lap.startDate,
+        'End': lap.endDate.toString(),
+
       });
       return lapDataArray;
     }, []));
   }
 
   getColumns() {
-    return ['#', 'Start time', 'Start']
+    return ['#', 'Distance', 'Start', 'End']
   }
 }
