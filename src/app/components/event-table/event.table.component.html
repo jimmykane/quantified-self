@@ -1,17 +1,27 @@
 <mat-card>
   <mat-card>
-    <div>
-      <!--<mat-form-field>-->
-        <!--<input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">-->
-      <!--</mat-form-field>-->
-    </div>
+    <mat-form-field>
+      <input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">
+    </mat-form-field>
     <mat-table *ngIf="data" [dataSource]="data">
-      <ng-container *ngFor="let column of columns" [matColumnDef]="column">
-        <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
-        <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+      <ng-container *ngFor="let column of columns; first as isFirst" [matColumnDef]="column">
+        <mat-header-cell *matHeaderCellDef>
+          <mat-checkbox *ngIf="isFirst" (change)="$event ? masterToggle() : null"
+                        [checked]="selection.hasValue() && isAllSelected()"
+                        [indeterminate]="selection.hasValue() && !isAllSelected()">
+          </mat-checkbox>
+          <span *ngIf="!isFirst">{{ column }}</span>
+        </mat-header-cell>
+        <mat-cell *matCellDef="let row">
+          <mat-checkbox *ngIf="column === 'Event'" (click)="$event.stopPropagation()"
+                        (change)="$event ? selection.toggle(row) : null"
+                        [checked]="selection.isSelected(row)">
+          </mat-checkbox>
+          <span  *ngIf="column !== 'Event'" >{{ row[column] }}</span>
+        </mat-cell>
       </ng-container>
       <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: columns;"></mat-row>
+      <mat-row *matRowDef="let row; columns: columns;" (click)="rowCheckBoxClick(row)"></mat-row>
     </mat-table>
   </mat-card>
 </mat-card>

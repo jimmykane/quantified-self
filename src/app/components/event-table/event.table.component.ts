@@ -1,11 +1,12 @@
-import {ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {EventInterface} from '../../entities/events/event.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatSnackBar} from '@angular/material';
+import {MatSnackBar, MatTableDataSource} from '@angular/material';
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
+import {SelectionModel} from '@angular/cdk/collections';
 
 
 @Component({
@@ -17,6 +18,9 @@ import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
   @Input() events: EventInterface[];
+  data: MatTableDataSource<Object>;
+  columns: Array<Object>;
+  selection = new SelectionModel(true, []);
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
@@ -27,22 +31,52 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnChanges(): void {
+    const data = this.events.reduce((eventArray, event) => {
+      eventArray.push({
+        Event: event,
+        Name: event.name,
+        'Date': event.getFirstActivity().startDate.toLocaleDateString(),
+      });
+      return eventArray;
+    }, []);
+    this.columns = Object.keys(data[0]);
+    this.data = new MatTableDataSource(data);
   }
 
-  clickEventCard(event: EventInterface) {
-    this.eventSelectionMap.set(event, !this.eventSelectionMap.get(event));
-    const selectedEvents = [];
-    this.eventSelectionMap.forEach((value, key, map) => {
-      if (value === true) {
-        selectedEvents.push(key);
-      }
-    });
-    if (selectedEvents.length > 1) {
+  rowCheckBoxClick(row) {
+    this.selection.toggle(row);
+    this.updateActionButtonService();
+  }
+
+  /** Whether the number of selected elements matches the total number of rows. */
+  isAllSelected() {
+    const numSelected = this.selection.selected.length;
+    const numRows = this.data.data.length;
+    return numSelected === numRows;
+  }
+
+  /** Selects all rows if they are not all selected; otherwise clear selection. */
+  masterToggle() {
+    this.isAllSelected() ?
+      this.selection.clear() :
+      this.data.data.forEach(row => this.selection.select(row));
+    this.updateActionButtonService();
+  }
+
+
+  applyFilter(filterValue: string) {
+    filterValue = filterValue.trim(); // Remove whitespace
+    filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
+    this.data.filter = filterValue;
+  }
+
+  private updateActionButtonService() {
+    if (this.selection.selected.length > 1) {
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
-          EventUtilities.mergeEvents(selectedEvents).then((mergedEvent: EventInterface) => {
+          EventUtilities.mergeEvents(this.selection.selected.map(selected => selected.Event)).then((mergedEvent: EventInterface) => {
             this.actionButtonService.removeActionButton('mergeEvents');
             this.eventService.addAndSaveEvent(mergedEvent);
             this.eventSelectionMap.clear();

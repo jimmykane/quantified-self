@@ -1,0 +1,6 @@
+mat-cell, .mat-header-cell{
+   overflow: visible;
+ }
+.mat-column-Event {
+  flex: 0 0 100px;
+}
