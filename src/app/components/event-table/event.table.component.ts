@@ -57,13 +57,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   ngOnChanges(): void {
     const data = this.events.reduce((eventArray, event) => {
       eventArray.push({
-        Event: event,
+        Checkbox: event,
         Name: event.name.slice(0, 15),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
         Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
-        Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : '',
+        Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : null,
         Device: event.getFirstActivity().creator.name,
+        Actions: event,
       });
       return eventArray;
     }, []);
@@ -71,7 +72,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.data = new MatTableDataSource(data);
   }
 
-  rowCheckBoxClick(row) {
+  checkBoxClick(row) {
     this.selection.toggle(row);
     this.updateActionButtonService();
   }
@@ -82,6 +83,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     const numRows = this.data.data.length;
     return numSelected === numRows;
   }
+
 
   /** Selects all rows if they are not all selected; otherwise clear selection. */
   masterToggle() {
@@ -104,7 +106,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'compare_arrows',
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
-          EventUtilities.mergeEvents(this.selection.selected.map(selected => selected.Event)).then((mergedEvent: EventInterface) => {
+          EventUtilities.mergeEvents(this.selection.selected.map(selected => selected.Checkbox)).then((mergedEvent: EventInterface) => {
             this.actionButtonService.removeActionButton('mergeEvents');
             this.eventService.addAndSaveEvent(mergedEvent);
             this.eventSelectionMap.clear();

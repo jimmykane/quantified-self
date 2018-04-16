@@ -10,18 +10,20 @@
                         [checked]="selection.hasValue() && isAllSelected()"
                         [indeterminate]="selection.hasValue() && !isAllSelected()">
           </mat-checkbox>
-          <span *ngIf="!isFirst">{{ column }}</span>
+          <span *ngIf="!isFirst && !isLast">{{ column }}</span>
         </mat-header-cell>
         <mat-cell *matCellDef="let row">
-          <mat-checkbox *ngIf="column === 'Event'" (click)="$event.stopPropagation()"
-                        (change)="$event ? selection.toggle(row) : null"
+          <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
+                        (change)="$event ? checkBoxClick(row) : null"
                         [checked]="selection.isSelected(row)">
           </mat-checkbox>
-          <span *ngIf="column !== 'Event'">{{ row[column] }}</span>
+          <span *ngIf="column !== 'Checkbox' && column !== 'Actions'">{{ row[column] }}</span>
+          <span *ngIf="column === 'Actions'"><app-event-card-actions-menu></app-event-card-actions-menu></span>
         </mat-cell>
       </ng-container>
       <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: columns;" (click)="rowCheckBoxClick(row)"></mat-row>
+      <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/dashboard']"
+               [queryParams]="{ eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
     </mat-table>
   </mat-card>
 </div>

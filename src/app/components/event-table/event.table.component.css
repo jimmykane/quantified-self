@@ -1,8 +1,17 @@
 mat-cell, .mat-header-cell{
    overflow: visible;
  }
-.mat-column-Event {
-  flex: 0 0 100px;
+.mat-column-Checkbox {
+  flex: 0 0 50px;
+}
+
+.mat-column-Actions {
+  flex: 0 0 50px;
+  justify-content: flex-end;
+}
+
+.mat-row {
+    min-height: 50px;
 }
 
 .mat-header-cell.mat-sort-header-sorted {
