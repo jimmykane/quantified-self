@@ -17,6 +17,7 @@ import {MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/ma
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
+import {UPLOAD_STATUS} from "../upload/status";
 
 
 @Component({
@@ -98,6 +99,23 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     filterValue = filterValue.trim(); // Remove whitespace
     filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
     this.data.filter = filterValue;
+  }
+
+  getColumnIcon(columnName): string {
+    switch (columnName) {
+      case 'Distance':
+        return 'trending_flat';
+      case 'Duration':
+        return 'timer';
+      case 'Date':
+        return 'date_range';
+      case 'Location':
+        return 'location_on';
+      case 'Device':
+        return 'watch';
+      default:
+        return null;
+    }
   }
 
   private updateActionButtonService() {

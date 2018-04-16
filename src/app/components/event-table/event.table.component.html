@@ -10,7 +10,7 @@
                         [checked]="selection.hasValue() && isAllSelected()"
                         [indeterminate]="selection.hasValue() && !isAllSelected()">
           </mat-checkbox>
-          <span *ngIf="!isFirst && !isLast">{{ column }}</span>
+          <span *ngIf="!isFirst && !isLast"><mat-icon *ngIf="getColumnIcon(column)">{{ getColumnIcon(column) }}</mat-icon>{{ column }}</span>
         </mat-header-cell>
         <mat-cell *matCellDef="let row">
           <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
