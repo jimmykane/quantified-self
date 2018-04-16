@@ -1,13 +1,11 @@
-<div *ngIf="isVisible">
-  <mat-card>
-    <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>
-  </mat-card>
-  <mat-card>
-    <mat-list class="list">
-      <mat-list-item *ngFor="let activity of activitiesMetaData">
-        <mat-icon>{{getActivityStatusIcon(activity)}}</mat-icon>
-        {{activity.name}}
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
-</div>
+<mat-card>
+  <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>
+</mat-card>
+<mat-card>
+  <mat-list class="list">
+    <mat-list-item *ngFor="let activity of activitiesMetaData">
+      <mat-icon>{{getActivityStatusIcon(activity)}}</mat-icon>
+      {{activity.name}}
+    </mat-list-item>
+  </mat-list>
+</mat-card>

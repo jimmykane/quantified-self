@@ -1,15 +1,23 @@
 <div style="padding: 2vmin;">
-  <mat-card>
+  <mat-card *ngIf="!isUploadActive">
     <mat-card-content>
       <h1>
-        Upload your activities<br/>
+        Select files<br/>
       </h1>
-      <app-upload-info [activitiesMetaData]="activitiesMetaData" [isVisible]="isUploadActive"></app-upload-info>
-      <div *ngIf="!isUploadActive">
-        <p></p>
+      <div>
         <button mat-button (click)="inputFile.click()">Open JSON or TCX file</button>
-        <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'" (change)="openFile($event)">
+        <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'"
+               (change)="getFiles($event)">
       </div>
     </mat-card-content>
   </mat-card>
+
+  <mat-card *ngIf="!isUploadActive" (drop)="getFiles($event);"
+            ondragenter="event.stopPropagation(); event.preventDefault();"
+            ondragover="event.stopPropagation(); event.preventDefault();"
+            ondragleave="event.stopPropagation(); event.preventDefault();">
+    Drag one or more files to this Drop Zone ...
+  </mat-card>
+
+  <app-upload-info [activitiesMetaData]="activitiesMetaData" *ngIf="isUploadActive"></app-upload-info>
 </div>

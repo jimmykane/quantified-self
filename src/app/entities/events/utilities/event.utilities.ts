@@ -35,6 +35,7 @@ import {DataTemperatureAvg} from '../../data/data.temperature-avg';
 import {DataDistance} from "../../data/data.distance";
 import {DataDuration} from "../../data/data.duration";
 import {DataPause} from "../../data/data.pause";
+import {DataNumber} from "../../data/data.number";
 
 export class EventUtilities {
 
@@ -54,10 +55,14 @@ export class EventUtilities {
                                    activities?: ActivityInterface[]): number {
     let count = 0;
     const averageForDataType = event.getPoints(startDate, endDate, activities).reduce((average: number, point: PointInterface) => {
+      const data = point.getDataByType(dataType);
+      if (!(data instanceof DataNumber)) {
+        return;
+      }
       if (!point.getDataByType(dataType)) {
         return average;
       }
-      average += point.getDataByType(dataType).getValue();
+      average += data.getValue();
       count++;
       return average;
     }, 0);

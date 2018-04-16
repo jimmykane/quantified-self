@@ -2,12 +2,19 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 
 export interface DataInterface extends SerializableClassInterface {
   setValue(value: number | string);
-  getValue(): number;
-  getDisplayValue(): number|string;
+
+  getValue(): number | string;
+
+  getDisplayValue(): number | string;
+
   getType(): string;
+
   getUnit(): string;
+
   getDisplayUnit(): string;
+
   getClassName(): string;
+
   getUnitSystem(): UnitSystem;
 }
 

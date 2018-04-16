@@ -15,6 +15,7 @@ import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pre
 import {Log, Level} from 'ng2-logger'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 import {PointInterface} from '../../../../entities/points/point.interface';
+import {DataNumber} from "../../../../entities/data/data.number";
 
 
 @Component({
@@ -27,7 +28,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
 
-  private dataMap: Map<string, Map<number, DataInterface[]>>;
+  private dataMap: Map<string, Map<number, DataNumber[]>>;
   private categories = [];
   private chart: any;
   private selectedActivities = [];
@@ -222,18 +223,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     }
   }
 
-  private getAllData(): Map<string, Map<number, DataInterface[]>> {
+  private getAllData(): Map<string, Map<number, DataNumber[]>> {
     const t0 = performance.now();
     if (!this.dataMap) {
-      this.dataMap = new Map<string, Map<number, DataInterface[]>>();
+      this.dataMap = new Map<string, Map<number, DataNumber[]>>();
       this.selectedActivities.forEach((activity: ActivityInterface, index) => {
-        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataInterface[]>>, point: PointInterface, currentIndex) => {
+        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataNumber[]>>, point: PointInterface, currentIndex) => {
           point.getData().forEach((pointData: DataInterface, key: string) => {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
+            if (!(pointData instanceof DataNumber)){
+              return;
+            }
             key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
-            const DataMapArray = dataMap.get(key) || new Map<number, DataInterface[]>();
+            const DataMapArray = dataMap.get(key) || new Map<number, DataNumber[]>();
             if (!DataMapArray.size) {
               dataMap.set(key, DataMapArray);
             }
@@ -289,9 +293,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
     const t0 = performance.now();
     const dataMap = new Map<number, any>();
     let dataCount = 0;
-    this.getAllData().forEach((dataArrayMap: Map<number, DataInterface[]>, dataType: string) => {
-      dataArrayMap.forEach((dataArray: DataInterface[], time) => {
-        dataArray.reduce((dataAccumulator: Map<number, any>, data: DataInterface) => {
+    this.getAllData().forEach((dataArrayMap: Map<number, DataNumber[]>, dataType: string) => {
+      dataArrayMap.forEach((dataArray: DataNumber[], time) => {
+        dataArray.reduce((dataAccumulator: Map<number, any>, data: DataNumber) => {
           dataCount++;
           const dateData = dataAccumulator.get(time) || {};
           let value = data.getValue().toFixed(1);

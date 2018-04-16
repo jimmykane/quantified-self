@@ -1,6 +1,6 @@
-import {Data} from './data';
+import {DataNumber} from './data.number';
 
-export class DataCadence extends Data {
+export class DataCadence extends DataNumber {
   static className = 'DataCadence';
   static type = 'Cadence';
   static unit = 'spm';

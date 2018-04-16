@@ -1,6 +1,6 @@
-import {DataBare} from './data.bare';
+import {DataNumber} from './data.number';
 
-export class DataFeeling extends DataBare {
+export class DataFeeling extends DataNumber {
   static className = 'DataFeeling';
   static type = 'Feeling';
 }
