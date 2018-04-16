@@ -17,7 +17,6 @@ import {MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/ma
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
-import {UPLOAD_STATUS} from "../upload/status";
 
 
 @Component({
@@ -61,10 +60,19 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         Checkbox: event,
         Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
         Name: event.name.slice(0, 15),
+        Activities: event.getActivities().reduce((activities, activity, index) => {
+          activities.push(activity.type);
+          return activities;
+        }, []).join(', '),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
         Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : null,
-        Device: event.getFirstActivity().creator.name,
+        Device: event.getActivities().reduce((creators, activity, index) => {
+          if (creators.indexOf(activity.creator.name) === -1) {
+            creators.push(activity.creator.name);
+          }
+          return creators;
+        }, []).join(', '),
         Actions: event,
       });
       return eventArray;
@@ -115,6 +123,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'watch';
       case 'Name':
         return 'font_download';
+      case 'Activities':
+        return 'filter_none';
       default:
         return null;
     }
