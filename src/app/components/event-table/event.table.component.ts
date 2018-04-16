@@ -1,23 +1,22 @@
 import {ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
-import {EventInterface} from '../../../../entities/events/event.interface';
-import {ActionButtonService} from '../../../../services/action-buttons/app.action-button.service';
-import {ActionButton} from '../../../../services/action-buttons/app.action-button';
-import {EventService} from '../../../../services/app.event.service';
+import {EventInterface} from '../../entities/events/event.interface';
+import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
+import {ActionButton} from '../../services/action-buttons/app.action-button';
+import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material';
-import {EventUtilities} from '../../../../entities/events/utilities/event.utilities';
+import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 
 
 @Component({
   selector: 'app-event-card-list',
-  templateUrl: './event.card.list.component.html',
-  styleUrls: ['./event.card.list.component.css'],
+  templateUrl: './event.table.component.html',
+  styleUrls: ['./event.table.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
+export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
   @Input() events: EventInterface[];
-  gridListColumnCount: number;
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
@@ -25,15 +24,9 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    this.gridListColumnCount = this.getColumnsFromWidth((window.innerWidth));
   }
 
   ngOnChanges(): void {
-  }
-
-  @HostListener('window:resize', ['$event.target.innerWidth'])
-  onResize(width) {
-    this.gridListColumnCount = this.getColumnsFromWidth(width);
   }
 
   clickEventCard(event: EventInterface) {
@@ -74,17 +67,5 @@ export class EventCardListComponent implements OnChanges, OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.actionButtonService.removeActionButton('mergeEvents');
-  }
-
-  private getColumnsFromWidth(width: number): number {
-    if (width < 700) {
-      return 1;
-    } else if (width < 1000) {
-      return 2;
-    } else if (width < 1300) {
-      return 3;
-    } else {
-      return 4;
-    }
   }
 }
