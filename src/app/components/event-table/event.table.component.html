@@ -4,8 +4,8 @@
       <input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">
     </mat-form-field>
     <mat-table *ngIf="data" [dataSource]="data" matSort>
-      <ng-container *ngFor="let column of columns; first as isFirst" [matColumnDef]="column">
-        <mat-header-cell *matHeaderCellDef mat-sort-header>
+      <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
+        <mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="isFirst || isLast">
           <mat-checkbox *ngIf="isFirst" (change)="$event ? masterToggle() : null"
                         [checked]="selection.hasValue() && isAllSelected()"
                         [indeterminate]="selection.hasValue() && !isAllSelected()">
