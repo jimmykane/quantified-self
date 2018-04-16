@@ -30,7 +30,6 @@ import {HttpModule} from '@angular/http';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
 import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
-import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
@@ -94,7 +93,6 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     EventCardActionsMenuComponent,
     EventCardLapsComponent,
     EventCardChartComponent,
-    EventCardSmallComponent,
     EventCardToolsComponent,
     AboutComponent,
     UploadInfoComponent

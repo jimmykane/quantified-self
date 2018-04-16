@@ -1,5 +1,4 @@
 <mat-grid-list cols="{{ gridListColumnCount }}" rowHeight="1:1">
   <mat-grid-tile *ngFor="let event of events" (click)="clickEventCard(event)">
-    <app-event-card-small [event]="event" [classActive]="eventSelectionMap.get(event)"></app-event-card-small>
   </mat-grid-tile>
 </mat-grid-list>
