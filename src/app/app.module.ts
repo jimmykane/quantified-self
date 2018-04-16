@@ -16,11 +16,26 @@ import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {
-  MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatExpansionModule,
-  MatGridListModule, MatIconModule,
-  MatMenuModule, MatProgressBarModule,
-  MatSidenavModule, MatTableModule,
-  MatTabsModule, MatToolbarModule, MatCheckboxModule, MatSliderModule, MatSnackBarModule, MatInputModule, MatListModule
+  MatButtonModule,
+  MatButtonToggleModule,
+  MatCardModule,
+  MatChipsModule,
+  MatCommonModule,
+  MatExpansionModule,
+  MatGridListModule,
+  MatIconModule,
+  MatMenuModule,
+  MatProgressBarModule,
+  MatSidenavModule,
+  MatTableModule,
+  MatTabsModule,
+  MatToolbarModule,
+  MatCheckboxModule,
+  MatSliderModule,
+  MatSnackBarModule,
+  MatInputModule,
+  MatListModule,
+  MatSortModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -77,6 +92,7 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     Angular2FontawesomeModule,
     MatProgressBarModule,
     MatTableModule,
+    MatSortModule,
   ],
   declarations: [
     AppComponent,

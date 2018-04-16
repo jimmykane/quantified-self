@@ -1,10 +1,19 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  ViewChild
+} from '@angular/core';
 import {EventInterface} from '../../entities/events/event.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatSnackBar, MatTableDataSource} from '@angular/material';
+import {MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/material';
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
@@ -18,8 +27,9 @@ import {DatePipe} from '@angular/common';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
+export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() events: EventInterface[];
+  @ViewChild(MatSort) sort: MatSort;
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
   selection = new SelectionModel(true, []);
@@ -33,6 +43,15 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
   }
 
   ngOnInit() {
+  }
+
+  ngAfterViewInit() {
+    this.data.sort = this.sort;
+    this.data.sort.sort(<MatSortable>{
+        id: 'Date',
+        start: 'desc'
+      }
+    );
   }
 
   ngOnChanges(): void {

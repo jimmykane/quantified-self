@@ -4,3 +4,7 @@ mat-cell, .mat-header-cell{
 .mat-column-Event {
   flex: 0 0 100px;
 }
+
+.mat-header-cell.mat-sort-header-sorted {
+  color: black;
+}
