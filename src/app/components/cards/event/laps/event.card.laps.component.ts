@@ -4,6 +4,7 @@ import {MatTableDataSource} from '@angular/material';
 import {DataHeartRateAvg} from '../../../../entities/data/data.heart-rate-avg';
 import {DataAscent} from '../../../../entities/data/data.ascent';
 import {DataDescent} from '../../../../entities/data/data.descent';
+import {DataDistance} from "../../../../entities/data/data.distance";
 
 @Component({
   selector: 'app-event-card-laps',
@@ -16,18 +17,16 @@ import {DataDescent} from '../../../../entities/data/data.descent';
 export class EventCardLapsComponent {
   @Input() event: EventInterface;
 
-  // // Get the columns
-  //   this.columns = (Object.keys(data[0]));
-  //   // Set the data
-  //   this.data = new MatTableDataSource(data);
   getData(activity) {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
       const lapObj = {
         '#': index,
-        'Distance': lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit(),
         'Start Time': lap.startDate.toLocaleTimeString(),
         'End Time': lap.endDate.toLocaleTimeString(),
       };
+      if (lap.getDistance()) {
+        lapObj[DataDistance.type] = lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit();
+      }
       if (lap.getStat(DataAscent.className)) {
         lapObj[DataAscent.type] = lap.getStat(DataAscent.className).getDisplayValue() + ' ' + lap.getStat(DataAscent.className).getDisplayUnit();
       }
@@ -42,7 +41,7 @@ export class EventCardLapsComponent {
     }, []));
   }
 
-  getColumns() {
-    return ['#', 'Distance', 'Start Time', 'End Time', DataAscent.type, DataDescent.type, DataHeartRateAvg.type]
+  getColumns(activity) {
+    return Object.keys(this.getData(activity).data[0]);
   }
 }

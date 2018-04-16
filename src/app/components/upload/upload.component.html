@@ -19,7 +19,5 @@
     Drag one or more files to this Drop Zone ...
   </mat-card>
 
-  <mat-card *ngIf="isUploadActive">
-    <app-upload-info [activitiesMetaData]="activitiesMetaData"></app-upload-info>
-  </mat-card>
+  <app-upload-info [activitiesMetaData]="activitiesMetaData" *ngIf="isUploadActive"></app-upload-info>
 </div>
