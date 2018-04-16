@@ -20,7 +20,7 @@ import {DatePipe} from '@angular/common';
 
 
 @Component({
-  selector: 'app-event-card-list',
+  selector: 'app-event-table',
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
   providers: [DatePipe],
