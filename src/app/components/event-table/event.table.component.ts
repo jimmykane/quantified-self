@@ -123,13 +123,28 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           })
         },
         'material'
-      ))
+      ));
+      this.actionButtonService.addActionButton('deleteEvents', new ActionButton(
+        'delete',
+        () => {
+          this.actionButtonService.removeActionButton('deleteEvents');
+          this.actionButtonService.removeActionButton('mergeEvents');
+          this.selection.selected.map(selected => selected.Checkbox).forEach((event) => this.eventService.deleteEvent(event));
+          this.eventSelectionMap.clear();
+          this.snackBar.open('Events deleted', null, {
+            duration: 5000,
+          });
+        },
+        'material'
+      ));
     } else {
       this.actionButtonService.removeActionButton('mergeEvents');
+      this.actionButtonService.removeActionButton('deleteEvents');
     }
   }
 
   ngOnDestroy() {
     this.actionButtonService.removeActionButton('mergeEvents');
+    this.actionButtonService.removeActionButton('deleteEvents');
   }
 }
