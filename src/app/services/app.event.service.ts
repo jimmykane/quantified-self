@@ -59,43 +59,44 @@ export class EventService {
     return this.events.asObservable();
   }
 
-  public generateGeoAndWeather(event: EventInterface): Promise<EventInterface> {
-    // @todo refactor this poc
+  /**
+   * Add geolocation and weather info to an event
+   * @param {EventInterface} event
+   * @return {Promise<EventInterface>}
+   * @todo Write tests!
+   */
+  public addGeoLocationAndWeatherInfo(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
-      // Activities Stats
-      const activitiesPromises = [];
-      for (const activity of event.getActivities()) {
-        if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
-          continue;
-        }
-
-        activitiesPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
+      // Find the activites with positional data
+      const activitiesWithPosition = event.getActivities().filter((activity) => {
+        return event.hasPointsWithPosition(void 0, void 0, [activity])
+      });
+      // Create their promises
+      const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
+        activityPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
           event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition()
         ));
-        activitiesPromises.push(this.weatherService.getWeather(
+        activityPromises.push(this.weatherService.getWeather(
           event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate
         ));
-      }
+        return activityPromises;
+      }, []);
 
-      Observable.forkJoin(activitiesPromises).toPromise().then(results => {
-        let index = 0;
-        for (const activity of event.getActivities()) {
-          // If indoors
-          if (!event.hasPointsWithPosition(void 0, void 0, [activity])) {
-            index += 2;
-            continue;
-          }
-          if (results[index]) {
-            activity.geoLocationInfo = <GeoLocationInfo> results[index];
-          }
-          if (results[index + 1]) {
-            activity.weather = <Weather> results[index + 1];
-          }
-          index += 2;
+      // Wait for all
+      Promise.all(activitiesPromises).then(results => {
+        if (!results || !results.length) {
+          resolve(event);
         }
+        // For each activity get 2 data from the results
+        let i = 0;
+        activitiesWithPosition.forEach((activity, index) => {
+          activity.geoLocationInfo = <GeoLocationInfo> results[index + i];
+          activity.weather = <Weather> results[index + i + 1];
+          i += 2;
+        });
         resolve(event);
-      }).catch(() => {
-        resolve(event);
+      }).catch((error) => {
+        reject(error);
       });
     }));
   }

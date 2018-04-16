@@ -18,8 +18,6 @@ export class UploadInfoComponent implements OnInit {
 
   /**
    * return the activity process icon
-   * @param {number} status
-   * @returns {string}
    */
   getActivityStatusIcon(activity): string {
     switch (activity.status) {
@@ -38,7 +36,7 @@ export class UploadInfoComponent implements OnInit {
 
   getProcessedActivities() {
     return this.activitiesMetaData.filter((activity) => {
-      return activity.status === UPLOAD_STATUS.PROCESSED;
+      return activity.status !== UPLOAD_STATUS.PROCESSING;
     })
   }
 
