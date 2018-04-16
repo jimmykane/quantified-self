@@ -59,10 +59,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     const data = this.events.reduce((eventArray, event) => {
       eventArray.push({
         Checkbox: event,
+        Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
         Name: event.name.slice(0, 15),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
-        Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
         Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : null,
         Device: event.getFirstActivity().creator.name,
         Actions: event,
@@ -113,6 +113,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'location_on';
       case 'Device':
         return 'watch';
+      case 'Name':
+        return 'font_download';
       default:
         return null;
     }
