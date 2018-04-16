@@ -7,12 +7,14 @@ import {Router} from '@angular/router';
 import {MatSnackBar, MatTableDataSource} from '@angular/material';
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 import {SelectionModel} from '@angular/cdk/collections';
+import {DatePipe} from '@angular/common';
 
 
 @Component({
   selector: 'app-event-card-list',
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
+  providers: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
@@ -24,7 +26,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
-  constructor(private snackBar: MatSnackBar, private eventService: EventService, private actionButtonService: ActionButtonService, private router: Router) {
+  constructor(private snackBar: MatSnackBar,
+              private eventService: EventService,
+              private actionButtonService: ActionButtonService,
+              private router: Router, private  datePipe: DatePipe) {
   }
 
   ngOnInit() {
@@ -34,8 +39,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy {
     const data = this.events.reduce((eventArray, event) => {
       eventArray.push({
         Event: event,
-        Name: event.name,
-        'Date': event.getFirstActivity().startDate.toLocaleDateString(),
+        Name: event.name.slice(0, 15),
+        Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
+        Duration: event.getDuration().getDisplayValue(),
+        Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
+        Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : '',
+        Device: event.getFirstActivity().creator.name,
       });
       return eventArray;
     }, []);
