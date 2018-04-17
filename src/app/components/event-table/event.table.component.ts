@@ -60,19 +60,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         Checkbox: event,
         Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
         Name: event.name.slice(0, 15),
-        Activities: event.getActivities().reduce((activities, activity, index) => {
-          activities.push(activity.type);
-          return activities;
-        }, []).join(', '),
+        Activities: this.getUniqueString(event.getActivities().map((activity) => activity.type)),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
         Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : null,
-        Device: event.getActivities().reduce((creators, activity, index) => {
-          if (creators.indexOf(activity.creator.name) === -1) {
-            creators.push(activity.creator.name);
-          }
-          return creators;
-        }, []).join(', '),
+        Device: this.getUniqueString(event.getActivities().map((activity) => activity.creator.name)),
         Actions: event,
       });
       return eventArray;
@@ -171,6 +163,25 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.removeActionButton('mergeEvents');
       this.actionButtonService.removeActionButton('deleteEvents');
     }
+  }
+
+  private getUniqueString(arrayOfStrings: string[]) {
+    const uniqueObject = arrayOfStrings.reduce((uniqueObj, activityType, index) => {
+      if (!uniqueObj[activityType]) {
+        uniqueObj[activityType] = 1;
+      } else {
+        uniqueObj[activityType] += 1;
+      }
+      return uniqueObj;
+    }, {});
+    return Object.keys(uniqueObject).reduce((uniqueArray, key, index, object) => {
+      if (uniqueObject[key] === 1) {
+        uniqueArray.push(key);
+      } else {
+        uniqueArray.push(uniqueObject[key] + ' x ' + key);
+      }
+      return uniqueArray;
+    }, []).join(', ');
   }
 
   ngOnDestroy() {
