@@ -56,11 +56,13 @@ export class EventUtilities {
     let count = 0;
     const averageForDataType = event.getPoints(startDate, endDate, activities).reduce((average: number, point: PointInterface) => {
       const data = point.getDataByType(dataType);
+      if (!(data instanceof DataNumber)) {
+        return;
+      }
       if (!point.getDataByType(dataType)) {
         return average;
       }
-      // @todo fix
-      average += Number(data.getValue());
+      average += data.getValue();
       count++;
       return average;
     }, 0);
