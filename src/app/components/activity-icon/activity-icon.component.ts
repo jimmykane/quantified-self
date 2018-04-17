@@ -12,7 +12,10 @@ export class ActivityIconComponent {
 
   getActivityIcon() {
     // @todo optimize
-    if (this.activity.type.toLocaleLowerCase().includes('running')) {
+    if (this.activity.type.toLocaleLowerCase().includes('run')) {
+      return 'directions_run';
+    }
+    if (this.activity.type.toLocaleLowerCase().includes('hik')) {
       return 'directions_run';
     }
     if (this.activity.type.toLocaleLowerCase().includes('biking')) {
