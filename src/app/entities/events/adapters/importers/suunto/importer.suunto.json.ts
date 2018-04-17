@@ -94,8 +94,6 @@ export class EventImporterSuuntoJSON {
       return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type !== 'Start' && sample.Events[0].Lap.Type !== 'Stop';
     });
 
-
-
     // Get the stop event
     const stopEventSample = eventJSONObject.DeviceLog.Samples.find((sample) => {
       return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type === 'Stop';
@@ -145,12 +143,15 @@ export class EventImporterSuuntoJSON {
       return activity;
     });
 
-     // set the start dates of all lap types to the start of the first activity
+    // set the start dates of all lap types to the start of the first activity
     const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample) => {
-       lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = activities[0].startDate;
-       return lapStartDatesByTypeObject;
+      lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = activities[0].startDate;
+      return lapStartDatesByTypeObject;
     }, {});
-    const laps = lapEventSamples.map((lapEventSample, index): LapInterface => {
+    const laps = lapEventSamples.reduce((lapArray, lapEventSample, index): LapInterface => {
+      if (lapEventSamples.length === 1) {
+        return lapArray;
+      }
       // Set the end date
       const lapEndDate = new Date(lapEventSample.TimeISO8601);
       // Set the start date. For the current
@@ -159,16 +160,17 @@ export class EventImporterSuuntoJSON {
       lapStartDatesByType[lapEventSample.Events[0].Lap.Type] = lapEndDate;
       lap.type = lapEventSample.Events[0].Lap.Type;
       // if it's only one lap there is no stats as it's the whole activity
-      if (lapEventSamples.length !== 1) {
-        this.getStats(lapWindows[index]).forEach((stat) => {
-          lap.addStat(stat);
-        });
-        lap.type = lapWindows[index].Type;
-        // Add the pause from end date minurs start date and removing the duration as widows do not contain the pause time
-        lap.setPause(new DataPause((lap.endDate.getTime() - lap.startDate.getTime()) / 1000 - lap.getDuration().getValue()));
-      }
-      return lap;
-    });
+      // @todo think
+
+      this.getStats(lapWindows[index]).forEach((stat) => {
+        lap.addStat(stat);
+      });
+      lap.type = lapWindows[index].Type;
+      // Add the pause from end date minurs start date and removing the duration as widows do not contain the pause time
+      lap.setPause(new DataPause((lap.endDate.getTime() - lap.startDate.getTime()) / 1000 - lap.getDuration().getValue()));
+      lapArray.push(lap);
+      return lapArray;
+    }, []);
 
     // Add the laps to the belonging activity. If a lap starts or stops at the activity date delta then it belong to the acitvity
     // @todo move laps to event so we don't have cross border laps to acivities and decouple them
@@ -196,6 +198,7 @@ export class EventImporterSuuntoJSON {
           activity.addPoint(point)
         }
       });
+      activity.sortPointsByDate();
     });
 
     // Add the ibiData
@@ -213,7 +216,7 @@ export class EventImporterSuuntoJSON {
     }
 
     // Add the activities to the event
-    activities.forEach((activity) => {
+    activities.forEach((activity: ActivityInterface) => {
       event.addActivity(activity);
     });
 

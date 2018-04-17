@@ -16,8 +16,8 @@ export class GeoLocationInfoService {
   constructor(private mapsAPILoader: MapsAPILoader) {
   }
 
-  public getGeoLocationInfo(position: DataPositionInterface): Observable<GeoLocationInfo> {
-    return Observable.fromPromise(new Promise((resolve, reject) => {
+  public getGeoLocationInfo(position: DataPositionInterface): Promise<GeoLocationInfo> {
+    return new Promise((resolve, reject) => {
       if (this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(','))) {
         return resolve(this.geoLocationsInfo.get([position.latitudeDegrees, position.longitudeDegrees].join(',')));
       }
@@ -53,6 +53,6 @@ export class GeoLocationInfoService {
           return resolve(geoLocationInfo);
         });
       });
-    }));
+    });
   }
 }

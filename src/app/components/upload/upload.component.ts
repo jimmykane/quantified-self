@@ -3,9 +3,9 @@ import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {UPLOAD_STATUS} from './status';
 import {MatSnackBar} from '@angular/material';
-import {EventUtilities} from '../../entities/events/utilities/event.utilities';
-import {EventImporterSuuntoJSON} from "../../entities/events/adapters/importers/suunto/importer.suunto.json";
-import {EventImporterTCX} from "../../entities/events/adapters/importers/importer.tcx";
+import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/suunto/importer.suunto.json';
+import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
+import {EventInterface} from '../../entities/events/event.interface';
 
 @Component({
   selector: 'app-upload',
@@ -27,7 +27,7 @@ export class UploadComponent {
    * @param file
    * @returns {Promise}
    */
-  processFile(file): Promise<any> {
+  processFile(file): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       const {name} = file,
@@ -48,16 +48,14 @@ export class UploadComponent {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
           }
           newEvent.name = activityName;
-          await this.eventService.generateGeoAndWeather(newEvent);
+          await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
           metaData.status = UPLOAD_STATUS.PROCESSED;
           this.eventService.addAndSaveEvent(newEvent);
-          resolve();
-
+          resolve(newEvent);
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
           console.error('Could not load event from file' + file.name, error);
           reject(error);
-          return;
         }
       };
       // Read it
@@ -82,16 +80,15 @@ export class UploadComponent {
     }
     try {
       await Promise.all(processPromises);
-      this.router.navigate(['dashboard']);
-      this.snackBar.open('Processing complete!', null, {
-        duration: 5000,
+      this.router.navigate(['dashboard']).then(() => {
+        this.snackBar.open('Processing complete!', null, {
+          duration: 5000,
+        });
       });
     } catch (error) {
       console.error('Some of the files could not be processed', error);
     } finally {
-      this.isUploadActive = false;
       // Pass event to removeDragData for cleanup
-      console.log('Removing drag data');
       if (event.dataTransfer && event.dataTransfer.items) {
         // Use DataTransferItemList interface to remove the drag data
         event.dataTransfer.items.clear();

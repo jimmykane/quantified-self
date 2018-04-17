@@ -23,6 +23,7 @@ export class EventCardLapsComponent {
         '#': index,
         'Start Time': lap.startDate.toLocaleTimeString(),
         'End Time': lap.endDate.toLocaleTimeString(),
+        'Duration': lap.getDuration().getDisplayValue(),
       };
       if (lap.getDistance()) {
         lapObj[DataDistance.type] = lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit();
