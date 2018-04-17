@@ -1,0 +1,19 @@
+mat-icon {
+  vertical-align: middle;
+}
+
+section {
+  display: flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+mat-chip mat-icon {
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
+}
+
+/deep/ .mat-chip-list-wrapper {
+  align-items: center !important;
+}

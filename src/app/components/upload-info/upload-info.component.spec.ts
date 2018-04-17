@@ -74,7 +74,7 @@ describe('UploadInfoComponent', () => {
         status: UPLOAD_STATUS.ERROR
       }
     ];
-    expect(component.getProcessedActivities().length).toBe(2);
+    expect(component.getProcessedActivities().length).toBe(4);
   });
 
   it('should get the correct percent of overall progress', () => {
@@ -104,7 +104,7 @@ describe('UploadInfoComponent', () => {
         status: UPLOAD_STATUS.ERROR
       }
     ];
-    expect(component.getOverallProgress()).toBe(33.333333333333336);
+    expect(component.getOverallProgress()).toBe(66.66666666666667);
   });
 
 });

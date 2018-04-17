@@ -1,0 +1,12 @@
+<section>
+  <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch</mat-icon>
+  <mat-chip-list>
+    <mat-chip>{{ activity.creator.name }}</mat-chip>
+    <mat-chip *ngIf="showType">
+      <app-activity-icon *ngIf="showTypeIcon" [activity]="activity"></app-activity-icon>
+      {{ activity.type }}
+    </mat-chip>
+    <mat-chip *ngIf="showSWInfo">v{{ activity.creator.swInfo }}</mat-chip>
+    <mat-chip *ngIf="showSerialNumber"><mat-icon>info_outline</mat-icon>{{ activity.creator.serialNumber }}</mat-chip>
+  </mat-chip-list>
+</section>

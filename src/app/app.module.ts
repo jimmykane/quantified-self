@@ -16,11 +16,26 @@ import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {
-  MatButtonModule, MatButtonToggleModule, MatCardModule, MatChipsModule, MatCommonModule, MatExpansionModule,
-  MatGridListModule, MatIconModule,
-  MatMenuModule, MatProgressBarModule,
-  MatSidenavModule, MatTableModule,
-  MatTabsModule, MatToolbarModule, MatCheckboxModule, MatSliderModule, MatSnackBarModule, MatInputModule, MatListModule
+  MatButtonModule,
+  MatButtonToggleModule,
+  MatCardModule,
+  MatChipsModule,
+  MatCommonModule,
+  MatExpansionModule,
+  MatGridListModule,
+  MatIconModule,
+  MatMenuModule,
+  MatProgressBarModule,
+  MatSidenavModule,
+  MatTableModule,
+  MatTabsModule,
+  MatToolbarModule,
+  MatCheckboxModule,
+  MatSliderModule,
+  MatSnackBarModule,
+  MatInputModule,
+  MatListModule,
+  MatSortModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -29,8 +44,7 @@ import {WeatherUndergroundWeatherService} from './services/weather/app.weather-u
 import {HttpModule} from '@angular/http';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
-import {EventCardListComponent} from './components/cards/event/list/event.card.list.component';
-import {EventCardSmallComponent} from './components/cards/event/event.card-small.component';
+import {EventTableComponent} from './components/event-table/event.table.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
@@ -43,6 +57,7 @@ import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/
 import {AppEventColorService} from './services/app.event.color.service';
 import { UploadInfoComponent } from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
+import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
 
 @NgModule({
   imports: [
@@ -78,6 +93,7 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     Angular2FontawesomeModule,
     MatProgressBarModule,
     MatTableModule,
+    MatSortModule,
   ],
   declarations: [
     AppComponent,
@@ -87,17 +103,17 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     ActivityIconComponent,
     ActivitiesCheckboxesComponent,
     EventCardComponent,
-    EventCardListComponent,
+    EventTableComponent,
     EventCardMapComponent,
     EventCardMapAGMComponent,
     EventCardStatsComponent,
     EventCardActionsMenuComponent,
     EventCardLapsComponent,
     EventCardChartComponent,
-    EventCardSmallComponent,
     EventCardToolsComponent,
     AboutComponent,
-    UploadInfoComponent
+    UploadInfoComponent,
+    ActivityHeaderComponent,
   ],
   providers: [
     LocalStorageService,

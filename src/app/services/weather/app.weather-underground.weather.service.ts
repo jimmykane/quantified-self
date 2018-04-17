@@ -18,7 +18,7 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
   constructor(private http: Http) {
   }
 
-  getWeather(position: DataPositionInterface, date: Date): Observable<Weather> {
+  getWeather(position: DataPositionInterface, date: Date): Promise<Weather> {
     return this.http
       .get(
         this.historyApiUrl
@@ -53,6 +53,6 @@ export class WeatherUndergroundWeatherService implements WeatherServiceInterface
         return new Weather(
           Array.from(weatherItemsMap.values())
         );
-      }));
+      })).toPromise();
   }
 }
