@@ -34,19 +34,17 @@
     && event.getFirstActivity().weather.weatherItems.length
     && event.getFirstActivity().weather.getAverageTemperatureInCelsius() ">
       <mat-icon>terrain</mat-icon>
-      <span class="mat-body-2">{{ event.getFirstActivity().weather.getAverageTemperatureInCelsius().toFixed(0) }}c</span>
+      <span
+        class="mat-body-2">{{ event.getFirstActivity().weather.getAverageTemperatureInCelsius().toFixed(0) }}c</span>
       and
       <span class="mat-body-2">{{event.getFirstActivity().weather.weatherItems[0].conditions }}</span>
       conditions
     </mat-card-subtitle>
     <mat-card-subtitle *ngFor="let activity of event.getActivities(); let i = index;">
-      <span *ngIf=" activity.creator.name">
-          <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch</mat-icon>
-          <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activity.creator.name }}</mat-chip></mat-chip-list></span>
-          <span class="mat-body-2"
-                *ngIf=" activity.creator.swInfo">v{{ activity.creator.swInfo }}</span>
-          <span *ngIf=" activity.creator.serialNumber"> - sn {{ activity.creator.serialNumber }}</span>
-        </span>
+     <app-activity-header [activity]="activity" [event]="event"></app-activity-header>
+      <span class="mat-body-2"
+            *ngIf=" activity.creator.swInfo">v{{ activity.creator.swInfo }}</span>
+      <span *ngIf=" activity.creator.serialNumber"> - sn {{ activity.creator.serialNumber }}</span>
     </mat-card-subtitle>
   </mat-card-header>
 

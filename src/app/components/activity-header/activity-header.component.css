@@ -1,0 +1,8 @@
+mat-icon{
+  vertical-align: middle;
+}
+section{
+  display: flex;
+  align-items: center;
+  vertical-align: middle;
+}

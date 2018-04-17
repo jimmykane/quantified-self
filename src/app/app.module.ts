@@ -57,6 +57,7 @@ import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/
 import {AppEventColorService} from './services/app.event.color.service';
 import { UploadInfoComponent } from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
+import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
 
 @NgModule({
   imports: [
@@ -111,7 +112,8 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
     EventCardChartComponent,
     EventCardToolsComponent,
     AboutComponent,
-    UploadInfoComponent
+    UploadInfoComponent,
+    ActivityHeaderComponent,
   ],
   providers: [
     LocalStorageService,
