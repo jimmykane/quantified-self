@@ -1,25 +1,26 @@
-mat-cell, .mat-header-cell{
-   overflow: visible;
- }
+mat-cell, .mat-header-cell {
+  overflow: visible;
+}
+
 .mat-column-Checkbox {
-  flex: 0 0 50px;
+  flex: 0 0 30px;
+  justify-content: flex-start;
 }
 
 .mat-column-Actions {
-  flex: 0 0 50px;
+  flex: 0 0 30px;
   justify-content: flex-end;
 }
 
 .mat-row {
-    min-height: 50px;
+  min-height: 50px;
 }
 
 .mat-header-cell.mat-sort-header-sorted {
   color: black;
 }
 
-
-mat-icon{
+mat-icon {
   vertical-align: middle;
   font-size: 22px;
 }
