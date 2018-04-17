@@ -194,7 +194,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       return string;
     }
     if (geoLocationInfo.city) {
-      string += geoLocationInfo.city
+      string += geoLocationInfo.city + ', '
     }
     string += geoLocationInfo.country;
     return string;
