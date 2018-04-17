@@ -63,7 +63,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         Activities: this.getUniqueString(event.getActivities().map((activity) => activity.type)),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
-        Location: event.getFirstActivity().geoLocationInfo ? event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country : null,
+        Location: event.getFirstActivity().geoLocationInfo ?
+          event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country :
+          null,
         Device: this.getUniqueString(event.getActivities().map((activity) => activity.creator.name)),
         Actions: event,
       });
