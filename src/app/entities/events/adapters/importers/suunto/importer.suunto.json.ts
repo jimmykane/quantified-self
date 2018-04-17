@@ -196,6 +196,7 @@ export class EventImporterSuuntoJSON {
           activity.addPoint(point)
         }
       });
+      activity.sortPointsByDate();
     });
 
     // Add the ibiData
@@ -213,7 +214,7 @@ export class EventImporterSuuntoJSON {
     }
 
     // Add the activities to the event
-    activities.forEach((activity) => {
+    activities.forEach((activity: ActivityInterface) => {
       event.addActivity(activity);
     });
 
