@@ -71,6 +71,7 @@ export class EventImporterTCX {
           activity.addPoint(point);
         });
       });
+      activity.sortPointsByDate();
     }
 
     EventUtilities.generateStats(event);
