@@ -41,7 +41,7 @@
       conditions
     </mat-card-subtitle>
     <mat-card-subtitle *ngFor="let activity of event.getActivities(); let i = index;">
-     <app-activity-header [activity]="activity" [event]="event" [showSWInfo]="true" [showSerialNumber]="true"></app-activity-header>
+     <app-activity-header [activity]="activity" [event]="event" [showSWInfo]="true" [showType]="true" [showTypeIcon]="true"></app-activity-header>
     </mat-card-subtitle>
   </mat-card-header>
 
