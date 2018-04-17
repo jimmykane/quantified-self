@@ -12,6 +12,8 @@ import {EventInterface} from '../../entities/events/event.interface';
 export class ActivityHeaderComponent {
   @Input() activity: ActivityInterface;
   @Input() event: EventInterface;
+  @Input() showSWInfo: boolean;
+  @Input() showSerialNumber: boolean;
 
   constructor(public eventColorService: AppEventColorService) {
   }
