@@ -1,6 +1,6 @@
 <mat-card>
   <mat-card *ngFor="let activity of event.getActivities()">
-     <mat-table *ngIf="getData(activity)" [dataSource]="getData(activity)">
+     <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
       <ng-container *ngFor="let column of getColumns(activity)" [matColumnDef]="column">
         <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
         <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
