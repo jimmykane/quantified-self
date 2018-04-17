@@ -94,8 +94,6 @@ export class EventImporterSuuntoJSON {
       return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type !== 'Start' && sample.Events[0].Lap.Type !== 'Stop';
     });
 
-
-
     // Get the stop event
     const stopEventSample = eventJSONObject.DeviceLog.Samples.find((sample) => {
       return sample.Events && sample.Events[0].Lap && sample.Events[0].Lap.Type === 'Stop';
@@ -159,6 +157,7 @@ export class EventImporterSuuntoJSON {
       lapStartDatesByType[lapEventSample.Events[0].Lap.Type] = lapEndDate;
       lap.type = lapEventSample.Events[0].Lap.Type;
       // if it's only one lap there is no stats as it's the whole activity
+      // @todo think
       if (lapEventSamples.length !== 1) {
         this.getStats(lapWindows[index]).forEach((stat) => {
           lap.addStat(stat);

@@ -17,6 +17,7 @@ import {MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/ma
 import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
+import {GeoLocationInfo} from '../../entities/geo-location-info/geo-location-info';
 
 
 @Component({
@@ -60,15 +61,16 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         Checkbox: event,
         Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
         Name: event.name.slice(0, 15),
-        Activities: this.getUniqueString(event.getActivities().map((activity) => activity.type)),
+        Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
-        Location: event.getFirstActivity().geoLocationInfo ?
-          event.getFirstActivity().geoLocationInfo.city + ', ' + event.getFirstActivity().geoLocationInfo.country :
-          null,
-        Device: this.getUniqueString(event.getActivities().map((activity) => activity.creator.name)),
-        Actions: event,
-      });
+        Location: this.getLocationString(event.getFirstActivity().geoLocationInfo),
+        Device:
+          this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
+        Actions:
+        event,
+      })
+      ;
       return eventArray;
     }, []);
     this.columns = Object.keys(data[0]);
@@ -167,7 +169,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
   }
 
-  private getUniqueString(arrayOfStrings: string[]) {
+  private getUniqueStringWithMultiplier(arrayOfStrings: string[]) {
     const uniqueObject = arrayOfStrings.reduce((uniqueObj, activityType, index) => {
       if (!uniqueObj[activityType]) {
         uniqueObj[activityType] = 1;
@@ -184,6 +186,18 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       }
       return uniqueArray;
     }, []).join(', ');
+  }
+
+  private getLocationString(geoLocationInfo: GeoLocationInfo) {
+    let string = '';
+    if (!geoLocationInfo) {
+      return string;
+    }
+    if (geoLocationInfo.city) {
+      string += geoLocationInfo.city
+    }
+    string += geoLocationInfo.country;
+    return string;
   }
 
   ngOnDestroy() {
