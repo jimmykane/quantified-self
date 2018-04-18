@@ -19,7 +19,7 @@
                         [checked]="selection.isSelected(row)">
           </mat-checkbox>
           <span *ngIf="column !== 'Checkbox' && column !== 'Actions'">{{ row[column] }}</span>
-          <span *ngIf="column === 'Actions'"><app-event-card-actions-menu></app-event-card-actions-menu></span>
+          <span *ngIf="column === 'Actions'"><app-event-card-actions-menu [event]="row[column]"></app-event-card-actions-menu></span>
         </mat-cell>
       </ng-container>
       <mat-header-row *matHeaderRowDef="columns"></mat-header-row>

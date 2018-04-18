@@ -4,7 +4,7 @@ import {EventService} from '../../../../services/app.event.service';
 import {EventExporterTCX} from '../../../../entities/events/adapters/exporters/exporter.tcx';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {Router} from '@angular/router';
-import {EventUtilities} from "../../../../entities/events/utilities/event.utilities";
+import {EventUtilities} from '../../../../entities/events/utilities/event.utilities';
 
 @Component({
   selector: 'app-event-card-actions-menu',
