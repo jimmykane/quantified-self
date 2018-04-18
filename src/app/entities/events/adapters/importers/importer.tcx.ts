@@ -57,7 +57,7 @@ export class EventImporterTCX {
         activity.getDistance().setValue(activity.getDistance().getValue() + lap.getDistance().getValue());
         activity.getDuration().setValue(activity.getDuration().getValue() + lap.getDuration().getValue() + lap.getPause().getValue());
         activity.getPause().setValue(activity.getPause().getValue() + lap.getPause().getValue());
-        // activity.getStat(DataEnergy.className).setValue(activity.getStat(DataEnergy.className).getValue() + lap.getStat(DataEnergy.className).getValue())
+        activity.getStat(DataEnergy.className).setValue((<DataEnergy>activity.getStat(DataEnergy.className)).getValue() + (<DataEnergy>lap.getStat(DataEnergy.className)).getValue());
 
         // Todo perhaps think about distance if 0 to add the lap as pause
 
