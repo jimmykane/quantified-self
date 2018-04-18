@@ -1,4 +1,5 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {DataInterface} from '../../../../entities/data/data.interface';
@@ -15,7 +16,7 @@ import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pre
 import {Log, Level} from 'ng2-logger'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 import {PointInterface} from '../../../../entities/points/point.interface';
-import {DataNumber} from "../../../../entities/data/data.number";
+import {DataNumber} from '../../../../entities/data/data.number';
 
 
 @Component({
@@ -24,7 +25,7 @@ import {DataNumber} from "../../../../entities/data/data.number";
   styleUrls: ['./event.card.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
+export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @Input() event: EventInterface;
 
@@ -37,8 +38,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
   constructor(private  changeDetector: ChangeDetectorRef, private AmCharts: AmChartsService) {
   }
 
-  ngOnInit() {
+  ngAfterViewInit() {
+  }
 
+  ngOnInit() {
   }
 
   ngOnChanges(): void {
@@ -124,7 +127,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             const visibleGraphs = graph.chart.graphs.filter((graphObj) => {
               return !graphObj.hidden;
             });
-            if (visibleGraphs.length === 1 && !graph.hidden){
+            if (visibleGraphs.length === 1 && !graph.hidden) {
               return;
             }
             graph.hidden = !graph.hidden;
