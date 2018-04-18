@@ -24,8 +24,7 @@ import {GeoLocationInfo} from '../../entities/geo-location-info/geo-location-inf
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
-  providers: [DatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  providers: [DatePipe]
 })
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
@@ -56,6 +55,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnChanges(): void {
+    console.log(1)
     const data = this.events.reduce((eventArray, event) => {
       eventArray.push({
         Checkbox: event,
@@ -75,6 +75,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }, []);
     this.columns = Object.keys(data[0]);
     this.data = new MatTableDataSource(data);
+    if (this.sort) {
+      this.data.sort = this.sort;
+      this.data.sort.sort(<MatSortable>{
+          id: 'Date',
+          start: 'desc'
+        }
+      );
+    }
   }
 
   checkBoxClick(row) {
