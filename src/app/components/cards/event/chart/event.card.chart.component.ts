@@ -121,6 +121,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
           marginTop: 0,
           valueText: '[[value]]',
           clickLabel: (graph) => {
+            const visibleGraphs = graph.chart.graphs.filter((graphObj) => {
+              return !graphObj.hidden;
+            });
+            if (visibleGraphs.length === 1 && !graph.hidden){
+              return;
+            }
             graph.hidden = !graph.hidden;
             // graph.chart.valueAxes.forEach((valueAxis) => {
             //   valueAxis.guides = this.getZoneGuides();
@@ -233,7 +239,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy {
             if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
               return;
             }
-            if (!(pointData instanceof DataNumber)){
+            if (!(pointData instanceof DataNumber)) {
               return;
             }
             key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
