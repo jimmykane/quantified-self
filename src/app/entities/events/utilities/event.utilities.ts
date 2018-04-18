@@ -60,7 +60,7 @@ export class EventUtilities {
         return average;
       }
       const value = Number(point.getDataByType(dataType).getValue());
-      if (!isNaN(value) && isFinite(value)) {
+      if (isNaN(value) || !isFinite(value)) {
         return;
       }
       average += value;
