@@ -42,6 +42,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnInit() {
+
   }
 
   ngOnChanges(): void {

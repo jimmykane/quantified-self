@@ -26,6 +26,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   ngOnInit() {
+  }
+
+  ngOnChanges() {
     if (this.event.getActivities().length === 1) {
       this.selectedActivities = [this.event.getFirstActivity()];
     }
@@ -33,9 +36,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     this.agmMap.triggerResize().then(() => {
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
-  }
-
-  ngOnChanges() {
   }
 
   onSelectedActivities(activities) {
