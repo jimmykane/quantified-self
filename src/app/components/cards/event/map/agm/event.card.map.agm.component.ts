@@ -29,13 +29,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     if (this.event.getActivities().length === 1) {
       this.selectedActivities = [this.event.getFirstActivity()];
     }
-  }
-
-  ngOnChanges() {
     // @todo maybe this can be done in a different way
     this.agmMap.triggerResize().then(() => {
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
+  }
+
+  ngOnChanges() {
   }
 
   onSelectedActivities(activities) {
