@@ -100,6 +100,11 @@ export class EventExporterTCX implements EventExporterInterface {
         caloriesInKCALElement.textContent = lap.getStat(DataEnergy.className).getValue().toString();
         lapElement.appendChild(caloriesInKCALElement);
 
+        const triggerMethod = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'TriggerMethod');
+        // @todo fix if autolap
+        triggerMethod.textContent = lap.type === 'Autolap' ? 'Manual' : 'Manual';
+        lapElement.appendChild(triggerMethod);
+
         activityElement.appendChild(lapElement);
         const trackElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Track');
         lapElement.appendChild(trackElement);
