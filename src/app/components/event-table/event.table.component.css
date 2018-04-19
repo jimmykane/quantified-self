@@ -4,7 +4,6 @@ mat-cell, .mat-header-cell {
 
 .mat-cell{
   font-size: 13px;
-  word-wrap: ;
 }
 
 .mat-column-Checkbox, .mat-column-Actions{
