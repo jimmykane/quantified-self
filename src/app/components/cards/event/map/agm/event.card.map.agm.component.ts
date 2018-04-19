@@ -5,8 +5,8 @@ import {
 import {EventInterface} from '../../../../../entities/events/event.interface';
 import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
-import {ActivityInterface} from '../../../../../entities/activities/activity.interface';
 import {AppEventColorService} from '../../../../../services/app.event.color.service';
+import {ActivityInterface} from "../../../../../entities/activities/activity.interface";
 
 
 @Component({
@@ -19,7 +19,7 @@ import {AppEventColorService} from '../../../../../services/app.event.color.serv
 export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
-  @Input() selectedActivities: ActivityInterface[];
+  @Input() selectedActivities: ActivityInterface[] = [];
 
   constructor(public eventColorService: AppEventColorService) {
   }
@@ -28,6 +28,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
+    if (this.event.getActivities().length === 1) {
+      this.selectedActivities.push(this.event.getFirstActivity());
+    }
     // @todo maybe this can be done in a different way
     this.agmMap.triggerResize().then(() => {
       this.agmMap._mapsWrapper.fitBounds(this.getBounds());
