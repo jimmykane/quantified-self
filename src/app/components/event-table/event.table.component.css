@@ -7,7 +7,7 @@ mat-cell, .mat-header-cell {
 }
 
 .mat-column-Checkbox, .mat-column-Actions{
-  max-width: 28px;
+  max-width: 32px;
 }
 
 .mat-column-Checkbox {
@@ -30,4 +30,8 @@ mat-icon {
   vertical-align: middle;
   font-size: 22px;
   margin-left: -5px;
+}
+
+.mat-header-row, .mat-row{
+  padding: 0;
 }
