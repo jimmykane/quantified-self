@@ -59,7 +59,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     const data = this.events.reduce((eventArray, event) => {
       eventArray.push({
         Checkbox: event,
-        Date: this.datePipe.transform(event.getFirstActivity().startDate, 'medium'),
+        Date: this.datePipe.transform(event.getFirstActivity().startDate, 'short'),
         Name: event.name.slice(0, 15),
         Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),

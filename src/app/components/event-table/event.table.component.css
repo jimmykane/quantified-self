@@ -2,13 +2,20 @@ mat-cell, .mat-header-cell {
   overflow: visible;
 }
 
+.mat-cell{
+  font-size: 13px;
+  word-wrap: ;
+}
+
+.mat-column-Checkbox, .mat-column-Actions{
+  max-width: 28px;
+}
+
 .mat-column-Checkbox {
-  flex: 0 0 30px;
   justify-content: flex-start;
 }
 
 .mat-column-Actions {
-  flex: 0 0 30px;
   justify-content: flex-end;
 }
 
@@ -23,4 +30,5 @@ mat-cell, .mat-header-cell {
 mat-icon {
   vertical-align: middle;
   font-size: 22px;
+  margin-left: -5px;
 }
