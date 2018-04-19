@@ -1,12 +1,12 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
+  ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnInit,
   ViewChild
 } from '@angular/core';
 import {EventInterface} from '../../../../../entities/events/event.interface';
 import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
-import {ActivityInterface} from "../../../../../entities/activities/activity.interface";
-import {AppEventColorService} from "../../../../../services/app.event.color.service";
+import {ActivityInterface} from '../../../../../entities/activities/activity.interface';
+import {AppEventColorService} from '../../../../../services/app.event.color.service';
 
 
 @Component({
@@ -19,7 +19,6 @@ import {AppEventColorService} from "../../../../../services/app.event.color.serv
 export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
-  @Input() resize: boolean;
   @Input() selectedActivities: ActivityInterface[];
 
   constructor(public eventColorService: AppEventColorService) {
@@ -29,12 +28,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
-    if (this.event.getActivities().length === 1) {
-      this.selectedActivities = [this.event.getFirstActivity()];
-    }
     // @todo maybe this can be done in a different way
     this.agmMap.triggerResize().then(() => {
-      this.agmMap._mapsWrapper.fitBounds(this.getBounds())
+      this.agmMap._mapsWrapper.fitBounds(this.getBounds());
     });
   }
 
@@ -44,6 +40,14 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   getBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.event.getPointsWithPosition(void 0, void 0, this.selectedActivities);
+    if (!pointsWithPosition.length) {
+      return <LatLngBoundsLiteral>{
+        east: 0,
+        west: 0,
+        north: 0,
+        south: 0
+      };
+    }
     const mostEast = pointsWithPosition.reduce((acc: PointInterface, point: PointInterface) => {
       return (acc.getPosition().longitudeDegrees < point.getPosition().longitudeDegrees) ? point : acc;
     });
