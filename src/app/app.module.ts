@@ -35,7 +35,7 @@ import {
   MatSnackBarModule,
   MatInputModule,
   MatListModule,
-  MatSortModule
+  MatSortModule, MatTooltipModule
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -94,6 +94,7 @@ import {ActivityHeaderComponent} from './components/activity-header/activity-hea
     MatProgressBarModule,
     MatTableModule,
     MatSortModule,
+    MatTooltipModule,
   ],
   declarations: [
     AppComponent,
