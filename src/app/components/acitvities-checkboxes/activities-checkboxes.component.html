@@ -5,7 +5,6 @@
     [(ngModel)]="activityCheckbox.checked"
     [disabled]="activityCheckbox.disabled"
     (change)="onCheckboxChange()">
-    <mat-card>
       <app-activity-header
         [event]="event"
         [activity]="activityCheckbox.activity"
@@ -13,6 +12,5 @@
         [showDistance]="true"
         [showDuration]="true">
       </app-activity-header>
-    </mat-card>
   </mat-checkbox>
 </section>

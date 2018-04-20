@@ -6,11 +6,6 @@
       <app-activity-icon *ngIf="showTypeIcon" [activity]="activity"></app-activity-icon>
       {{ activity.type }}
     </mat-chip>
-    <mat-chip *ngIf="showSWInfo && activity.creator.swInfo">v{{ activity.creator.swInfo }}</mat-chip>
-    <mat-chip *ngIf="showSerialNumber && activity.creator.serialNumber">
-      <mat-icon>info_outline</mat-icon>
-      {{ activity.creator.serialNumber }}
-    </mat-chip>
     <mat-chip *ngIf="showDuration">
       <mat-icon>timer</mat-icon>
       {{ activity.getDuration().getDisplayValue() }}
@@ -19,6 +14,11 @@
       <mat-icon>trending_flat</mat-icon>
       {{ activity.getDistance().getDisplayValue() }}
       {{ activity.getDistance().getDisplayUnit() }}
+    </mat-chip>
+    <mat-chip *ngIf="showSWInfo && activity.creator.swInfo">v{{ activity.creator.swInfo }}</mat-chip>
+    <mat-chip *ngIf="showSerialNumber && activity.creator.serialNumber">
+      <mat-icon>info_outline</mat-icon>
+      {{ activity.creator.serialNumber }}
     </mat-chip>
   </mat-chip-list>
 </section>
