@@ -6,17 +6,13 @@
     [disabled]="activityCheckbox.disabled"
     (change)="onCheckboxChange()">
     <mat-card>
-      <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}">watch
-      </mat-icon>
-      <span class="mat-body-2"><mat-chip-list><mat-chip>{{ activityCheckbox.activity.creator.name }}</mat-chip></mat-chip-list></span>
-      <mat-icon>timer</mat-icon>
-      {{
-      activityCheckbox.activity.getDuration().getDisplayValue()
-      }}
-      <app-activity-icon [activity]="activityCheckbox.activity"></app-activity-icon>
-      {{ activityCheckbox.activity.type }}
-      <mat-icon>trending_flat</mat-icon>
-      {{ (activityCheckbox.activity.getDistance().getValue() / 1000).toFixed(1) }} Km
+      <app-activity-header
+        [event]="event"
+        [activity]="activityCheckbox.activity"
+        [showType]="true"
+        [showDistance]="true"
+        [showDuration]="true">
+      </app-activity-header>
     </mat-card>
   </mat-checkbox>
 </section>
