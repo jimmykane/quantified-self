@@ -39,52 +39,55 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngAfterViewInit() {
+    if (this.event.getActivities().length === 1) {
+      this.selectedActivities = [this.event.getFirstActivity()];
+      this.createChart();
+    }
   }
 
   ngOnInit() {
-
   }
 
   ngOnChanges(): void {
+    if (!this.chart) {
+      return;
+    }
+    debugger;
     if (this.event.getActivities().length === 1) {
       this.selectedActivities = [this.event.getFirstActivity()];
-      this.createAndUpdateChart();
+      this.updateChart();
     }
   }
 
   onSelectedActivities(activities) {
-    this.selectedActivities = activities;
-    if (this.selectedActivities.length) {
-      this.createAndUpdateChart();
-    } else if (this.chart) {
-      this.AmCharts.destroyChart(this.chart);
-    }
+    debugger
+    // this.selectedActivities = activities;
+    // if (this.selectedActivities.length) {
+    //   this.createAndUpdateChart();
+    // } else if (this.chart) {
+    //   this.AmCharts.destroyChart(this.chart);
+    // }
 
   }
 
-  private createAndUpdateChart() {
-    const t0 = performance.now();
-
-    this.createChart().then(() => {
-      this.logger.d('Chart create promise completed after ' +
-        (performance.now() - t0) + ' milliseconds or ' +
-        (performance.now() - t0) / 1000 + ' seconds'
-      );
-      this.updateChart().then(() => {
-        this.logger.d('Chart update promise completed after ' +
-          (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds'
-        );
-      });
-    });
-  }
+  // private createAndUpdateChart() {
+  //   const t0 = performance.now();
+  //
+  //   this.createChart().then(() => {
+  //     this.logger.d('Chart create promise completed after ' +
+  //       (performance.now() - t0) + ' milliseconds or ' +
+  //       (performance.now() - t0) / 1000 + ' seconds'
+  //     );
+  //     this.updateChart().then(() => {
+  //       this.logger.d('Chart update promise completed after ' +
+  //         (performance.now() - t0) + ' milliseconds or ' +
+  //         (performance.now() - t0) / 1000 + ' seconds'
+  //       );
+  //     });
+  //   });
+  // }
 
   private createChart() {
-    this.categories = [];
-    this.dataMap = void 0;
-    const graphs = this.getGraphs();
-    // const valueAxes = this.getValueAxes();
-
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
       this.logger.d('Chart Create started after ' +
@@ -96,73 +99,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         this.AmCharts.destroyChart(this.chart);
       }
       // Create a fresh one
-      this.chart = this.AmCharts.makeChart('chartdiv', {
-        type: 'serial',
-        theme: 'light',
-        autoMarginOffset: 0,
-        // marginRight: 100,
-        autoMargins: true,
-        graphs: graphs,
-        // autoTransform: false,
-        // autoResize: false,
-        // autoDisplay: false,
-        // responsive: {
-        //   enabled: false
-        // },
-        // valueAxes: [{
-        //   gridThickness: 0.0,
-        // }],
-        startDuration: 0.3,
-        startEffect: 'elastic',
-        sequencedAnimation: false,
-        categoryField: 'date',
-        // processCount: 1000,
-        // processTimeout: 2000,
-        legend: {
-          align: 'center',
-          useGraphSettings: true,
-          autoMargins: true,
-          marginTop: 0,
-          valueText: '[[value]]',
-          clickLabel: (graph) => {
-            const visibleGraphs = graph.chart.graphs.filter((graphObj) => {
-              return !graphObj.hidden;
-            });
-            if (visibleGraphs.length === 1 && !graph.hidden) {
-              return;
-            }
-            graph.hidden = !graph.hidden;
-            // graph.chart.valueAxes.forEach((valueAxis) => {
-            //   valueAxis.guides = this.getZoneGuides();
-            // });
-            if (!graph.hidden) {
-              graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
-            }
-            graph.chart.validateNow();
-          },
-        },
-        synchronizeGrid: true,
-        categoryAxis: {
-          parseDates: true,
-          minPeriod: 'fff',
-          axisColor: '#DADADA',
-          gridThickness: 0.0,
-          offset: 0,
-          labelOffset: 0,
-          // minorGridEnabled: true,
-        },
-        chartScrollbar: this.getScrollbarForGraph(graphs[0]),
-        chartCursor: {
-          valueZoomable: true,
-          categoryBalloonDateFormat: 'JJ:NN:SS',
-          cursorAlpha: 0,
-          valueLineEnabled: true,
-          valueLineBalloonEnabled: true,
-          valueLineAlpha: 0.5,
-          fullWidth: true
-        },
-        creditsPosition: 'bottom-right'
-      });
+      const dataMap = this.getDataMap();
+      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmchartOptions(dataMap));
       const t1 = performance.now();
       this.logger.d('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
       resolve(true);
@@ -172,11 +110,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private updateChart(): Promise<any> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
-
-      const dataProvider = this.getDataProvider(this.getDataMap()); // I only need the length @todo
       // This must be called when making any changes to the chart
       this.AmCharts.updateChart(this.chart, () => {
-        this.chart.dataProvider = dataProvider;
+        const dataMap = this.getDataMap();
+        this.chart.dataProvider = this.getDataProvider(dataMap);
+        this.chart.graphs = this.getGraphs(dataMap);
         this.addListenersToChart();
         this.logger.d('Updated chart after ' +
           (performance.now() - t0) + ' milliseconds or ' +
@@ -268,7 +206,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return this.dataMap;
   }
 
-  private getAllCategoryTypes(): any[] {
+  private getAllCategoryTypes(dataMap: Map<number, any>): any[] {
+    debugger;
     if (this.categories.length < 1) {
       this.getAllData().forEach((dataMapArray, category, eventData) => {
         // Hack here to add the units unfortunately
@@ -324,12 +263,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return dataMap;
   }
 
-  private getValueAxes(): any[] {
+  private getValueAxes(dataMap: Map<number, any>): any[] {
     const t0 = performance.now();
     const valueAxes = [];
     let leftIndex = 0;
     let rightIndex = 0;
-    this.getAllCategoryTypes().forEach((dataCategory) => {
+    this.getAllCategoryTypes(dataMap).forEach((dataCategory) => {
       valueAxes.push({
         id: dataCategory.id,
         axisColor: this.genColor(dataCategory.id),
@@ -348,10 +287,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return valueAxes;
   }
 
-  private getGraphs(): any[] {
+  private getGraphs(dataMap: Map<number, any>): any[] {
     const t0 = performance.now();
     const graphs = [];
-    this.getAllCategoryTypes().forEach((dataCategory: any) => {
+    this.getAllCategoryTypes(dataMap).forEach((dataCategory: any) => {
       const categoryID = dataCategory.id;
       const name = categoryID.split(':')[0];
       const activityID = categoryID.split(':')[1];
@@ -492,6 +431,77 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     };
   }
 
+  private getAmchartOptions(dataMap: Map<number, any>) {
+    return {
+      type: 'serial',
+      theme: 'light',
+      dataProvider: this.getDataProvider(dataMap),
+      autoMarginOffset: 0,
+      // marginRight: 100,
+      autoMargins: true,
+      graphs: this.getGraphs(dataMap),
+      // autoTransform: false,
+      // autoResize: false,
+      // autoDisplay: false,
+      // responsive: {
+      //   enabled: false
+      // },
+      // valueAxes: [{
+      //   gridThickness: 0.0,
+      // }],
+      startDuration: 0.3,
+      startEffect: 'elastic',
+      sequencedAnimation: false,
+      categoryField: 'date',
+      // processCount: 1000,
+      // processTimeout: 2000,
+      legend: {
+        align: 'center',
+        useGraphSettings: true,
+        autoMargins: true,
+        marginTop: 0,
+        valueText: '[[value]]',
+        clickLabel: (graph) => {
+          const visibleGraphs = graph.chart.graphs.filter((graphObj) => {
+            return !graphObj.hidden;
+          });
+          if (visibleGraphs.length === 1 && !graph.hidden) {
+            return;
+          }
+          graph.hidden = !graph.hidden;
+          // graph.chart.valueAxes.forEach((valueAxis) => {
+          //   valueAxis.guides = this.getZoneGuides();
+          // });
+          if (!graph.hidden) {
+            graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
+          }
+          graph.chart.validateNow();
+        },
+      },
+      synchronizeGrid: true,
+      categoryAxis: {
+        parseDates: true,
+        minPeriod: 'fff',
+        axisColor: '#DADADA',
+        gridThickness: 0.0,
+        offset: 0,
+        labelOffset: 0,
+        // minorGridEnabled: true,
+      },
+      chartScrollbar: this.getScrollbarForGraph(this.getGraphs(dataMap)),
+      chartCursor: {
+        valueZoomable: true,
+        categoryBalloonDateFormat: 'JJ:NN:SS',
+        cursorAlpha: 0,
+        valueLineEnabled: true,
+        valueLineBalloonEnabled: true,
+        valueLineAlpha: 0.5,
+        fullWidth: true
+      },
+      creditsPosition: 'bottom-right'
+    }
+  }
+
   private genColor(key: string) {
     if (key.includes(DataHeartRate.type + ' 4')) {
       return '#006064';
@@ -529,6 +539,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   ngOnDestroy() {
     // @todo should check better if created or built
-    this.AmCharts.destroyChart(this.chart);
+    if (this.chart) {
+      this.AmCharts.destroyChart(this.chart);
+    }
   }
 }
