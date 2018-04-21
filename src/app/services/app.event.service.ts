@@ -59,6 +59,18 @@ export class EventService {
     return this.events.asObservable();
   }
 
+  public getEvent(eventID: string): Promise<EventInterface> {
+    return new Promise<EventInterface>((resolve, reject) => {
+      const foundEvent = this.events.getValue().find((event: EventInterface) => {
+        return event.getID() === eventID;
+      });
+      if (!foundEvent) {
+        return reject('No event found for this ID');
+      }
+      resolve(foundEvent);
+    });
+  }
+
   /**
    * Add geolocation and weather info to an event
    * @param {EventInterface} event
