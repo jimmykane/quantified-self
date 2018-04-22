@@ -29,8 +29,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   @Input() event: EventInterface;
 
-  private dataMap: Map<string, Map<number, DataNumber[]>>;
-  private categories = [];
   private chart: any;
   private selectedActivities = [];
   private logger = Log.create('EventCardChartComponent');
@@ -39,9 +37,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngAfterViewInit() {
-    if (this.event.getActivities().length === 1) {
-      this.selectedActivities = [this.event.getFirstActivity()];
-    }
   }
 
   ngOnInit() {
@@ -52,10 +47,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   onSelectedActivities(activities) {
     this.selectedActivities = activities;
-    if (!this.selectedActivities.length) {
-      this.AmCharts.destroyChart(this.chart);
-      return;
-    }
+    this.destroyChart();
     this.createChart();
   }
 
@@ -149,47 +141,44 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private getAllData(): Map<string, Map<number, DataNumber[]>> {
     const t0 = performance.now();
-    if (!this.dataMap) {
-      this.dataMap = new Map<string, Map<number, DataNumber[]>>();
-      this.selectedActivities.forEach((activity: ActivityInterface, index) => {
-        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataNumber[]>>, point: PointInterface, currentIndex) => {
-          point.getData().forEach((pointData: DataInterface, key: string) => {
-            if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
-              return;
-            }
-            if (!(pointData instanceof DataNumber)) {
-              return;
-            }
-            key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
-            const DataMapArray = dataMap.get(key) || new Map<number, DataNumber[]>();
-            if (!DataMapArray.size) {
-              dataMap.set(key, DataMapArray);
-            }
-            const existingDataArray = DataMapArray.get(point.getDate().getTime()) || [];
-            if (!existingDataArray.length) {
-              DataMapArray.set(point.getDate().getTime(), existingDataArray)
-            }
-            existingDataArray.push(pointData);
-          });
-          return dataMap;
-        }, this.dataMap);
-      });
-    }
+    const dataMapReturn = new Map<string, Map<number, DataNumber[]>>();
+    this.selectedActivities.forEach((activity: ActivityInterface, index) => {
+      activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataNumber[]>>, point: PointInterface, currentIndex) => {
+        point.getData().forEach((pointData: DataInterface, key: string) => {
+          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
+            return;
+          }
+          if (!(pointData instanceof DataNumber)) {
+            return;
+          }
+          key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
+          const DataMapArray = dataMap.get(key) || new Map<number, DataNumber[]>();
+          if (!DataMapArray.size) {
+            dataMap.set(key, DataMapArray);
+          }
+          const existingDataArray = DataMapArray.get(point.getDate().getTime()) || [];
+          if (!existingDataArray.length) {
+            DataMapArray.set(point.getDate().getTime(), existingDataArray)
+          }
+          existingDataArray.push(pointData);
+        });
+        return dataMap;
+      }, dataMapReturn);
+    });
     this.logger.d('Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
-    return this.dataMap;
+    return dataMapReturn;
   }
 
   private getAllCategoryTypes(dataMap: Map<number, any>): any[] {
-    if (this.categories.length < 1) {
-      this.getAllData().forEach((dataMapArray, category, eventData) => {
-        // Hack here to add the units unfortunately
-        this.categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
-      });
-    }
-    return this.categories;
+    const categories = [];
+    this.getAllData().forEach((dataMapArray, category, eventData) => {
+      // Hack here to add the units unfortunately
+      categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
+    });
+    return categories;
   }
 
   private getDataProvider(dataMap: Map<number, any>): any[] {
@@ -238,29 +227,29 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return dataMap;
   }
 
-  private getValueAxes(dataMap: Map<number, any>): any[] {
-    const t0 = performance.now();
-    const valueAxes = [];
-    let leftIndex = 0;
-    let rightIndex = 0;
-    this.getAllCategoryTypes(dataMap).forEach((dataCategory) => {
-      valueAxes.push({
-        id: dataCategory.id,
-        axisColor: this.genColor(dataCategory.id),
-        axisThickness: 1,
-        axisAlpha: 1,
-        position: valueAxes.length % 2 === 0 ? 'left' : 'right',
-        offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
-        gridThickness: 0.09,
-      });
-      valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
-    });
-    this.logger.d('Got valueAxes after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return valueAxes;
-  }
+  // private getValueAxes(dataMap: Map<number, any>): any[] {
+  //   const t0 = performance.now();
+  //   const valueAxes = [];
+  //   let leftIndex = 0;
+  //   let rightIndex = 0;
+  //   this.getAllCategoryTypes(dataMap).forEach((dataCategory) => {
+  //     valueAxes.push({
+  //       id: dataCategory.id,
+  //       axisColor: this.genColor(dataCategory.id),
+  //       axisThickness: 1,
+  //       axisAlpha: 1,
+  //       position: valueAxes.length % 2 === 0 ? 'left' : 'right',
+  //       offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
+  //       gridThickness: 0.09,
+  //     });
+  //     valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
+  //   });
+  //   this.logger.d('Got valueAxes after ' +
+  //     (performance.now() - t0) + ' milliseconds or ' +
+  //     (performance.now() - t0) / 1000 + ' seconds'
+  //   );
+  //   return valueAxes;
+  // }
 
   private getGraphs(dataMap: Map<number, any>): any[] {
     const t0 = performance.now();
@@ -512,7 +501,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
 
-  ngOnDestroy() {
+  private destroyChart() {
     // There can be the case where the chart has not finished bulding and the user navigated away
     // thus no chart to destroy
     try {
@@ -522,5 +511,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     } catch (e) {
       this.logger.error('Could not destroy chart');
     }
+  }
+
+  ngOnDestroy() {
+    this.destroyChart();
   }
 }
