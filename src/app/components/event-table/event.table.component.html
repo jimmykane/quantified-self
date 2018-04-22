@@ -25,7 +25,7 @@
         </mat-cell>
       </ng-container>
       <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/dashboard']"
+      <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/eventDetails']"
                [queryParams]="{ eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
     </mat-table>
   </mat-card>
