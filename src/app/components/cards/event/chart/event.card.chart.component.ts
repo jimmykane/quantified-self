@@ -41,7 +41,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   ngAfterViewInit() {
     if (this.event.getActivities().length === 1) {
       this.selectedActivities = [this.event.getFirstActivity()];
-      this.createChart();
     }
   }
 
@@ -49,43 +48,17 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(): void {
-    if (!this.chart) {
-      return;
-    }
-    debugger;
-    if (this.event.getActivities().length === 1) {
-      this.selectedActivities = [this.event.getFirstActivity()];
-      this.updateChart();
-    }
   }
 
   onSelectedActivities(activities) {
-    debugger
-    // this.selectedActivities = activities;
-    // if (this.selectedActivities.length) {
-    //   this.createAndUpdateChart();
-    // } else if (this.chart) {
-    //   this.AmCharts.destroyChart(this.chart);
-    // }
-
+    this.selectedActivities = activities;
+    if (!this.selectedActivities.length) {
+      this.AmCharts.destroyChart(this.chart);
+      return;
+    }
+    this.createChart();
   }
 
-  // private createAndUpdateChart() {
-  //   const t0 = performance.now();
-  //
-  //   this.createChart().then(() => {
-  //     this.logger.d('Chart create promise completed after ' +
-  //       (performance.now() - t0) + ' milliseconds or ' +
-  //       (performance.now() - t0) / 1000 + ' seconds'
-  //     );
-  //     this.updateChart().then(() => {
-  //       this.logger.d('Chart update promise completed after ' +
-  //         (performance.now() - t0) + ' milliseconds or ' +
-  //         (performance.now() - t0) / 1000 + ' seconds'
-  //       );
-  //     });
-  //   });
-  // }
 
   private createChart() {
     return new Promise((resolve, reject) => {
@@ -94,13 +67,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         (performance.now() - t0) + ' milliseconds or ' +
         (performance.now() - t0) / 1000 + ' seconds'
       );
-      // Destroy existing chart
-      if (this.chart) {
-        this.AmCharts.destroyChart(this.chart);
-      }
       // Create a fresh one
       const dataMap = this.getDataMap();
-      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmchartOptions(dataMap));
+      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmchartOptions(dataMap), 1);
+      this.addListenersToChart();
+
       const t1 = performance.now();
       this.logger.d('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
       resolve(true);
@@ -128,11 +99,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private addListenersToChart() {
     if (!this.chart.events.rendered.length) {
       this.chart.addListener('rendered', () => {
+        this.logger.d('Rendered')
       });
     }
 
     if (!this.chart.events.init.length) {
       this.chart.addListener('init', () => {
+        this.logger.d('Init')
       });
     }
 
@@ -143,6 +116,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       //   });
       //   event.chart.validateNow();
       // });
+      this.logger.d('DataUpdated')
+
     }
 
     if (!this.chart.events.resized.length) {
@@ -167,6 +142,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
     if (!this.chart.events.drawn.length) {
       this.chart.addListener('drawn', () => {
+        this.logger.d('Drawn')
       });
     }
   }
@@ -207,7 +183,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getAllCategoryTypes(dataMap: Map<number, any>): any[] {
-    debugger;
     if (this.categories.length < 1) {
       this.getAllData().forEach((dataMapArray, category, eventData) => {
         // Hack here to add the units unfortunately
