@@ -538,9 +538,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnDestroy() {
-    // @todo should check better if created or built
-    if (this.chart) {
-      this.AmCharts.destroyChart(this.chart);
+    // There can be the case where the chart has not finished bulding and the user navigated away
+    // thus no chart to destroy
+    try {
+      if (this.chart) {
+        this.AmCharts.destroyChart(this.chart);
+      }
+    } catch (e) {
+      this.logger.error('Could not destroy chart');
     }
   }
 }
