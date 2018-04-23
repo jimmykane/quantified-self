@@ -78,23 +78,18 @@ export class UploadComponent {
     for (let index = 0; index < files.length; index++) {
       processPromises.push(this.processFile(files[index]));
     }
-    try {
-      await Promise.all(processPromises);
-    } catch (error) {
-      console.error('Some of the files could not be processed', error);
-    } finally {
-      this.isUploadActive = false;
-      this.snackBar.open('Processed '  + processPromises.length + ' files', null, {
-        duration: 5000,
-      });
-      // Pass event to removeDragData for cleanup
-      if (event.dataTransfer && event.dataTransfer.items) {
-        // Use DataTransferItemList interface to remove the drag data
-        event.dataTransfer.items.clear();
-      } else if (event.dataTransfer) {
-        // Use DataTransfer interface to remove the drag data
-        event.dataTransfer.clearData();
-      }
+    await Promise.all(processPromises);
+    this.isUploadActive = false;
+    this.snackBar.open('Processed ' + processPromises.length + ' files', null, {
+      duration: 5000,
+    });
+    // Pass event to removeDragData for cleanup
+    if (event.dataTransfer && event.dataTransfer.items) {
+      // Use DataTransferItemList interface to remove the drag data
+      event.dataTransfer.items.clear();
+    } else if (event.dataTransfer) {
+      // Use DataTransfer interface to remove the drag data
+      event.dataTransfer.clearData();
     }
   }
 }
