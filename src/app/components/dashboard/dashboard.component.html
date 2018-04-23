@@ -10,14 +10,5 @@
 </ng-template>
 
 <ng-template #eventBlock>
-  <div *ngIf="selectedEvent; then eventCardBlock else eventCardListBlock"></div>
-  <ng-template #eventCardBlock>
-    <app-event-card
-      *ngIf="selectedEvent"
-      [event]="selectedEvent">
-    </app-event-card>
-  </ng-template>
-  <ng-template #eventCardListBlock>
     <app-event-table [events]="events"></app-event-table>
-  </ng-template>
 </ng-template>

@@ -29,8 +29,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   @Input() event: EventInterface;
 
-  private dataMap: Map<string, Map<number, DataNumber[]>>;
-  private categories = [];
   private chart: any;
   private selectedActivities = [];
   private logger = Log.create('EventCardChartComponent');
@@ -42,159 +40,63 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnInit() {
-
   }
 
   ngOnChanges(): void {
-    if (this.event.getActivities().length === 1) {
-      this.selectedActivities = [this.event.getFirstActivity()];
-      this.createAndUpdateChart();
-    }
   }
 
   onSelectedActivities(activities) {
     this.selectedActivities = activities;
-    if (this.selectedActivities.length) {
-      this.createAndUpdateChart();
-    } else if (this.chart) {
-      this.AmCharts.destroyChart(this.chart);
-    }
-
+    this.destroyChart();
+    this.createChart();
   }
 
-  private createAndUpdateChart() {
-    const t0 = performance.now();
-
-    this.createChart().then(() => {
-      this.logger.d('Chart create promise completed after ' +
-        (performance.now() - t0) + ' milliseconds or ' +
-        (performance.now() - t0) / 1000 + ' seconds'
-      );
-      this.updateChart().then(() => {
-        this.logger.d('Chart update promise completed after ' +
-          (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds'
-        );
-      });
-    });
-  }
 
   private createChart() {
-    this.categories = [];
-    this.dataMap = void 0;
-    const graphs = this.getGraphs();
-    // const valueAxes = this.getValueAxes();
-
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
       this.logger.d('Chart Create started after ' +
         (performance.now() - t0) + ' milliseconds or ' +
         (performance.now() - t0) / 1000 + ' seconds'
       );
-      // Destroy existing chart
-      if (this.chart) {
-        this.AmCharts.destroyChart(this.chart);
-      }
       // Create a fresh one
-      this.chart = this.AmCharts.makeChart('chartdiv', {
-        type: 'serial',
-        theme: 'light',
-        autoMarginOffset: 0,
-        // marginRight: 100,
-        autoMargins: true,
-        graphs: graphs,
-        // autoTransform: false,
-        // autoResize: false,
-        // autoDisplay: false,
-        // responsive: {
-        //   enabled: false
-        // },
-        // valueAxes: [{
-        //   gridThickness: 0.0,
-        // }],
-        startDuration: 0.3,
-        startEffect: 'elastic',
-        sequencedAnimation: false,
-        categoryField: 'date',
-        // processCount: 1000,
-        // processTimeout: 2000,
-        legend: {
-          align: 'center',
-          useGraphSettings: true,
-          autoMargins: true,
-          marginTop: 0,
-          valueText: '[[value]]',
-          clickLabel: (graph) => {
-            const visibleGraphs = graph.chart.graphs.filter((graphObj) => {
-              return !graphObj.hidden;
-            });
-            if (visibleGraphs.length === 1 && !graph.hidden) {
-              return;
-            }
-            graph.hidden = !graph.hidden;
-            // graph.chart.valueAxes.forEach((valueAxis) => {
-            //   valueAxis.guides = this.getZoneGuides();
-            // });
-            if (!graph.hidden) {
-              graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
-            }
-            graph.chart.validateNow();
-          },
-        },
-        synchronizeGrid: true,
-        categoryAxis: {
-          parseDates: true,
-          minPeriod: 'fff',
-          axisColor: '#DADADA',
-          gridThickness: 0.0,
-          offset: 0,
-          labelOffset: 0,
-          // minorGridEnabled: true,
-        },
-        chartScrollbar: this.getScrollbarForGraph(graphs[0]),
-        chartCursor: {
-          valueZoomable: true,
-          categoryBalloonDateFormat: 'JJ:NN:SS',
-          cursorAlpha: 0,
-          valueLineEnabled: true,
-          valueLineBalloonEnabled: true,
-          valueLineAlpha: 0.5,
-          fullWidth: true
-        },
-        creditsPosition: 'bottom-right'
-      });
+      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmChartOptions(this.getAllData()), 1);
+      this.addListenersToChart();
+
       const t1 = performance.now();
       this.logger.d('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
       resolve(true);
     });
   }
 
-  private updateChart(): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const t0 = performance.now();
-
-      const dataProvider = this.getDataProvider(this.getDataMap()); // I only need the length @todo
-      // This must be called when making any changes to the chart
-      this.AmCharts.updateChart(this.chart, () => {
-        this.chart.dataProvider = dataProvider;
-        this.addListenersToChart();
-        this.logger.d('Updated chart after ' +
-          (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds'
-        );
-      });
-      resolve(true);
-    });
-  }
+  // private updateChart(): Promise<any> {
+  //   return new Promise((resolve, reject) => {
+  //     const t0 = performance.now();
+  //     // This must be called when making any changes to the chart
+  //     this.AmCharts.updateChart(this.chart, () => {
+  //       const dataMap = this.getDataMap();
+  //       this.chart.dataProvider = this.getDataProvider(dataMap);
+  //       this.chart.graphs = this.getGraphs(dataMap);
+  //       this.addListenersToChart();
+  //       this.logger.d('Updated chart after ' +
+  //         (performance.now() - t0) + ' milliseconds or ' +
+  //         (performance.now() - t0) / 1000 + ' seconds'
+  //       );
+  //     });
+  //     resolve(true);
+  //   });
+  // }
 
   private addListenersToChart() {
     if (!this.chart.events.rendered.length) {
       this.chart.addListener('rendered', () => {
+        this.logger.d('Rendered')
       });
     }
 
     if (!this.chart.events.init.length) {
       this.chart.addListener('init', () => {
+        this.logger.d('Init')
       });
     }
 
@@ -205,6 +107,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       //   });
       //   event.chart.validateNow();
       // });
+      this.logger.d('DataUpdated')
+
     }
 
     if (!this.chart.events.resized.length) {
@@ -229,53 +133,52 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
     if (!this.chart.events.drawn.length) {
       this.chart.addListener('drawn', () => {
+        this.logger.d('Drawn')
       });
     }
   }
 
   private getAllData(): Map<string, Map<number, DataNumber[]>> {
     const t0 = performance.now();
-    if (!this.dataMap) {
-      this.dataMap = new Map<string, Map<number, DataNumber[]>>();
-      this.selectedActivities.forEach((activity: ActivityInterface, index) => {
-        activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataNumber[]>>, point: PointInterface, currentIndex) => {
-          point.getData().forEach((pointData: DataInterface, key: string) => {
-            if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
-              return;
-            }
-            if (!(pointData instanceof DataNumber)) {
-              return;
-            }
-            key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
-            const DataMapArray = dataMap.get(key) || new Map<number, DataNumber[]>();
-            if (!DataMapArray.size) {
-              dataMap.set(key, DataMapArray);
-            }
-            const existingDataArray = DataMapArray.get(point.getDate().getTime()) || [];
-            if (!existingDataArray.length) {
-              DataMapArray.set(point.getDate().getTime(), existingDataArray)
-            }
-            existingDataArray.push(pointData);
-          });
-          return dataMap;
-        }, this.dataMap);
-      });
-    }
+    const dataMapReturn = new Map<string, Map<number, DataNumber[]>>();
+    this.selectedActivities.forEach((activity: ActivityInterface, index) => {
+      activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataNumber[]>>, point: PointInterface, currentIndex) => {
+        point.getData().forEach((pointData: DataInterface, key: string) => {
+          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
+            return;
+          }
+          if (!(pointData instanceof DataNumber)) {
+            return;
+          }
+          key += ':' + activity.getID() + ':' + index + ':' + activity.creator.name;
+          const DataMapArray = dataMap.get(key) || new Map<number, DataNumber[]>();
+          if (!DataMapArray.size) {
+            dataMap.set(key, DataMapArray);
+          }
+          const existingDataArray = DataMapArray.get(point.getDate().getTime()) || [];
+          if (!existingDataArray.length) {
+            DataMapArray.set(point.getDate().getTime(), existingDataArray)
+          }
+          existingDataArray.push(pointData);
+        });
+        return dataMap;
+      }, dataMapReturn);
+    });
+
     this.logger.d('Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
     );
-    return this.dataMap;
+    return dataMapReturn;
   }
 
-  private getAllCategoryTypes(): any[] {
-    if (this.categories.length < 1) {
-      this.getAllData().forEach((dataMapArray, category, eventData) => {
-        // Hack here to add the units unfortunately
-        this.categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
-      });
-    }
-    return this.categories;
+  private getAllCategoryTypes(allData: Map<string, Map<number, DataNumber[]>>): any[] {
+    const categories = [];
+    allData.forEach((dataMapArray, category, eventData) => {
+      // Hack here to add the units unfortunately
+      categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
+    });
+    return categories;
   }
 
   private getDataProvider(dataMap: Map<number, any>): any[] {
@@ -299,11 +202,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return dataProvider;
   }
 
-  private getDataMap() {
+  private getDataMap(allData: Map<string, Map<number, DataNumber[]>>) {
     const t0 = performance.now();
     const dataMap = new Map<number, any>();
     let dataCount = 0;
-    this.getAllData().forEach((dataArrayMap: Map<number, DataNumber[]>, dataType: string) => {
+    allData.forEach((dataArrayMap: Map<number, DataNumber[]>, dataType: string) => {
       dataArrayMap.forEach((dataArray: DataNumber[], time) => {
         dataArray.reduce((dataAccumulator: Map<number, any>, data: DataNumber) => {
           dataCount++;
@@ -324,34 +227,34 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return dataMap;
   }
 
-  private getValueAxes(): any[] {
-    const t0 = performance.now();
-    const valueAxes = [];
-    let leftIndex = 0;
-    let rightIndex = 0;
-    this.getAllCategoryTypes().forEach((dataCategory) => {
-      valueAxes.push({
-        id: dataCategory.id,
-        axisColor: this.genColor(dataCategory.id),
-        axisThickness: 1,
-        axisAlpha: 1,
-        position: valueAxes.length % 2 === 0 ? 'left' : 'right',
-        offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
-        gridThickness: 0.09,
-      });
-      valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
-    });
-    this.logger.d('Got valueAxes after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds'
-    );
-    return valueAxes;
-  }
+  // private getValueAxes(dataMap: Map<number, any>): any[] {
+  //   const t0 = performance.now();
+  //   const valueAxes = [];
+  //   let leftIndex = 0;
+  //   let rightIndex = 0;
+  //   this.getAllCategoryTypes(dataMap).forEach((dataCategory) => {
+  //     valueAxes.push({
+  //       id: dataCategory.id,
+  //       axisColor: this.genColor(dataCategory.id),
+  //       axisThickness: 1,
+  //       axisAlpha: 1,
+  //       position: valueAxes.length % 2 === 0 ? 'left' : 'right',
+  //       offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
+  //       gridThickness: 0.09,
+  //     });
+  //     valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
+  //   });
+  //   this.logger.d('Got valueAxes after ' +
+  //     (performance.now() - t0) + ' milliseconds or ' +
+  //     (performance.now() - t0) / 1000 + ' seconds'
+  //   );
+  //   return valueAxes;
+  // }
 
-  private getGraphs(): any[] {
+  private getGraphs(allData: Map<string, Map<number, DataNumber[]>>): any[] {
     const t0 = performance.now();
     const graphs = [];
-    this.getAllCategoryTypes().forEach((dataCategory: any) => {
+    this.getAllCategoryTypes(allData).forEach((dataCategory: any) => {
       const categoryID = dataCategory.id;
       const name = categoryID.split(':')[0];
       const activityID = categoryID.split(':')[1];
@@ -492,6 +395,78 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     };
   }
 
+  private getAmChartOptions(allData: Map<string, Map<number, DataNumber[]>>) {
+    const dataMap = this.getDataMap(allData);
+    return {
+      type: 'serial',
+      theme: 'light',
+      dataProvider: this.getDataProvider(dataMap),
+      autoMarginOffset: 0,
+      // marginRight: 100,
+      autoMargins: true,
+      graphs: this.getGraphs(allData),
+      // autoTransform: false,
+      // autoResize: false,
+      // autoDisplay: false,
+      // responsive: {
+      //   enabled: false
+      // },
+      // valueAxes: [{
+      //   gridThickness: 0.0,
+      // }],
+      startDuration: 0.3,
+      startEffect: 'elastic',
+      sequencedAnimation: false,
+      categoryField: 'date',
+      // processCount: 1000,
+      // processTimeout: 2000,
+      legend: {
+        align: 'center',
+        useGraphSettings: true,
+        autoMargins: true,
+        marginTop: 0,
+        valueText: '[[value]]',
+        clickLabel: (graph) => {
+          const visibleGraphs = graph.chart.graphs.filter((graphObj) => {
+            return !graphObj.hidden;
+          });
+          if (visibleGraphs.length === 1 && !graph.hidden) {
+            return;
+          }
+          graph.hidden = !graph.hidden;
+          // graph.chart.valueAxes.forEach((valueAxis) => {
+          //   valueAxis.guides = this.getZoneGuides();
+          // });
+          if (!graph.hidden) {
+            graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
+          }
+          graph.chart.validateNow();
+        },
+      },
+      synchronizeGrid: true,
+      categoryAxis: {
+        parseDates: true,
+        minPeriod: 'fff',
+        axisColor: '#DADADA',
+        gridThickness: 0.0,
+        offset: 0,
+        labelOffset: 0,
+        // minorGridEnabled: true,
+      },
+      chartScrollbar: this.getScrollbarForGraph(this.getGraphs(allData)[0]),
+      chartCursor: {
+        valueZoomable: true,
+        categoryBalloonDateFormat: 'JJ:NN:SS',
+        cursorAlpha: 0,
+        valueLineEnabled: true,
+        valueLineBalloonEnabled: true,
+        valueLineAlpha: 0.5,
+        fullWidth: true
+      },
+      creditsPosition: 'bottom-right'
+    }
+  }
+
   private genColor(key: string) {
     if (key.includes(DataHeartRate.type + ' 4')) {
       return '#006064';
@@ -527,8 +502,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
 
+  private destroyChart() {
+    // There can be the case where the chart has not finished bulding and the user navigated away
+    // thus no chart to destroy
+    try {
+      if (this.chart) {
+        this.AmCharts.destroyChart(this.chart);
+      }
+    } catch (e) {
+      this.logger.error('Could not destroy chart');
+    }
+  }
+
   ngOnDestroy() {
-    // @todo should check better if created or built
-    this.AmCharts.destroyChart(this.chart);
+    this.destroyChart();
   }
 }

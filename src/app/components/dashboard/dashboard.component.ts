@@ -21,15 +21,12 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public events: List<EventInterface> = List([]);
   public selectedEvent: EventInterface;
 
-  private parametersEventID: string;
-  private parametersSubscription: Subscription;
   private eventsSubscription: Subscription;
 
   constructor(private eventService: EventService,
               private changeDetectorRef: ChangeDetectorRef,
               private route: ActivatedRoute,
               private router: Router) {
-    // this.changeDetectorRef.detach();
   }
 
   mergeEvents($event, event: EventInterface) {
@@ -37,35 +34,19 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     EventUtilities.mergeEvents([this.selectedEvent, event]).then((mergedEvent: EventInterface) => {
         this.eventService.addAndSaveEvent(mergedEvent);
     });
-    return false;
   }
 
   ngOnInit() {
-    // Subscribe to route changes
-    this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-      this.parametersEventID = params['eventID'];
-      this.findSelectedEvent();
-    });
-
     // Fetch the events from the service
     this.eventsSubscription = this.eventService.getEvents().subscribe((events: List<EventInterface>) => {
       this.events = events;
-      this.findSelectedEvent();
     });
-  }
-
-  private findSelectedEvent() {
-    this.selectedEvent = this.events.find((event: EventInterface) => {
-      return event.getID() === this.parametersEventID;
-    });
-    this.changeDetectorRef.markForCheck();
   }
 
   ngOnChanges() {
   }
 
   ngOnDestroy(): void {
-    this.parametersSubscription.unsubscribe();
     this.eventsSubscription.unsubscribe();
   }
 }

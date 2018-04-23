@@ -1,4 +1,4 @@
-<mat-card>
+<mat-card *ngIf="eventPromise | async as event">
   <mat-card-header>
     <mat-card-title>
       <section class="title">
@@ -44,7 +44,7 @@
 
   <mat-card-content>
     <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex"
-                   (selectedIndexChange)="selectedTabIndexChange($event)">
+                   (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {eventID: event.getID(), tabIndex: $event}})">
       <mat-tab label="Map" *ngIf="event.hasPointsWithPosition()">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
