@@ -60,8 +60,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         (performance.now() - t0) / 1000 + ' seconds'
       );
       // Create a fresh one
-      const dataMap = this.getDataMap();
-      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmchartOptions(dataMap), 1);
+      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmChartOptions(this.getAllData()), 1);
       this.addListenersToChart();
 
       const t1 = performance.now();
@@ -70,23 +69,23 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     });
   }
 
-  private updateChart(): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const t0 = performance.now();
-      // This must be called when making any changes to the chart
-      this.AmCharts.updateChart(this.chart, () => {
-        const dataMap = this.getDataMap();
-        this.chart.dataProvider = this.getDataProvider(dataMap);
-        this.chart.graphs = this.getGraphs(dataMap);
-        this.addListenersToChart();
-        this.logger.d('Updated chart after ' +
-          (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds'
-        );
-      });
-      resolve(true);
-    });
-  }
+  // private updateChart(): Promise<any> {
+  //   return new Promise((resolve, reject) => {
+  //     const t0 = performance.now();
+  //     // This must be called when making any changes to the chart
+  //     this.AmCharts.updateChart(this.chart, () => {
+  //       const dataMap = this.getDataMap();
+  //       this.chart.dataProvider = this.getDataProvider(dataMap);
+  //       this.chart.graphs = this.getGraphs(dataMap);
+  //       this.addListenersToChart();
+  //       this.logger.d('Updated chart after ' +
+  //         (performance.now() - t0) + ' milliseconds or ' +
+  //         (performance.now() - t0) / 1000 + ' seconds'
+  //       );
+  //     });
+  //     resolve(true);
+  //   });
+  // }
 
   private addListenersToChart() {
     if (!this.chart.events.rendered.length) {
@@ -165,6 +164,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         return dataMap;
       }, dataMapReturn);
     });
+
     this.logger.d('Retrieved all data after ' +
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds'
@@ -172,9 +172,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return dataMapReturn;
   }
 
-  private getAllCategoryTypes(dataMap: Map<number, any>): any[] {
+  private getAllCategoryTypes(allData: Map<string, Map<number, DataNumber[]>>): any[] {
     const categories = [];
-    this.getAllData().forEach((dataMapArray, category, eventData) => {
+    allData.forEach((dataMapArray, category, eventData) => {
       // Hack here to add the units unfortunately
       categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
     });
@@ -202,11 +202,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return dataProvider;
   }
 
-  private getDataMap() {
+  private getDataMap(allData: Map<string, Map<number, DataNumber[]>>) {
     const t0 = performance.now();
     const dataMap = new Map<number, any>();
     let dataCount = 0;
-    this.getAllData().forEach((dataArrayMap: Map<number, DataNumber[]>, dataType: string) => {
+    allData.forEach((dataArrayMap: Map<number, DataNumber[]>, dataType: string) => {
       dataArrayMap.forEach((dataArray: DataNumber[], time) => {
         dataArray.reduce((dataAccumulator: Map<number, any>, data: DataNumber) => {
           dataCount++;
@@ -251,10 +251,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   //   return valueAxes;
   // }
 
-  private getGraphs(dataMap: Map<number, any>): any[] {
+  private getGraphs(allData: Map<string, Map<number, DataNumber[]>>): any[] {
     const t0 = performance.now();
     const graphs = [];
-    this.getAllCategoryTypes(dataMap).forEach((dataCategory: any) => {
+    this.getAllCategoryTypes(allData).forEach((dataCategory: any) => {
       const categoryID = dataCategory.id;
       const name = categoryID.split(':')[0];
       const activityID = categoryID.split(':')[1];
@@ -395,7 +395,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     };
   }
 
-  private getAmchartOptions(dataMap: Map<number, any>) {
+  private getAmChartOptions(allData: Map<string, Map<number, DataNumber[]>>) {
+    const dataMap = this.getDataMap(allData);
     return {
       type: 'serial',
       theme: 'light',
@@ -403,7 +404,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       autoMarginOffset: 0,
       // marginRight: 100,
       autoMargins: true,
-      graphs: this.getGraphs(dataMap),
+      graphs: this.getGraphs(allData),
       // autoTransform: false,
       // autoResize: false,
       // autoDisplay: false,
@@ -452,7 +453,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         labelOffset: 0,
         // minorGridEnabled: true,
       },
-      chartScrollbar: this.getScrollbarForGraph(this.getGraphs(dataMap)),
+      chartScrollbar: this.getScrollbarForGraph(this.getGraphs(allData)[0]),
       chartCursor: {
         valueZoomable: true,
         categoryBalloonDateFormat: 'JJ:NN:SS',
