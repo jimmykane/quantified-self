@@ -84,6 +84,9 @@ export class UploadComponent {
       console.error('Some of the files could not be processed', error);
     } finally {
       this.isUploadActive = false;
+      this.snackBar.open('Processed '  + processPromises.length + ' files', null, {
+        duration: 5000,
+      });
       // Pass event to removeDragData for cleanup
       if (event.dataTransfer && event.dataTransfer.items) {
         // Use DataTransferItemList interface to remove the drag data
