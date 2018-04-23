@@ -67,7 +67,6 @@ export class EventImporterSuuntoJSON {
 
   static getFromJSONString(jsonString: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
-    debugger;
 
     // Create an event
     const event = new Event();
@@ -219,8 +218,6 @@ export class EventImporterSuuntoJSON {
     activities.forEach((activity: ActivityInterface) => {
       event.addActivity(activity);
     });
-
-    debugger;
 
     return event;
   }

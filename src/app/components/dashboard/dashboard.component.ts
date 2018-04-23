@@ -13,7 +13,6 @@ import {EventUtilities} from '../../entities/events/utilities/event.utilities';
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {

@@ -61,7 +61,12 @@ import * as Raven from 'raven-js';
 import {environment} from '../environments/environment';
 
 Raven
-  .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244')
+  .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
+    environment: environment.production ? 'Production' : 'Development',
+    shouldSendCallback: function () {
+      return environment.production;
+    }
+  })
   .install();
 
 export class RavenErrorHandler implements ErrorHandler {
@@ -135,8 +140,8 @@ export class RavenErrorHandler implements ErrorHandler {
     WeatherUndergroundWeatherService,
     GeoLocationInfoService,
     AppEventColorService,
-    { provide: ErrorHandler, useClass: RavenErrorHandler }
-    // {provide: ErrorHandler, useClass: !environment.production ? RavenErrorHandler : ErrorHandler}
+    // {provide: ErrorHandler, useClass: RavenErrorHandler}
+    {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler}
   ],
   bootstrap: [AppComponent]
 })

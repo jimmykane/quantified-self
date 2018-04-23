@@ -9,7 +9,6 @@ const routes: Routes = [
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
   { path: 'dashboard',  component: DashboardComponent },
   { path: 'eventDetails',  component: EventCardComponent },
-  { path: 'upload', component: UploadComponent },
   { path: 'about', component: AboutComponent },
 ];
 

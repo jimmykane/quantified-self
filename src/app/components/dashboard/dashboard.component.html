@@ -1,14 +1,2 @@
-<div *ngIf="events.size > 0; then eventBlock else uploadBlock"></div>
-
-<ng-template #uploadBlock>
-  <div style="padding: 2vmin;">
-    <h1>
-      There is nothing to show
-    </h1>
-    <h2><a mat-button routerLink="/upload">Go upload some</a></h2>
-  </div>
-</ng-template>
-
-<ng-template #eventBlock>
-    <app-event-table [events]="events"></app-event-table>
-</ng-template>
+<app-upload></app-upload>
+<app-event-table *ngIf="events.size > 0" [events]="events"></app-event-table>
