@@ -1,5 +1,4 @@
-import {NgModule} from '@angular/core';
-
+import {ErrorHandler, NgModule} from '@angular/core';
 import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
 import {AppRoutingModule} from './app-routing.module';
@@ -55,9 +54,21 @@ import {ActivityIconComponent} from './components/activity-icon/activity-icon.co
 import {DisqusModule} from 'ngx-disqus';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
 import {AppEventColorService} from './services/app.event.color.service';
-import { UploadInfoComponent } from './components/upload-info/upload-info.component';
+import {UploadInfoComponent} from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
 import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
+import * as Raven from 'raven-js';
+import {environment} from '../environments/environment';
+
+Raven
+  .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244')
+  .install();
+
+export class RavenErrorHandler implements ErrorHandler {
+  handleError(err: any): void {
+    Raven.captureException(err);
+  }
+}
 
 @NgModule({
   imports: [
@@ -123,7 +134,9 @@ import {ActivityHeaderComponent} from './components/activity-header/activity-hea
     ActionButtonService,
     WeatherUndergroundWeatherService,
     GeoLocationInfoService,
-    AppEventColorService
+    AppEventColorService,
+    { provide: ErrorHandler, useClass: RavenErrorHandler }
+    // {provide: ErrorHandler, useClass: !environment.production ? RavenErrorHandler : ErrorHandler}
   ],
   bootstrap: [AppComponent]
 })
