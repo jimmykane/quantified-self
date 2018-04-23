@@ -54,8 +54,8 @@ export class UploadComponent {
           resolve(newEvent);
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
-          console.error('Could not load event from file' + file.name, error);
-          reject(error);
+          console.error('Could not load event from file' + file.name, error); // Should check with Sentry
+          resolve(); // no-op here!
         }
       };
       // Read it
@@ -80,14 +80,10 @@ export class UploadComponent {
     }
     try {
       await Promise.all(processPromises);
-      this.router.navigate(['dashboard']).then(() => {
-        this.snackBar.open('Processing complete!', null, {
-          duration: 5000,
-        });
-      });
     } catch (error) {
       console.error('Some of the files could not be processed', error);
     } finally {
+      this.isUploadActive = false;
       // Pass event to removeDragData for cleanup
       if (event.dataTransfer && event.dataTransfer.items) {
         // Use DataTransferItemList interface to remove the drag data

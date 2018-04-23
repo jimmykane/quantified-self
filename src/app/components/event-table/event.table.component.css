@@ -35,3 +35,7 @@ mat-icon {
 .mat-header-row, .mat-row{
   padding: 0;
 }
+
+mat-card{
+  margin-bottom: 1vh;
+}

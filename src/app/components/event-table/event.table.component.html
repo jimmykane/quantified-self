@@ -1,32 +1,32 @@
-<div style="padding: 2vmin;">
-  <mat-card>
-    <mat-form-field>
-      <input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">
-    </mat-form-field>
-    <mat-table *ngIf="data" [dataSource]="data" matSort>
-      <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
-        <mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="isFirst || isLast">
-          <mat-checkbox *ngIf="isFirst" (change)="$event ? masterToggle() : null"
-                        [checked]="selection.hasValue() && isAllSelected()"
-                        [indeterminate]="selection.hasValue() && !isAllSelected()">
-          </mat-checkbox>
-          <span *ngIf="!isFirst && !isLast">
+<mat-card>
+  <mat-form-field>
+    <input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">
+  </mat-form-field>
+  <mat-table *ngIf="data" [dataSource]="data" matSort>
+    <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
+      <mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="isFirst || isLast">
+        <mat-checkbox *ngIf="isFirst" (change)="$event ? masterToggle() : null"
+                      [checked]="selection.hasValue() && isAllSelected()"
+                      [indeterminate]="selection.hasValue() && !isAllSelected()">
+        </mat-checkbox>
+        <span *ngIf="!isFirst && !isLast">
             <mat-icon *ngIf="getColumnIcon(column)">{{ getColumnIcon(column) }}</mat-icon>
             {{ column }}
           </span>
-        </mat-header-cell>
-        <mat-cell *matCellDef="let row">
-          <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
-                        (change)="$event ? checkBoxClick(row) : null"
-                        [checked]="selection.isSelected(row)">
-          </mat-checkbox>
-          <span *ngIf="column !== 'Checkbox' && column !== 'Actions'" matTooltip="{{ row[column] }}" [matTooltipPosition]="'above'">{{ row[column] }}</span>
-          <span *ngIf="column === 'Actions'"><app-event-card-actions-menu [event]="row[column]"></app-event-card-actions-menu></span>
-        </mat-cell>
-      </ng-container>
-      <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/eventDetails']"
-               [queryParams]="{ eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
-    </mat-table>
-  </mat-card>
-</div>
+      </mat-header-cell>
+      <mat-cell *matCellDef="let row">
+        <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
+                      (change)="$event ? checkBoxClick(row) : null"
+                      [checked]="selection.isSelected(row)">
+        </mat-checkbox>
+        <span *ngIf="column !== 'Checkbox' && column !== 'Actions'" matTooltip="{{ row[column] }}"
+              [matTooltipPosition]="'above'">{{ row[column] }}</span>
+        <span *ngIf="column === 'Actions'"><app-event-card-actions-menu
+          [event]="row[column]"></app-event-card-actions-menu></span>
+      </mat-cell>
+    </ng-container>
+    <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
+    <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/eventDetails']"
+             [queryParams]="{ eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
+  </mat-table>
+</mat-card>
