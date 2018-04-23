@@ -5,7 +5,7 @@
   <button mat-button (click)="inputFile.click()">Click to open .json or tcx files</button>
   <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'"
          (change)="getFiles($event)">
-  Or drag one or more files to this here ...
+  Or drag one or more files here ...
 </mat-card>
 
 <mat-card *ngIf="isUploadActive">
