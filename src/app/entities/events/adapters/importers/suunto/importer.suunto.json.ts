@@ -116,9 +116,9 @@ export class EventImporterSuuntoJSON {
     });
 
     // Get the move window
-    const moveWindow = eventJSONObject.DeviceLog.Windows.find((windowObj) => {
-      return windowObj.Window.Type === 'Move';
-    }).Window;
+    // const moveWindow = eventJSONObject.DeviceLog.Windows.find((windowObj) => {
+    //   return windowObj.Window.Type === 'Move';
+    // }).Window;
 
     // Create the activities
     const activities = activityStartEventSamples.map((activityStartEventSample, index): ActivityInterface => {
