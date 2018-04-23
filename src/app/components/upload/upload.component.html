@@ -2,10 +2,10 @@
           ondragenter="event.stopPropagation(); event.preventDefault();"
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
-  <button mat-button (click)="inputFile.click()">Open JSON or TCX file</button>
+  <button mat-button (click)="inputFile.click()">Click to open .json or tcx files</button>
   <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'"
          (change)="getFiles($event)">
-  Drag one or more files to this Drop Zone ...
+  Or drag one or more files to this here ...
 </mat-card>
 
 <mat-card *ngIf="isUploadActive">
