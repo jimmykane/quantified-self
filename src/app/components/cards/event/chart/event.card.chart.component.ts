@@ -440,7 +440,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
           if (!graph.hidden) {
             graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
           }
-          graph.chart.validateNow();
+          graph.chart.invalidateSize();
         },
       },
       synchronizeGrid: true,
