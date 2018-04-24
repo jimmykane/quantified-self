@@ -143,23 +143,27 @@ export class EventImporterSuuntoJSON {
     });
 
     // set the start dates of all lap types to the start of the first activity
-    const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample) => {
+    const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample, index) => {
+      // If its a stop event then set the start date to the previous
+      if (lapEventSample.Events[0].Lap.Type === 'Stop'){
+        lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] =  new Date(lapEventSamples[index - 1].TimeISO8601);
+        return lapStartDatesByTypeObject
+      }
       lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = activities[0].startDate;
       return lapStartDatesByTypeObject;
     }, {});
     const laps = lapEventSamples.reduce((lapArray, lapEventSample, index): LapInterface => {
+      // if there is only one lap then skip it's the whole activity
       if (lapEventSamples.length === 1) {
         return lapArray;
       }
       // Set the end date
       const lapEndDate = new Date(lapEventSample.TimeISO8601);
-      // Set the start date. For the current
+      // Set the start date.
       const lap = new Lap(lapStartDatesByType[lapEventSample.Events[0].Lap.Type], lapEndDate);
       // Set it for the next run
       lapStartDatesByType[lapEventSample.Events[0].Lap.Type] = lapEndDate;
       lap.type = lapEventSample.Events[0].Lap.Type;
-      // if it's only one lap there is no stats as it's the whole activity
-      // @todo think
 
       this.getStats(lapWindows[index]).forEach((stat) => {
         lap.addStat(stat);
