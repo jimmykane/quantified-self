@@ -61,15 +61,14 @@ export class EventExporterTCX implements EventExporterInterface {
 
       const activityLaps: LapInterface[] = activity.getLaps();
 
-
       // If there are no laps create one and clone it from the activity
-      // @todo fix
-      // if (!activityLaps.length) {
-      //   const lap = new Lap(activity.startDate, activity.endDate);
-      //   lap.summary = activity.summary;
-      //   activityLaps.push(lap);
-      // }
-
+      if (!activityLaps.length) {
+        const lap = new Lap(activity.startDate, activity.endDate);
+        Array.from(activity.getStats().values()).forEach((stat: DataInterface) => {
+          lap.addStat(stat);
+        });
+        activityLaps.push(lap);
+      }
 
       // Create the element
       // const creatorElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Creator'); // @todo should output the correct creator
@@ -81,7 +80,7 @@ export class EventExporterTCX implements EventExporterInterface {
       // Add it to the activities
       // activityElement.appendChild(creatorElement);
 
-
+      debugger
       for (const lap of activityLaps) {
         // Create a lap element
         const lapElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Lap');
