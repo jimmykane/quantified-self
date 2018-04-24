@@ -11,6 +11,7 @@
   <agm-map
     [fullscreenControl]="true"
     [mapTypeControl]="true"
+    [scaleControl]="true"
     [fitBounds]="getBounds()">
     <agm-polyline
       *ngFor="let activity of this.selectedActivities;"
