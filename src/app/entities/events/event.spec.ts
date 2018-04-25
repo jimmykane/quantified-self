@@ -118,6 +118,18 @@ describe('Event', () => {
     expect(event.hasPointsWithPosition()).toBe(true);
   });
 
+  it('should get return false if points with position when an activity is removed', () => {
+    const activity = new Activity();
+    const point = new Point(new Date());
+    point.addData(new DataLatitudeDegrees(0));
+    point.addData(new DataLongitudeDegrees(0));
+    activity.addPoint(point);
+    event.addActivity(activity);
+    expect(event.hasPointsWithPosition()).toBe(true);
+    event.removeActivity(activity);
+    expect(event.hasPointsWithPosition()).toBe(false);
+  });
+
   it('should export correctly to JSON', () => {
     const activity = new Activity();
     event.addActivity(activity);
