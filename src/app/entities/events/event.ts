@@ -55,11 +55,10 @@ export class Event extends StatsClassAbstract implements EventInterface {
       }, []);
   }
 
-  // @todo proper implementation for this query
-  hasPointsWithPosition(startDate?: Date, endDate?: Date, activities?: ActivityInterface[]): boolean {
+  hasPointsWithPosition(): boolean {
     // If not bool = not set
     if (this._hasPointsWithPosition === null) {
-      this._hasPointsWithPosition = this.getPointsWithPosition(startDate, endDate, activities).length > 0;
+      this._hasPointsWithPosition = !!this.getPointsWithPosition().length;
     }
     return this._hasPointsWithPosition;
   }

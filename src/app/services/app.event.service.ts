@@ -79,9 +79,9 @@ export class EventService {
    */
   public addGeoLocationAndWeatherInfo(event: EventInterface): Promise<EventInterface> {
     return new Promise(((resolve, reject) => {
-      // Find the activites with positional data
+      // Find the activities with positional data
       const activitiesWithPosition = event.getActivities().filter((activity) => {
-        return event.hasPointsWithPosition(void 0, void 0, [activity])
+        return event.getPointsWithPosition(void 0, void 0, [activity]).length
       });
       // Create their promises
       const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
