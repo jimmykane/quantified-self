@@ -128,6 +128,13 @@ describe('Event', () => {
     expect(event.hasPointsWithPosition()).toBe(true);
     event.removeActivity(activity);
     expect(event.hasPointsWithPosition()).toBe(false);
+    event.addActivity(activity);
+    expect(event.hasPointsWithPosition()).toBe(true);
+    const activityWithNoPosition = new Activity();
+    event.addActivity(activityWithNoPosition);
+    expect(event.hasPointsWithPosition()).toBe(true);
+    event.removeActivity(activity);
+    expect(event.hasPointsWithPosition()).toBe(false);
   });
 
   it('should export correctly to JSON', () => {
