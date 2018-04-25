@@ -6,7 +6,7 @@ import {EventInterface} from '../../../../../entities/events/event.interface';
 import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
 import {AppEventColorService} from '../../../../../services/app.event.color.service';
-import {ActivityInterface} from "../../../../../entities/activities/activity.interface";
+import {ActivityInterface} from '../../../../../entities/activities/activity.interface';
 
 
 @Component({
