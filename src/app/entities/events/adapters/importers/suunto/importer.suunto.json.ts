@@ -145,7 +145,7 @@ export class EventImporterSuuntoJSON {
     // set the start dates of all lap types to the start of the first activity
     const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample, index) => {
       // If its a stop event then set the start date to the previous
-      if (lapEventSample.Events[0].Lap.Type === 'Stop'){
+      if (lapEventSample.Events[0].Lap.Type === 'Stop' && lapEventSamples.length > 1) {
         lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] =  new Date(lapEventSamples[index - 1].TimeISO8601);
         return lapStartDatesByTypeObject
       }
