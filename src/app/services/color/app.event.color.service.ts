@@ -2,9 +2,8 @@ import {Injectable} from '@angular/core';
 import {EventInterface} from '../../entities/events/event.interface';
 import {ActivityInterface} from '../../entities/activities/activity.interface';
 import {CreatorInterface} from '../../entities/creators/creatorInterface';
-import {ImporterSuuntoDeviceNames} from '../../entities/events/adapters/importers/suunto/importer.suunto.device.names';
 import {AppColors} from './app.colors';
-import {AppDeviceColors} from "./app.device.colors";
+import {AppDeviceColors} from './app.device.colors';
 
 
 @Injectable()
