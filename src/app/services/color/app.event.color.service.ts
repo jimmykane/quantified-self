@@ -4,41 +4,14 @@ import {ActivityInterface} from '../../entities/activities/activity.interface';
 import {CreatorInterface} from '../../entities/creators/creatorInterface';
 import {ImporterSuuntoDeviceNames} from '../../entities/events/adapters/importers/suunto/importer.suunto.device.names';
 import {AppColors} from './app.colors';
+import {AppDeviceColors} from "./app.device.colors";
 
 
 @Injectable()
 export class AppEventColorService {
 
   private static getColorByCreator(activity: ActivityInterface, creator: CreatorInterface): string {
-    if (creator.name.includes(ImporterSuuntoDeviceNames['Suunto Ambit 3 Sport'])) {
-      return AppColors.Orange;
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames['Suunto Ambit 3 Peak'])) {
-      return AppColors.Orange;
-    }
-    if (creator.name.includes('Ibiza')) {
-      return AppColors.Green;
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames.Amsterdam)) {
-      return AppColors.Blue;
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames.Helsinki)) {
-      return AppColors.Pink;
-
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames.Forssa)) {
-      return AppColors.Purple;
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames.Brighton)) {
-      return AppColors.PurpleBlue;
-
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames.Gdansk)) {
-      return AppColors.Red;
-    }
-    if (creator.name.includes(ImporterSuuntoDeviceNames.Cairo)) {
-      return AppColors.LightGreen;
-    }
+    return AppDeviceColors[creator.name];
   }
 
   private static getColorByIndex(index: number): string {
