@@ -140,23 +140,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.actionButtonService.removeActionButton('mergeEvents');
     this.actionButtonService.removeActionButton('deleteEvents');
 
-    if (this.selection.selected.length > 0) {
-      this.actionButtonService.addActionButton('deleteEvents', new ActionButton(
-        'delete',
-        () => {
-          this.actionButtonService.removeActionButton('deleteEvents');
-          this.actionButtonService.removeActionButton('mergeEvents');
-          this.selection.selected.map(selected => selected.Checkbox).forEach((event) => this.eventService.deleteEvent(event));
-          this.eventSelectionMap.clear();
-          this.snackBar.open('Events deleted', null, {
-            duration: 5000,
-          });
-        },
-        'material'
-      ));
-    }
-
-    if (this.selection.selected.length > 1) {
+     if (this.selection.selected.length > 1) {
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         () => {
@@ -176,6 +160,22 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               });
             });
           })
+        },
+        'material'
+      ));
+    }
+
+    if (this.selection.selected.length > 0) {
+      this.actionButtonService.addActionButton('deleteEvents', new ActionButton(
+        'delete',
+        () => {
+          this.actionButtonService.removeActionButton('deleteEvents');
+          this.actionButtonService.removeActionButton('mergeEvents');
+          this.selection.selected.map(selected => selected.Checkbox).forEach((event) => this.eventService.deleteEvent(event));
+          this.eventSelectionMap.clear();
+          this.snackBar.open('Events deleted', null, {
+            duration: 5000,
+          });
         },
         'material'
       ));
