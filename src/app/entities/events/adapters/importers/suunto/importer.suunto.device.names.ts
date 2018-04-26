@@ -1,11 +1,11 @@
 export enum ImporterSuuntoDeviceNames {
-  'Amsterdam' = 'Spartan Ultra',
-  'Brighton' = 'Spartan Sport',
-  'Cairo' = 'Spartan WHR',
-  'Forssa' = 'Spartan Trainer',
-  'Gdansk' = 'Spartan WHR Baro',
-  'Helsinki' = '3 Fitness',
-  'Ibiza' = 'Ibiza',
+  'Amsterdam' = 'Suunto Spartan Ultra',
+  'Brighton' = 'Suunto Spartan Sport',
+  'Cairo' = 'Suunto Spartan WHR',
+  'Forssa' = 'Suunto Spartan Trainer',
+  'Gdansk' = 'Suunto Spartan WHR Baro',
+  'Helsinki' = 'Suunto 3 Fitness',
+  'Ibiza' = 'Suunto Ibiza',
   'Suunto Ambit3 Sport' = 'Suunto Ambit3 Sport',
   'Suunto Ambit3 Peak' = 'Suunto Ambit3 Peak',
 }
