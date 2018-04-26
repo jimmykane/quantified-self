@@ -7,7 +7,8 @@ import {ImporterSuuntoDeviceNames} from '../entities/events/adapters/importers/s
 
 @Injectable()
 export class AppEventColorService {
-  private static getColorByCreator(creator: CreatorInterface): string {
+
+  private static getColorByCreator(activity: ActivityInterface, creator: CreatorInterface): string {
     if (creator.name.includes(ImporterSuuntoDeviceNames['Suunto Ambit 3 Sport'])) {
       return '#FFA500';
     }
@@ -66,8 +67,8 @@ export class AppEventColorService {
   }
 
   public getActivityColor(event: EventInterface, activity: ActivityInterface): string {
-    return AppEventColorService.getColorByCreator(activity.creator) ?
-      AppEventColorService.getColorByCreator(activity.creator) :
+    return AppEventColorService.getColorByCreator(activity, activity.creator) ?
+      AppEventColorService.getColorByCreator(activity, activity.creator) :
       AppEventColorService.getColorByIndex(event.getActivities().findIndex((eventActivity) => {
         return activity === eventActivity
       }));
