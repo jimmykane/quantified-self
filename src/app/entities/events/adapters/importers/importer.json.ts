@@ -21,7 +21,7 @@ export class EventImporterJSON {
     event.name = eventJSONObject.name;
 
     eventJSONObject.stats.forEach((stat) => {
-      event.addStat(DynamicDataLoader.createData(stat.className, stat.value))
+      event.addStat(DynamicDataLoader.getDataInstance(stat.className, stat.value))
     });
 
     for (const activityObject of eventJSONObject.activities) {
@@ -38,7 +38,7 @@ export class EventImporterJSON {
         activity.geoLocationInfo = this.getGeoLocationInfo(activityObject);
       }
       activityObject.stats.forEach((stat) => {
-        activity.addStat(DynamicDataLoader.createData(stat.className, stat.value))
+        activity.addStat(DynamicDataLoader.getDataInstance(stat.className, stat.value))
       });
 
       for (const lapObject of activityObject.laps) {
@@ -46,7 +46,7 @@ export class EventImporterJSON {
         lap.type = lapObject.type;
         lap.setID(lapObject.id);
         lapObject.stats.forEach((stat) => {
-          lap.addStat(DynamicDataLoader.createData(stat.className, stat.value))
+          lap.addStat(DynamicDataLoader.getDataInstance(stat.className, stat.value))
         });
         activity.addLap(lap);
       }
@@ -80,7 +80,7 @@ export class EventImporterJSON {
         const point = new Point(new Date(pointObject.date));
         activity.addPoint(point);
         for (const dataObject of pointObject.data) {
-          point.addData(DynamicDataLoader.createData(dataObject.className, dataObject.value));
+          point.addData(DynamicDataLoader.getDataInstance(dataObject.className, dataObject.value));
         }
       }
     }

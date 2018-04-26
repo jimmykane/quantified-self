@@ -107,10 +107,17 @@ export const DataStore: any = {
 };
 
 export class DynamicDataLoader {
-  static createData(className: string, opts: any): DataInterface {
+  static getDataInstance(className: string, opts: any): DataInterface {
     if (DataStore[className] === undefined || DataStore[className] === null) {
       throw new Error(`Class type of \'${className}\' is not in the store`);
     }
     return new DataStore[className](opts);
+  }
+
+  static getDataClassFromClassName(className: string): DataInterface {
+    if (DataStore[className] === undefined || DataStore[className] === null) {
+      throw new Error(`Class type of \'${className}\' is not in the store`);
+    }
+    return DataStore[className];
   }
 }
