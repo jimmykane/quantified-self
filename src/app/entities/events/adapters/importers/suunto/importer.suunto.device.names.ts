@@ -1,5 +1,4 @@
 export enum ImporterSuuntoDeviceNames {
-
   'Amsterdam' = 'Spartan Ultra',
   'Brighton' = 'Spartan Sport',
   'Cairo' = 'Spartan WHR',

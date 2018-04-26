@@ -3,6 +3,7 @@ import {EventInterface} from '../../entities/events/event.interface';
 import {ActivityInterface} from '../../entities/activities/activity.interface';
 import {CreatorInterface} from '../../entities/creators/creatorInterface';
 import {ImporterSuuntoDeviceNames} from '../../entities/events/adapters/importers/suunto/importer.suunto.device.names';
+import {AppColors} from './app.colors';
 
 
 @Injectable()
@@ -10,56 +11,55 @@ export class AppEventColorService {
 
   private static getColorByCreator(activity: ActivityInterface, creator: CreatorInterface): string {
     if (creator.name.includes(ImporterSuuntoDeviceNames['Suunto Ambit 3 Sport'])) {
-      return '#FFA500';
+      return AppColors.Orange;
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames['Suunto Ambit 3 Peak'])) {
-      return '#FFA500';
+      return AppColors.Orange;
     }
     if (creator.name.includes('Ibiza')) {
-      return '#3fd532';
+      return AppColors.Green;
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames.Amsterdam)) {
-      return '#00008B';
+      return AppColors.Blue;
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames.Helsinki)) {
-      return '#FF00FF';
+      return AppColors.Pink;
 
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames.Forssa)) {
-      return '#800080';
-
+      return AppColors.Purple;
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames.Brighton)) {
-      return '#a4a8f5';
+      return AppColors.PurpleBlue;
 
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames.Gdansk)) {
-      return '#cb410f';
+      return AppColors.Red;
     }
     if (creator.name.includes(ImporterSuuntoDeviceNames.Cairo)) {
-      return '#82cca1';
+      return AppColors.LightGreen;
     }
   }
 
   private static getColorByIndex(index: number): string {
     switch (index) {
       case 0: {
-        return '#FFA500';
+        return AppColors.Orange;
       }
       case 1: {
-        return '#00008B';
+        return AppColors.Blue;
       }
       case 2: {
-        return '#FF00FF';
+        return AppColors.Pink;
       }
       case 3: {
-        return '#00FF00';
+        return AppColors.Green;
       }
       case 4: {
-        return '#800080';
+        return AppColors.Red;
       }
       case 5: {
-        return '#a4a8f5';
+        return AppColors.PurpleBlue;
       }
     }
     // Do random else
