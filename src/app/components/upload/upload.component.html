@@ -1,4 +1,4 @@
-<mat-card *ngIf="!isUploadActive" (drop)="getFiles($event);"
+<mat-card (drop)="getFiles($event);"
           ondragenter="event.stopPropagation(); event.preventDefault();"
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
@@ -6,9 +6,7 @@
   <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'"
          (change)="getFiles($event)">
   or drag one or more files here ...
+  <app-upload-info *ngIf="isUploadActive" [activitiesMetaData]="activitiesMetaData" ></app-upload-info>
 </mat-card>
 
-<mat-card *ngIf="isUploadActive">
-  <app-upload-info [activitiesMetaData]="activitiesMetaData" ></app-upload-info>
-</mat-card>
 
