@@ -5,7 +5,7 @@ export enum ImporterSuuntoDeviceNames {
   'Forssa' = 'Suunto Spartan Trainer',
   'Gdansk' = 'Suunto Spartan WHR Baro',
   'Helsinki' = 'Suunto 3 Fitness',
-  'Ibiza' = 'Suunto Ibiza',
+  'Ibiza' = 'Suunto 9',
   'Suunto Ambit3 Sport' = 'Suunto Ambit3 Sport',
   'Suunto Ambit3 Peak' = 'Suunto Ambit3 Peak',
 }
