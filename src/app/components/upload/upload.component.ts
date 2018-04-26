@@ -83,6 +83,8 @@ export class UploadComponent {
     this.snackBar.open('Processed ' + processPromises.length + ' files', null, {
       duration: 5000,
     });
+    // Remove all;
+    this.activitiesMetaData = [];
     // Pass event to removeDragData for cleanup
     if (event.dataTransfer && event.dataTransfer.items) {
       // Use DataTransferItemList interface to remove the drag data
