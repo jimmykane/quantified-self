@@ -17,6 +17,7 @@ import {Log, Level} from 'ng2-logger'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {DataNumber} from '../../../../entities/data/data.number';
+import {DataStore, DynamicDataLoader} from "../../../../entities/data/data.store";
 
 
 @Component({
@@ -103,7 +104,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     if (!this.chart.events.dataUpdated.length) {
       // this.chart.addListener('dataUpdated', (event) => {
       //   event.chart.valueAxes.forEach((valueAxis) => {
-      //     valueAxis.guides = this.getZoneGuides();
+      //     valueAxis.guides = this.getAverageGuide();
       //   });
       //   event.chart.validateNow();
       // });
@@ -291,85 +292,18 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return graphs;
   }
 
-  private getZoneGuides() {
-    // Find which graphs are visible and if applicable get a zone guide
-    if (this.chart.graphs.filter(chart => !chart.hidden).length !== 1) {
-      return [];
-    }
-    return this.chart.graphs.reduce((zoneGuides, graph) => {
-      if (graph.hidden) {
-        return zoneGuides;
-      }
-
-      let units = '';
-      // Only for HR for now
-      if (graph.id.split(':')[0] === DataHeartRate.type) {
-        units = DataHeartRate.unit;
-      }
-
-      // Check if there is an intensity zone
-      const activityIntensityZones = this.selectedActivities.find((activity: ActivityInterface) => {
-        return activity.getID() === graph.id.split(':')[1];
-      }).intensityZones.get(graph.id.split(':')[0]);
-      if (!activityIntensityZones) {
-        return zoneGuides
-      }
-
-      zoneGuides.push({
-          value: 0,
-          toValue: activityIntensityZones.zone2LowerLimit,
-          lineAlpha: 0.5,
-          lineThickness: 0.5,
-          lineColor: '#000000',
-          label: 'Z1',
-          position: 'right',
-          inside: true,
-          boldLabel: true,
-        }, {
-          value: activityIntensityZones.zone2LowerLimit,
-          toValue: activityIntensityZones.zone3LowerLimit,
-          lineAlpha: 0.5,
-          lineThickness: 0.5,
-          lineColor: '#000000',
-          label: 'Z2 (' + activityIntensityZones.zone2LowerLimit + ' to ' + activityIntensityZones.zone3LowerLimit + ') ' + units,
-          position: 'right',
-          inside: true,
-          boldLabel: true,
-        }, {
-          value: activityIntensityZones.zone3LowerLimit,
-          toValue: activityIntensityZones.zone4LowerLimit,
-          lineAlpha: 0.5,
-          lineThickness: 0.5,
-          lineColor: '#000000',
-          label: 'Z3 (' + activityIntensityZones.zone3LowerLimit + ' to ' + activityIntensityZones.zone4LowerLimit + ') ' + units,
-          position: 'right',
-          inside: true,
-          boldLabel: true,
-        }, {
-          value: activityIntensityZones.zone4LowerLimit,
-          toValue: activityIntensityZones.zone5LowerLimit,
-          lineAlpha: 0.5,
-          lineThickness: 0.5,
-          lineColor: '#000000',
-          label: 'Z4 (' + activityIntensityZones.zone4LowerLimit + ' to ' + activityIntensityZones.zone5LowerLimit + ') ' + units,
-          position: 'right',
-          inside: true,
-          boldLabel: true,
-        },
-        {
-          value: activityIntensityZones.zone5LowerLimit,
-          toValue: 220,
-          lineAlpha: 0.5,
-          lineThickness: 0.5,
-          lineColor: '#000000',
-          label: 'Z5 (' + activityIntensityZones.zone5LowerLimit + ' to max) ' + units,
-          position: 'right',
-          inside: true,
-          boldLabel: true,
-        }
-      );
-      return zoneGuides;
-    }, []);
+  private getAverageGuide(graph) {
+    return {
+      value: 120,
+      // toValue: 120,
+      lineAlpha: 0.5,
+      lineThickness: 0.5,
+      lineColor: '#000000',
+      label: 'Z1',
+      position: 'right',
+      inside: true,
+      boldLabel: true,
+    };
   }
 
   private getScrollbarForGraph(graph) {
@@ -434,9 +368,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             return;
           }
           graph.hidden = !graph.hidden;
-          // graph.chart.valueAxes.forEach((valueAxis) => {
-          //   valueAxis.guides = this.getZoneGuides();
-          // });
+          // Add the average quide
+          if (!graph.hidden) {
+            // graph.valueAxis.guides = [this.getAverageGuide(graph)];
+          }
           if (!graph.hidden) {
             graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
           }
