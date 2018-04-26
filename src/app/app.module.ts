@@ -53,7 +53,7 @@ import {FormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {DisqusModule} from 'ngx-disqus';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
-import {AppEventColorService} from './services/app.event.color.service';
+import {AppEventColorService} from './services/color/app.event.color.service';
 import {UploadInfoComponent} from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
 import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';

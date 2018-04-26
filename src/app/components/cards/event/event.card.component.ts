@@ -8,7 +8,7 @@ import {
 import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
-import {AppEventColorService} from '../../../services/app.event.color.service';
+import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {ActivityInterface} from '../../../entities/activities/activity.interface';
 import {EventService} from '../../../services/app.event.service';
 

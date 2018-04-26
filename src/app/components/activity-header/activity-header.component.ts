@@ -1,6 +1,6 @@
 import {Component, Input} from '@angular/core';
 import {ActivityInterface} from '../../entities/activities/activity.interface';
-import {AppEventColorService} from '../../services/app.event.color.service';
+import {AppEventColorService} from '../../services/color/app.event.color.service';
 import {EventInterface} from '../../entities/events/event.interface';
 
 @Component({
