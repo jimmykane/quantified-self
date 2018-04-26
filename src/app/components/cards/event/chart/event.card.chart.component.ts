@@ -178,7 +178,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Hack here to add the units unfortunately
       categories.push({id: category, unit: dataMapArray.values().next().value[0].getUnit()});
     });
-    return categories;
+    return categories.sort((categoryA, categoryB) => categoryA.id.localeCompare(categoryB.id));
   }
 
   private getDataProvider(dataMap: Map<number, any>): any[] {
@@ -267,7 +267,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         lineColor: this.genColor(name + ' ' + (activityIndex > 0 ? activityIndex : '')),
         bulletBorderThickness: 3,
         hideBulletsCount: 1,
-        title: '#' + activityIndex + ' ' + name + ' ' + creator,
+        title: ' ' + name + ' (' + creator + ')',
         valueField: categoryID,
         balloonText: name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b></br>' + creator,
         legendValueText: '[[value]] ' + dataCategory.unit,
