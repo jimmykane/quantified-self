@@ -23,5 +23,21 @@
         [longitude]="point.getPosition().longitudeDegrees">
       </agm-polyline-point>
     </agm-polyline>
+
+    <agm-marker
+      [title]="'S'"
+      [label]="'S'"
+      [latitude]="getStartPosition().latitudeDegrees"
+      [longitude]="getStartPosition().longitudeDegrees">
+    </agm-marker>
+    <agm-marker *ngFor="let lap of getAllLaps(); let i = index;"
+      [title]="i.toString()"
+      [label]="i.toString()"
+      [latitude]="getLapEndPosition(lap).latitudeDegrees"
+      [longitude]="getLapEndPosition(lap).longitudeDegrees">
+    </agm-marker>
+
   </agm-map>
 </mat-card>
+
+<div *ngFor="let lap of getAllLaps()">test</div>
