@@ -82,17 +82,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     return this.event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition();
   }
 
-  getEndPosition(): DataPositionInterface {
-    return this.event.getPointsWithPosition()[this.event.getPointsWithPosition().length - 1].getPosition();
-  }
-
-  getLapStartPosition(lap: LapInterface): DataPositionInterface {
-    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate);
-    return lapPoints[0].getPosition();
-  }
-
-  getLapEndPosition(lap: LapInterface): DataPositionInterface {
-    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate);
+  getLapEndPosition(activity, lap: LapInterface): DataPositionInterface {
+    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
     return lapPoints[lapPoints.length - 1].getPosition();
   }
 

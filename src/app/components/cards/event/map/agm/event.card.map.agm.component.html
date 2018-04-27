@@ -42,13 +42,13 @@
         *ngFor="let lap of activity.getLaps(); let i = index;"
         (markerClick)="openLapMarkerInfoWindow(lap)"
         [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=flag|'+ eventColorService.getActivityColor(event, activity).slice(1)"
-        [latitude]="getLapEndPosition(lap).latitudeDegrees"
-        [longitude]="getLapEndPosition(lap).longitudeDegrees">
+        [latitude]="getLapEndPosition(activity, lap).latitudeDegrees"
+        [longitude]="getLapEndPosition(activity, lap).longitudeDegrees">
         <agm-info-window
           [disableAutoPan]="true"
           [isOpen]="openedLapMarkerInfoWindow === lap"
-          [latitude]="getLapEndPosition(lap).latitudeDegrees"
-          [longitude]="getLapEndPosition(lap).longitudeDegrees">
+          [latitude]="getLapEndPosition(activity, lap).latitudeDegrees"
+          [longitude]="getLapEndPosition(activity, lap).longitudeDegrees">
           <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
           Lap {{ i +1 }}
           <mat-divider [inset]="true"></mat-divider>
