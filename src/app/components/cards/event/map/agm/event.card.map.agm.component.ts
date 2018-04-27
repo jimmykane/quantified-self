@@ -25,6 +25,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() selectedActivities: ActivityInterface[] = [];
 
   public openedLapMarkerInfoWindow: LapInterface;
+  public openedActivityStartMarkerInfoWindow: ActivityInterface;
 
   constructor(public eventColorService: AppEventColorService) {
   }
@@ -97,6 +98,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   openLapMarkerInfoWindow(lap) {
     this.openedLapMarkerInfoWindow = lap;
+  }
+
+  openActivityStartMarkerInfoWindow(activity) {
+    this.openedActivityStartMarkerInfoWindow = activity;
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
