@@ -20,7 +20,7 @@ export class EventCardLapsComponent {
   getData(activity) {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
       const lapObj = {
-        '#': index,
+        '#': index + 1,
         'Type': lap.type,
         'Start Time': lap.startDate.toLocaleTimeString(),
         'End Time': lap.endDate.toLocaleTimeString(),
