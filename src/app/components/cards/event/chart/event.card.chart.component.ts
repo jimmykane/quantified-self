@@ -331,6 +331,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private getAmChartOptions(allData: Map<string, Map<number, DataNumber[]>>) {
     const dataMap = this.getDataMap(allData);
+    const graphs = this.getGraphs(allData);
     return {
       type: 'serial',
       theme: 'light',
@@ -338,7 +339,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       autoMarginOffset: 0,
       // marginRight: 100,
       autoMargins: true,
-      graphs: this.getGraphs(allData),
+      graphs: graphs,
       // autoTransform: false,
       // autoResize: false,
       // autoDisplay: false,
@@ -388,7 +389,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         labelOffset: 0,
         // minorGridEnabled: true,
       },
-      chartScrollbar: this.getScrollbarForGraph(this.getGraphs(allData)[0]),
       chartCursor: {
         valueZoomable: true,
         categoryBalloonDateFormat: 'JJ:NN:SS',
