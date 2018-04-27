@@ -24,36 +24,40 @@
       </agm-polyline-point>
     </agm-polyline>
 
-    <agm-marker
-      [iconUrl]="'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAYAAADgkQYQAAAAiklEQVR42mNgQIAoIF4NxGegdCCSHAMzEC+NUlH5v9rF5f+ZoCAwHaig8B8oPhOmKC1NU/P//7Q0DByrqgpSGAtSdOCAry9WRXt9fECK9oIUPXwYFYVV0e2ICJCi20SbFAuyG5uiECUlkKIQmOPng3y30d0d7Lt1bm4w301jQAOgcNoIDad1yOEEAFm9fSv/VqtJAAAAAElFTkSuQmCC'"
-      [latitude]="getStartPosition().latitudeDegrees"
-      [longitude]="getStartPosition().longitudeDegrees">
-      <agm-info-window
-        [isOpen]="true"
-        [disableAutoPan]="true"
-        [latitude]="getStartPosition().latitudeDegrees"
-        [longitude]="getStartPosition().longitudeDegrees">
-        Start
-      </agm-info-window>
-    </agm-marker>
-    <agm-marker
-      *ngFor="let lap of getAllLaps(); let i = index;"
-      (markerClick)="openLapMarkerInfoWindow(lap)"
-      [iconUrl]="'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAkAAAAJCAYAAADgkQYQAAAAiklEQVR42mNgQIAoIF4NxGegdCCSHAMzEC+NUlH5v9rF5f+ZoCAwHaig8B8oPhOmKC1NU/P//7Q0DByrqgpSGAtSdOCAry9WRXt9fECK9oIUPXwYFYVV0e2ICJCi20SbFAuyG5uiECUlkKIQmOPng3y30d0d7Lt1bm4w301jQAOgcNoIDad1yOEEAFm9fSv/VqtJAAAAAElFTkSuQmCC'"
-      [latitude]="getLapEndPosition(lap).latitudeDegrees"
-      [longitude]="getLapEndPosition(lap).longitudeDegrees">
-      <agm-info-window
-        [disableAutoPan]="true"
-        [isOpen]="openedLapMarkerInfoWindow === lap"
+    <ng-container *ngFor="let activity of selectedActivities">
+      <agm-marker
+        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activity).slice(1)"
+        [latitude]="getStartPosition(activity).latitudeDegrees"
+        [longitude]="getStartPosition(activity).longitudeDegrees">
+        <agm-info-window
+          [isOpen]="true"
+          [disableAutoPan]="true"
+          [latitude]="getStartPosition(activity).latitudeDegrees"
+          [longitude]="getStartPosition(activity).longitudeDegrees">
+          Start
+        </agm-info-window>
+      </agm-marker>
+      <agm-marker
+        *ngFor="let lap of activity.getLaps(); let i = index;"
+        (markerClick)="openLapMarkerInfoWindow(lap)"
+        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=flag|'+ eventColorService.getActivityColor(event, activity).slice(1)"
         [latitude]="getLapEndPosition(lap).latitudeDegrees"
         [longitude]="getLapEndPosition(lap).longitudeDegrees">
-        Lap {{ i +1 }}
-        <mat-divider [inset]="true"></mat-divider>
-        Start: {{lap.startDate.toLocaleTimeString()}}<br/>
-        End: {{lap.endDate.toLocaleTimeString()}}<br/>
-        Duration: {{ lap.getDuration().getDisplayValue() }} {{ lap.getDuration().getDisplayUnit() }}<br/>
-        Distance: {{ lap.getDistance().getDisplayValue() }} {{ lap.getDistance().getDisplayUnit() }}<br/>
-      </agm-info-window>
-    </agm-marker>
+        <agm-info-window
+          [disableAutoPan]="true"
+          [isOpen]="openedLapMarkerInfoWindow === lap"
+          [latitude]="getLapEndPosition(lap).latitudeDegrees"
+          [longitude]="getLapEndPosition(lap).longitudeDegrees">
+          <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
+          Lap {{ i +1 }}
+          <mat-divider [inset]="true"></mat-divider>
+          Start: {{lap.startDate.toLocaleTimeString()}}<br/>
+          End: {{lap.endDate.toLocaleTimeString()}}<br/>
+          Duration: {{ lap.getDuration().getDisplayValue() }} {{ lap.getDuration().getDisplayUnit() }}<br/>
+          Distance: {{ lap.getDistance().getDisplayValue() }} {{ lap.getDistance().getDisplayUnit() }}<br/>
+        </agm-info-window>
+      </agm-marker>
+    </ng-container>
+
   </agm-map>
 </mat-card>

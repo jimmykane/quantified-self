@@ -77,15 +77,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     };
   }
 
-  getAllLaps(): LapInterface[] {
-    return this.selectedActivities.reduce((lapsArray, activity) => {
-      lapsArray = lapsArray.concat(activity.getLaps());
-      return lapsArray;
-    }, []);
-  }
-
-  getStartPosition(): DataPositionInterface {
-    return this.event.getPointsWithPosition()[0].getPosition();
+  getStartPosition(activity: ActivityInterface): DataPositionInterface {
+    return this.event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition();
   }
 
   getEndPosition(): DataPositionInterface {
