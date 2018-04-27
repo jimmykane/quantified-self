@@ -77,7 +77,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     };
   }
 
-  private getAllLaps(): LapInterface[] {
+  getAllLaps(): LapInterface[] {
     return this.selectedActivities.reduce((lapsArray, activity) => {
       lapsArray = lapsArray.concat(activity.getLaps());
       return lapsArray;
