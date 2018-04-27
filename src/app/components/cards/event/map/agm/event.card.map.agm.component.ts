@@ -78,7 +78,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   getStartPosition(activity: ActivityInterface): DataPositionInterface {
-    return this.event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition();
+    return this.event.getPointsWithPosition(void 0, void 0, [activity])[0] ?
+      this.event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition() :
+      void 0;
   }
 
   getLapEndPosition(activity, lap: LapInterface): DataPositionInterface {

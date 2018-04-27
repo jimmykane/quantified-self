@@ -24,7 +24,7 @@
     </agm-polyline>
 
     <ng-container *ngFor="let activity of selectedActivities">
-      <agm-marker
+      <agm-marker *ngIf="getStartPosition(activity)"
         (markerClick)="openActivityStartMarkerInfoWindow(activity)"
         [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activity).slice(1)"
         [latitude]="getStartPosition(activity).latitudeDegrees"
