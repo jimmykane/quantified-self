@@ -7,8 +7,9 @@ import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
 import {AppEventColorService} from '../../../../../services/color/app.event.color.service';
 import {ActivityInterface} from '../../../../../entities/activities/activity.interface';
-import {LapInterface} from "../../../../../entities/laps/lap.interface";
-import {DataPositionInterface} from "../../../../../entities/data/data.position.interface";
+import {LapInterface} from '../../../../../entities/laps/lap.interface';
+import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
+import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 
 
 @Component({
@@ -23,6 +24,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
 
+  public openedLapMarkerInfoWindow: LapInterface;
+
   constructor(public eventColorService: AppEventColorService) {
   }
 
@@ -35,7 +38,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     }
     // @todo maybe this can be done in a different way
     this.agmMap.triggerResize().then(() => {
-      this.agmMap._mapsWrapper.fitBounds(this.getBounds());
+      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+      googleMaps.fitBounds(this.getBounds());
     });
   }
 
@@ -98,6 +102,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     return lapPoints[lapPoints.length - 1].getPosition();
   }
 
+  openLapMarkerInfoWindow(lap){
+    this.openedLapMarkerInfoWindow = lap;
+  }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
   onResize(width) {
