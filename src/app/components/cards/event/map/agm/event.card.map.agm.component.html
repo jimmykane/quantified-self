@@ -25,16 +25,23 @@
 
     <ng-container *ngFor="let activity of selectedActivities">
       <agm-marker *ngIf="getStartPosition(activity)"
-        (markerClick)="openActivityStartMarkerInfoWindow(activity)"
-        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activity).slice(1)"
-        [latitude]="getStartPosition(activity).latitudeDegrees"
-        [longitude]="getStartPosition(activity).longitudeDegrees">
+                  (markerClick)="openActivityStartMarkerInfoWindow(activity)"
+                  [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activity).slice(1)"
+                  [latitude]="getStartPosition(activity).latitudeDegrees"
+                  [longitude]="getStartPosition(activity).longitudeDegrees">
         <agm-info-window
           [isOpen]="openedActivityStartMarkerInfoWindow === activity"
-          [disableAutoPan]="true"
+          [disableAutoPan]="false"
           [latitude]="getStartPosition(activity).latitudeDegrees"
           [longitude]="getStartPosition(activity).longitudeDegrees">
-          Start
+          <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
+          <span class="mat-title">Start {{activity.startDate.toLocaleTimeString()}}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">End {{activity.endDate.toLocaleTimeString()}}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">Duration: {{ activity.getDuration().getDisplayValue() }} {{ activity.getDuration().getDisplayUnit() }}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">Distance: {{ activity.getDistance().getDisplayValue() }} {{ activity.getDistance().getDisplayUnit() }}</span>
         </agm-info-window>
       </agm-marker>
       <agm-marker
@@ -44,7 +51,7 @@
         [latitude]="getLapEndPosition(activity, lap).latitudeDegrees"
         [longitude]="getLapEndPosition(activity, lap).longitudeDegrees">
         <agm-info-window
-          [disableAutoPan]="true"
+          [disableAutoPan]="false"
           [isOpen]="openedLapMarkerInfoWindow === lap"
           [latitude]="getLapEndPosition(activity, lap).latitudeDegrees"
           [longitude]="getLapEndPosition(activity, lap).longitudeDegrees">
@@ -60,7 +67,27 @@
           <span class="mat-subheading-1">Distance: {{ lap.getDistance().getDisplayValue() }} {{ lap.getDistance().getDisplayUnit() }}</span>
         </agm-info-window>
       </agm-marker>
+      <agm-marker
+        *ngIf="getEndPosition(activity)"
+        (markerClick)="openActivityEndMarkerInfoWindow(activity)"
+        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=glyphish_trophy|'+ eventColorService.getActivityColor(event, activity).slice(1)"
+        [latitude]="getEndPosition(activity).latitudeDegrees"
+        [longitude]="getEndPosition(activity).longitudeDegrees">
+        <agm-info-window
+          [isOpen]="openedActivityEndMarkerInfoWindow === activity"
+          [disableAutoPan]="false"
+          [latitude]="getEndPosition(activity).latitudeDegrees"
+          [longitude]="getEndPosition(activity).longitudeDegrees">
+          <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
+          <span class="mat-subheading-1">Start {{activity.startDate.toLocaleTimeString()}}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-title">End {{activity.endDate.toLocaleTimeString()}}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">Duration: {{ activity.getDuration().getDisplayValue() }} {{ activity.getDuration().getDisplayUnit() }}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">Distance: {{ activity.getDistance().getDisplayValue() }} {{ activity.getDistance().getDisplayUnit() }}</span>
+        </agm-info-window>
+      </agm-marker>
     </ng-container>
-
   </agm-map>
 </mat-card>

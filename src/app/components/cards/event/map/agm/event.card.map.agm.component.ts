@@ -26,6 +26,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
+  public openedActivityEndMarkerInfoWindow: ActivityInterface;
 
   constructor(public eventColorService: AppEventColorService) {
   }
@@ -83,6 +84,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       void 0;
   }
 
+  getEndPosition(activity: ActivityInterface): DataPositionInterface {
+    const eventsWithPosition = this.event.getPointsWithPosition(void 0, void 0, [activity])
+    return eventsWithPosition[eventsWithPosition.length - 1] ?
+      eventsWithPosition[eventsWithPosition.length - 1].getPosition() :
+      void 0;
+  }
+
   getLapEndPosition(activity, lap: LapInterface): DataPositionInterface {
     const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
     return lapPoints[lapPoints.length - 1].getPosition();
@@ -94,6 +102,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   openActivityStartMarkerInfoWindow(activity) {
     this.openedActivityStartMarkerInfoWindow = activity;
+  }
+
+  openActivityEndMarkerInfoWindow(activity) {
+    this.openedActivityEndMarkerInfoWindow = activity;
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
