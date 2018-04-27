@@ -1,4 +1,4 @@
-<mat-card *ngIf="event.getActivities().length > 1">
+<mat-card>
   <mat-card-content>
     <section>
       <app-activities-checkboxes [event]="event" (selectedActivities)="onSelectedActivities($event)">
