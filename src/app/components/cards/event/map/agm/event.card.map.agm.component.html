@@ -49,12 +49,15 @@
           [latitude]="getLapEndPosition(activity, lap).latitudeDegrees"
           [longitude]="getLapEndPosition(activity, lap).longitudeDegrees">
           <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
-          Lap {{ i +1 }}
+          <span class="mat-title">Lap {{ i +1 }}</span>
           <mat-divider [inset]="true"></mat-divider>
-          Start: {{lap.startDate.toLocaleTimeString()}}<br/>
-          End: {{lap.endDate.toLocaleTimeString()}}<br/>
-          Duration: {{ lap.getDuration().getDisplayValue() }} {{ lap.getDuration().getDisplayUnit() }}<br/>
-          Distance: {{ lap.getDistance().getDisplayValue() }} {{ lap.getDistance().getDisplayUnit() }}<br/>
+          <span class="mat-subheading-1">Start {{lap.startDate.toLocaleTimeString()}}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">End {{lap.endDate.toLocaleTimeString()}}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">Duration: {{ lap.getDuration().getDisplayValue() }} {{ lap.getDuration().getDisplayUnit() }}</span>
+          <mat-divider [inset]="true"></mat-divider>
+          <span class="mat-subheading-1">Distance: {{ lap.getDistance().getDisplayValue() }} {{ lap.getDistance().getDisplayUnit() }}</span>
         </agm-info-window>
       </agm-marker>
     </ng-container>
