@@ -102,7 +102,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     return lapPoints[lapPoints.length - 1].getPosition();
   }
 
-  openLapMarkerInfoWindow(lap){
+  openLapMarkerInfoWindow(lap) {
     this.openedLapMarkerInfoWindow = lap;
   }
 
