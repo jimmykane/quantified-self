@@ -11,8 +11,7 @@
   <agm-map
     [fullscreenControl]="true"
     [mapTypeControl]="true"
-    [scaleControl]="true"
-    [fitBounds]="getBounds()">
+    [scaleControl]="true">
     <agm-polyline
       *ngFor="let activity of this.selectedActivities;"
       [strokeColor]="eventColorService.getActivityColor(event, activity)"

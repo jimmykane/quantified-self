@@ -37,15 +37,14 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     if (this.event.getActivities().length === 1) {
       this.selectedActivities.push(this.event.getFirstActivity());
     }
-    // @todo maybe this can be done in a different way
-    this.agmMap.triggerResize().then(() => {
-      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-      googleMaps.fitBounds(this.getBounds());
-    });
   }
 
   onSelectedActivities(activities) {
     this.selectedActivities = activities;
+    this.agmMap.triggerResize().then(() => {
+      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+      googleMaps.fitBounds(this.getBounds());
+    });
   }
 
   getBounds(): LatLngBoundsLiteral {
