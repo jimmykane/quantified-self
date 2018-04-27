@@ -7,6 +7,9 @@ import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
 import {PointInterface} from '../../../../../entities/points/point.interface';
 import {AppEventColorService} from '../../../../../services/color/app.event.color.service';
 import {ActivityInterface} from '../../../../../entities/activities/activity.interface';
+import {LapInterface} from '../../../../../entities/laps/lap.interface';
+import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
+import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 
 
 @Component({
@@ -21,6 +24,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
 
+  public openedLapMarkerInfoWindow: LapInterface;
+
   constructor(public eventColorService: AppEventColorService) {
   }
 
@@ -33,7 +38,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     }
     // @todo maybe this can be done in a different way
     this.agmMap.triggerResize().then(() => {
-      this.agmMap._mapsWrapper.fitBounds(this.getBounds());
+      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+      googleMaps.fitBounds(this.getBounds());
     });
   }
 
@@ -69,6 +75,35 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       north: mostNorth.getPosition().latitudeDegrees,
       south: mostSouth.getPosition().latitudeDegrees
     };
+  }
+
+  getAllLaps(): LapInterface[] {
+    return this.selectedActivities.reduce((lapsArray, activity) => {
+      lapsArray = lapsArray.concat(activity.getLaps());
+      return lapsArray;
+    }, []);
+  }
+
+  getStartPosition(): DataPositionInterface {
+    return this.event.getPointsWithPosition()[0].getPosition();
+  }
+
+  getEndPosition(): DataPositionInterface {
+    return this.event.getPointsWithPosition()[this.event.getPointsWithPosition().length - 1].getPosition();
+  }
+
+  getLapStartPosition(lap: LapInterface): DataPositionInterface {
+    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate);
+    return lapPoints[0].getPosition();
+  }
+
+  getLapEndPosition(lap: LapInterface): DataPositionInterface {
+    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate);
+    return lapPoints[lapPoints.length - 1].getPosition();
+  }
+
+  openLapMarkerInfoWindow(lap){
+    this.openedLapMarkerInfoWindow = lap;
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
