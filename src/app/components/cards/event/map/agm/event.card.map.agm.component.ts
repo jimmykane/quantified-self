@@ -102,14 +102,20 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   openLapMarkerInfoWindow(lap) {
     this.openedLapMarkerInfoWindow = lap;
+    this.openedActivityStartMarkerInfoWindow = void 0;
+    this.openedActivityEndMarkerInfoWindow = void 0;
   }
 
   openActivityStartMarkerInfoWindow(activity) {
     this.openedActivityStartMarkerInfoWindow = activity;
+    this.openedActivityEndMarkerInfoWindow = void 0;
+    this.openedLapMarkerInfoWindow = void 0;
   }
 
   openActivityEndMarkerInfoWindow(activity) {
     this.openedActivityEndMarkerInfoWindow = activity;
+    this.openedActivityStartMarkerInfoWindow = void 0;
+    this.openedLapMarkerInfoWindow = void 0;
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
