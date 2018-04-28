@@ -66,12 +66,15 @@ export class EventImporterTCX {
         event.setDuration(new DataDuration(event.getDuration().getValue() + lap.getDuration().getValue()));
         event.getPause().setValue(event.getPause().getValue() + lap.getPause().getValue());
       });
+
       Array.from(activityElement.getElementsByTagName('Lap')).map((lapElement: HTMLElement) => {
         this.getPoints(<any>lapElement.getElementsByTagName('Trackpoint')).map((point) => {
           activity.addPoint(point);
         });
       });
       activity.sortPointsByDate();
+      // Set the end date as of pause + duration
+      activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000  + activity.getPause().getValue() * 1000)
     }
 
     EventUtilities.generateStats(event);
