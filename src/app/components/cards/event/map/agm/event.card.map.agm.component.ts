@@ -97,7 +97,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   getLapEndPosition(activity, lap: LapInterface): DataPositionInterface {
     const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
-    return lapPoints[lapPoints.length - 1].getPosition();
+    return lapPoints[lapPoints.length - 1] ?
+      lapPoints[lapPoints.length - 1].getPosition() :
+      void 0;
   }
 
   openLapMarkerInfoWindow(lap) {
