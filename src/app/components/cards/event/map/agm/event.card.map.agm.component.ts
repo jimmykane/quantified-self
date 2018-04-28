@@ -81,9 +81,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     };
   }
 
-  getLapsWithPosition(activity: ActivityInterface){
+  getLapsWithPosition(activity: ActivityInterface) {
     return activity.getLaps().reduce((lapsArray, lap) => {
-      if (this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]).length){
+      if (this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]).length) {
         lapsArray.push(lap);
       }
       return lapsArray;
@@ -97,6 +97,15 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       }
       return activitiesArray;
     }, [])
+  }
+
+  getActivityStartPoint(activity: ActivityInterface): PointInterface {
+    return this.event.getPointsWithPosition(void 0, void 0, [activity])[0];
+  }
+
+  getLapEndPoint(activity: ActivityInterface, lap: LapInterface): PointInterface {
+    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
+    return lapPoints[lapPoints.length - 1];
   }
 
   openLapMarkerInfoWindow(lap) {
