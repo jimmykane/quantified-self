@@ -26,7 +26,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public openedActivityEndMarkerInfoWindow: ActivityInterface;
 
   constructor(public eventColorService: AppEventColorService) {
   }
@@ -82,41 +81,31 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     };
   }
 
-  getStartPosition(activity: ActivityInterface): DataPositionInterface {
-    return this.event.getPointsWithPosition(void 0, void 0, [activity])[0] ?
-      this.event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition() :
-      void 0;
+  getLapsWithPosition(activity: ActivityInterface){
+    return activity.getLaps().reduce((lapsArray, lap) => {
+      if (this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]).length){
+        lapsArray.push(lap);
+      }
+      return lapsArray;
+    }, [])
   }
 
-  getEndPosition(activity: ActivityInterface): DataPositionInterface {
-    const eventsWithPosition = this.event.getPointsWithPosition(void 0, void 0, [activity])
-    return eventsWithPosition[eventsWithPosition.length - 1] ?
-      eventsWithPosition[eventsWithPosition.length - 1].getPosition() :
-      void 0;
-  }
-
-  getLapEndPosition(activity, lap: LapInterface): DataPositionInterface {
-    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
-    return lapPoints[lapPoints.length - 1] ?
-      lapPoints[lapPoints.length - 1].getPosition() :
-      void 0;
+  getActivitiesWithPosition() {
+    return this.selectedActivities.reduce((activitiesArray, activity) => {
+      if (this.event.getPointsWithPosition(void 0, void 0, [activity]).length) {
+        activitiesArray.push(activity)
+      }
+      return activitiesArray;
+    }, [])
   }
 
   openLapMarkerInfoWindow(lap) {
     this.openedLapMarkerInfoWindow = lap;
     this.openedActivityStartMarkerInfoWindow = void 0;
-    this.openedActivityEndMarkerInfoWindow = void 0;
   }
 
   openActivityStartMarkerInfoWindow(activity) {
     this.openedActivityStartMarkerInfoWindow = activity;
-    this.openedActivityEndMarkerInfoWindow = void 0;
-    this.openedLapMarkerInfoWindow = void 0;
-  }
-
-  openActivityEndMarkerInfoWindow(activity) {
-    this.openedActivityEndMarkerInfoWindow = activity;
-    this.openedActivityStartMarkerInfoWindow = void 0;
     this.openedLapMarkerInfoWindow = void 0;
   }
 
