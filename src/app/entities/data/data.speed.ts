@@ -6,6 +6,6 @@ export class DataSpeed extends DataNumber {
   static unit = 'm/s';
 
   getDisplayValue() {
-    return this.getValue().toFixed(3);
+    return this.getValue().toFixed(2);
   }
 }
