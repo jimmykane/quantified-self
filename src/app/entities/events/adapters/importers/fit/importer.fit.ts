@@ -21,6 +21,8 @@ import {LapInterface} from '../../../../laps/lap.interface';
 import {DataDistance} from '../../../../data/data.distance';
 import {PointInterface} from '../../../../points/point.interface';
 import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
+import {ImporterFitGarminDeviceNames} from './importer.fit.garmin.device.names';
+import {ImporterFitSuuntoDeviceNames} from './importer.fit.suunto.device.names';
 
 export class EventImporterFIT {
 
@@ -45,6 +47,9 @@ export class EventImporterFIT {
           // Get the activity from the sessionObject
           const activity = this.getActivityFromSessionObject(sessionObject);
 
+          // Set the creator to the activity
+          activity.creator = this.getCreatorFromFitDataObject(fitDataObject);
+
           // Go over the laps
           sessionObject.laps.forEach((sessionLapObject) => {
             // Get and add the lap to the activity
@@ -56,10 +61,8 @@ export class EventImporterFIT {
               activity.addPoint(point);
             })
           });
-          debugger;
           event.addActivity(activity);
         });
-
         resolve(event);
       });
 
@@ -88,7 +91,7 @@ export class EventImporterFIT {
     if (sessionLapObjectRecord.hasOwnProperty('cadence') && sessionLapObjectRecord.cadence !== null) {
       let cadenceValue = sessionLapObjectRecord.cadence;
       // Add the fractional cadence if it's there
-      if (sessionLapObjectRecord.hasOwnProperty('fractional_cadence') && sessionLapObjectRecord.fractional_cadence !== null){
+      if (sessionLapObjectRecord.hasOwnProperty('fractional_cadence') && sessionLapObjectRecord.fractional_cadence !== null) {
         cadenceValue += sessionLapObjectRecord.fractional_cadence;
       }
       point.addData(new DataCadence(cadenceValue));
@@ -112,10 +115,10 @@ export class EventImporterFIT {
     const lap = new Lap(sessionLapObject.start_time, sessionLapObject.timestamp);
 
     // Set the duration
-    lap.setDuration(new DataDuration(sessionLapObject.total_moving_time));
+    lap.setDuration(new DataDuration(sessionLapObject.total_timer_time));
 
     // Set the pause which is elapsed time - moving time
-    lap.setPause(new DataDuration(sessionLapObject.total_elapsed_time - sessionLapObject.total_moving_time));
+    lap.setPause(new DataDuration(sessionLapObject.total_elapsed_time - sessionLapObject.total_timer_time));
 
     // Set the distance
     lap.setDistance(new DataDistance(sessionLapObject.total_distance));
@@ -141,10 +144,10 @@ export class EventImporterFIT {
     activity.endDate = sessionObject.timestamp;
 
     // Set the duration which is the moving time
-    activity.setDuration(new DataDuration(sessionObject.total_moving_time));
+    activity.setDuration(new DataDuration(sessionObject.total_timer_time));
 
     // Set the pause which is elapsed time - moving time
-    activity.setPause(new DataDuration(sessionObject.total_elapsed_time - sessionObject.total_moving_time));
+    activity.setPause(new DataDuration(sessionObject.total_elapsed_time - sessionObject.total_timer_time));
 
     // Set the distance
     activity.setDistance(new DataDistance(sessionObject.total_distance));
@@ -167,25 +170,28 @@ export class EventImporterFIT {
 
   private static getCreatorFromFitDataObject(fitDataObject: any): CreatorInterface {
     const creator = new Creator();
-    creator.hwInfo = fitDataObject.file_creator.hardware_version;
-    creator.swInfo = fitDataObject.file_creator.software_version;
-
-    // Set the name
-    if (fitDataObject.file_id.manufacturer !== 'suunto') {
-      creator.name = fitDataObject.file_id.product;
-      return creator;
+    if (fitDataObject.file_creator.hasOwnProperty('hardware_version') && fitDataObject.file_creator.hardware_version !== null) {
+      creator.hwInfo = String(fitDataObject.file_creator.hardware_version);
+    }
+    if (fitDataObject.file_creator.hasOwnProperty('software_version') && fitDataObject.file_creator.software_version !== null) {
+      creator.swInfo = String(fitDataObject.file_creator.software_version);
+    }
+    if (fitDataObject.file_id.hasOwnProperty('serial_number') && fitDataObject.file_id.serial_number !== null) {
+      creator.serialNumber = fitDataObject.file_id.serial_number;
     }
 
-    // If it's a suunto fit
-    switch (fitDataObject.file_id.product) {
-      case 34: {
-        creator.name = 'Suunto 9';
-        break;
-      }
-      case 29: {
-        creator.name = 'Suunto Spartan Ultra';
-        break;
-      }
+
+
+    // Set the name
+    if (fitDataObject.file_id.manufacturer === 'suunto') {
+      creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product];
+      debugger
+
+    } else if (fitDataObject.file_id.manufacturer === 'garmin') {
+      creator.name = ImporterFitGarminDeviceNames[fitDataObject.file_id.product];
+      debugger;
+    } else {
+      creator.name = 'Unknown device';
     }
     return creator;
   }
