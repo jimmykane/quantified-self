@@ -16,7 +16,7 @@ import {CreatorInterface} from '../../../../creators/creatorInterface';
 
 export class EventImporterFIT {
 
-  static getFromArrayBuffer(jsonString: string, id?: string): Promise<EventInterface> {
+  static getFromArrayBuffer(arrayBuffer: ArrayBuffer): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
 
       const easyFitParser = new EasyFit({
@@ -28,7 +28,7 @@ export class EventImporterFIT {
         mode: 'cascade',
       });
 
-      easyFitParser.parse(jsonString, (error, data: any) => {
+      easyFitParser.parse(arrayBuffer, (error, data: any) => {
         debugger;
         // Create an event
         const event = new Event();
