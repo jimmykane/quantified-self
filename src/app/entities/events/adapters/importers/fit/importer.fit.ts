@@ -86,7 +86,12 @@ export class EventImporterFIT {
     }
     // Add Cadence
     if (sessionLapObjectRecord.hasOwnProperty('cadence') && sessionLapObjectRecord.cadence !== null) {
-      point.addData(new DataCadence(sessionLapObjectRecord.cadence));
+      let cadenceValue = sessionLapObjectRecord.cadence;
+      // Add the fractional cadence if it's there
+      if (sessionLapObjectRecord.hasOwnProperty('fractional_cadence') && sessionLapObjectRecord.fractional_cadence !== null){
+        cadenceValue += sessionLapObjectRecord.fractional_cadence;
+      }
+      point.addData(new DataCadence(cadenceValue));
     }
     // Add Speed
     if (sessionLapObjectRecord.hasOwnProperty('speed') && sessionLapObjectRecord.speed !== null) {
