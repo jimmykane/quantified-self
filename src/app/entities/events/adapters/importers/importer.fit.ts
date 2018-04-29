@@ -1,4 +1,3 @@
-/*
 import {Event} from '../../event';
 import {Activity} from '../../../activities/activity';
 import {Lap} from '../../../laps/lap';
@@ -10,9 +9,7 @@ import {DataSpeed} from '../../../data/data.speed';
 import {EventInterface} from '../../event.interface';
 import {DataLatitudeDegrees} from '../../../data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '../../../data/data.longitude-degrees';
-import {DataSeaLevelPressure} from '../../../data/data.sea-level-pressure';
 import {DataTemperature} from '../../../data/data.temperature';
-import {DataVerticalSpeed} from '../../../data/data.verticalspeed';
 import {Creator} from '../../../creators/creator';
 import EasyFit from 'easy-fit';
 
@@ -88,4 +85,3 @@ export class EventImporterFIT {
     });
   }
 }
-*/

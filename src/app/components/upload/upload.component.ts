@@ -6,6 +6,7 @@ import {MatSnackBar} from '@angular/material';
 import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
 import {EventInterface} from '../../entities/events/event.interface';
+import {EventImporterFIT} from "../../entities/events/adapters/importers/importer.fit";
 
 @Component({
   selector: 'app-upload',
@@ -46,6 +47,8 @@ export class UploadComponent {
             newEvent = EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
           } else if (extension === 'tcx') {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
+          } else if (extension === 'fit') {
+            newEvent = EventImporterFIT.getFromJSONString(fileReader.result);
           }
           newEvent.name = activityName;
           await this.eventService.addGeoLocationAndWeatherInfo(newEvent);

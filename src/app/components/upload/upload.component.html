@@ -2,8 +2,8 @@
           ondragenter="event.stopPropagation(); event.preventDefault();"
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
-  <button mat-button (click)="inputFile.click()">Click to open .json or tcx files</button>
-  <input #inputFile type="file" accept=".json, .tcx" multiple [style.display]="'none'"
+  <button mat-button (click)="inputFile.click()">Click to open .json, .tcx or .fit files</button>
+  <input #inputFile type="file" accept=".json, .tcx, .fit" multiple [style.display]="'none'"
          (change)="getFiles($event)">
   or drag one or more files here ...
   <app-upload-info *ngIf="isUploadActive" [activitiesMetaData]="activitiesMetaData" ></app-upload-info>
