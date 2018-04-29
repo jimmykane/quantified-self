@@ -6,7 +6,7 @@ import {MatSnackBar} from '@angular/material';
 import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
 import {EventInterface} from '../../entities/events/event.interface';
-import {EventImporterFIT} from "../../entities/events/adapters/importers/importer.fit";
+import {EventImporterFIT} from "../../entities/events/adapters/importers/fit/importer.fit";
 
 @Component({
   selector: 'app-upload',
