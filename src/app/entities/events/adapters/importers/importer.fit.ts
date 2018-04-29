@@ -15,7 +15,7 @@ import EasyFit from 'easy-fit';
 
 export class EventImporterFIT {
 
-  static getFromJSONString(jsonString: string, id?: string): Promise<EventInterface> {
+  static getFromArrayBuffer(jsonString: string, id?: string): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
 
       const easyFitParser = new EasyFit({
@@ -34,12 +34,12 @@ export class EventImporterFIT {
         let dataCount = 0;
         for (const session of data.activity.sessions) {
           const activity = new Activity();
-          activity.setType(session.sport);
+          activity.type = session.sport;
           event.addActivity(activity);
 
           const creator = new Creator();
-          creator.setName(data.file_id.manufacturer);
-          activity.setCreator(creator);
+          creator.name = data.file_id.manufacturer;
+          activity.creator = creator;
 
           for (const sessionLap of session.laps) {
             // If the lap does not have any elapsed time or distance dont add it
@@ -53,7 +53,7 @@ export class EventImporterFIT {
               const point = new Point(new Date(lapRecord.timestamp));
               activity.addPoint(point);
                // Hack for strange Suunto data
-              if (creator.getName() === 'suunto') {
+              if (creator.name  === 'suunto') {
                 if (lapRecord.position_lat && lapRecord.position_long) {
                   point.addData(new DataLatitudeDegrees(lapRecord.position_lat));
                   point.addData(new DataLongitudeDegrees(lapRecord.position_long));
@@ -70,7 +70,6 @@ export class EventImporterFIT {
                   case 'position_long': { return point.addData(new DataLongitudeDegrees(lapRecord[key])); }
                   case 'cadence': { return point.addData(new DataCadence(lapRecord[key])); }
                   case 'heart_rate': { return point.addData(new DataHeartRate(lapRecord[key])); }
-                  case 'vertical_speed': { return point.addData(new DataVerticalSpeed(lapRecord[key])); }
                   case 'speed': { return point.addData(new DataSpeed(lapRecord[key])); }
                   case 'temperature': { return point.addData(new DataTemperature(lapRecord[key])); }
                 }
