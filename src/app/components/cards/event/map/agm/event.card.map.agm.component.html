@@ -34,7 +34,7 @@
           [disableAutoPan]="false"
           [latitude]="getActivityStartPoint(activity).getPosition().latitudeDegrees"
           [longitude]="getActivityStartPoint(activity).getPosition().longitudeDegrees">
-          <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
+          <app-activity-header [event]="event" [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
           <span class="mat-title">Start {{activity.startDate.toLocaleTimeString()}}</span>
           <mat-divider [inset]="true"></mat-divider>
           <span class="mat-subheading-1">End {{activity.endDate.toLocaleTimeString()}}</span>
@@ -55,7 +55,7 @@
           [isOpen]="openedLapMarkerInfoWindow === lap"
           [latitude]="getLapEndPoint(activity, lap).getPosition().latitudeDegrees"
           [longitude]="getLapEndPoint(activity, lap).getPosition().latitudeDegrees">
-          <app-activity-header [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
+          <app-activity-header [event]="event" [activity]="activity" [showType]="false" [showDuration]="false"></app-activity-header>
           <span class="mat-title">Lap {{ i +1 }}</span>
           <mat-divider [inset]="true"></mat-divider>
           <span class="mat-subheading-1">Duration: {{ lap.getDuration().getDisplayValue() }}{{ lap.getDuration().getDisplayUnit() }}</span>
