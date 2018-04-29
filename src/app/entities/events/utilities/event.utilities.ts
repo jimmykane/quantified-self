@@ -32,11 +32,9 @@ import {DataPowerAvg} from '../../data/data.power-avg';
 import {DataTemperatureMax} from '../../data/data.temperature-max';
 import {DataTemperatureMin} from '../../data/data.temperature-min';
 import {DataTemperatureAvg} from '../../data/data.temperature-avg';
-import {DataDistance} from "../../data/data.distance";
-import {DataDuration} from "../../data/data.duration";
-import {DataPause} from "../../data/data.pause";
-import {DataNumber} from "../../data/data.number";
-import {isNumber} from "util";
+import {DataDistance} from '../../data/data.distance';
+import {DataDuration} from '../../data/data.duration';
+import {DataPause} from '../../data/data.pause';
 
 export class EventUtilities {
 
