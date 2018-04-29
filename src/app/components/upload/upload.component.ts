@@ -48,7 +48,7 @@ export class UploadComponent {
           } else if (extension === 'tcx') {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
           } else if (extension === 'fit') {
-            newEvent = EventImporterFIT.getFromJSONString(fileReader.result);
+            newEvent = EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
           newEvent.name = activityName;
           await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
@@ -61,8 +61,14 @@ export class UploadComponent {
           resolve(); // no-op here!
         }
       };
-      // Read it
-      fileReader.readAsText(file);
+      // Read it depending on the extension
+      if (extension === 'fit') {
+        // Fit files should be read as array buffers
+        fileReader.readAsArrayBuffer(file);
+      } else {
+        // All other as text
+        fileReader.readAsText(file);
+      }
     });
   }
 
