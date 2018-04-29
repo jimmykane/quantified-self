@@ -15,10 +15,12 @@ import EasyFit from 'easy-fit';
 import {CreatorInterface} from '../../../../creators/creatorInterface';
 import {ActivityTypes} from '../../../../activities/activity.types';
 import {DataDuration} from '../../../../data/data.duration';
-import {DataEnergy} from "../../../../data/data.energy";
-import {ActivityInterface} from "../../../../activities/activity.interface";
-import {LapInterface} from "../../../../laps/lap.interface";
-import {DataDistance} from "../../../../data/data.distance";
+import {DataEnergy} from '../../../../data/data.energy';
+import {ActivityInterface} from '../../../../activities/activity.interface';
+import {LapInterface} from '../../../../laps/lap.interface';
+import {DataDistance} from '../../../../data/data.distance';
+import {PointInterface} from '../../../../points/point.interface';
+import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
 
 export class EventImporterFIT {
 
@@ -27,7 +29,7 @@ export class EventImporterFIT {
 
       const easyFitParser = new EasyFit({
         force: false,
-        speedUnit: 'km/h',
+        speedUnit: 'm/s',
         lengthUnit: 'm',
         temperatureUnit: 'celsius',
         elapsedRecordField: false,
@@ -45,17 +47,60 @@ export class EventImporterFIT {
 
           // Go over the laps
           sessionObject.laps.forEach((sessionLapObject) => {
+            // Get and add the lap to the activity
             const lap = this.getLapFromSessionLapObject(sessionLapObject);
             activity.addLap(lap);
+            // Go over the records and add the points to the activity
+            sessionLapObject.records.forEach((sessionLapObjectRecord) => {
+              const point = this.getPointFromSessionLapObjectRecord(sessionLapObjectRecord);
+              activity.addPoint(point);
+            })
           });
-
           debugger;
+          event.addActivity(activity);
         });
 
         resolve(event);
       });
 
     });
+  }
+
+  private static getPointFromSessionLapObjectRecord(sessionLapObjectRecord): PointInterface {
+    const point = new Point(sessionLapObjectRecord.timestamp);
+    // Add Lat
+    if (sessionLapObjectRecord.hasOwnProperty('position_lat') && sessionLapObjectRecord.position_lat !== null) {
+      point.addData(new DataLatitudeDegrees(sessionLapObjectRecord.position_lat));
+    }
+    // Add long
+    if (sessionLapObjectRecord.hasOwnProperty('position_long') && sessionLapObjectRecord.position_long !== null) {
+      point.addData(new DataLongitudeDegrees(sessionLapObjectRecord.position_long));
+    }
+    // Add HR
+    if (sessionLapObjectRecord.hasOwnProperty('heart_rate') && sessionLapObjectRecord.heart_rate !== null) {
+      point.addData(new DataHeartRate(sessionLapObjectRecord.heart_rate));
+    }
+    // Add Altitude
+    if (sessionLapObjectRecord.hasOwnProperty('altitude') && sessionLapObjectRecord.altitude !== null) {
+      point.addData(new DataAltitude(sessionLapObjectRecord.altitude));
+    }
+    // Add Cadence
+    if (sessionLapObjectRecord.hasOwnProperty('cadence') && sessionLapObjectRecord.cadence !== null) {
+      point.addData(new DataCadence(sessionLapObjectRecord.cadence));
+    }
+    // Add Speed
+    if (sessionLapObjectRecord.hasOwnProperty('speed') && sessionLapObjectRecord.speed !== null) {
+      point.addData(new DataSpeed(sessionLapObjectRecord.speed));
+    }
+    // Add Vertical Speed
+    if (sessionLapObjectRecord.hasOwnProperty('vertical_speed') && sessionLapObjectRecord.vertical_speed !== null) {
+      point.addData(new DataVerticalSpeed(sessionLapObjectRecord.vertical_speed));
+    }
+    // Add Temperature
+    if (sessionLapObjectRecord.hasOwnProperty('temperature') && sessionLapObjectRecord.temperature !== null) {
+      point.addData(new DataTemperature(sessionLapObjectRecord.temperature));
+    }
+    return point;
   }
 
   private static getLapFromSessionLapObject(sessionLapObject): LapInterface {
