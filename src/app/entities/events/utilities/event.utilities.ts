@@ -282,18 +282,3 @@ export class EventUtilities {
 }
 
 
-// public createEventFromJSONSMLString(data: string): Promise<EventInterface> {
-//   return new Promise((resolve, reject) => {
-//     return resolve(EventImporterSML.getFromJSONString(data));
-//   });
-// }
-
-
-// public createEventFromJSONFITString(data: string): Promise<EventInterface> {
-//   return new Promise((resolve, reject) => {
-//     return resolve(EventImporterFIT.getFromJSONString(data));
-//   });
-// }
-
-
-
