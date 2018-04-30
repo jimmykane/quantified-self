@@ -162,8 +162,8 @@ export class EventImporterFIT {
   }
 
   private static getActivityTypeFromSessionObject(session: any): string {
-    if (session.sub_sport) {
-      return ActivityTypes[session.sub_sport]
+    if (session.sub_sport !== 'generic') {
+      return ActivityTypes[session.sub_sport] || ActivityTypes[session.sport] || 'unknown'
     }
     return ActivityTypes[session.sport]
   }
