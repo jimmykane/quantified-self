@@ -3,9 +3,9 @@ import {SerializableClassInterface} from '../serializable/serializable.class.int
 export interface DataInterface extends SerializableClassInterface {
   setValue(value: number | string);
 
-  getValue(): number | string;
+  getValue(): number | string | boolean;
 
-  getDisplayValue(): number | string;
+  getDisplayValue(): number | string ;
 
   getType(): string;
 
