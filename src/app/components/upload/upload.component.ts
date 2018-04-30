@@ -102,5 +102,7 @@ export class UploadComponent {
       // Use DataTransfer interface to remove the drag data
       event.dataTransfer.clearData();
     }
+    // Clear the target
+    event.target.value = '';
   }
 }
