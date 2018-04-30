@@ -1,4 +1,4 @@
-import {ImporterSuuntoDeviceNames} from "../suunto/importer.suunto.device.names";
+import {ImporterSuuntoDeviceNames} from '../suunto/importer.suunto.device.names';
 
 export const ImporterFitSuuntoDeviceNames = {
   29: ImporterSuuntoDeviceNames.Amsterdam,
