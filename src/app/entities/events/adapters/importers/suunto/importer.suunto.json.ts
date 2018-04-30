@@ -146,7 +146,7 @@ export class EventImporterSuuntoJSON {
     const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample, index) => {
       // If its a stop event then set the start date to the previous
       if (lapEventSample.Events[0].Lap.Type === 'Stop' && lapEventSamples.length > 1) {
-        lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] =  new Date(lapEventSamples[index - 1].TimeISO8601);
+        lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = new Date(lapEventSamples[index - 1].TimeISO8601);
         return lapStartDatesByTypeObject
       }
       lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = activities[0].startDate;
@@ -227,7 +227,7 @@ export class EventImporterSuuntoJSON {
   }
 
   private static setIntensityZones(activity: ActivityInterface, object) {
-// Create intensity zones from the header
+    // Create intensity zones from the header
     if (object.HrZones) {
       activity.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
     }
@@ -383,7 +383,7 @@ export class EventImporterSuuntoJSON {
       pauseDuration = object.PauseDuration;
     }
     stats.push(new DataPause(pauseDuration));
-    stats.push(new DataDuration( object.Duration));
+    stats.push(new DataDuration(object.Duration));
 
     // double case
     if (Array.isArray(object.Altitude)) {
