@@ -180,13 +180,13 @@ export class EventImporterFIT {
 
   private static getCreatorFromFitDataObject(fitDataObject: any): CreatorInterface {
     const creator = new Creator();
-    if (fitDataObject.file_creator.hasOwnProperty('hardware_version') && fitDataObject.file_creator.hardware_version !== null) {
+    if (isNumberOrString(fitDataObject.file_creator.hardware_version)) {
       creator.hwInfo = String(fitDataObject.file_creator.hardware_version);
     }
-    if (fitDataObject.file_creator.hasOwnProperty('software_version') && fitDataObject.file_creator.software_version !== null) {
+    if (isNumberOrString(fitDataObject.file_creator.software_version)) {
       creator.swInfo = String(fitDataObject.file_creator.software_version);
     }
-    if (fitDataObject.file_id.hasOwnProperty('serial_number') && fitDataObject.file_id.serial_number !== null) {
+    if (isNumberOrString(fitDataObject.file_id.serial_number)) {
       creator.serialNumber = fitDataObject.file_id.serial_number;
     }
 
