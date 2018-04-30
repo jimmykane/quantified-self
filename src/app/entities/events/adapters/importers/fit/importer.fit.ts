@@ -26,6 +26,13 @@ import {ImporterFitSuuntoDeviceNames} from './importer.fit.suunto.device.names';
 import {DataPause} from '../../../../data/data.pause';
 import {DataInterface} from '../../../../data/data.interface';
 import {isNumberOrString} from '../../../utilities/event.utilities';
+import {DataCadenceAvg} from '../../../../data/data.cadence-avg';
+import {DataPowerAvg} from '../../../../data/data.power-avg';
+import {DataSpeedAvg} from '../../../../data/data.speed-avg';
+import {DataCadenceMax} from '../../../../data/data.cadence-max';
+import {DataPowerMax} from '../../../../data/data.power-max';
+import {DataAscent} from '../../../../data/data.ascent';
+import {DataDescent} from '../../../../data/data.descent';
 
 export class EventImporterFIT {
 
@@ -49,23 +56,27 @@ export class EventImporterFIT {
         fitDataObject.activity.sessions.forEach((sessionObject) => {
           // Get the activity from the sessionObject
           const activity = this.getActivityFromSessionObject(sessionObject);
-
+          // Set the activity stats
+          this.getStatsFromObject(sessionObject).forEach(stat => activity.addStat(stat));
           // Set the creator to the activity
           activity.creator = this.getCreatorFromFitDataObject(fitDataObject);
-
           // Go over the laps
           sessionObject.laps.forEach((sessionLapObject) => {
             // Get and add the lap to the activity
             const lap = this.getLapFromSessionLapObject(sessionLapObject);
-            activity.addLap(lap);
+            // Add stats to the lap
+            this.getStatsFromObject(sessionLapObject).forEach(stat => lap.addStat(stat));
             // Go over the records and add the points to the activity
             sessionLapObject.records.forEach((sessionLapObjectRecord) => {
               const point = this.getPointFromSessionLapObjectRecord(sessionLapObjectRecord);
               activity.addPoint(point);
-            })
+            });
+            // Add the lap to the activity
+            activity.addLap(lap);
           });
           event.addActivity(activity);
         });
+        // Set the totals for the event
         event.setDuration(new DataDuration(event.getActivities().reduce((duration, activity) => activity.getDuration().getValue(), 0)));
         event.setDistance(new DataDistance(event.getActivities().reduce((duration, activity) => activity.getDistance().getValue(), 0)));
         event.setPause(new DataPause(event.getActivities().reduce((duration, activity) => activity.getPause().getValue(), 0)));
@@ -175,7 +186,35 @@ export class EventImporterFIT {
   }
 
   private static getStatsFromObject(object): DataInterface[] {
-
+    const stats = [];
+    if (isNumberOrString(object.avg_cadence)) {
+      stats.push(new DataCadenceAvg(object.avg_cadence));
+    }
+    if (isNumberOrString(object.max_cadence)) {
+      stats.push(new DataCadenceMax(object.max_cadence));
+    }
+    if (isNumberOrString(object.avg_power)) {
+      stats.push(new DataPowerAvg(object.avg_power));
+    }
+    if (isNumberOrString(object.max_power)) {
+      stats.push(new DataPowerMax(object.max_power));
+    }
+    if (isNumberOrString(object.avg_speed)) {
+      stats.push(new DataSpeedAvg(object.avg_speed));
+    }
+    if (isNumberOrString(object.avg_speed)) {
+      stats.push(new DataSpeedAvg(object.avg_speed));
+    }
+    if (isNumberOrString(object.total_ascent)) {
+      stats.push(new DataAscent(object.total_ascent));
+    }
+    if (isNumberOrString(object.total_descent)) {
+      stats.push(new DataDescent(object.total_descent));
+    }
+    if (isNumberOrString(object.total_calories)) {
+      stats.push(new DataEnergy(object.total_calories));
+    }
+    return stats;
   }
 
   private static getCreatorFromFitDataObject(fitDataObject: any): CreatorInterface {
