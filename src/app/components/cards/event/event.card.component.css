@@ -2,7 +2,7 @@ mat-card {
   margin: 0;
 }
 
-mat-icon {
+mat-card-header mat-icon {
   vertical-align: middle;
   font-size: 18px;
   height: 18px;
