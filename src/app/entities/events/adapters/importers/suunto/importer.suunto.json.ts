@@ -62,6 +62,7 @@ import {DataVerticalSpeedMax} from '../../../../data/data.vertical-speed-max';
 import {DataVerticalSpeedMin} from '../../../../data/data.vertical-speed-min';
 import {DataAltitudeAvg} from '../../../../data/data.altitude-avg';
 import {DataAltitudeMin} from '../../../../data/data.altitude-min';
+import {DataFusedLocation} from '../../../../data/data.fused-location';
 
 export class EventImporterSuuntoJSON {
 
@@ -197,8 +198,14 @@ export class EventImporterSuuntoJSON {
     activities.every((activity) => {
       eventJSONObject.DeviceLog.Samples.forEach((sample) => {
         const point = this.getPointFromSample(sample);
+        // Checked for fused location on the sample
         if (point && point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
-          activity.addPoint(point)
+          // add the point
+          activity.addPoint(point);
+          // if the point has fusedLocation data mark the activity by adding a stat
+          if (this.hasFusedLocData(sample)) {
+            activity.addStat(new DataFusedLocation(true)); // @todo mircooptimize here
+          }
         }
       });
       activity.sortPointsByDate();
@@ -224,6 +231,10 @@ export class EventImporterSuuntoJSON {
     });
 
     return event;
+  }
+
+  private static hasFusedLocData(sample): boolean {
+    return !!sample.Inertial;
   }
 
   private static setIntensityZones(activity: ActivityInterface, object) {

@@ -4,8 +4,8 @@ export abstract class DataBoolean extends DataBare {
   static className = 'DataBoolean';
   protected value;
 
-  constructor(value: string | number) {
+  constructor(value: boolean) {
     super(value);
-    this.setValue(Boolean(value));
+    this.setValue(value);
   }
 }
