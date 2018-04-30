@@ -24,6 +24,8 @@ import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
 import {ImporterFitGarminDeviceNames} from './importer.fit.garmin.device.names';
 import {ImporterFitSuuntoDeviceNames} from './importer.fit.suunto.device.names';
 import {DataPause} from '../../../../data/data.pause';
+import {DataInterface} from '../../../../data/data.interface';
+import {isNumberOrString} from '../../../utilities/event.utilities';
 
 export class EventImporterFIT {
 
@@ -76,40 +78,40 @@ export class EventImporterFIT {
   private static getPointFromSessionLapObjectRecord(sessionLapObjectRecord): PointInterface {
     const point = new Point(sessionLapObjectRecord.timestamp);
     // Add Lat
-    if (sessionLapObjectRecord.hasOwnProperty('position_lat') && sessionLapObjectRecord.position_lat !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.position_lat)) {
       point.addData(new DataLatitudeDegrees(sessionLapObjectRecord.position_lat));
     }
     // Add long
-    if (sessionLapObjectRecord.hasOwnProperty('position_long') && sessionLapObjectRecord.position_long !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.position_long)) {
       point.addData(new DataLongitudeDegrees(sessionLapObjectRecord.position_long));
     }
     // Add HR
-    if (sessionLapObjectRecord.hasOwnProperty('heart_rate') && sessionLapObjectRecord.heart_rate !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.heart_rate)) {
       point.addData(new DataHeartRate(sessionLapObjectRecord.heart_rate));
     }
     // Add Altitude
-    if (sessionLapObjectRecord.hasOwnProperty('altitude') && sessionLapObjectRecord.altitude !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.altitude)) {
       point.addData(new DataAltitude(sessionLapObjectRecord.altitude));
     }
     // Add Cadence
-    if (sessionLapObjectRecord.hasOwnProperty('cadence') && sessionLapObjectRecord.cadence !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.cadence)) {
       let cadenceValue = sessionLapObjectRecord.cadence;
       // Add the fractional cadence if it's there
-      if (sessionLapObjectRecord.hasOwnProperty('fractional_cadence') && sessionLapObjectRecord.fractional_cadence !== null) {
+      if (isNumberOrString(sessionLapObjectRecord.fractional_cadence)) {
         cadenceValue += sessionLapObjectRecord.fractional_cadence;
       }
       point.addData(new DataCadence(cadenceValue));
     }
     // Add Speed
-    if (sessionLapObjectRecord.hasOwnProperty('speed') && sessionLapObjectRecord.speed !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.speed)) {
       point.addData(new DataSpeed(sessionLapObjectRecord.speed));
     }
     // Add Vertical Speed
-    if (sessionLapObjectRecord.hasOwnProperty('vertical_speed') && sessionLapObjectRecord.vertical_speed !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.vertical_speed)) {
       point.addData(new DataVerticalSpeed(sessionLapObjectRecord.vertical_speed));
     }
     // Add Temperature
-    if (sessionLapObjectRecord.hasOwnProperty('temperature') && sessionLapObjectRecord.temperature !== null) {
+    if (isNumberOrString(sessionLapObjectRecord.temperature)) {
       point.addData(new DataTemperature(sessionLapObjectRecord.temperature));
     }
     return point;
@@ -172,6 +174,10 @@ export class EventImporterFIT {
     return ActivityTypes[session.sport]
   }
 
+  private static getStatsFromObject(object): DataInterface[] {
+
+  }
+
   private static getCreatorFromFitDataObject(fitDataObject: any): CreatorInterface {
     const creator = new Creator();
     if (fitDataObject.file_creator.hasOwnProperty('hardware_version') && fitDataObject.file_creator.hardware_version !== null) {
@@ -183,8 +189,6 @@ export class EventImporterFIT {
     if (fitDataObject.file_id.hasOwnProperty('serial_number') && fitDataObject.file_id.serial_number !== null) {
       creator.serialNumber = fitDataObject.file_id.serial_number;
     }
-
-
 
     // Set the name
     if (fitDataObject.file_id.manufacturer === 'suunto') {
