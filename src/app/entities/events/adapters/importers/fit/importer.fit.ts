@@ -33,6 +33,7 @@ import {DataCadenceMax} from '../../../../data/data.cadence-max';
 import {DataPowerMax} from '../../../../data/data.power-max';
 import {DataAscent} from '../../../../data/data.ascent';
 import {DataDescent} from '../../../../data/data.descent';
+import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
 
 export class EventImporterFIT {
 
@@ -187,6 +188,12 @@ export class EventImporterFIT {
 
   private static getStatsFromObject(object): DataInterface[] {
     const stats = [];
+    if (isNumberOrString(object.avg_heart_rate)) {
+      stats.push(new DataHeartRateAvg(object.avg_heart_rate));
+    }
+    if (isNumberOrString(object.max_heart_rate)) {
+      stats.push(new DataHeartRateAvg(object.max_heart_rate));
+    }
     if (isNumberOrString(object.avg_cadence)) {
       stats.push(new DataCadenceAvg(object.avg_cadence));
     }
