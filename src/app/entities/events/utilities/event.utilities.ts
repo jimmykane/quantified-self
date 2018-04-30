@@ -279,7 +279,7 @@ export class EventUtilities {
 
 }
 
-export function isStringOrNumber(property: any) {
+export function isNumberOrString(property: any) {
   return (typeof property === 'number' || typeof property === 'string');
 }
 
