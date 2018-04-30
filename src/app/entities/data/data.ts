@@ -8,7 +8,7 @@ export abstract class Data implements DataInterface {
   static unitSystem = UnitSystem.Metric;
   protected value: number | string;
 
-  constructor(value: string | number) {
+  protected constructor(value: string | number) {
     this.setValue(value);
   }
 
