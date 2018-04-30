@@ -34,6 +34,8 @@ import {DataPowerMax} from '../../../../data/data.power-max';
 import {DataAscent} from '../../../../data/data.ascent';
 import {DataDescent} from '../../../../data/data.descent';
 import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
+import {DataHeartRateMax} from "../../../../data/data.heart-rate-max";
+import {DataSpeedMax} from "../../../../data/data.speed-max";
 
 export class EventImporterFIT {
 
@@ -57,16 +59,12 @@ export class EventImporterFIT {
         fitDataObject.activity.sessions.forEach((sessionObject) => {
           // Get the activity from the sessionObject
           const activity = this.getActivityFromSessionObject(sessionObject);
-          // Set the activity stats
-          this.getStatsFromObject(sessionObject).forEach(stat => activity.addStat(stat));
           // Set the creator to the activity
           activity.creator = this.getCreatorFromFitDataObject(fitDataObject);
           // Go over the laps
           sessionObject.laps.forEach((sessionLapObject) => {
             // Get and add the lap to the activity
             const lap = this.getLapFromSessionLapObject(sessionLapObject);
-            // Add stats to the lap
-            this.getStatsFromObject(sessionLapObject).forEach(stat => lap.addStat(stat));
             // Go over the records and add the points to the activity
             sessionLapObject.records.forEach((sessionLapObjectRecord) => {
               const point = this.getPointFromSessionLapObjectRecord(sessionLapObjectRecord);
@@ -131,23 +129,14 @@ export class EventImporterFIT {
 
   private static getLapFromSessionLapObject(sessionLapObject): LapInterface {
     const lap = new Lap(sessionLapObject.start_time, sessionLapObject.timestamp);
-
-    // Set the duration
-    lap.setDuration(new DataDuration(sessionLapObject.total_timer_time));
-
-    // Set the pause which is elapsed time - moving time
-    lap.setPause(new DataPause(sessionLapObject.total_elapsed_time - sessionLapObject.total_timer_time));
-
-    // Set the distance
-    lap.setDistance(new DataDistance(sessionLapObject.total_distance));
-
     // Set the calories
     if (sessionLapObject.total_calories) {
       lap.addStat(new DataEnergy(sessionLapObject.total_calories));
     }
-
+    // Set the type
     lap.type = sessionLapObject.lap_trigger === 'distance' ? 'Manual' : 'Manual';
-
+    // Add stats to the lap
+    this.getStatsFromObject(sessionLapObject).forEach(stat => lap.addStat(stat));
     return lap;
   }
 
@@ -161,20 +150,11 @@ export class EventImporterFIT {
     // Set the end date
     activity.endDate = sessionObject.timestamp;
 
-    // Set the duration which is the moving time
-    activity.setDuration(new DataDuration(sessionObject.total_timer_time));
-
-    // Set the pause which is elapsed time - moving time
-    activity.setPause(new DataPause(sessionObject.total_elapsed_time - sessionObject.total_timer_time));
-
-    // Set the distance
-    activity.setDistance(new DataDistance(sessionObject.total_distance));
-
-    // Set the calories
-    activity.addStat(new DataEnergy(sessionObject.total_calories));
-
     // Set the type
     activity.type = this.getActivityTypeFromSessionObject(sessionObject);
+
+    // Set the activity stats
+    this.getStatsFromObject(sessionObject).forEach(stat => activity.addStat(stat));
 
     return activity;
   }
@@ -188,11 +168,21 @@ export class EventImporterFIT {
 
   private static getStatsFromObject(object): DataInterface[] {
     const stats = [];
+
+    // Set the duration which is the moving time
+    stats.push(new DataDuration(object.total_timer_time));
+
+    // Set the pause which is elapsed time - moving time
+    stats.push(new DataPause(object.total_elapsed_time - object.total_timer_time));
+
+    if (isNumberOrString(object.total_distance)) {
+      stats.push(new DataDistance(object.total_distance));
+    }
     if (isNumberOrString(object.avg_heart_rate)) {
       stats.push(new DataHeartRateAvg(object.avg_heart_rate));
     }
     if (isNumberOrString(object.max_heart_rate)) {
-      stats.push(new DataHeartRateAvg(object.max_heart_rate));
+      stats.push(new DataHeartRateMax(object.max_heart_rate));
     }
     if (isNumberOrString(object.avg_cadence)) {
       stats.push(new DataCadenceAvg(object.avg_cadence));
@@ -209,8 +199,8 @@ export class EventImporterFIT {
     if (isNumberOrString(object.avg_speed)) {
       stats.push(new DataSpeedAvg(object.avg_speed));
     }
-    if (isNumberOrString(object.avg_speed)) {
-      stats.push(new DataSpeedAvg(object.avg_speed));
+    if (isNumberOrString(object.max_speed)) {
+      stats.push(new DataSpeedMax(object.max_speed));
     }
     if (isNumberOrString(object.total_ascent)) {
       stats.push(new DataAscent(object.total_ascent));
@@ -235,7 +225,6 @@ export class EventImporterFIT {
     if (isNumberOrString(fitDataObject.file_id.serial_number)) {
       creator.serialNumber = fitDataObject.file_id.serial_number;
     }
-
     // Set the name
     if (fitDataObject.file_id.manufacturer === 'suunto') {
       creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product];
