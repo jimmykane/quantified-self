@@ -196,15 +196,15 @@ export class EventImporterSuuntoJSON {
 
     // Add the samples that belong to the activity and the ibi data.
     activities.every((activity) => {
+      activity.addStat(new DataFusedLocation(false));
       eventJSONObject.DeviceLog.Samples.forEach((sample) => {
         const point = this.getPointFromSample(sample);
-        // Checked for fused location on the sample
         if (point && point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
           // add the point
           activity.addPoint(point);
           // if the point has fusedLocation data mark the activity by adding a stat
-          if (this.hasFusedLocData(sample)) {
-            activity.addStat(new DataFusedLocation(true)); // @todo mircooptimize here
+          if (this.hasFusedLocData(sample) && !activity.getStat(DataFusedLocation.className).getValue()) {
+            activity.addStat(new DataFusedLocation(true));
           }
         }
       });
