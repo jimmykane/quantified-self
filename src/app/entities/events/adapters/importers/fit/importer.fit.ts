@@ -77,7 +77,7 @@ export class EventImporterFIT {
         });
         // Set the totals for the event
         event.setDuration(new DataDuration(event.getActivities().reduce((duration, activity) => activity.getDuration().getValue(), 0)));
-        event.setDistance(new DataDistance(event.getActivities().reduce((duration, activity) => activity.getDistance().getValue(), 0)));
+        event.setDistance(new DataDistance(event.getActivities().reduce((duration, activity) => activity.getDistance() ? activity.getDistance().getValue() : 0, 0)));
         event.setPause(new DataPause(event.getActivities().reduce((duration, activity) => activity.getPause().getValue(), 0)));
         resolve(event);
       });
@@ -175,8 +175,11 @@ export class EventImporterFIT {
     // Set the pause which is elapsed time - moving time
     stats.push(new DataPause(object.total_elapsed_time - object.total_timer_time));
 
+    // Set the distance @todo check on other importers for this logic
     if (isNumberOrString(object.total_distance)) {
       stats.push(new DataDistance(object.total_distance));
+    } else {
+      stats.push(new DataDistance(0));
     }
     if (isNumberOrString(object.avg_heart_rate)) {
       stats.push(new DataHeartRateAvg(object.avg_heart_rate));
