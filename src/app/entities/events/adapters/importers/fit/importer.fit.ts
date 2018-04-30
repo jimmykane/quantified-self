@@ -34,8 +34,8 @@ import {DataPowerMax} from '../../../../data/data.power-max';
 import {DataAscent} from '../../../../data/data.ascent';
 import {DataDescent} from '../../../../data/data.descent';
 import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
-import {DataHeartRateMax} from "../../../../data/data.heart-rate-max";
-import {DataSpeedMax} from "../../../../data/data.speed-max";
+import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
+import {DataSpeedMax} from '../../../../data/data.speed-max';
 
 export class EventImporterFIT {
 
