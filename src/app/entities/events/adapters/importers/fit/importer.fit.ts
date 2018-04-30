@@ -23,6 +23,7 @@ import {PointInterface} from '../../../../points/point.interface';
 import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
 import {ImporterFitGarminDeviceNames} from './importer.fit.garmin.device.names';
 import {ImporterFitSuuntoDeviceNames} from './importer.fit.suunto.device.names';
+import {DataPause} from '../../../../data/data.pause';
 
 export class EventImporterFIT {
 
@@ -63,6 +64,9 @@ export class EventImporterFIT {
           });
           event.addActivity(activity);
         });
+        event.setDuration(new DataDuration(event.getActivities().reduce((duration, activity) => activity.getDuration().getValue(), 0)));
+        event.setDistance(new DataDistance(event.getActivities().reduce((duration, activity) => activity.getDistance().getValue(), 0)));
+        event.setPause(new DataPause(event.getActivities().reduce((duration, activity) => activity.getPause().getValue(), 0)));
         resolve(event);
       });
 
@@ -118,7 +122,7 @@ export class EventImporterFIT {
     lap.setDuration(new DataDuration(sessionLapObject.total_timer_time));
 
     // Set the pause which is elapsed time - moving time
-    lap.setPause(new DataDuration(sessionLapObject.total_elapsed_time - sessionLapObject.total_timer_time));
+    lap.setPause(new DataPause(sessionLapObject.total_elapsed_time - sessionLapObject.total_timer_time));
 
     // Set the distance
     lap.setDistance(new DataDistance(sessionLapObject.total_distance));
@@ -147,7 +151,7 @@ export class EventImporterFIT {
     activity.setDuration(new DataDuration(sessionObject.total_timer_time));
 
     // Set the pause which is elapsed time - moving time
-    activity.setPause(new DataDuration(sessionObject.total_elapsed_time - sessionObject.total_timer_time));
+    activity.setPause(new DataPause(sessionObject.total_elapsed_time - sessionObject.total_timer_time));
 
     // Set the distance
     activity.setDistance(new DataDistance(sessionObject.total_distance));

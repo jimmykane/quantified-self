@@ -383,7 +383,7 @@ export class EventImporterSuuntoJSON {
       pauseDuration = object.PauseDuration;
     }
     stats.push(new DataPause(pauseDuration));
-    stats.push(new DataDuration( object.Duration));
+    stats.push(new DataDuration(object.Duration - pauseDuration));
 
     // double case
     if (Array.isArray(object.Altitude)) {
