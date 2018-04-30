@@ -189,11 +189,8 @@ export class EventImporterFIT {
     // Set the name
     if (fitDataObject.file_id.manufacturer === 'suunto') {
       creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product];
-      debugger
-
     } else if (fitDataObject.file_id.manufacturer === 'garmin') {
       creator.name = ImporterFitGarminDeviceNames[fitDataObject.file_id.product];
-      debugger;
     } else {
       creator.name = 'Unknown device';
     }
