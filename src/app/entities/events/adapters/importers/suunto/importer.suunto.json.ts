@@ -62,6 +62,7 @@ import {DataVerticalSpeedMax} from '../../../../data/data.vertical-speed-max';
 import {DataVerticalSpeedMin} from '../../../../data/data.vertical-speed-min';
 import {DataAltitudeAvg} from '../../../../data/data.altitude-avg';
 import {DataAltitudeMin} from '../../../../data/data.altitude-min';
+import {DataFusedLocation} from '../../../../data/data.fused-location';
 
 export class EventImporterSuuntoJSON {
 
@@ -146,7 +147,7 @@ export class EventImporterSuuntoJSON {
     const lapStartDatesByType = lapEventSamples.reduce((lapStartDatesByTypeObject, lapEventSample, index) => {
       // If its a stop event then set the start date to the previous
       if (lapEventSample.Events[0].Lap.Type === 'Stop' && lapEventSamples.length > 1) {
-        lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] =  new Date(lapEventSamples[index - 1].TimeISO8601);
+        lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = new Date(lapEventSamples[index - 1].TimeISO8601);
         return lapStartDatesByTypeObject
       }
       lapStartDatesByTypeObject[lapEventSample.Events[0].Lap.Type] = activities[0].startDate;
@@ -195,10 +196,16 @@ export class EventImporterSuuntoJSON {
 
     // Add the samples that belong to the activity and the ibi data.
     activities.every((activity) => {
+      activity.addStat(new DataFusedLocation(false));
       eventJSONObject.DeviceLog.Samples.forEach((sample) => {
         const point = this.getPointFromSample(sample);
         if (point && point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
-          activity.addPoint(point)
+          // add the point
+          activity.addPoint(point);
+          // if the point has fusedLocation data mark the activity by adding a stat
+          if (this.hasFusedLocData(sample) && !activity.getStat(DataFusedLocation.className).getValue()) {
+            activity.addStat(new DataFusedLocation(true));
+          }
         }
       });
       activity.sortPointsByDate();
@@ -226,8 +233,12 @@ export class EventImporterSuuntoJSON {
     return event;
   }
 
+  private static hasFusedLocData(sample): boolean {
+    return !!sample.Inertial;
+  }
+
   private static setIntensityZones(activity: ActivityInterface, object) {
-// Create intensity zones from the header
+    // Create intensity zones from the header
     if (object.HrZones) {
       activity.intensityZones.set(DataHeartRate.type, this.getZones(object.HrZones));
     }
