@@ -7,6 +7,7 @@ import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/
 import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
 import {EventInterface} from '../../entities/events/event.interface';
 import {EventImporterFIT} from "../../entities/events/adapters/importers/fit/importer.fit";
+import * as Raven from "raven-js";
 
 @Component({
   selector: 'app-upload',
@@ -51,15 +52,20 @@ export class UploadComponent {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
           newEvent.name = activityName;
-          await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
-          metaData.status = UPLOAD_STATUS.PROCESSED;
-          this.eventService.addAndSaveEvent(newEvent);
-          resolve(newEvent);
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
           console.error('Could not load event from file' + file.name, error); // Should check with Sentry
           resolve(); // no-op here!
         }
+        try {
+          await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
+        } catch (e) {
+          // Log to Sentry
+          Raven.captureException(e);
+        }
+        this.eventService.addAndSaveEvent(newEvent);
+        metaData.status = UPLOAD_STATUS.PROCESSED;
+        resolve(newEvent);
       };
       // Read it depending on the extension
       if (extension === 'fit') {
