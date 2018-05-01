@@ -56,6 +56,39 @@ describe('EventUtilities', () => {
     expect(EventUtilities.getDataTypeAverage(event, DataAbsolutePressure.type)).toBe(null);
   });
 
+  it('should get the correct gain for a DataType', () => {
+    // Check the current set
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type)).toBe(200);
+    // Add more altitude data but this time descending so it would not affect the gain
+    let pointA = new Point(new Date(3));
+    let pointB = new Point(new Date(4));
+    let pointC = new Point(new Date(5));
+
+    pointA.addData(new DataAltitude(400));
+    pointB.addData(new DataAltitude(300));
+    pointC.addData(new DataAltitude(200));
+
+    event.getFirstActivity().addPoint(pointA);
+    event.getFirstActivity().addPoint(pointB);
+    event.getFirstActivity().addPoint(pointC);
+
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type)).toBe(200);
+
+    // Add more for gain
+    pointA = new Point(new Date(6));
+    pointB = new Point(new Date(7));
+    pointC = new Point(new Date(8));
+
+    pointA.addData(new DataAltitude(400)); // + 200 to prev
+    pointB.addData(new DataAltitude(300)); // + 0
+    pointC.addData(new DataAltitude(400)); // + 100
+
+    event.getFirstActivity().addPoint(pointA);
+    event.getFirstActivity().addPoint(pointB);
+    event.getFirstActivity().addPoint(pointC);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type)).toBe(500);
+  });
+
   it('should get an event as tcx blob', (done) => {
     EventUtilities.getEventAsTCXBloB(event).then((blob) => {
       expect(blob instanceof Blob).toBe(true);

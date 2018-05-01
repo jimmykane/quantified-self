@@ -212,30 +212,28 @@ export class EventUtilities {
     }
   }
 
-  // public static getEventDataTypeGain(event: EventInterface,
-  //                                    dataType: string,
-  //                                    startDate?: Date,
-  //                                    endDate?: Date,
-  //                                    activities?: ActivityInterface[],
-  //                                    precision?: number,
-  //                                    minDiff?: number): number {
-  //   precision = precision || 1;
-  //   minDiff = minDiff || 1.5;
-  //   let gain = 0;
-  //   event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
-  //     if (!previous.getDataByType(dataType)) {
-  //       return next;
-  //     }
-  //     if (!next.getDataByType(dataType)) {
-  //       return previous;
-  //     }
-  //     if ((previous.getDataByType(dataType).getValue() + minDiff) < (Number(next.getDataByType(dataType).getValue()))) {
-  //       gain += Number(next.getDataByType(dataType).getValue().toFixed(precision)) - Number(previous.getDataByType(dataType).getValue().toFixed(precision));
-  //     }
-  //     return next;
-  //   });
-  //   return gain;
-  // }
+  public static getEventDataTypeGain(event: EventInterface,
+                                     dataType: string,
+                                     activities?: ActivityInterface[]){
+    // @todo safeguard on numbers
+    const minDiff = 1;
+    let gain = 0;
+    event.getPoints(void 0, void 0, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataByType(dataType)) {
+        return next;
+      }
+      if (!next.getDataByType(dataType)) {
+        return previous;
+      }
+      if ((<number>previous.getDataByType(dataType).getValue() + minDiff) < <number>next.getDataByType(dataType).getValue()) {
+        gain += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
+      }
+      return next;
+    });
+    return gain;
+  }
+
+
   //
   // public static getEventDataTypeLoss(event: EventInterface,
   //                                    dataType: string,
