@@ -27,7 +27,7 @@ import {ActivityTypes} from '../../../activities/activity.types';
 export class EventImporterTCX {
 
   static getFromXML(xml: Document): EventInterface {
-
+    // Init the event
     const event = new Event();
     event.setDistance(new DataDistance(0));
     event.setDuration(new DataDuration(0));
@@ -39,7 +39,7 @@ export class EventImporterTCX {
       event.addActivity(activity);
 
       // Set the type
-      activity.type = ActivityTypes[<string>activityElement.getAttribute('Sport')] ||  ActivityTypes['unknown'] ;
+      activity.type = ActivityTypes[<string>activityElement.getAttribute('Sport')] || ActivityTypes['unknown'];
       // First element must exist
       activity.startDate = new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime'));
       // Setup the creator
@@ -76,7 +76,7 @@ export class EventImporterTCX {
       });
       activity.sortPointsByDate();
       // Set the end date as of pause + duration
-      activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000  + activity.getPause().getValue() * 1000)
+      activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000 + activity.getPause().getValue() * 1000)
     }
 
     EventUtilities.generateStats(event);
@@ -197,11 +197,8 @@ export class EventImporterTCX {
         lastPointFromPreviousTrack = trackElement.getElementsByTagName('Trackpoint')[trackElement.getElementsByTagName('Trackpoint').length - 1];
       });
 
-
       lapArray.push(lap);
       return lapArray;
     }, []);
   }
-
-
 }
