@@ -214,9 +214,10 @@ export class EventUtilities {
 
   public static getEventDataTypeGain(event: EventInterface,
                                      dataType: string,
-                                     activities?: ActivityInterface[]){
-    // @todo safeguard on numbers
-    const minDiff = 1;
+                                     activities?: ActivityInterface[],
+                                     minDiff?: number){
+    // @todo safeguard on number data types
+    minDiff = minDiff || 1;
     let gain = 0;
     event.getPoints(void 0, void 0, activities).reduce((previous: PointInterface, next: PointInterface) => {
       if (!previous.getDataByType(dataType)) {
@@ -225,40 +226,13 @@ export class EventUtilities {
       if (!next.getDataByType(dataType)) {
         return previous;
       }
-      if ((<number>previous.getDataByType(dataType).getValue() + minDiff) < <number>next.getDataByType(dataType).getValue()) {
+      if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue()) {
         gain += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
       }
       return next;
     });
     return gain;
   }
-
-
-  //
-  // public static getEventDataTypeLoss(event: EventInterface,
-  //                                    dataType: string,
-  //                                    startDate?: Date,
-  //                                    endDate?: Date,
-  //                                    activities?: ActivityInterface[],
-  //                                    precision?: number,
-  //                                    minDiff?: number): number {
-  //   precision = precision || 1;
-  //   minDiff = minDiff || 1.5;
-  //   let loss = 0;
-  //   event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
-  //     if (!previous.getDataByType(dataType)) {
-  //       return next;
-  //     }
-  //     if (!next.getDataByType(dataType)) {
-  //       return previous;
-  //     }
-  //     if ((Number(next.getDataByType(dataType).getValue().toFixed(precision)) - minDiff) < Number(previous.getDataByType(dataType).getValue().toFixed(precision))) {
-  //       loss += Number(previous.getDataByType(dataType).getValue().toFixed(precision)) - Number(next.getDataByType(dataType).getValue().toFixed(precision));
-  //     }
-  //     return next;
-  //   });
-  //   return loss;
-  // }
 
   // private static geodesyAdapter = new GeoLibAdapter();
   //
@@ -273,8 +247,6 @@ export class EventUtilities {
   //     return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, [activity]));
   //   }, 0);
   // }
-
-
 }
 
 export function isNumberOrString(property: any) {
