@@ -230,11 +230,11 @@ export class EventImporterFIT {
     }
     // Set the name
     if (fitDataObject.file_id.manufacturer === 'suunto') {
-      creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product];
+      creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product] || fitDataObject.file_id.manufacturer + ' ' + fitDataObject.file_id.product;
     } else if (fitDataObject.file_id.manufacturer === 'garmin') {
-      creator.name = ImporterFitGarminDeviceNames[fitDataObject.file_id.product];
+      creator.name = ImporterFitGarminDeviceNames[fitDataObject.file_id.product] || fitDataObject.file_id.manufacturer + ' ' + fitDataObject.file_id.product;
     } else {
-      creator.name = 'Unknown device';
+      creator.name = fitDataObject.file_id.manufacturer + ' ' + fitDataObject.file_id.product;
     }
     return creator;
   }
