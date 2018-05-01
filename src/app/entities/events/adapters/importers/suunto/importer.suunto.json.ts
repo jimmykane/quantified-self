@@ -431,13 +431,13 @@ export class EventImporterSuuntoJSON {
 
     if (object.Cadence) {
       if (object.Cadence[0].Avg !== null) {
-        stats.push(new DataCadenceAvg(object.Cadence[0].Avg * 60 * 2));
+        stats.push(new DataCadenceAvg(object.Cadence[0].Avg * 60));
       }
       if (object.Cadence[0].Max !== null) {
-        stats.push(new DataCadenceMax(object.Cadence[0].Max * 60 * 2));
+        stats.push(new DataCadenceMax(object.Cadence[0].Max * 60));
       }
       if (object.Cadence[0].Min !== null) {
-        stats.push(new DataCadenceMin(object.Cadence[0].Min * 60 * 2));
+        stats.push(new DataCadenceMin(object.Cadence[0].Min * 60));
       }
     }
 

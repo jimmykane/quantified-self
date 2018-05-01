@@ -114,7 +114,7 @@ export class EventImporterTCX {
                   break;
                 }
                 case 'RunCadence': {
-                  point.addData(new DataCadence(Number(dataExtensionElement.textContent) * 2));
+                  point.addData(new DataCadence(Number(dataExtensionElement.textContent)));
                   break;
                 }
                 case 'Watts': {
