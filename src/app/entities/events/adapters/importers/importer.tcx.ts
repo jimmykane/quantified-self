@@ -22,6 +22,7 @@ import {DataPause} from '../../../data/data.pause';
 import {DataSpeedMax} from '../../../data/data.speed-max';
 import {DataHeartRateAvg} from '../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../data/data.heart-rate-max';
+import {ActivityTypes} from '../../../activities/activity.types';
 
 export class EventImporterTCX {
 
@@ -35,7 +36,7 @@ export class EventImporterTCX {
     // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
       const activity = new Activity();
-      activity.type = activityElement.getAttribute('Sport');
+      activity.type = ActivityTypes[activityElement.getAttribute('Sport')];
       event.addActivity(activity);
       // First element must exist
       activity.startDate = new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime'));
