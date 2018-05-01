@@ -166,6 +166,8 @@ describe('EventUtilities', () => {
 
     // Up to now we have 200m, 300m, 400m, 100m, 101m, 102m
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 200)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 300)).toBe(0);
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 1)).toBe(202);
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 2)).toBe(202);
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 3)).toBe(200);
