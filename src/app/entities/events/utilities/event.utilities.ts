@@ -231,11 +231,11 @@ export class EventUtilities {
         gain += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
         return next;
       }
-      // If the next is not smaller than the current then return the current
-      if (<number>previous.getDataByType(dataType).getValue() >= <number>next.getDataByType(dataType).getValue()){
-        return next;
+      // If the next is bigger then return the previous
+      if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()){
+        return previous;
       }
-      return previous;
+      return next;
     });
     return gain;
   }
