@@ -36,13 +36,14 @@ export class EventImporterTCX {
     // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
       const activity = new Activity();
-      activity.type = ActivityTypes[activityElement.getAttribute('Sport')];
       event.addActivity(activity);
+
+      // Set the type
+      activity.type = ActivityTypes[<string>activityElement.getAttribute('Sport')] ||  ActivityTypes['unknown'] ;
       // First element must exist
       activity.startDate = new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime'));
       // Setup the creator
       activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
-
 
       // Go over the laps and start filling up the stats and creating the points
       // @todo

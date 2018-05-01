@@ -9,11 +9,12 @@ import {Creator} from '../creators/creator';
 import {StatsClassAbstract} from '../stats/stats.class.abstract';
 import {Weather} from '../weather/app.weather';
 import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
+import {ActivityTypes} from './activity.types';
 
 export class Activity extends StatsClassAbstract implements ActivityInterface {
   public startDate;
   public endDate;
-  public type: string;
+  public type: ActivityTypes;
   public creator = new Creator();
   public ibiData = new IBIData();
   public intensityZones: Map<string, IntensityZonesInterface> = new Map<string, IntensityZonesInterface>();

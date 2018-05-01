@@ -63,6 +63,7 @@ import {DataVerticalSpeedMin} from '../../../../data/data.vertical-speed-min';
 import {DataAltitudeAvg} from '../../../../data/data.altitude-avg';
 import {DataAltitudeMin} from '../../../../data/data.altitude-min';
 import {DataFusedLocation} from '../../../../data/data.fused-location';
+import {ActivityTypes} from '../../../../activities/activity.types';
 
 export class EventImporterSuuntoJSON {
 
@@ -125,7 +126,7 @@ export class EventImporterSuuntoJSON {
     const activities = activityStartEventSamples.map((activityStartEventSample, index): ActivityInterface => {
       const activity = new Activity();
       activity.startDate = new Date(activityStartEventSample.TimeISO8601);
-      activity.type = ImporterSuuntoActivityIds[activityStartEventSample.Events[0].Activity.ActivityType];
+      activity.type = ActivityTypes[ImporterSuuntoActivityIds[activityStartEventSample.Events[0].Activity.ActivityType]];
       activity.creator = creator;
       // Set the end date to the stop event time if the activity is the last or the only one else set it on the next itery time
       activity.endDate = activityStartEventSamples.length - 1 === index ?
