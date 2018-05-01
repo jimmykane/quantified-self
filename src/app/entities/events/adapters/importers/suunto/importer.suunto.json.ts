@@ -302,7 +302,7 @@ export class EventImporterSuuntoJSON {
       point.addData(new DataAltitude(sample.Altitude))
     }
     if (sample.hasOwnProperty('Cadence') && sample.Cadence !== null) {
-      point.addData(new DataCadence(sample.Cadence * 120))
+      point.addData(new DataCadence(sample.Cadence * 60))
     }
     if (sample.hasOwnProperty('Power') && sample.Power !== null) {
       point.addData(new DataPower(sample.Power))
