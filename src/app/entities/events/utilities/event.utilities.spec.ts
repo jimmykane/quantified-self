@@ -144,10 +144,12 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointA);
     event.getFirstActivity().addPoint(pointB);
     event.getFirstActivity().addPoint(pointC);
-    // With a diff of 100 the gain should be included
+    // With a diff of 100,200 the gain should be included
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
-    // With a diff of 101 it should not report a gain
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 101)).toBe(0);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 200)).toBe(200);
+
+    // with a diff of 201 it shouldn't
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 201)).toBe(0);
 
     // Add more
     const pointD = new Point(new Date(3));
@@ -164,12 +166,9 @@ describe('EventUtilities', () => {
 
     // Up to now we have 200, 300, 400, 100, 101, 102
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 101)).toBe(0);
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 1)).toBe(202);
-    // Here is the interesting part that my algo fails
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 2)).toBe(200);
-
-
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 2)).toBe(202);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 3)).toBe(200);
   });
 
   it('should get an event as tcx blob', (done) => {

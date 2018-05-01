@@ -226,10 +226,16 @@ export class EventUtilities {
       if (!next.getDataByType(dataType)) {
         return previous;
       }
+      // Increase the gain if eligible
       if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue()) {
         gain += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
+        return next;
       }
-      return next;
+      // If the next is not smaller than the current then return the current
+      if (<number>previous.getDataByType(dataType).getValue() >= <number>next.getDataByType(dataType).getValue()){
+        return next;
+      }
+      return previous;
     });
     return gain;
   }
