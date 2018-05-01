@@ -173,6 +173,30 @@ describe('EventUtilities', () => {
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 3)).toBe(200);
   });
 
+
+  it('should get the correct gain for a DataType with a set of points of non data', () => {
+    const pointA = new Point(new Date(0));
+    const pointB = new Point(new Date(1));
+    const pointC = new Point(new Date(2));
+    const pointD = new Point(new Date(3));
+    const pointE = new Point(new Date(4));
+    const pointF = new Point(new Date(5));
+
+    pointB.addData(new DataAltitude(100)); // Gain 0
+    pointC.addData(new DataAltitude(300)); // Gain 100
+    pointD.addData(new DataAltitude(200)); // Gain 0
+    pointF.addData(new DataAltitude(400)); // Gain 300
+
+    event.getFirstActivity().addPoint(pointA);
+    event.getFirstActivity().addPoint(pointB);
+    event.getFirstActivity().addPoint(pointC);
+    event.getFirstActivity().addPoint(pointD);
+    event.getFirstActivity().addPoint(pointE);
+    event.getFirstActivity().addPoint(pointF);
+
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type)).toBe(400);
+  });
+
   it('should get an event as tcx blob', (done) => {
     const pointA = new Point(new Date(0));
     const pointB = new Point(new Date(1));
