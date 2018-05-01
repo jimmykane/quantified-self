@@ -164,7 +164,7 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointE);
     event.getFirstActivity().addPoint(pointF);
 
-    // Up to now we have 200, 300, 400, 100, 101, 102
+    // Up to now we have 200m, 300m, 400m, 100m, 101m, 102m
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 1)).toBe(202);
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 2)).toBe(202);
