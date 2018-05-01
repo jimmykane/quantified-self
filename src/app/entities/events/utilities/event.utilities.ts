@@ -74,13 +74,7 @@ export class EventUtilities {
                                    endDate?: Date,
                                    activities?: ActivityInterface[]): number {
 
-    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
-      if (point.getDataByType(dataType)) {
-        dataValues.push(point.getDataByType(dataType).getValue());
-      }
-      return dataValues;
-    }, []);
-    return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
+    return this.getDataTypeMinOrMax(true, event, dataType, startDate, endDate, activities);
   }
 
   public static getDateTypeMinimum(event: EventInterface,
@@ -88,14 +82,8 @@ export class EventUtilities {
                                    startDate?: Date,
                                    endDate?: Date,
                                    activities?: ActivityInterface[]): number {
+    return this.getDataTypeMinOrMax(false, event, dataType, startDate, endDate, activities);
 
-    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
-      if (point.getDataByType(dataType)) {
-        dataValues.push(point.getDataByType(dataType).getValue());
-      }
-      return dataValues;
-    }, []);
-    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
   }
 
   public static mergeEvents(events: EventInterface[]): Promise<EventInterface> {
@@ -215,7 +203,7 @@ export class EventUtilities {
   public static getEventDataTypeGain(event: EventInterface,
                                      dataType: string,
                                      activities?: ActivityInterface[],
-                                     minDiff?: number){
+                                     minDiff?: number) {
     // @todo safeguard on number data types
     minDiff = minDiff || 1;
     let gain = 0;
@@ -232,12 +220,31 @@ export class EventUtilities {
         return next;
       }
       // If the next is bigger then return the previous
-      if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()){
+      if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()) {
         return previous;
       }
       return next;
     });
     return gain;
+  }
+
+  private static getDataTypeMinOrMax(max: boolean,
+                                     event: EventInterface,
+                                     dataType: string,
+                                     startDate?: Date,
+                                     endDate?: Date,
+                                     activities?: ActivityInterface[]): number {
+
+    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
+      if (point.getDataByType(dataType)) {
+        dataValues.push(point.getDataByType(dataType).getValue());
+      }
+      return dataValues;
+    }, []);
+    if (max) {
+      return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
+    }
+    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
   }
 
   // private static geodesyAdapter = new GeoLibAdapter();
