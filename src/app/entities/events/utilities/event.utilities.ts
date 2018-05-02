@@ -150,7 +150,7 @@ export class EventUtilities {
                                             activities?: ActivityInterface[],
                                             minDiff?: number): number {
     // @todo safeguard on number data types
-    minDiff = minDiff || 1;
+    minDiff = minDiff || 3;
     let gainOrLoss = 0;
 
     event.getPoints(starDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
