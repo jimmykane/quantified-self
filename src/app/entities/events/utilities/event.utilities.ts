@@ -35,6 +35,8 @@ import {DataTemperatureAvg} from '../../data/data.temperature-avg';
 import {DataDistance} from '../../data/data.distance';
 import {DataDuration} from '../../data/data.duration';
 import {DataPause} from '../../data/data.pause';
+import {DataAscent} from '../../data/data.ascent';
+import {DataDescent} from '../../data/data.descent';
 
 export class EventUtilities {
 
@@ -275,6 +277,14 @@ export class EventUtilities {
     }
     if (subject.getStat(DataTemperatureAvg.className) === undefined && this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureAvg(this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate)));
+    }
+    // Ascent (altitude gain)
+    if (subject.getStat(DataAscent.className) === undefined && this.getEventDataTypeGain(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataAscent(this.getEventDataTypeGain(event, DataAltitude.type, subject.startDate, subject.endDate)));
+    }
+    // Descent (altitude loss)
+    if (subject.getStat(DataDescent.className) === undefined && this.getEventDataTypeLoss(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataDescent(this.getEventDataTypeLoss(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
   }
 
