@@ -25,7 +25,7 @@ import {ImporterFitGarminDeviceNames} from './importer.fit.garmin.device.names';
 import {ImporterFitSuuntoDeviceNames} from './importer.fit.suunto.device.names';
 import {DataPause} from '../../../../data/data.pause';
 import {DataInterface} from '../../../../data/data.interface';
-import {isNumberOrString} from '../../../utilities/event.utilities';
+import {EventUtilities, isNumberOrString} from '../../../utilities/event.utilities';
 import {DataCadenceAvg} from '../../../../data/data.cadence-avg';
 import {DataPowerAvg} from '../../../../data/data.power-avg';
 import {DataSpeedAvg} from '../../../../data/data.speed-avg';
@@ -79,6 +79,7 @@ export class EventImporterFIT {
         event.setDuration(new DataDuration(event.getActivities().reduce((duration, activity) => activity.getDuration().getValue(), 0)));
         event.setDistance(new DataDistance(event.getActivities().reduce((duration, activity) => activity.getDistance() ? activity.getDistance().getValue() : 0, 0)));
         event.setPause(new DataPause(event.getActivities().reduce((duration, activity) => activity.getPause().getValue(), 0)));
+        EventUtilities.generateStats(event);
         resolve(event);
       });
 
