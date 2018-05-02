@@ -154,7 +154,7 @@ export class EventUtilities {
       // Gain!
       if (gain) {
         // Increase the gain if eligible first check to be greater plus diff  [200, 300, 400, 100, 101, 102]
-        if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue() {
+        if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue()) {
           gainOrLoss += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
           return next;
         }
