@@ -219,7 +219,7 @@ export class EventUtilities {
     if (subject.getStat(DataHeartRateAvg.className) === undefined && this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateAvg(this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
-
+    // Cadence
     if (subject.getStat(DataCadenceMax.className) === undefined && this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceMax(this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
@@ -229,7 +229,6 @@ export class EventUtilities {
     if (subject.getStat(DataCadenceAvg.className) === undefined && this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceAvg(this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
-
     // Speed
     if (subject.getStat(DataSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedMax(this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate)));
@@ -240,7 +239,6 @@ export class EventUtilities {
     if (subject.getStat(DataSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedAvg(this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
-
     // Vertical Speed
     if (subject.getStat(DataVerticalSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedMax(this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
@@ -251,7 +249,6 @@ export class EventUtilities {
     if (subject.getStat(DataVerticalSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedAvg(this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
-
     // Power
     if (subject.getStat(DataPowerMax.className) === undefined && this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerMax(this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate)));
@@ -262,7 +259,6 @@ export class EventUtilities {
     if (subject.getStat(DataPowerAvg.className) === undefined && this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerAvg(this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate)));
     }
-
     // Temperature
     if (subject.getStat(DataTemperatureMax.className) === undefined && this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureMax(this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate)));
