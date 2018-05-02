@@ -1,6 +1,6 @@
-import {DataDistance} from './data.distance';
+import {DataAltitude} from './data.altitude';
 
-export class DataDescent extends DataDistance {
+export class DataDescent extends DataAltitude {
   static className = 'DataDescent';
   static type = 'Descent';
 }
