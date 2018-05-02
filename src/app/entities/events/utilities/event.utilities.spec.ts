@@ -183,9 +183,9 @@ describe('EventUtilities', () => {
     const pointF = new Point(new Date(5));
 
     pointB.addData(new DataAltitude(100)); // Gain 0
-    pointC.addData(new DataAltitude(300)); // Gain 100
+    pointC.addData(new DataAltitude(300)); // Gain 200
     pointD.addData(new DataAltitude(200)); // Gain 0
-    pointF.addData(new DataAltitude(400)); // Gain 300
+    pointF.addData(new DataAltitude(400)); // Gain 400
 
     event.getFirstActivity().addPoint(pointA);
     event.getFirstActivity().addPoint(pointB);
@@ -196,9 +196,6 @@ describe('EventUtilities', () => {
 
     expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type)).toBe(400);
   });
-
-
-
 
   it('should get the correct loss for a DataType', () => {
     const pointA = new Point(new Date(0));
@@ -244,7 +241,7 @@ describe('EventUtilities', () => {
     expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type)).toBe(500);
   });
 
-  it('should get the correct gain for a DataType with a changed min difference', () => {
+  it('should get the correct loss for a DataType with a changed min difference', () => {
     const pointA = new Point(new Date(0));
     const pointB = new Point(new Date(1));
     const pointC = new Point(new Date(2));
@@ -286,7 +283,7 @@ describe('EventUtilities', () => {
   });
 
 
-  it('should get the correct gain for a DataType with a set of points of non data', () => {
+  it('should get the correct loss for a DataType with a set of points of non data', () => {
     const pointA = new Point(new Date(0));
     const pointB = new Point(new Date(1));
     const pointC = new Point(new Date(2));
@@ -294,10 +291,10 @@ describe('EventUtilities', () => {
     const pointE = new Point(new Date(4));
     const pointF = new Point(new Date(5));
 
-    pointB.addData(new DataAltitude(100)); // Gain 0
-    pointC.addData(new DataAltitude(300)); // Gain 100
-    pointD.addData(new DataAltitude(200)); // Gain 0
-    pointF.addData(new DataAltitude(400)); // Gain 300
+    pointB.addData(new DataAltitude(400)); // loss 0
+    pointC.addData(new DataAltitude(200)); // loss 200
+    pointD.addData(new DataAltitude(300)); // loss 0
+    pointF.addData(new DataAltitude(100)); // loss 400
 
     event.getFirstActivity().addPoint(pointA);
     event.getFirstActivity().addPoint(pointB);
@@ -306,7 +303,7 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointE);
     event.getFirstActivity().addPoint(pointF);
 
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type)).toBe(400);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type)).toBe(400);
   });
 
   it('should get an event as tcx blob', (done) => {
