@@ -151,6 +151,7 @@ export class EventUtilities {
       if (!next.getDataByType(dataType)) {
         return previous;
       }
+      // Gain!
       if (gain) {
         // Increase the gain if eligible first check to be greater plus diff  [200, 300, 400, 100, 101, 102]
         if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue() {
@@ -161,17 +162,17 @@ export class EventUtilities {
         if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()) {
           return previous;
         }
-        // Else (lower) will return the next
-      } else {
-        // Increase the loss if eligible
-        if ((<number>previous.getDataByType(dataType).getValue() - minDiff) >= <number>next.getDataByType(dataType).getValue() {
-          gainOrLoss += <number>previous.getDataByType(dataType).getValue() - <number>next.getDataByType(dataType).getValue();
-          return next;
-        }
-        // if not eligible check if smaller without the diff and if yes do not register it and send it back as the last to check against
-        if (<number>previous.getDataByType(dataType).getValue() >= <number>next.getDataByType(dataType).getValue()) {
-          return previous;
-        }
+        return next
+      }
+      // Loss
+      // Increase the loss if eligible
+      if ((<number>previous.getDataByType(dataType).getValue() - minDiff) >= <number>next.getDataByType(dataType).getValue() {
+        gainOrLoss += <number>previous.getDataByType(dataType).getValue() - <number>next.getDataByType(dataType).getValue();
+        return next;
+      }
+      // if not eligible check if smaller without the diff and if yes do not register it and send it back as the last to check against
+      if (<number>previous.getDataByType(dataType).getValue() >= <number>next.getDataByType(dataType).getValue()) {
+        return previous;
       }
       return next;
     });
