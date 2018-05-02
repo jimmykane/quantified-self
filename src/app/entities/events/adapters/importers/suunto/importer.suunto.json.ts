@@ -295,10 +295,10 @@ export class EventImporterSuuntoJSON {
       point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
     }
     if (isNumberOrString(sample.AbsPressure)) {
-      point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
+      point.addData(new DataAbsolutePressure(sample.AbsPressure / 100))
     }
     if (isNumberOrString(sample.SeaLevelPressure)) {
-      point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
+      point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 100))
     }
     if (isNumberOrString(sample.Altitude)) {
       point.addData(new DataAltitude(sample.Altitude))
