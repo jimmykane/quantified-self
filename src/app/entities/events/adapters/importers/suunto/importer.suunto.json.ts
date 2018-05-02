@@ -64,6 +64,7 @@ import {DataAltitudeAvg} from '../../../../data/data.altitude-avg';
 import {DataAltitudeMin} from '../../../../data/data.altitude-min';
 import {DataFusedLocation} from '../../../../data/data.fused-location';
 import {ActivityTypes} from '../../../../activities/activity.types';
+import {isNumberOrString} from '../../../utilities/event.utilities';
 
 export class EventImporterSuuntoJSON {
 
@@ -281,52 +282,52 @@ export class EventImporterSuuntoJSON {
       return null;
     }
     const point = new Point(new Date(sample.TimeISO8601));
-    if (sample.hasOwnProperty('HR') && sample.HR !== null) {
+    if (isNumberOrString(sample.HR)) {
       point.addData(new DataHeartRate(sample.HR * 60))
     }
-    if (sample.hasOwnProperty('GPSAltitude') && sample.GPSAltitude !== null) {
+    if (isNumberOrString(sample.GPSAltitude)) {
       point.addData(new DataGPSAltitude(sample.GPSAltitude))
     }
-    if (sample.hasOwnProperty('Latitude') && sample.Latitude !== null) {
+    if (isNumberOrString(sample.Latitude)) {
       point.addData(new DataLatitudeDegrees(sample.Latitude * (180 / Math.PI)))
     }
-    if (sample.hasOwnProperty('Longitude') && sample.Longitude !== null) {
+    if (isNumberOrString(sample.Longitude)) {
       point.addData(new DataLongitudeDegrees(sample.Longitude * (180 / Math.PI)))
     }
-    if (sample.hasOwnProperty('AbsPressure') && sample.AbsPressure !== null) {
+    if (isNumberOrString(sample.AbsPressure)) {
       point.addData(new DataAbsolutePressure(sample.AbsPressure / 1000))
     }
-    if (sample.hasOwnProperty('SeaLevelPressure') && sample.SeaLevelPressure !== null) {
+    if (isNumberOrString(sample.SeaLevelPressure)) {
       point.addData(new DataSeaLevelPressure(sample.SeaLevelPressure / 1000))
     }
-    if (sample.hasOwnProperty('Altitude') && sample.Altitude !== null) {
+    if (isNumberOrString(sample.Altitude)) {
       point.addData(new DataAltitude(sample.Altitude))
     }
-    if (sample.hasOwnProperty('Cadence') && sample.Cadence !== null) {
+    if (isNumberOrString(sample.Cadence)) {
       point.addData(new DataCadence(sample.Cadence * 60))
     }
-    if (sample.hasOwnProperty('Power') && sample.Power !== null) {
+    if (isNumberOrString(sample.Power)) {
       point.addData(new DataPower(sample.Power))
     }
-    if (sample.hasOwnProperty('Speed') && sample.Speed !== null) {
+    if (isNumberOrString(sample.Speed)) {
       point.addData(new DataSpeed(sample.Speed))
     }
-    if (sample.hasOwnProperty('Temperature') && sample.Temperature !== null) {
+    if (isNumberOrString(sample.Temperature)) {
       point.addData(new DataTemperature(sample.Temperature - 273.15))
     }
-    if (sample.hasOwnProperty('VerticalSpeed') && sample.VerticalSpeed !== null) {
+    if (isNumberOrString(sample.VerticalSpeed)) {
       point.addData(new DataVerticalSpeed(sample.VerticalSpeed))
     }
-    if (sample.hasOwnProperty('EHPE') && sample.EHPE !== null) {
+    if (isNumberOrString(sample.EHPE)) {
       point.addData(new DataEHPE(sample.EHPE));
     }
-    if (sample.hasOwnProperty('EVPE') && sample.EVPE !== null) {
+    if (isNumberOrString(sample.EVPE)) {
       point.addData(new DataEVPE(sample.EVPE));
     }
-    if (sample.hasOwnProperty('NumberOfSatellites') && sample.NumberOfSatellites !== null) {
+    if (isNumberOrString(sample.NumberOfSatellites)) {
       point.addData(new DataNumberOfSatellites(sample.NumberOfSatellites));
     }
-    if (sample.hasOwnProperty('Satellite5BestSNR') && sample.Satellite5BestSNR !== null) {
+    if (isNumberOrString(sample.Satellite5BestSNR)) {
       point.addData(new DataSatellite5BestSNR(sample.Satellite5BestSNR));
     }
     return point;
@@ -349,49 +350,49 @@ export class EventImporterSuuntoJSON {
 
   private static getStats(object: any): DataInterface[] {
     const stats = [];
-    if (object.hasOwnProperty('Distance') && object.Distance !== null) {
+    if (isNumberOrString(object.Distance)) {
       stats.push(new DataDistance(object.Distance));
     }
-    if (object.hasOwnProperty('AscentTime') && object.AscentTime !== null) {
+    if (isNumberOrString(object.AscentTime)) {
       stats.push(new DataAscentTime(object.AscentTime));
     }
 
-    if (object.hasOwnProperty('DescentTime') && object.DescentTime !== null) {
+    if (isNumberOrString(object.DescentTime)) {
       stats.push(new DataDescentTime(object.DescentTime));
     }
 
-    if (object.hasOwnProperty('Ascent') && object.Ascent !== null) {
+    if (isNumberOrString(object.Ascent)) {
       stats.push(new DataAscent(object.Ascent));
     }
 
-    if (object.hasOwnProperty('Descent') && object.Descent !== null) {
+    if (isNumberOrString(object.Descent)) {
       stats.push(new DataDescent(object.Descent));
     }
 
-    if (object.hasOwnProperty('EPOC') && object.EPOC !== null) {
+    if (isNumberOrString(object.EPOC)) {
       stats.push(new DataEPOC(object.EPOC));
     }
 
-    if (object.hasOwnProperty('Energy') && object.Energy !== null) {
+    if (isNumberOrString(object.Energy)) {
       stats.push(new DataEnergy(object.Energy * 0.239 / 1000));
     }
 
-    if (object.hasOwnProperty('Feeling') && object.Feeling !== null) {
+    if (isNumberOrString(object.Feeling)) {
       stats.push(new DataFeeling(object.Feeling));
     }
 
-    if (object.hasOwnProperty('PeakTrainingEffect') && object.PeakTrainingEffect !== null) {
+    if (isNumberOrString(object.PeakTrainingEffect)) {
       stats.push(new DataPeakTrainingEffect(object.PeakTrainingEffect));
     }
-    if (object.hasOwnProperty('RecoveryTime') && object.RecoveryTime !== null) {
+    if (isNumberOrString(object.RecoveryTime)) {
       stats.push(new DataRecovery(object.RecoveryTime));
     }
-    if (object.hasOwnProperty('MAXVO2') && object.MAXVO2 !== null) {
+    if (isNumberOrString(object.MAXVO2)) {
       stats.push(new DataVO2Max(object.MAXVO2));
     }
 
     let pauseDuration = 0;
-    if (object.hasOwnProperty('PauseDuration') && object.PauseDuration !== null) {
+    if (isNumberOrString(object.PauseDuration)) {
       pauseDuration = object.PauseDuration;
     }
     stats.push(new DataPause(pauseDuration));
