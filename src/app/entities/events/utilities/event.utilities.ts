@@ -125,7 +125,7 @@ export class EventUtilities {
                                      dataType: string,
                                      activities?: ActivityInterface[],
                                      minDiff?: number): number {
-    return this.getEventDataTypeGainOrLoss(true, event, dataType, activities, minDiff);
+    return this.getEventDataTypeGainOrLoss(true, event, dataType, void 0, void 0, activities, minDiff);
   }
 
 
@@ -133,18 +133,21 @@ export class EventUtilities {
                                      dataType: string,
                                      activities?: ActivityInterface[],
                                      minDiff?: number): number {
-    return this.getEventDataTypeGainOrLoss(false, event, dataType, activities, minDiff);
+    return this.getEventDataTypeGainOrLoss(false, event, dataType, void 0, void 0, activities, minDiff);
   }
 
   private static getEventDataTypeGainOrLoss(gain: boolean,
                                             event: EventInterface,
                                             dataType: string,
+                                            starDate: Date,
+                                            endDate: Date,
                                             activities?: ActivityInterface[],
                                             minDiff?: number): number {
     // @todo safeguard on number data types
     minDiff = minDiff || 1;
     let gainOrLoss = 0;
-    event.getPoints(void 0, void 0, activities).reduce((previous: PointInterface, next: PointInterface) => {
+
+    event.getPoints(starDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
       if (!previous.getDataByType(dataType)) {
         return next;
       }
