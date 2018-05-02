@@ -129,7 +129,7 @@ export class EventUtilities {
                                      endDate?: Date,
                                      activities?: ActivityInterface[],
                                      minDiff?: number): number {
-    return this.getEventDataTypeGainOrLoss(true, event, dataType, void 0, void 0, activities, minDiff);
+    return this.getEventDataTypeGainOrLoss(true, event, dataType, starDate, endDate, activities, minDiff);
   }
 
 
@@ -139,7 +139,7 @@ export class EventUtilities {
                                      endDate?: Date,
                                      activities?: ActivityInterface[],
                                      minDiff?: number): number {
-    return this.getEventDataTypeGainOrLoss(false, event, dataType, void 0, void 0, activities, minDiff);
+    return this.getEventDataTypeGainOrLoss(false, event, dataType, starDate, endDate, activities, minDiff);
   }
 
   private static getEventDataTypeGainOrLoss(gain: boolean,
