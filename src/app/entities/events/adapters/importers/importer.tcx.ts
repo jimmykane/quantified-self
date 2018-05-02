@@ -54,7 +54,10 @@ export class EventImporterTCX {
       activity.addStat(new DataEnergy(0));
 
       // Get the laps and add the total distance to the activity
-      this.getLaps(activityElement.getElementsByTagName('Lap')).map((lap: LapInterface) => {
+      this.getLaps(activityElement.getElementsByTagName('Lap')).forEach((lap: LapInterface) => {
+        if (lap.getDuration().getValue() === 0){
+          return;
+        }
         activity.addLap(lap);
         // Increment wrapper stats
         activity.getDistance().setValue(activity.getDistance().getValue() + lap.getDistance().getValue());
