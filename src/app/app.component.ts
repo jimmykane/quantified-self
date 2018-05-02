@@ -1,5 +1,5 @@
 import {
-  AfterViewChecked, AfterViewInit, ChangeDetectorRef, Component, OnDestroy, OnInit,
+  AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit,
   ViewChild
 } from '@angular/core';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
@@ -11,11 +11,11 @@ import {Subscription} from 'rxjs/Subscription';
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
   @ViewChild('sidenav') sideNav: MatSidenav;
-  public title = 'Quantified Self';
   public actionButtons: ActionButton[] = [];
   private actionButtonsSubscription: Subscription;
 

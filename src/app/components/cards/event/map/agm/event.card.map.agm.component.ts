@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, Component, HostListener, Input, OnChanges, OnInit,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
   ViewChild
 } from '@angular/core';
 import {EventInterface} from '../../../../../entities/events/event.interface';
@@ -8,7 +8,6 @@ import {PointInterface} from '../../../../../entities/points/point.interface';
 import {AppEventColorService} from '../../../../../services/color/app.event.color.service';
 import {ActivityInterface} from '../../../../../entities/activities/activity.interface';
 import {LapInterface} from '../../../../../entities/laps/lap.interface';
-import {DataPositionInterface} from '../../../../../entities/data/data.position.interface';
 import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 
 
@@ -27,7 +26,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
 
-  constructor(public eventColorService: AppEventColorService) {
+  constructor(private changeDetectorRef: ChangeDetectorRef, public eventColorService: AppEventColorService) {
   }
 
   ngOnInit() {
