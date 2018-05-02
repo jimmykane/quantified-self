@@ -7,7 +7,6 @@ import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
-import {EventCardMapComponent} from 'app/components/cards/event/map/event.card.map.component';
 import {LocalStorageService} from './services/storage/app.local.storage.service';
 import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
@@ -121,7 +120,6 @@ export class RavenErrorHandler implements ErrorHandler {
     ActivitiesCheckboxesComponent,
     EventCardComponent,
     EventTableComponent,
-    EventCardMapComponent,
     EventCardMapAGMComponent,
     EventCardStatsComponent,
     EventCardActionsMenuComponent,
