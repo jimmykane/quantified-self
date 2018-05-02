@@ -121,6 +121,82 @@ export class EventUtilities {
     })
   }
 
+  public static getEventDataTypeGain(event: EventInterface,
+                                     dataType: string,
+                                     activities?: ActivityInterface[],
+                                     minDiff?: number): number {
+    return this.getEventDataTypeGainOrLoss(true, event, dataType, activities, minDiff);
+  }
+
+
+  public static getEventDataTypeLoss(event: EventInterface,
+                                     dataType: string,
+                                     activities?: ActivityInterface[],
+                                     minDiff?: number): number {
+    return this.getEventDataTypeGainOrLoss(false, event, dataType, activities, minDiff);
+  }
+
+  private static getEventDataTypeGainOrLoss(gain: boolean,
+                                            event: EventInterface,
+                                            dataType: string,
+                                            activities?: ActivityInterface[],
+                                            minDiff?: number): number {
+    // @todo safeguard on number data types
+    minDiff = minDiff || 1;
+    let gainOrLoss = 0;
+    event.getPoints(void 0, void 0, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataByType(dataType)) {
+        return next;
+      }
+      if (!next.getDataByType(dataType)) {
+        return previous;
+      }
+      if (gain) {
+        // Increase the gain if eligible first check to be greater plus diff  [200, 300, 400, 100, 101, 102]
+        if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue() {
+          gainOrLoss += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
+          return next;
+        }
+        // if not eligible check if smaller without the diff and if yes do not register it and send it back as the last to check against
+        if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()) {
+          return previous;
+        }
+        // Else (lower) will return the next
+      } else {
+        // Increase the loss if eligible
+        if ((<number>previous.getDataByType(dataType).getValue() - minDiff) >= <number>next.getDataByType(dataType).getValue() {
+          gainOrLoss += <number>previous.getDataByType(dataType).getValue() - <number>next.getDataByType(dataType).getValue();
+          return next;
+        }
+        // if not eligible check if smaller without the diff and if yes do not register it and send it back as the last to check against
+        if (<number>previous.getDataByType(dataType).getValue() >= <number>next.getDataByType(dataType).getValue()) {
+          return previous;
+        }
+      }
+      return next;
+    });
+    return gainOrLoss;
+  }
+
+  private static getDataTypeMinOrMax(max: boolean,
+                                     event: EventInterface,
+                                     dataType: string,
+                                     startDate?: Date,
+                                     endDate?: Date,
+                                     activities?: ActivityInterface[]): number {
+
+    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
+      if (point.getDataByType(dataType)) {
+        dataValues.push(point.getDataByType(dataType).getValue());
+      }
+      return dataValues;
+    }, []);
+    if (max) {
+      return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
+    }
+    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
+  }
+
   private static generateStatsForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
     // Altitude
     if (subject.getStat(DataAltitudeMax.className) === undefined && this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
@@ -132,7 +208,6 @@ export class EventUtilities {
     if (subject.getStat(DataAltitudeAvg.className) === undefined && this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataAltitudeAvg(this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
-
     // Heart Rate
     if (subject.getStat(DataHeartRateMax.className) === undefined && this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateMax(this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate)));
@@ -144,7 +219,6 @@ export class EventUtilities {
       subject.addStat(new DataHeartRateAvg(this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
 
-    // Cadence
     if (subject.getStat(DataCadenceMax.className) === undefined && this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceMax(this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
@@ -198,53 +272,6 @@ export class EventUtilities {
     if (subject.getStat(DataTemperatureAvg.className) === undefined && this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureAvg(this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
-  }
-
-  public static getEventDataTypeGain(event: EventInterface,
-                                     dataType: string,
-                                     activities?: ActivityInterface[],
-                                     minDiff?: number) {
-    // @todo safeguard on number data types
-    minDiff = minDiff || 1;
-    let gain = 0;
-    event.getPoints(void 0, void 0, activities).reduce((previous: PointInterface, next: PointInterface) => {
-      if (!previous.getDataByType(dataType)) {
-        return next;
-      }
-      if (!next.getDataByType(dataType)) {
-        return previous;
-      }
-      // Increase the gain if eligible
-      if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue()) {
-        gain += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
-        return next;
-      }
-      // If the next is bigger then return the previous
-      if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()) {
-        return previous;
-      }
-      return next;
-    });
-    return gain;
-  }
-
-  private static getDataTypeMinOrMax(max: boolean,
-                                     event: EventInterface,
-                                     dataType: string,
-                                     startDate?: Date,
-                                     endDate?: Date,
-                                     activities?: ActivityInterface[]): number {
-
-    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
-      if (point.getDataByType(dataType)) {
-        dataValues.push(point.getDataByType(dataType).getValue());
-      }
-      return dataValues;
-    }, []);
-    if (max) {
-      return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
-    }
-    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
   }
 
   // private static geodesyAdapter = new GeoLibAdapter();
