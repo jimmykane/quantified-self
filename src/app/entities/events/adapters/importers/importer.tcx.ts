@@ -57,7 +57,7 @@ export class EventImporterTCX {
         activity.addLap(lap);
         // Increment wrapper stats
         activity.getDistance().setValue(activity.getDistance().getValue() + lap.getDistance().getValue());
-        activity.getDuration().setValue(activity.getDuration().getValue() + lap.getDuration().getValue() + lap.getPause().getValue());
+        activity.getDuration().setValue(activity.getDuration().getValue() + lap.getDuration().getValue());
         activity.getPause().setValue(activity.getPause().getValue() + lap.getPause().getValue());
         activity.getStat(DataEnergy.className).setValue((<DataEnergy>activity.getStat(DataEnergy.className)).getValue() + (<DataEnergy>lap.getStat(DataEnergy.className)).getValue());
 
@@ -79,6 +79,7 @@ export class EventImporterTCX {
       activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000 + activity.getPause().getValue() * 1000)
     }
 
+    debugger;
     EventUtilities.generateStats(event);
     return event;
   }
