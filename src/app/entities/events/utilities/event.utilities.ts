@@ -166,7 +166,7 @@ export class EventUtilities {
       }
       // Loss
       // Increase the loss if eligible
-      if ((<number>previous.getDataByType(dataType).getValue() - minDiff) >= <number>next.getDataByType(dataType).getValue() {
+      if ((<number>previous.getDataByType(dataType).getValue() - minDiff) >= <number>next.getDataByType(dataType).getValue()) {
         gainOrLoss += <number>previous.getDataByType(dataType).getValue() - <number>next.getDataByType(dataType).getValue();
         return next;
       }
