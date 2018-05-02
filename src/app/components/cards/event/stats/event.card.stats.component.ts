@@ -17,12 +17,12 @@ export class EventCardStatsComponent implements OnChanges {
 
   ngOnChanges() {
     // Collect all the stat types from all the activities
-    const stats = this.event.getActivities().reduce((statsSet, activity) => {
+    const stats = this.event.getActivities().reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
-        statsSet.add(stat);
+        statsMap.set(stat.getClassName(), stat);
       });
-      return statsSet;
-    }, new Set<DataInterface>());
+      return statsMap;
+    }, new Map<string, DataInterface>());
 
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
