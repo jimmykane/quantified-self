@@ -3,7 +3,7 @@ mat-cell, .mat-header-cell {
 }
 
 .mat-cell{
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .mat-column-Checkbox, .mat-column-Actions{
@@ -28,9 +28,9 @@ mat-cell, .mat-header-cell {
 
 mat-icon {
   vertical-align: middle;
-  font-size: 18px;
-  height: 18px;
-  width: 18px;
+  font-size: 22px;
+  height: 22px;
+  width: 22px;
   margin-left: -5px;
 }
 
