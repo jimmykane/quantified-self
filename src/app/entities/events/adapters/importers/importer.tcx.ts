@@ -80,7 +80,6 @@ export class EventImporterTCX {
       activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000 + activity.getPause().getValue() * 1000)
     }
 
-    debugger;
     EventUtilities.generateStats(event);
     return event;
   }
