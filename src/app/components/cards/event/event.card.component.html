@@ -1,19 +1,20 @@
 <mat-card *ngIf="eventPromise | async as event">
   <mat-card-header>
-    <mat-card-title>
-      <section class="title">
-        <app-activity-icon [activity]="event.getFirstActivity()"
-                           *ngIf="event.getActivities().length === 1 "></app-activity-icon>
-        <mat-icon *ngIf="event.getActivities().length > 1 " style="margin-right: 0.2vw;">
-          compare_arrows
-        </mat-icon>
-        <span>{{ event.name.slice(0, 70) }}</span>
-      </section>
-    </mat-card-title>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
     <mat-card-subtitle>
+      <app-activity-icon [activity]="event.getFirstActivity()"
+                         *ngIf="event.getActivities().length === 1 "></app-activity-icon>
+      <mat-icon *ngIf="event.getActivities().length > 1 ">
+        compare_arrows
+      </mat-icon>
+      <span class="mat-body-2">{{ event.name.slice(0, 70) }}</span>
+    </mat-card-subtitle>
+    <mat-card-subtitle>
       <mat-icon>access_time</mat-icon>
+      From
       <span class="mat-body-2">{{ event.getFirstActivity().startDate | date:'medium' }}</span>
+      to
+      <span class="mat-body-2">{{ event.getFirstActivity().endDate | date:'medium' }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
       <mat-icon>filter_{{ event.getActivities().length }}</mat-icon>
@@ -21,6 +22,8 @@
       <span class="mat-body-2">{{ (event.getDistance().getValue()/1000).toFixed(2) }}</span> km
       in
       <span class="mat-body-2">{{ event.getDuration().getDisplayValue() }}</span>
+      with a pause of
+      <span class="mat-body-2">{{ event.getPause().getDisplayValue() }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
       <span *ngIf="event.getFirstActivity().geoLocationInfo">

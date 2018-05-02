@@ -80,7 +80,6 @@ export class EventExporterTCX implements EventExporterInterface {
       // Add it to the activities
       // activityElement.appendChild(creatorElement);
 
-      debugger
       for (const lap of activityLaps) {
         // Create a lap element
         const lapElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Lap');
@@ -96,7 +95,11 @@ export class EventExporterTCX implements EventExporterInterface {
         lapElement.appendChild(distanceInMetersElement);
 
         const caloriesInKCALElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Calories');
-        caloriesInKCALElement.textContent = lap.getStat(DataEnergy.className).getValue().toString();
+        if (lap.getStat(DataEnergy.className)) {
+          caloriesInKCALElement.textContent = lap.getStat(DataEnergy.className).getValue().toString();
+        } else {
+          caloriesInKCALElement.textContent = '0';
+        }
         lapElement.appendChild(caloriesInKCALElement);
 
         const triggerMethod = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'TriggerMethod');

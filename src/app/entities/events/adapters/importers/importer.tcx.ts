@@ -22,11 +22,12 @@ import {DataPause} from '../../../data/data.pause';
 import {DataSpeedMax} from '../../../data/data.speed-max';
 import {DataHeartRateAvg} from '../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../data/data.heart-rate-max';
+import {ActivityTypes} from '../../../activities/activity.types';
 
 export class EventImporterTCX {
 
   static getFromXML(xml: Document): EventInterface {
-
+    // Init the event
     const event = new Event();
     event.setDistance(new DataDistance(0));
     event.setDuration(new DataDuration(0));
@@ -35,13 +36,14 @@ export class EventImporterTCX {
     // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
       const activity = new Activity();
-      activity.type = activityElement.getAttribute('Sport');
       event.addActivity(activity);
+
+      // Set the type
+      activity.type = ActivityTypes[<string>activityElement.getAttribute('Sport')] || ActivityTypes['unknown'];
       // First element must exist
       activity.startDate = new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime'));
       // Setup the creator
       activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
-
 
       // Go over the laps and start filling up the stats and creating the points
       // @todo
@@ -74,7 +76,7 @@ export class EventImporterTCX {
       });
       activity.sortPointsByDate();
       // Set the end date as of pause + duration
-      activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000  + activity.getPause().getValue() * 1000)
+      activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000 + activity.getPause().getValue() * 1000)
     }
 
     EventUtilities.generateStats(event);
@@ -112,7 +114,7 @@ export class EventImporterTCX {
                   break;
                 }
                 case 'RunCadence': {
-                  point.addData(new DataCadence(Number(dataExtensionElement.textContent) * 2));
+                  point.addData(new DataCadence(Number(dataExtensionElement.textContent)));
                   break;
                 }
                 case 'Watts': {
@@ -195,11 +197,8 @@ export class EventImporterTCX {
         lastPointFromPreviousTrack = trackElement.getElementsByTagName('Trackpoint')[trackElement.getElementsByTagName('Trackpoint').length - 1];
       });
 
-
       lapArray.push(lap);
       return lapArray;
     }, []);
   }
-
-
 }

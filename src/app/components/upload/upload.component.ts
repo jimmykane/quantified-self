@@ -6,6 +6,8 @@ import {MatSnackBar} from '@angular/material';
 import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
 import {EventInterface} from '../../entities/events/event.interface';
+import {EventImporterFIT} from "../../entities/events/adapters/importers/fit/importer.fit";
+import * as Raven from "raven-js";
 
 @Component({
   selector: 'app-upload',
@@ -46,20 +48,33 @@ export class UploadComponent {
             newEvent = EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
           } else if (extension === 'tcx') {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
+          } else if (extension === 'fit') {
+            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
           newEvent.name = activityName;
-          await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
-          metaData.status = UPLOAD_STATUS.PROCESSED;
-          this.eventService.addAndSaveEvent(newEvent);
-          resolve(newEvent);
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
           console.error('Could not load event from file' + file.name, error); // Should check with Sentry
           resolve(); // no-op here!
         }
+        try {
+          await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
+        } catch (e) {
+          // Log to Sentry
+          Raven.captureException(e);
+        }
+        this.eventService.addAndSaveEvent(newEvent);
+        metaData.status = UPLOAD_STATUS.PROCESSED;
+        resolve(newEvent);
       };
-      // Read it
-      fileReader.readAsText(file);
+      // Read it depending on the extension
+      if (extension === 'fit') {
+        // Fit files should be read as array buffers
+        fileReader.readAsArrayBuffer(file);
+      } else {
+        // All other as text
+        fileReader.readAsText(file);
+      }
     });
   }
 
@@ -93,5 +108,7 @@ export class UploadComponent {
       // Use DataTransfer interface to remove the drag data
       event.dataTransfer.clearData();
     }
+    // Clear the target
+    event.target.value = '';
   }
 }

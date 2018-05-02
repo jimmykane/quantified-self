@@ -32,11 +32,11 @@ import {DataPowerAvg} from '../../data/data.power-avg';
 import {DataTemperatureMax} from '../../data/data.temperature-max';
 import {DataTemperatureMin} from '../../data/data.temperature-min';
 import {DataTemperatureAvg} from '../../data/data.temperature-avg';
-import {DataDistance} from "../../data/data.distance";
-import {DataDuration} from "../../data/data.duration";
-import {DataPause} from "../../data/data.pause";
-import {DataNumber} from "../../data/data.number";
-import {isNumber} from "util";
+import {DataDistance} from '../../data/data.distance';
+import {DataDuration} from '../../data/data.duration';
+import {DataPause} from '../../data/data.pause';
+import {DataAscent} from '../../data/data.ascent';
+import {DataDescent} from '../../data/data.descent';
 
 export class EventUtilities {
 
@@ -76,13 +76,7 @@ export class EventUtilities {
                                    endDate?: Date,
                                    activities?: ActivityInterface[]): number {
 
-    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
-      if (point.getDataByType(dataType)) {
-        dataValues.push(point.getDataByType(dataType).getValue());
-      }
-      return dataValues;
-    }, []);
-    return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
+    return this.getDataTypeMinOrMax(true, event, dataType, startDate, endDate, activities);
   }
 
   public static getDateTypeMinimum(event: EventInterface,
@@ -90,14 +84,8 @@ export class EventUtilities {
                                    startDate?: Date,
                                    endDate?: Date,
                                    activities?: ActivityInterface[]): number {
+    return this.getDataTypeMinOrMax(false, event, dataType, startDate, endDate, activities);
 
-    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
-      if (point.getDataByType(dataType)) {
-        dataValues.push(point.getDataByType(dataType).getValue());
-      }
-      return dataValues;
-    }, []);
-    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
   }
 
   public static mergeEvents(events: EventInterface[]): Promise<EventInterface> {
@@ -135,6 +123,90 @@ export class EventUtilities {
     })
   }
 
+  public static getEventDataTypeGain(event: EventInterface,
+                                     dataType: string,
+                                     starDate?: Date,
+                                     endDate?: Date,
+                                     activities?: ActivityInterface[],
+                                     minDiff?: number): number {
+    return this.getEventDataTypeGainOrLoss(true, event, dataType, void 0, void 0, activities, minDiff);
+  }
+
+
+  public static getEventDataTypeLoss(event: EventInterface,
+                                     dataType: string,
+                                     starDate?: Date,
+                                     endDate?: Date,
+                                     activities?: ActivityInterface[],
+                                     minDiff?: number): number {
+    return this.getEventDataTypeGainOrLoss(false, event, dataType, void 0, void 0, activities, minDiff);
+  }
+
+  private static getEventDataTypeGainOrLoss(gain: boolean,
+                                            event: EventInterface,
+                                            dataType: string,
+                                            starDate?: Date,
+                                            endDate?: Date,
+                                            activities?: ActivityInterface[],
+                                            minDiff?: number): number {
+    // @todo safeguard on number data types
+    minDiff = minDiff || 3.1;
+    let gainOrLoss = 0;
+
+    event.getPoints(starDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
+      if (!previous.getDataByType(dataType)) {
+        return next;
+      }
+      if (!next.getDataByType(dataType)) {
+        return previous;
+      }
+      // Gain!
+      if (gain) {
+        // Increase the gain if eligible first check to be greater plus diff  [200, 300, 400, 100, 101, 102]
+        if ((<number>previous.getDataByType(dataType).getValue() + minDiff) <= <number>next.getDataByType(dataType).getValue()) {
+          gainOrLoss += <number>next.getDataByType(dataType).getValue() - <number>previous.getDataByType(dataType).getValue();
+          return next;
+        }
+        // if not eligible check if smaller without the diff and if yes do not register it and send it back as the last to check against
+        if (<number>previous.getDataByType(dataType).getValue() <= <number>next.getDataByType(dataType).getValue()) {
+          return previous;
+        }
+        return next
+      }
+      // Loss
+      // Increase the loss if eligible
+      if ((<number>previous.getDataByType(dataType).getValue() - minDiff) >= <number>next.getDataByType(dataType).getValue()) {
+        gainOrLoss += <number>previous.getDataByType(dataType).getValue() - <number>next.getDataByType(dataType).getValue();
+        return next;
+      }
+      // if not eligible check if smaller without the diff and if yes do not register it and send it back as the last to check against
+      if (<number>previous.getDataByType(dataType).getValue() >= <number>next.getDataByType(dataType).getValue()) {
+        return previous;
+      }
+      return next;
+    });
+    return gainOrLoss;
+  }
+
+  private static getDataTypeMinOrMax(max: boolean,
+                                     event: EventInterface,
+                                     dataType: string,
+                                     startDate?: Date,
+                                     endDate?: Date,
+                                     activities?: ActivityInterface[]): number {
+
+    const dataValuesArray = event.getPoints(startDate, endDate, activities).reduce((dataValues, point: PointInterface) => {
+      if (point.getDataByType(dataType)) {
+        dataValues.push(point.getDataByType(dataType).getValue());
+      }
+      return dataValues;
+    }, []);
+    if (max) {
+      return dataValuesArray.length ? Math.max(...dataValuesArray) : null;
+    }
+    return dataValuesArray.length ? Math.min(...dataValuesArray) : null;
+  }
+
   private static generateStatsForActivityOrLap(event: EventInterface, subject: ActivityInterface | LapInterface) {
     // Altitude
     if (subject.getStat(DataAltitudeMax.className) === undefined && this.getDateTypeMaximum(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
@@ -146,7 +218,6 @@ export class EventUtilities {
     if (subject.getStat(DataAltitudeAvg.className) === undefined && this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataAltitudeAvg(this.getDataTypeAverage(event, DataAltitude.type, subject.startDate, subject.endDate)));
     }
-
     // Heart Rate
     if (subject.getStat(DataHeartRateMax.className) === undefined && this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateMax(this.getDateTypeMaximum(event, DataHeartRate.type, subject.startDate, subject.endDate)));
@@ -157,7 +228,6 @@ export class EventUtilities {
     if (subject.getStat(DataHeartRateAvg.className) === undefined && this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataHeartRateAvg(this.getDataTypeAverage(event, DataHeartRate.type, subject.startDate, subject.endDate)));
     }
-
     // Cadence
     if (subject.getStat(DataCadenceMax.className) === undefined && this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceMax(this.getDateTypeMaximum(event, DataCadence.type, subject.startDate, subject.endDate)));
@@ -168,7 +238,6 @@ export class EventUtilities {
     if (subject.getStat(DataCadenceAvg.className) === undefined && this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataCadenceAvg(this.getDataTypeAverage(event, DataCadence.type, subject.startDate, subject.endDate)));
     }
-
     // Speed
     if (subject.getStat(DataSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedMax(this.getDateTypeMaximum(event, DataSpeed.type, subject.startDate, subject.endDate)));
@@ -179,7 +248,6 @@ export class EventUtilities {
     if (subject.getStat(DataSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataSpeedAvg(this.getDataTypeAverage(event, DataSpeed.type, subject.startDate, subject.endDate)));
     }
-
     // Vertical Speed
     if (subject.getStat(DataVerticalSpeedMax.className) === undefined && this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedMax(this.getDateTypeMaximum(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
@@ -190,7 +258,6 @@ export class EventUtilities {
     if (subject.getStat(DataVerticalSpeedAvg.className) === undefined && this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataVerticalSpeedAvg(this.getDataTypeAverage(event, DataVerticalSpeed.type, subject.startDate, subject.endDate)));
     }
-
     // Power
     if (subject.getStat(DataPowerMax.className) === undefined && this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerMax(this.getDateTypeMaximum(event, DataPower.type, subject.startDate, subject.endDate)));
@@ -201,7 +268,6 @@ export class EventUtilities {
     if (subject.getStat(DataPowerAvg.className) === undefined && this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataPowerAvg(this.getDataTypeAverage(event, DataPower.type, subject.startDate, subject.endDate)));
     }
-
     // Temperature
     if (subject.getStat(DataTemperatureMax.className) === undefined && this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureMax(this.getDateTypeMaximum(event, DataTemperature.type, subject.startDate, subject.endDate)));
@@ -212,57 +278,15 @@ export class EventUtilities {
     if (subject.getStat(DataTemperatureAvg.className) === undefined && this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate) !== null) {
       subject.addStat(new DataTemperatureAvg(this.getDataTypeAverage(event, DataTemperature.type, subject.startDate, subject.endDate)));
     }
+    // Ascent (altitude gain)
+    if (subject.getStat(DataAscent.className) === undefined && this.getEventDataTypeGain(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataAscent(this.getEventDataTypeGain(event, DataAltitude.type, subject.startDate, subject.endDate)));
+    }
+    // Descent (altitude loss)
+    if (subject.getStat(DataDescent.className) === undefined && this.getEventDataTypeLoss(event, DataAltitude.type, subject.startDate, subject.endDate) !== null) {
+      subject.addStat(new DataDescent(this.getEventDataTypeLoss(event, DataAltitude.type, subject.startDate, subject.endDate)));
+    }
   }
-
-  // public static getEventDataTypeGain(event: EventInterface,
-  //                                    dataType: string,
-  //                                    startDate?: Date,
-  //                                    endDate?: Date,
-  //                                    activities?: ActivityInterface[],
-  //                                    precision?: number,
-  //                                    minDiff?: number): number {
-  //   precision = precision || 1;
-  //   minDiff = minDiff || 1.5;
-  //   let gain = 0;
-  //   event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
-  //     if (!previous.getDataByType(dataType)) {
-  //       return next;
-  //     }
-  //     if (!next.getDataByType(dataType)) {
-  //       return previous;
-  //     }
-  //     if ((previous.getDataByType(dataType).getValue() + minDiff) < (Number(next.getDataByType(dataType).getValue()))) {
-  //       gain += Number(next.getDataByType(dataType).getValue().toFixed(precision)) - Number(previous.getDataByType(dataType).getValue().toFixed(precision));
-  //     }
-  //     return next;
-  //   });
-  //   return gain;
-  // }
-  //
-  // public static getEventDataTypeLoss(event: EventInterface,
-  //                                    dataType: string,
-  //                                    startDate?: Date,
-  //                                    endDate?: Date,
-  //                                    activities?: ActivityInterface[],
-  //                                    precision?: number,
-  //                                    minDiff?: number): number {
-  //   precision = precision || 1;
-  //   minDiff = minDiff || 1.5;
-  //   let loss = 0;
-  //   event.getPoints(startDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
-  //     if (!previous.getDataByType(dataType)) {
-  //       return next;
-  //     }
-  //     if (!next.getDataByType(dataType)) {
-  //       return previous;
-  //     }
-  //     if ((Number(next.getDataByType(dataType).getValue().toFixed(precision)) - minDiff) < Number(previous.getDataByType(dataType).getValue().toFixed(precision))) {
-  //       loss += Number(previous.getDataByType(dataType).getValue().toFixed(precision)) - Number(next.getDataByType(dataType).getValue().toFixed(precision));
-  //     }
-  //     return next;
-  //   });
-  //   return loss;
-  // }
 
   // private static geodesyAdapter = new GeoLibAdapter();
   //
@@ -277,23 +301,9 @@ export class EventUtilities {
   //     return distance + this.geodesyAdapter.getDistance(event.getPointsWithPosition(void 0, void 0, [activity]));
   //   }, 0);
   // }
-
-
 }
 
-
-// public createEventFromJSONSMLString(data: string): Promise<EventInterface> {
-//   return new Promise((resolve, reject) => {
-//     return resolve(EventImporterSML.getFromJSONString(data));
-//   });
-// }
-
-
-// public createEventFromJSONFITString(data: string): Promise<EventInterface> {
-//   return new Promise((resolve, reject) => {
-//     return resolve(EventImporterFIT.getFromJSONString(data));
-//   });
-// }
-
-
+export function isNumberOrString(property: any) {
+  return (typeof property === 'number' || typeof property === 'string');
+}
 

@@ -1,4 +1,5 @@
 import {EventImporterSuuntoJSON} from './importer.suunto.json';
+import {Event} from '../../../event';
 
 const suuntoJSON = require('../../../../../../../samples/suunto/suunto.json');
 const suuntoMultiSportJSON = require('../../../../../../../samples/suunto/multisport.json');
@@ -6,15 +7,13 @@ const suuntoMultiSportJSON = require('../../../../../../../samples/suunto/multis
 
 describe('EventImporterSuuntoJSON', () => {
 
-  let event;
-
   beforeEach(() => {
 
   });
 
 
   it('should import correctly a multisport activity', () => {
-    event = EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(suuntoMultiSportJSON));
+    expect(EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(suuntoMultiSportJSON)) instanceof Event).toBe(true);
   });
 
 

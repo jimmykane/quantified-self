@@ -1,9 +1,12 @@
-mat-card{
+mat-card {
   margin: 0;
 }
 
-mat-icon{
+mat-card-header mat-icon {
   vertical-align: middle;
+  font-size: 18px;
+  height: 18px;
+  width: 18px;
 }
 
 .title {
@@ -11,6 +14,7 @@ mat-icon{
   align-content: center;
   align-items: center;
 }
-mat-chip-list{
+
+mat-chip-list {
   display: inline-block;
 }
