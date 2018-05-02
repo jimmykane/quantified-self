@@ -37,6 +37,7 @@ import {DataDuration} from '../../data/data.duration';
 import {DataPause} from '../../data/data.pause';
 import {DataAscent} from '../../data/data.ascent';
 import {DataDescent} from '../../data/data.descent';
+import {P} from "@angular/core/src/render3";
 
 export class EventUtilities {
 
@@ -152,8 +153,11 @@ export class EventUtilities {
     // @todo safeguard on number data types
     minDiff = minDiff || 3.1;
     let gainOrLoss = 0;
-
-    event.getPoints(starDate, endDate, activities).reduce((previous: PointInterface, next: PointInterface) => {
+    const points = event.getPoints(starDate, endDate, activities);
+    if (!points.length) {
+      return null
+    }
+    points.reduce((previous: PointInterface, next: PointInterface) => {
       if (!previous.getDataByType(dataType)) {
         return next;
       }
