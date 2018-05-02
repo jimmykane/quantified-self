@@ -145,11 +145,11 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointB);
     event.getFirstActivity().addPoint(pointC);
     // With a diff of 100,200 the gain should be included
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 200)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 100)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 200)).toBe(200);
 
     // with a diff of 201 it shouldn't
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 201)).toBe(0);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 201)).toBe(0);
 
     // Add more
     const pointD = new Point(new Date(3));
@@ -165,12 +165,12 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointF);
 
     // Up to now we have 200m, 300m, 400m, 100m, 101m, 102m
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 200)).toBe(200);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 300)).toBe(0);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 1)).toBe(202);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 2)).toBe(202);
-    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, event.getActivities(), 3)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 100)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 200)).toBe(200);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 300)).toBe(0);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 1)).toBe(202);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 2)).toBe(202);
+    expect(EventUtilities.getEventDataTypeGain(event, DataAltitude.type, void 0, void 0, event.getActivities(), 3)).toBe(200);
   });
 
 
@@ -254,11 +254,11 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointB);
     event.getFirstActivity().addPoint(pointC);
     // With a diff of 100,200 the gain should be included
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 200)).toBe(200);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 100)).toBe(200);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 200)).toBe(200);
 
     // with a diff of 201 it shouldn't
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 201)).toBe(0);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 201)).toBe(0);
 
     // Add more
     const pointD = new Point(new Date(3));
@@ -274,12 +274,12 @@ describe('EventUtilities', () => {
     event.getFirstActivity().addPoint(pointF);
     // 200m, 300m, 400m, 100m, 101m, 102m
     // Up to now we have 400m, 300m, 200m, 500m, 499m, 498m
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 100)).toBe(200);
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 200)).toBe(200);
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 300)).toBe(0);
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 1)).toBe(202);
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 2)).toBe(202);
-    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, event.getActivities(), 3)).toBe(200);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 100)).toBe(200);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 200)).toBe(200);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 300)).toBe(0);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 1)).toBe(202);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 2)).toBe(202);
+    expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, void 0, void 0, event.getActivities(), 3)).toBe(200);
   });
 
 
