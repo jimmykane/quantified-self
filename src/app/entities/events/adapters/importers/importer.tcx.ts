@@ -23,6 +23,7 @@ import {DataSpeedMax} from '../../../data/data.speed-max';
 import {DataHeartRateAvg} from '../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../data/data.heart-rate-max';
 import {ActivityTypes} from '../../../activities/activity.types';
+import {DataSpeedAvg} from '../../../data/data.speed-avg';
 
 export class EventImporterTCX {
 
@@ -173,6 +174,10 @@ export class EventImporterTCX {
 
       if (lapElement.getElementsByTagName('MaximumHeartRateBpm')[0]) {
         lap.addStat(new DataHeartRateMax(Number(lapElement.getElementsByTagName('MaximumHeartRateBpm')[0].getElementsByTagName('Value')[0].textContent)));
+      }
+
+      if (lapElement.getElementsByTagName('Extensions')[0] && lapElement.getElementsByTagName('Extensions')[0].getElementsByTagName('AvgSpeed')[0]) {
+       lap.addStat(new DataSpeedAvg(Number(lapElement.getElementsByTagName('Extensions')[0].getElementsByTagName('AvgSpeed')[0].textContent)));
       }
 
       // Should check the track
