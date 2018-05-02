@@ -17,7 +17,6 @@ import {Log, Level} from 'ng2-logger'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {DataNumber} from '../../../../entities/data/data.number';
-import {DataStore, DynamicDataLoader} from "../../../../entities/data/data.store";
 
 
 @Component({
