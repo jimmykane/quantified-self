@@ -80,7 +80,6 @@ export class EventExporterTCX implements EventExporterInterface {
       // Add it to the activities
       // activityElement.appendChild(creatorElement);
 
-      debugger
       for (const lap of activityLaps) {
         // Create a lap element
         const lapElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Lap');
