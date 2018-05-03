@@ -1,20 +1,13 @@
 import {LapInterface} from './lap.interface';
 import {DataInterface} from '../data/data.interface';
-import {StatsClassAbstract} from '../stats/stats.class.abstract';
+import {DurationClassAbstract} from '../duration/duration.class.abstract';
 
-export class Lap extends StatsClassAbstract implements LapInterface {
+export class Lap extends DurationClassAbstract implements LapInterface {
 
-  public startDate: Date;
-  public endDate: Date;
   public type: string; // @todo make Enum
 
   constructor(startDate: Date, endDate: Date) {
-    super();
-    if (!startDate || !endDate) {
-      throw new Error('Lap start date and end date is required');
-    }
-    this.startDate = startDate;
-    this.endDate = endDate;
+    super(startDate, endDate);
   }
 
   toJSON(): any {
