@@ -27,6 +27,12 @@ export class ActivityIconComponent {
     if (this.activity.type.toLocaleLowerCase().includes('swimming')) {
       return 'pool';
     }
-    return 'help_outline';
+    if (this.activity.type.toLocaleLowerCase().includes('rowing')) {
+      return 'rowing';
+    }
+    if (this.activity.type.toLocaleLowerCase().includes('not specified')) {
+      return 'help_outline';
+    }
+    return 'beenhere';
   }
 }
