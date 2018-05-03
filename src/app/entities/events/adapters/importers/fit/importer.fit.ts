@@ -36,6 +36,7 @@ import {DataDescent} from '../../../../data/data.descent';
 import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
 import {DataSpeedMax} from '../../../../data/data.speed-max';
+import {ImporterZwiftDeviceNames} from "./importer.fit.swift.device.names";
 
 export class EventImporterFIT {
 
@@ -220,23 +221,35 @@ export class EventImporterFIT {
 
   private static getCreatorFromFitDataObject(fitDataObject: any): CreatorInterface {
     const creator = new Creator();
-    if (isNumberOrString(fitDataObject.file_creator.hardware_version)) {
+    if (fitDataObject.file_creator && isNumberOrString(fitDataObject.file_creator.hardware_version)) {
       creator.hwInfo = String(fitDataObject.file_creator.hardware_version);
     }
-    if (isNumberOrString(fitDataObject.file_creator.software_version)) {
+    if (fitDataObject.file_creator && isNumberOrString(fitDataObject.file_creator.software_version)) {
       creator.swInfo = String(fitDataObject.file_creator.software_version);
     }
-    if (isNumberOrString(fitDataObject.file_id.serial_number)) {
+    if (fitDataObject.file_creator && isNumberOrString(fitDataObject.file_id.serial_number)) {
       creator.serialNumber = fitDataObject.file_id.serial_number;
     }
     // Set the name
-    if (fitDataObject.file_id.manufacturer === 'suunto') {
-      creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product] || fitDataObject.file_id.manufacturer + ' ' + fitDataObject.file_id.product;
-    } else if (fitDataObject.file_id.manufacturer === 'garmin') {
-      creator.name = ImporterFitGarminDeviceNames[fitDataObject.file_id.product] || fitDataObject.file_id.manufacturer + ' ' + fitDataObject.file_id.product;
-    } else {
-      creator.name = fitDataObject.file_id.manufacturer + ' ' + fitDataObject.file_id.product;
+    switch (fitDataObject.file_id.manufacturer) {
+      case 'suunto': {
+        creator.name = ImporterFitSuuntoDeviceNames[fitDataObject.file_id.product];
+        break;
+      }
+      case 'garmin': {
+        creator.name = ImporterFitGarminDeviceNames[fitDataObject.file_id.product];
+        break;
+      }
+      case 'zwift': {
+        debugger;
+        creator.name = ImporterZwiftDeviceNames[fitDataObject.file_id.product];
+        break;
+      }
     }
+    if (!creator.name) {
+      creator.name = fitDataObject.file_id.manufacturer + ' (' + fitDataObject.file_id.product + ')';
+    }
+    debugger;
     return creator;
   }
 }
