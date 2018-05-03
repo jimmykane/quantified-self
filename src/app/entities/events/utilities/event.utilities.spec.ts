@@ -306,6 +306,11 @@ describe('EventUtilities', () => {
     expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type)).toBe(400);
   });
 
+  it('should not get a gain or loss for an event with no points', () => {
+      expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type)).toBe(null);
+      expect(EventUtilities.getEventDataTypeLoss(event, DataAltitude.type, new Date(), new Date())).toBe(null);
+  });
+
   it('should get an event as tcx blob', (done) => {
     const pointA = new Point(new Date(0));
     const pointB = new Point(new Date(1));
