@@ -264,7 +264,7 @@ export class EventImporterFIT {
       }
     }
     if (!creator.name) {
-      creator.name = fitDataObject.file_id.manufacturer + ' (' + fitDataObject.file_id.product + ')';
+      creator.name = fitDataObject.file_id.manufacturer + ' (' + (fitDataObject.file_id.product || 'no model') + ')';
     }
     return creator;
   }
