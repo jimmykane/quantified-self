@@ -36,13 +36,16 @@ export class EventImporterTCX {
 
     // Activities
     for (const activityElement of <any>xml.getElementsByTagName('TrainingCenterDatabase')[0].getElementsByTagName('Activity')) {
-      const activity = new Activity();
+      // TCX begins with laps, get them
+      const laps = this.getLaps(activityElement.getElementsByTagName('Lap'));
+      const activity = new Activity(
+        new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime')),
+        laps[laps.length - 1].endDate
+      );
       event.addActivity(activity);
 
       // Set the type
       activity.type = ActivityTypes[<string>activityElement.getAttribute('Sport')] || ActivityTypes['unknown'];
-      // First element must exist
-      activity.startDate = new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime'));
       // Setup the creator
       activity.creator = this.getCreator(activityElement.getElementsByTagName('Creator')[0]);
 
@@ -54,7 +57,7 @@ export class EventImporterTCX {
       activity.addStat(new DataEnergy(0));
 
       // Get the laps and add the total distance to the activity
-      this.getLaps(activityElement.getElementsByTagName('Lap')).forEach((lap: LapInterface) => {
+      laps.forEach((lap: LapInterface) => {
         if (lap.getDuration().getValue() === 0){
           return;
         }

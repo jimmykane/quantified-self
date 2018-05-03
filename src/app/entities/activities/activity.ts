@@ -6,14 +6,12 @@ import {IBIData} from '../data/ibi/data.ibi';
 import {Point} from '../points/point';
 import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interface';
 import {Creator} from '../creators/creator';
-import {StatsClassAbstract} from '../stats/stats.class.abstract';
 import {Weather} from '../weather/app.weather';
 import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
 import {ActivityTypes} from './activity.types';
+import {DurationClassAbstract} from '../duration/duration.class.abstract';
 
-export class Activity extends StatsClassAbstract implements ActivityInterface {
-  public startDate;
-  public endDate;
+export class Activity extends DurationClassAbstract implements ActivityInterface {
   public type: ActivityTypes;
   public creator = new Creator();
   public ibiData = new IBIData();
@@ -24,8 +22,8 @@ export class Activity extends StatsClassAbstract implements ActivityInterface {
   private points: Map<number, PointInterface> = new Map<number, PointInterface>();
   private laps: LapInterface[] = [];
 
-  constructor() {
-    super();
+  constructor(startDate: Date, endDate: Date) {
+    super(startDate, endDate);
   }
 
   addPoint(point: PointInterface, overrideAllDataOnCollision: boolean = false) {

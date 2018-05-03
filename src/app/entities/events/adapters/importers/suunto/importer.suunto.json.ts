@@ -125,14 +125,14 @@ export class EventImporterSuuntoJSON {
 
     // Create the activities
     const activities = activityStartEventSamples.map((activityStartEventSample, index): ActivityInterface => {
-      const activity = new Activity();
-      activity.startDate = new Date(activityStartEventSample.TimeISO8601);
+      const activity = new Activity(
+        new Date(activityStartEventSample.TimeISO8601),
+        activityStartEventSamples.length - 1 === index ?
+          new Date(stopEventSample.TimeISO8601) :
+          new Date(activityStartEventSamples[index + 1].TimeISO8601));
       activity.type = ActivityTypes[ImporterSuuntoActivityIds[activityStartEventSample.Events[0].Activity.ActivityType]];
       activity.creator = creator;
       // Set the end date to the stop event time if the activity is the last or the only one else set it on the next itery time
-      activity.endDate = activityStartEventSamples.length - 1 === index ?
-        new Date(stopEventSample.TimeISO8601) :
-        new Date(activityStartEventSamples[index + 1].TimeISO8601);
       // Create the stats these are a 1:1 ref arrays
       this.getStats(activityWindows[index]).forEach((stat) => {
         activity.addStat(stat)

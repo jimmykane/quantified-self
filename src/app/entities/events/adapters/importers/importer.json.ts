@@ -25,10 +25,8 @@ export class EventImporterJSON {
     });
 
     for (const activityObject of eventJSONObject.activities) {
-      const activity = new Activity();
+      const activity = new Activity(new Date(activityObject.startDate), new Date(activityObject.endDate));
       activity.setID(activityObject.id);
-      activity.startDate = new Date(activityObject.startDate);
-      activity.endDate = new Date(activityObject.endDate);
       activity.type = activityObject.type;
       activity.ibiData = new IBIData(activityObject.ibiData);
       if (activityObject.weather) {

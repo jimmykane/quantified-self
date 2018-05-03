@@ -15,12 +15,12 @@ describe('Event', () => {
 
   it('should add an activity', () => {
     expect(event.getActivities().length).toBe(0);
-    event.addActivity(new Activity());
+    event.addActivity(new Activity(new Date(0), new Date((new Date(0)).getTime() + 10)));
     expect(event.getActivities().length).toBe(1);
   });
 
   it('should remove an activity', () => {
-    const activity = new Activity();
+    const activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     event.addActivity(activity);
     expect(event.getActivities().length).toBe(1);
     event.removeActivity(activity);
@@ -29,9 +29,9 @@ describe('Event', () => {
 
 
   it('should get the first and the last activity', () => {
-    const activityA = new Activity();
+    const activityA = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     activityA.startDate = new Date(10);
-    const activityB = new Activity();
+    const activityB = new Activity(new Date(20), new Date((new Date(20)).getTime() + 30));
     activityB.startDate = new Date(0);
 
     event.addActivity(activityA);
@@ -44,8 +44,8 @@ describe('Event', () => {
 
 
   it('should get an empty point array if no activity points', () => {
-    const activityA = new Activity();
-    const activityB = new Activity();
+    const activityA = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
+    const activityB = new Activity(new Date(20), new Date((new Date(20)).getTime() + 30));
 
     event.addActivity(activityA);
     event.addActivity(activityB);
@@ -56,17 +56,17 @@ describe('Event', () => {
 
 
   it('should get the correct points', () => {
-    const activityA = new Activity();
+    const activityA = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     activityA.addPoint(new Point(new Date(0)));
     activityA.addPoint(new Point(new Date(10)));
     activityA.addPoint(new Point(new Date(20)));
     activityA.addPoint(new Point(new Date(30)));
-    const activityB = new Activity();
+    const activityB = new Activity(new Date(20), new Date((new Date(20)).getTime() + 30));
     activityB.addPoint(new Point(new Date(0)));
     activityB.addPoint(new Point(new Date(10)));
     activityB.addPoint(new Point(new Date(20)));
 
-    const activityC = new Activity();
+    const activityC = new Activity(new Date(30), new Date((new Date(30)).getTime() + 40));
     activityC.addPoint(new Point(new Date(40)));
     activityC.addPoint(new Point(new Date(50)));
 
@@ -88,7 +88,7 @@ describe('Event', () => {
   });
 
   it('should get the points with position', () => {
-    const activity = new Activity();
+    const activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     let point = new Point(new Date(0));
     point.addData(new DataLatitudeDegrees(0));
     point.addData(new DataLongitudeDegrees(0));
@@ -109,7 +109,7 @@ describe('Event', () => {
   });
 
   it('should get return true if points with position', () => {
-    const activity = new Activity();
+    const activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     const point = new Point(new Date());
     point.addData(new DataLatitudeDegrees(0));
     point.addData(new DataLongitudeDegrees(0));
@@ -119,7 +119,7 @@ describe('Event', () => {
   });
 
   it('should get return false if points with position when an activity is removed', () => {
-    const activity = new Activity();
+    const activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     const point = new Point(new Date());
     point.addData(new DataLatitudeDegrees(0));
     point.addData(new DataLongitudeDegrees(0));
@@ -130,7 +130,7 @@ describe('Event', () => {
     expect(event.hasPointsWithPosition()).toBe(false);
     event.addActivity(activity);
     expect(event.hasPointsWithPosition()).toBe(true);
-    const activityWithNoPosition = new Activity();
+    const activityWithNoPosition = new Activity(new Date(20), new Date((new Date(20)).getTime() + 30));
     event.addActivity(activityWithNoPosition);
     expect(event.hasPointsWithPosition()).toBe(true);
     event.removeActivity(activity);
@@ -138,7 +138,7 @@ describe('Event', () => {
   });
 
   it('should export correctly to JSON', () => {
-    const activity = new Activity();
+    const activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     event.addActivity(activity);
     event.setID('123');
     spyOn(activity, 'toJSON').and.returnValue({});

@@ -153,20 +153,11 @@ export class EventImporterFIT {
 
   private static getActivityFromSessionObject(sessionObject): ActivityInterface {
     // Create an activity
-    const activity = new Activity();
-
-    // Set the start date
-    activity.startDate = sessionObject.start_time;
-
-    // Set the end date
-    activity.endDate = sessionObject.timestamp;
-
+    const activity = new Activity(sessionObject.start_time, sessionObject.timestamp);
     // Set the type
     activity.type = this.getActivityTypeFromSessionObject(sessionObject);
-
     // Set the activity stats
     this.getStatsFromObject(sessionObject).forEach(stat => activity.addStat(stat));
-
     return activity;
   }
 
@@ -179,17 +170,14 @@ export class EventImporterFIT {
 
   private static getStatsFromObject(object): DataInterface[] {
     const stats = [];
-
     // Set the duration which is the moving time
     stats.push(new DataDuration(object.total_timer_time));
-
     // Set the pause which is elapsed time - moving time (timer_time)
     // There is although an exception for Zwift devices that have these fields vise versa
     const pause = object.total_elapsed_time > object.total_timer_time ?
       object.total_elapsed_time - object.total_timer_time :
       object.total_timer_time - object.total_elapsed_time;
     stats.push(new DataPause(pause));
-
     // Set the distance @todo check on other importers for this logic
     if (isNumberOrString(object.total_distance)) {
       stats.push(new DataDistance(object.total_distance));
@@ -264,7 +252,9 @@ export class EventImporterFIT {
       }
     }
     if (!creator.name) {
-      creator.name = fitDataObject.file_id.manufacturer + ' (' + (fitDataObject.file_id.product || 'no model') + ')';
+      creator.name =
+        (fitDataObject.file_id.manufacturer.toUpperCase() || 'Invalid Manufacturer')
+        + ' (' + (fitDataObject.file_id.product || 'no model') + ')';
     }
     return creator;
   }

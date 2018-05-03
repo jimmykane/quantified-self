@@ -15,8 +15,7 @@ describe('EventUtilities', () => {
 
   beforeEach(() => {
     event = new Event();
-    const activity = new Activity();
-    activity.startDate = new Date();
+    const activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     activity.setDuration(new DataDuration(10));
     activity.setDistance(new DataDistance(10));
     event.addActivity(activity);

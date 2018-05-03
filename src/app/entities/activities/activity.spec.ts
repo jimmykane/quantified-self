@@ -11,7 +11,8 @@ describe('Activity', () => {
   let activity: ActivityInterface;
 
   beforeEach(() => {
-    activity = new Activity();
+    // New activity that ends +6m
+    activity = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
     activity.setID('123');
   });
 
@@ -257,15 +258,14 @@ describe('Activity', () => {
     activity.addPoint(point);
     const lap = new Lap(new Date(), new Date());
     activity.addLap(lap);
-
     spyOn(point, 'toJSON').and.returnValue({});
     spyOn(lap, 'toJSON').and.returnValue({});
     spyOn(activity.ibiData, 'toJSON').and.returnValue([]);
     spyOn(activity.creator, 'toJSON').and.returnValue({});
     expect(activity.toJSON()).toEqual({
       'id': '123',
-      'startDate': undefined,
-      'endDate': undefined,
+      'startDate': activity.startDate,
+      'endDate': activity.endDate,
       'type': undefined,
       'creator': {},
       'points': [{}],
