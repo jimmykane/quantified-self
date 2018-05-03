@@ -235,10 +235,15 @@ export class EventImporterFIT {
     }
     if (fitDataObject.file_creator && isNumberOrString(fitDataObject.file_creator.software_version)) {
       creator.swInfo = String(fitDataObject.file_creator.software_version);
+    } else if (fitDataObject.device_info && isNumberOrString(fitDataObject.device_info.software_version)) {
+      creator.swInfo = String(fitDataObject.device_info.software_version)
     }
-    if (fitDataObject.file_creator && isNumberOrString(fitDataObject.file_id.serial_number)) {
+    if (fitDataObject.file_id && isNumberOrString(fitDataObject.file_id.serial_number)) {
       creator.serialNumber = fitDataObject.file_id.serial_number;
+    } else if (fitDataObject.device_info && isNumberOrString(fitDataObject.device_info.serial_number)) {
+      creator.serialNumber = fitDataObject.device_info.serial_number;
     }
+
     // Set the name
     switch (fitDataObject.file_id.manufacturer) {
       case 'suunto': {
