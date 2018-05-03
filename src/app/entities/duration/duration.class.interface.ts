@@ -1,4 +1,4 @@
 export interface DurationClassInterface  {
-  startDate: Date;
-  endDate: Date;
+  readonly startDate: Date;
+  readonly endDate: Date;
 }
