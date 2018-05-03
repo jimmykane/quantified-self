@@ -8,8 +8,6 @@ export class Lap extends StatsClassAbstract implements LapInterface {
   public endDate: Date;
   public type: string; // @todo make Enum
 
-  public stats = new Map<string, DataInterface>();
-
   constructor(startDate: Date, endDate: Date) {
     super();
     if (!startDate || !endDate) {
