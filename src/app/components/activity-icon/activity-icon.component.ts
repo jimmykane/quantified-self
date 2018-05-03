@@ -27,5 +27,6 @@ export class ActivityIconComponent {
     if (this.activity.type.toLocaleLowerCase().includes('swimming')) {
       return 'pool';
     }
+    return 'help_outline';
   }
 }
