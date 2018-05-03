@@ -31,19 +31,27 @@ export class GeoLocationInfoService {
           if (!status === google.maps.GeocoderStatus.OK || !results || !results.length) {
             return reject(status);
           }
-          const geoLocationInfo = results[0].address_components.reduce((geoLocationInfoBuilder: GeoLocationInfo, addressComponent) => {
-            // Keep first for now
+          results = results.reduce((resultsArray, result) => {
+            const wantedResults = result.address_components.filter((address_component) => {
+              return address_component.types.indexOf('country') !== -1
+                || address_component.types.indexOf('locality') !== -1
+                || address_component.types.indexOf('administrative_area_level_1') !== -1;
+            });
+            resultsArray = resultsArray.concat(wantedResults);
+            return resultsArray;
+          }, []);
+          const geoLocationInfo = results.reduce((geoLocationInfoBuilder: GeoLocationInfo, addressComponent) => {
             switch (addressComponent.types[0]) {
               case 'country': {
-                geoLocationInfoBuilder.country = addressComponent.long_name;
+                geoLocationInfoBuilder.country = geoLocationInfoBuilder.country || addressComponent.long_name;
                 break;
               }
               case 'locality': {
-                geoLocationInfoBuilder.city = addressComponent.long_name;
+                geoLocationInfoBuilder.city = geoLocationInfoBuilder.city || addressComponent.long_name;
                 break;
               }
               case 'administrative_area_level_1': {
-                geoLocationInfoBuilder.province = addressComponent.long_name;
+                geoLocationInfoBuilder.province = geoLocationInfoBuilder.province || addressComponent.long_name;
                 break;
               }
             }
