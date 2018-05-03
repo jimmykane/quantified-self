@@ -95,20 +95,24 @@ export class EventService {
       }, []);
 
       // Wait for all
-      Promise.all(activitiesPromises).then(results => {
+      Promise.all(activitiesPromises.map(p => p.catch(e => e))).then(results => {
         if (!results || !results.length) {
           resolve(event);
         }
         // For each activity get 2 data from the results
         let i = 0;
         activitiesWithPosition.forEach((activity, index) => {
-          activity.geoLocationInfo = <GeoLocationInfo> results[index + i];
-          activity.weather = <Weather> results[index + i + 1];
+          if (results[index + i] instanceof GeoLocationInfo) {
+            activity.geoLocationInfo = <GeoLocationInfo> results[index + i];
+          }
+          if (results[index + i + 1] instanceof Weather) {
+            activity.weather = <Weather> results[index + i + 1];
+          }
           i += 2;
         });
         resolve(event);
-      }).catch((error) => {
-        reject(error);
+      }).catch((e) => {
+        reject(event);
       });
     }));
   }
