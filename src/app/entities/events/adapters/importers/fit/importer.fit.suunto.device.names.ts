@@ -7,4 +7,5 @@ export const ImporterFitSuuntoDeviceNames = {
   31: ImporterSuuntoDeviceNames.Forssa,
   30: ImporterSuuntoDeviceNames.Cairo,
   22: ImporterSuuntoDeviceNames['Suunto Ambit3 Peak'],
+  23: ImporterSuuntoDeviceNames['Suunto Ambit3 Sport'],
 };
