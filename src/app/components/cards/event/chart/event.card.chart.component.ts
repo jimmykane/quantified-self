@@ -282,7 +282,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     if (!graphs.find((graph) => {
       return graph.hidden !== true
     })) {
-      graphs[0].hidden = false;
+      if (graphs[0]) {
+        graphs[0].hidden = false;
+      }
     }
     this.logger.d('Got graphs after ' +
       (performance.now() - t0) + ' milliseconds or ' +
