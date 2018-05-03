@@ -86,7 +86,7 @@
             </ng-container>
             <ng-container *ngIf="lap.getStat('DataVerticalSpeedAvg')">
               <mat-divider [inset]="true"></mat-divider>
-              <span class="mat-subheading-1">Vertical Speed: {{(lap.getStat('DataVerticalSpeedAvg').getValue()*60) }}{{ lap.getStat('DataVerticalSpeedAvg').getDisplayUnit() }}</span>
+              <span class="mat-subheading-1">Vertical Speed: {{(lap.getStat('DataVerticalSpeedAvg').getValue()*60).toFixed(3) }}{{ lap.getStat('DataVerticalSpeedAvg').getDisplayUnit() }}</span>
             </ng-container>
           </agm-info-window>
         </agm-marker>
