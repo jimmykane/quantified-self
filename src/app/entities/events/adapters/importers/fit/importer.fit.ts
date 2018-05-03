@@ -23,6 +23,7 @@ import {PointInterface} from '../../../../points/point.interface';
 import {DataVerticalSpeed} from '../../../../data/data.vertical-speed';
 import {ImporterFitGarminDeviceNames} from './importer.fit.garmin.device.names';
 import {ImporterFitSuuntoDeviceNames} from './importer.fit.suunto.device.names';
+import {ImporterZwiftDeviceNames} from './importer.fit.swift.device.names';
 import {DataPause} from '../../../../data/data.pause';
 import {DataInterface} from '../../../../data/data.interface';
 import {EventUtilities, isNumberOrString} from '../../../utilities/event.utilities';
@@ -36,7 +37,7 @@ import {DataDescent} from '../../../../data/data.descent';
 import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
 import {DataSpeedMax} from '../../../../data/data.speed-max';
-import {ImporterZwiftDeviceNames} from "./importer.fit.swift.device.names";
+import {DataPower} from '../../../../data/data.power';
 
 export class EventImporterFIT {
 
@@ -121,6 +122,10 @@ export class EventImporterFIT {
     // Add Vertical Speed
     if (isNumberOrString(sessionLapObjectRecord.vertical_speed)) {
       point.addData(new DataVerticalSpeed(sessionLapObjectRecord.vertical_speed));
+    }
+    // Add Power
+    if (isNumberOrString(sessionLapObjectRecord.power)) {
+      point.addData(new DataPower(sessionLapObjectRecord.power));
     }
     // Add Temperature
     if (isNumberOrString(sessionLapObjectRecord.temperature)) {
@@ -241,7 +246,6 @@ export class EventImporterFIT {
         break;
       }
       case 'zwift': {
-        debugger;
         creator.name = ImporterZwiftDeviceNames[fitDataObject.file_id.product];
         break;
       }
@@ -249,7 +253,6 @@ export class EventImporterFIT {
     if (!creator.name) {
       creator.name = fitDataObject.file_id.manufacturer + ' (' + fitDataObject.file_id.product + ')';
     }
-    debugger;
     return creator;
   }
 }
