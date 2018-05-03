@@ -2,8 +2,8 @@
  * This enum works like a all matchers for normalized sport types between different naming across services
  */
 export enum ActivityTypes {
-  'unknown' = 'Not specified sport',
-  'Not specified sport' = 'Not specified sport',
+  'unknown' = 'Unknown sport',
+  'Not specified sport' = 'Unknown sport',
   'Multisport' = 'Multisport',
   'Run' = 'Running',
   'run' = 'Running',
