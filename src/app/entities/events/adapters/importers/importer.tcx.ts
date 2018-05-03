@@ -82,8 +82,6 @@ export class EventImporterTCX {
         });
       });
       activity.sortPointsByDate();
-      // Set the end date as of pause + duration
-      activity.endDate = new Date(activity.startDate.getTime() + activity.getDuration().getValue() * 1000 + activity.getPause().getValue() * 1000)
     }
 
     EventUtilities.generateStats(event);
