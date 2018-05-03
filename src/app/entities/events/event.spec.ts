@@ -29,10 +29,8 @@ describe('Event', () => {
 
 
   it('should get the first and the last activity', () => {
-    const activityA = new Activity(new Date(0), new Date((new Date(0)).getTime() + 10));
-    activityA.startDate = new Date(10);
-    const activityB = new Activity(new Date(20), new Date((new Date(20)).getTime() + 30));
-    activityB.startDate = new Date(0);
+    const activityA = new Activity(new Date(20), new Date(30));
+    const activityB = new Activity(new Date(0), new Date(10));
 
     event.addActivity(activityA);
     event.addActivity(activityB);
