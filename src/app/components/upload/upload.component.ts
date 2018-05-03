@@ -54,15 +54,16 @@ export class UploadComponent {
           newEvent.name = activityName;
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
+          Raven.captureException(error);
           console.error('Could not load event from file' + file.name, error); // Should check with Sentry
           resolve(); // no-op here!
           return;
         }
         try {
           await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
-        } catch (e) {
+        } catch (error) {
           // Log to Sentry
-          Raven.captureException(e);
+          Raven.captureException(error);
         }
         this.eventService.addAndSaveEvent(newEvent);
         metaData.status = UPLOAD_STATUS.PROCESSED;
