@@ -137,8 +137,7 @@ export class EventImporterFIT {
   private static getLapFromSessionLapObject(sessionLapObject): LapInterface {
     const lap = new Lap(
       sessionLapObject.start_time,
-      sessionLapObject.timestamp ||
-      new Date(sessionLapObject.start_time.getTime() + sessionLapObject.total_elapsed_time * 1000) // Some dont have a timestamp
+      sessionLapObject.timestamp || new Date(sessionLapObject.start_time.getTime() + sessionLapObject.total_elapsed_time * 1000) // Some dont have a timestamp
     );
     // Set the calories
     if (sessionLapObject.total_calories) {
@@ -153,7 +152,9 @@ export class EventImporterFIT {
 
   private static getActivityFromSessionObject(sessionObject): ActivityInterface {
     // Create an activity
-    const activity = new Activity(sessionObject.start_time, sessionObject.timestamp);
+    const activity = new Activity(sessionObject.start_time,
+      sessionObject.timestamp || new Date(sessionObject.start_time.getTime() + sessionObject.total_elapsed_time * 1000)
+    );
     // Set the type
     activity.type = this.getActivityTypeFromSessionObject(sessionObject);
     // Set the activity stats
