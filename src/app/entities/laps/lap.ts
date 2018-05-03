@@ -12,6 +12,9 @@ export class Lap extends StatsClassAbstract implements LapInterface {
 
   constructor(startDate: Date, endDate: Date) {
     super();
+    if (!startDate || !endDate) {
+      throw new Error('Lap start date and end date is required');
+    }
     this.startDate = startDate;
     this.endDate = endDate;
   }
