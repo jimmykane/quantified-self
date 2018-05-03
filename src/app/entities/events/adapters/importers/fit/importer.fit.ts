@@ -135,7 +135,11 @@ export class EventImporterFIT {
   }
 
   private static getLapFromSessionLapObject(sessionLapObject): LapInterface {
-    const lap = new Lap(sessionLapObject.start_time, sessionLapObject.timestamp);
+    const lap = new Lap(
+      sessionLapObject.start_time,
+      sessionLapObject.timestamp ||
+      new Date(sessionLapObject.start_time.getTime() + sessionLapObject.total_elapsed_time * 1000) // Some dont have a timestamp
+    );
     // Set the calories
     if (sessionLapObject.total_calories) {
       lap.addStat(new DataEnergy(sessionLapObject.total_calories));
