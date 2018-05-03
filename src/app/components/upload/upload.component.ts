@@ -56,6 +56,7 @@ export class UploadComponent {
           metaData.status = UPLOAD_STATUS.ERROR;
           console.error('Could not load event from file' + file.name, error); // Should check with Sentry
           resolve(); // no-op here!
+          return;
         }
         try {
           await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
