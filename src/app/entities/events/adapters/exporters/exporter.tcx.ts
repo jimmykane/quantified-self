@@ -71,15 +71,14 @@ export class EventExporterTCX implements EventExporterInterface {
         activityLaps.push(lap);
       }
 
-      // Create the element
-      // const creatorElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Creator'); // @todo should output the correct creator
-      // creatorElement.setAttribute('xsi:type', 'Device_t');
-      // const nameElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Name');
-      // nameElement.textContent = activity.getCreator().getName();
-      // creatorElement.appendChild(nameElement);
-
-      // Add it to the activities
-      // activityElement.appendChild(creatorElement);
+      // Create the Creator as last
+      const creatorElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Creator'); // @todo should output the correct creator
+      creatorElement.setAttribute('xsi:type', 'Device_t');
+      const nameElement = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'Name');
+      nameElement.textContent = activity.creator.name;
+      creatorElement.appendChild(nameElement);
+      // Add it to the activity
+      activityElement.appendChild(creatorElement);
 
       for (const lap of activityLaps) {
         // Create a lap element
