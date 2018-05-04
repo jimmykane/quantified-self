@@ -4,6 +4,7 @@
 export enum ActivityTypes {
   'unknown' = 'Unknown sport',
   'Not specified sport' = 'Unknown sport',
+  'Other' = 'Unknown sport',
   'Multisport' = 'Multisport',
   'Run' = 'Running',
   'run' = 'Running',
@@ -11,6 +12,8 @@ export enum ActivityTypes {
   'running' = 'Running',
   'Cycling' = 'Cycling',
   'cycling' = 'Cycling',
+  'Biking' = 'Cycling',
+  'biking' = 'Cycling',
   'MountainBiking' = 'MountainBiking',
   'Swimming' = 'Swimming',
   'Swim' = 'Swimming',

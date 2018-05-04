@@ -38,7 +38,7 @@ import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
 import {DataSpeedMax} from '../../../../data/data.speed-max';
 import {DataPower} from '../../../../data/data.power';
-import {LapTypes} from "../../../../laps/lap.types";
+import {LapTypes} from '../../../../laps/lap.types';
 
 export class EventImporterFIT {
 
