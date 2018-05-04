@@ -39,7 +39,6 @@ import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {WeatherUndergroundWeatherService} from './services/weather/app.weather-underground.weather.service';
-import {HttpModule} from '@angular/http';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
 import {EventTableComponent} from './components/event-table/event.table.component';
@@ -58,6 +57,7 @@ import {EventCardToolsComponent} from './components/cards/event/tools/event.card
 import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
 import * as Raven from 'raven-js';
 import {environment} from '../environments/environment';
+import {HttpClientModule} from '@angular/common/http';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -79,7 +79,7 @@ export class RavenErrorHandler implements ErrorHandler {
     BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
-    HttpModule,
+    HttpClientModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ'
     }),

@@ -13,7 +13,7 @@ import {DataAltitude} from '../../../../entities/data/data.altitude';
 import {DataSpeed} from '../../../../entities/data/data.speed';
 import {DataVerticalSpeed} from '../../../../entities/data/data.vertical-speed';
 import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pressure';
-import {Log, Level} from 'ng2-logger'
+import {Log, Level} from 'ng2-logger/client'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {DataNumber} from '../../../../entities/data/data.number';

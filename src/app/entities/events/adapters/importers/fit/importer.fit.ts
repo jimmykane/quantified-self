@@ -254,7 +254,7 @@ export class EventImporterFIT {
     }
     if (!creator.name) {
       creator.name =
-        (fitDataObject.file_id.manufacturer.toUpperCase() || 'Invalid Manufacturer')
+        (fitDataObject.file_id.manufacturer || 'Invalid Manufacturer')
         + ' (' + (fitDataObject.file_id.product || 'no model') + ')';
     }
     return creator;
