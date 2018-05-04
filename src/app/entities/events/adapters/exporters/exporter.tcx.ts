@@ -11,6 +11,7 @@ import {PointInterface} from '../../../points/point.interface';
 import {LapInterface} from '../../../laps/lap.interface';
 import {DataPower} from '../../../data/data.power';
 import {DataEnergy} from '../../../data/data.energy';
+import {LapTypes} from '../../../laps/lap.types';
 
 export class EventExporterTCX implements EventExporterInterface {
   private xmlSerializer = new XMLSerializer();
@@ -104,7 +105,7 @@ export class EventExporterTCX implements EventExporterInterface {
 
         const triggerMethod = document.createElementNS('http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2', 'TriggerMethod');
         // @todo fix if autolap
-        triggerMethod.textContent = lap.type === 'Autolap' ? 'Manual' : 'Manual';
+        triggerMethod.textContent = lap.type === LapTypes.Distance ? 'Distance' : 'Manual';
         lapElement.appendChild(triggerMethod);
 
         activityElement.appendChild(lapElement);

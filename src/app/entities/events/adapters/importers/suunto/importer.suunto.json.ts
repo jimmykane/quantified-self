@@ -65,6 +65,7 @@ import {DataAltitudeMin} from '../../../../data/data.altitude-min';
 import {DataFusedLocation} from '../../../../data/data.fused-location';
 import {ActivityTypes} from '../../../../activities/activity.types';
 import {isNumberOrString} from '../../../utilities/event.utilities';
+import {LapTypes} from '../../../../laps/lap.types';
 
 export class EventImporterSuuntoJSON {
 
@@ -166,12 +167,13 @@ export class EventImporterSuuntoJSON {
       const lap = new Lap(lapStartDatesByType[lapEventSample.Events[0].Lap.Type], lapEndDate);
       // Set it for the next run
       lapStartDatesByType[lapEventSample.Events[0].Lap.Type] = lapEndDate;
-      lap.type = lapEventSample.Events[0].Lap.Type;
+      lap.type = LapTypes[<string>lapWindows[index].Type];
+      // @todo here is the real info LapTypes[lapEventSample.Events[0].Lap.Type
+
 
       this.getStats(lapWindows[index]).forEach((stat) => {
         lap.addStat(stat);
       });
-      lap.type = lapWindows[index].Type;
       // Add the pause from end date minurs start date and removing the duration as widows do not contain the pause time
       lap.setPause(new DataPause((lap.endDate.getTime() - lap.startDate.getTime()) / 1000 - lap.getDuration().getValue()));
       lapArray.push(lap);

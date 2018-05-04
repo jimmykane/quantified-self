@@ -1,10 +1,11 @@
 import {LapInterface} from './lap.interface';
 import {DataInterface} from '../data/data.interface';
 import {DurationClassAbstract} from '../duration/duration.class.abstract';
+import {LapTypes} from './lap.types';
 
 export class Lap extends DurationClassAbstract implements LapInterface {
 
-  public type: string; // @todo make Enum
+  public type: LapTypes;
 
   constructor(startDate: Date, endDate: Date) {
     super(startDate, endDate);

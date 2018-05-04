@@ -38,6 +38,7 @@ import {DataHeartRateAvg} from '../../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../../data/data.heart-rate-max';
 import {DataSpeedMax} from '../../../../data/data.speed-max';
 import {DataPower} from '../../../../data/data.power';
+import {LapTypes} from "../../../../laps/lap.types";
 
 export class EventImporterFIT {
 
@@ -144,7 +145,7 @@ export class EventImporterFIT {
       lap.addStat(new DataEnergy(sessionLapObject.total_calories));
     }
     // Set the type
-    lap.type = sessionLapObject.lap_trigger === 'distance' ? 'Manual' : 'Manual';
+    lap.type = LapTypes[<string>sessionLapObject.lap_trigger];
     // Add stats to the lap
     this.getStatsFromObject(sessionLapObject).forEach(stat => lap.addStat(stat));
     return lap;

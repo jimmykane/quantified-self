@@ -24,6 +24,7 @@ import {DataHeartRateAvg} from '../../../data/data.heart-rate-avg';
 import {DataHeartRateMax} from '../../../data/data.heart-rate-max';
 import {ActivityTypes} from '../../../activities/activity.types';
 import {DataSpeedAvg} from '../../../data/data.speed-avg';
+import {LapTypes} from '../../../laps/lap.types';
 
 export class EventImporterTCX {
 
@@ -58,7 +59,7 @@ export class EventImporterTCX {
 
       // Get the laps and add the total distance to the activity
       laps.forEach((lap: LapInterface) => {
-        if (lap.getDuration().getValue() === 0){
+        if (lap.getDuration().getValue() === 0) {
           return;
         }
         activity.addLap(lap);
@@ -158,7 +159,7 @@ export class EventImporterTCX {
           +(new Date(lapElement.getAttribute('StartTime'))) +
           1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
         ));
-      lap.type = lapElement.getElementsByTagName('TriggerMethod')[0].textContent;
+      lap.type = LapTypes[lapElement.getElementsByTagName('TriggerMethod')[0].textContent];
 
       // Create a stats (required TCX fields)
       lap.addStat(new DataEnergy(Number(lapElement.getElementsByTagName('Calories')[0].textContent)));
@@ -180,7 +181,7 @@ export class EventImporterTCX {
       }
 
       if (lapElement.getElementsByTagName('Extensions')[0] && lapElement.getElementsByTagName('Extensions')[0].getElementsByTagName('AvgSpeed')[0]) {
-       lap.addStat(new DataSpeedAvg(Number(lapElement.getElementsByTagName('Extensions')[0].getElementsByTagName('AvgSpeed')[0].textContent)));
+        lap.addStat(new DataSpeedAvg(Number(lapElement.getElementsByTagName('Extensions')[0].getElementsByTagName('AvgSpeed')[0].textContent)));
       }
 
       // Should check the track
