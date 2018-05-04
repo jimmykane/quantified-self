@@ -8,4 +8,5 @@ export enum ImporterSuuntoDeviceNames {
   'Ibiza' = 'Suunto 9',
   'Suunto Ambit3 Sport' = 'Suunto Ambit3 Sport',
   'Suunto Ambit3 Peak' = 'Suunto Ambit3 Peak',
+  'Suunto Ambit3 Run' = 'Suunto Ambit3 Run',
 }
