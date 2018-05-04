@@ -3,7 +3,7 @@ import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 
 import {AppModule} from './app/app.module';
 import {environment} from './environments/environment';
-import {Log} from 'ng2-logger';
+import {Log} from 'ng2-logger/client';
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../package.json');
