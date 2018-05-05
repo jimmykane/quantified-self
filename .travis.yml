@@ -25,7 +25,8 @@ before_script:
   - npm install -g @angular/cli
   - npm install codecov -g
   - npm install -g codeclimate-test-reporter
-  - openssl aes-256-cbc -K $encrypted_0a6446eb3ae3_key -iv $encrypted_0a6446eb3ae3_iv -in client-secret.json.enc -out client-secret.json -d
+  - openssl aes-256-cbc -K $encrypted_6e1429513935_key -iv $encrypted_6e1429513935_iv -in client-secret.json.enc -out client-secret.json -d
+
 
 script:
   - ng test --watch=false --code-coverage --progress  --colors --single-run
