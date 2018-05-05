@@ -9,11 +9,7 @@ import {AppDeviceColors} from './app.device.colors';
 @Injectable()
 export class AppEventColorService {
 
-  private static getColorByCreator(activity: ActivityInterface, creator: CreatorInterface): string {
-    return AppDeviceColors[creator.name];
-  }
-
-  private static getColorByIndex(index: number): string {
+  private getColorByIndex(index: number): string {
     switch (index) {
       case 0: {
         return AppColors.Orange;
@@ -39,10 +35,30 @@ export class AppEventColorService {
   }
 
   public getActivityColor(event: EventInterface, activity: ActivityInterface): string {
-    return AppEventColorService.getColorByCreator(activity, activity.creator) ?
-      AppEventColorService.getColorByCreator(activity, activity.creator) :
-      AppEventColorService.getColorByIndex(event.getActivities().findIndex((eventActivity) => {
-        return activity === eventActivity
-      }));
+    // Get the index of the requested activity among all activities
+    const activityIndex = event.getActivities().findIndex((eventActivity) => {
+      return activity === eventActivity
+    });
+    if (!AppDeviceColors[activity.creator.name]) {
+      return this.getColorByIndex(activityIndex);
+    }
+
+    // Find the activities that have the same creator
+    const sameCreatorActivities = event.getActivities().filter(eventActivity => eventActivity.creator.name === activity.creator.name);
+    // If there are no activities with the same creator return the color of this creator
+    if (!sameCreatorActivities.length) {
+      return AppDeviceColors[activity.creator.name];
+    }
+    // Get the index on the same creator activities
+    const sameCreatorActivitiesActivityIndex = sameCreatorActivities.findIndex((eventActivity) => {
+      return activity === eventActivity
+    });
+
+    // If its the first one return the color
+    if (sameCreatorActivitiesActivityIndex === 0) {
+      return AppDeviceColors[activity.creator.name];
+    }
+    // Else it's not the first one, then return the global activity index color
+   return this.getColorByIndex(activityIndex);
   }
 }
