@@ -43,7 +43,8 @@ deploy:
     project: quantified-self-173712
     version: v1
     default: true
-    on: master
+    on:
+      branch: master
 
 notifications:
   email:
