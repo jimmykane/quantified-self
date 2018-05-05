@@ -10,28 +10,8 @@ import {AppDeviceColors} from './app.device.colors';
 export class AppEventColorService {
 
   private getColorByIndex(index: number): string {
-    switch (index) {
-      case 0: {
-        return AppColors.Orange;
-      }
-      case 1: {
-        return AppColors.Blue;
-      }
-      case 2: {
-        return AppColors.Pink;
-      }
-      case 3: {
-        return AppColors.Green;
-      }
-      case 4: {
-        return AppColors.Red;
-      }
-      case 5: {
-        return AppColors.PurpleBlue;
-      }
-    }
-    // Do random else
-    return '#' + Math.floor((Math.abs(Math.sin(index) * 16777215)) % 16777215).toString(16);
+    // Return fixed random
+    return '#' + Math.floor((Math.abs(Math.sin(index + 10) * 16777215)) % 16777215).toString(16);
   }
 
   public getActivityColor(event: EventInterface, activity: ActivityInterface): string {
@@ -59,6 +39,6 @@ export class AppEventColorService {
       return AppDeviceColors[activity.creator.name];
     }
     // Else it's not the first one, then return the global activity index color
-   return this.getColorByIndex(activityIndex);
+    return this.getColorByIndex(activityIndex);
   }
 }
