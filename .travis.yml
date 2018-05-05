@@ -35,6 +35,16 @@ after_success:
   - test $TRAVIS_BRANCH = "master" && test $TRAVIS_PULL_REQUEST = "false" && CODECLIMATE_API_HOST=$CODECLIMATE_API_HOST CODECLIMATE_REPO_TOKEN=$CODECLIMATE_REPO_TOKEN_MASTER codeclimate-test-reporter < coverage/lcov.info
   - test $TRAVIS_BRANCH = "develop" && test $TRAVIS_PULL_REQUEST = "false" && CODECLIMATE_API_HOST=$CODECLIMATE_API_HOST CODECLIMATE_REPO_TOKEN=$CODECLIMATE_REPO_TOKEN_DEVELOP codeclimate-test-reporter < coverage/lcov.info
 
+deploy:
+    provider: gae
+    # Skip cleanup so api_key.py and vendored dependencies are still there
+#    skip_cleanup: true
+    keyfile: client-secret.json
+    project: quantified-self-173712
+    version: v1
+    default: true
+    on: master
+
 notifications:
   email:
     on_failure: change
