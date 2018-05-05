@@ -109,6 +109,7 @@ export class EventUtilities {
         }
       }
 
+      debugger
       mergeEvent.name = 'Merged at ' + (new Date()).toISOString();
       return resolve(mergeEvent);
     });

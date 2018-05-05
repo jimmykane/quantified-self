@@ -40,3 +40,7 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
+
+# credentials
+client-secret.json
+credentials.tar.gz
