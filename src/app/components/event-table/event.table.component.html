@@ -11,8 +11,7 @@
         </mat-checkbox>
         <span *ngIf="!isFirst && !isLast">
             <mat-icon *ngIf="getColumnIcon(column)">{{ getColumnIcon(column) }}</mat-icon>
-            {{ column }}
-          </span>
+        </span>
       </mat-header-cell>
       <mat-cell *matCellDef="let row">
         <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"

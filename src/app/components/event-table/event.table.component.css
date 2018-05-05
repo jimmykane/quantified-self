@@ -3,7 +3,7 @@ mat-cell, .mat-header-cell {
 }
 
 .mat-cell{
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .mat-column-Checkbox, .mat-column-Actions{
@@ -39,4 +39,8 @@ mat-icon {
 
 mat-card{
   margin-bottom: 1vh;
+}
+
+.mat-column-Checkbox{
+  padding-left: 0;
 }
