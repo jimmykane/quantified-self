@@ -29,7 +29,7 @@ before_script:
 
 
 script:
-  - ng test --watch=false --code-coverage --progress  --colors --single-run
+  - ng test --watch=false --code-coverage --progress --single-run
   - ng build --prod
 
 after_success:
