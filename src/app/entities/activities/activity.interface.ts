@@ -7,11 +7,11 @@ import {IntensityZonesInterface} from '../intensity-zones/intensity-zone.interfa
 import {StatsClassInterface} from '../stats/stats.class.interface';
 import {Weather} from '../weather/app.weather';
 import {GeoLocationInfo} from '../geo-location-info/geo-location-info';
+import {DurationClassInterface} from '../duration/duration.class.interface';
+import {ActivityTypes} from './activity.types';
 
-export interface ActivityInterface extends StatsClassInterface, SerializableClassInterface {
-  type: string;
-  startDate: Date;
-  endDate: Date;
+export interface ActivityInterface extends StatsClassInterface, DurationClassInterface, SerializableClassInterface {
+  type: ActivityTypes;
   creator: CreatorInterface;
   ibiData: IBIData;
   intensityZones: Map<string, IntensityZonesInterface>;
