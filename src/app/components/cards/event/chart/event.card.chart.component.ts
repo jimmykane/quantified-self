@@ -18,6 +18,7 @@ import {ActivityInterface} from '../../../../entities/activities/activity.interf
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {DataNumber} from '../../../../entities/data/data.number';
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
+import {ChartDataInterface} from './event.card.chart.data.interface';
 
 
 @Component({
@@ -32,7 +33,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private chart: any;
   private selectedActivities = [];
-  private chartData: ChartDataInterface;
 
   private logger = Log.create('EventCardChartComponent');
 
@@ -52,12 +52,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   onSelectedActivities(activities) {
     this.selectedActivities = activities;
-    // Reset the data
-    this.chartData = <ChartDataInterface>{
-      categories: new Map<string, any>(),
-      dataByDateTime: new Map<number, any>(),
-      dataProvider: [],
-    };
     this.destroyChart();
     this.createChart();
   }
@@ -131,12 +125,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     }
   }
 
-  private getAllData(): Map<string, Map<number, DataNumber[]>> {
+  private getAllData(): ChartDataInterface {
     const t0 = performance.now();
-    const dataMapReturn = new Map<string, Map<number, DataNumber[]>>();
-
+    const chartData: ChartDataInterface = {
+      categories: new Map<string, any>(),
+      dataByDateTime: new Map<number, any>(),
+      dataProvider: [],
+    };
     this.selectedActivities.forEach((activity: ActivityInterface, index) => {
-      activity.getPointsInterpolated(void 0, void 0).reduce((dataMap: Map<string, Map<number, DataNumber[]>>, point: PointInterface) => {
+      activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
         point.getData().forEach((pointData: DataInterface, key: string) => {
           if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
             return;
@@ -145,32 +142,30 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             return;
           }
 
-          let existingCategory = this.chartData.categories.get(key + activity.getID());
+          let existingCategory = chartData.categories.get(key + activity.getID());
 
           if (!existingCategory) {
             existingCategory = {
               activity: activity,
               graph: this.getGraph(activity, pointData),
             };
-            this.chartData.categories.set(key + activity.getID(), existingCategory);
+            chartData.categories.set(key + activity.getID(), existingCategory);
           }
 
-          let existingDateData = this.chartData.dataByDateTime.get(point.getDate().getTime());
+          let existingDateData = chartData.dataByDateTime.get(point.getDate().getTime());
           if (!existingDateData) {
             existingDateData = new Map<string, number>();
-            this.chartData.dataByDateTime.set(point.getDate().getTime(), existingDateData);
+            chartData.dataByDateTime.set(point.getDate().getTime(), existingDateData);
           }
           existingDateData.set(key + activity.getID(), pointData.getDisplayValue());
-
         });
-        return dataMap;
-      }, dataMapReturn);
+      });
 
     });
 
     // Flatten the data
-    this.chartData.dataByDateTime.forEach((dataMap, dateTime, map) => {
-      this.chartData.dataProvider.push(Object.assign({
+    chartData.dataByDateTime.forEach((dataMap, dateTime, map) => {
+      chartData.dataProvider.push(Object.assign({
         date: new Date(dateTime),
       }, Array.from(dataMap).reduce((obj, [key, value]) => (
         Object.assign(obj, {[key]: value})
@@ -178,7 +173,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     });
 
     // Sort them
-    this.chartData.dataProvider.sort((dataA: any, dataB: any) => {
+    chartData.dataProvider.sort((dataA: any, dataB: any) => {
       return +dataA.date - +dataB.date;
     });
 
@@ -186,79 +181,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       (performance.now() - t0) + ' milliseconds or ' +
       (performance.now() - t0) / 1000 + ' seconds',
     );
-    return dataMapReturn;
+    return chartData;
   }
-
-  // private getValueAxes(dataMap: Map<number, any>): any[] {
-  //   const t0 = performance.now();
-  //   const valueAxes = [];
-  //   let leftIndex = 0;
-  //   let rightIndex = 0;
-  //   this.getAllCategoryTypes(dataMap).forEach((dataCategory) => {
-  //     valueAxes.push({
-  //       id: dataCategory.id,
-  //       axisColor: this.genColor(dataCategory.id),
-  //       axisThickness: 1,
-  //       axisAlpha: 1,
-  //       position: valueAxes.length % 2 === 0 ? 'left' : 'right',
-  //       offset: valueAxes.length % 2 ? leftIndex * 50 : rightIndex * 50,
-  //       gridThickness: 0.09,
-  //     });
-  //     valueAxes.length % 2 === 0 ? leftIndex++ : rightIndex++;
-  //   });
-  //   this.logger.d('Got valueAxes after ' +
-  //     (performance.now() - t0) + ' milliseconds or ' +
-  //     (performance.now() - t0) / 1000 + ' seconds'
-  //   );
-  //   return valueAxes;
-  // }
-
-  // private getGraphs(allData: Map<string, Map<number, DataNumber[]>>): any[] {
-  //   const t0 = performance.now();
-  //   const graphs = [];
-  //   this.getAllCategoryTypes(allData).forEach((dataCategory: any) => {
-  //     const categoryID = dataCategory.id;
-  //     const name = categoryID.split(':')[0];
-  //     const activityIndex = categoryID.split(':')[1];
-  //     const creator = categoryID.split(':')[2];
-  //
-  //     graphs.push({
-  //       id: categoryID,
-  //       valueAxis: categoryID,
-  //       lineColor: this.genColor(name + ' ' + (activityIndex > 0 ? activityIndex : '')),
-  //       bulletBorderThickness: 3,
-  //       hideBulletsCount: 1,
-  //       title: ' ' + name + ' (' + creator + ')',
-  //       valueField: categoryID,
-  //       balloonText: name + '<br><b><span>[[value]] ' + dataCategory.unit + '</span></b></br>' + creator,
-  //       legendValueText: '[[value]] ' + dataCategory.unit,
-  //       fillAlphas: 0.05,
-  //       lineThickness: 1.5,
-  //       useLineColorForBulletBorder: true,
-  //       type: 'line',
-  //       hidden: name !== DataHeartRate.type,
-  //     });
-  //   });
-  //   // Check if any is visible and if not make visible the first one
-  //   if (!graphs.find((graph) => {
-  //     return graph.hidden !== true
-  //   })) {
-  //     if (graphs[0]) {
-  //       graphs[0].hidden = false;
-  //     }
-  //   }
-  //   this.logger.d('Got graphs after ' +
-  //     (performance.now() - t0) + ' milliseconds or ' +
-  //     (performance.now() - t0) / 1000 + ' seconds',
-  //   );
-  //   return graphs;
-  // }
 
   private getGraph(activity: ActivityInterface, data: DataInterface) {
     return {
       id: data.getType() + activity.getID(),
       activity: activity,
-      dataType: data.getType(),
       valueAxis: data.getType() + activity.getID(),
       lineColor: data.getType() !== DataHeartRate.type ? false : this.eventColorService.getActivityColor(this.event, activity),
       bulletBorderThickness: 3,
@@ -312,8 +241,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     };
   }
 
-  private getAmChartOptions(allData: Map<string, Map<number, DataNumber[]>>) {
-    const graphs = Array.from(this.chartData.categories.values()).reduce((graphArray, category) => {
+  private getAmChartOptions(chartData: ChartDataInterface) {
+    const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
       graphArray.push(category.graph);
       return graphArray;
     }, []);
@@ -327,7 +256,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return {
       type: 'serial',
       theme: 'light',
-      dataProvider: this.chartData.dataProvider,
+      dataProvider: chartData.dataProvider,
       autoMarginOffset: 0,
       // marginRight: 100,
       autoMargins: true,
@@ -450,13 +379,4 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   ngOnDestroy() {
     this.destroyChart();
   }
-}
-
-export interface ChartDataInterface {
-  categories: Map<string, {
-    activity: ActivityInterface,
-    graph: any,
-  }>;
-  dataByDateTime: Map<number, Map<string, number | string>>,
-  dataProvider: any[],
 }
