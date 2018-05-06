@@ -55,10 +55,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private createChart() {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
-      this.logger.d('Chart Create started after ' +
-        (performance.now() - t0) + ' milliseconds or ' +
-        (performance.now() - t0) / 1000 + ' seconds',
-      );
+      this.logger.d('Chart Create started after ' + (performance.now() - t0) + ' milliseconds');
       // Create a fresh one
       this.chart = this.AmCharts.makeChart('chartdiv', this.getAmChartOptions(this.getAllData()), 1);
       this.addListenersToChart();
