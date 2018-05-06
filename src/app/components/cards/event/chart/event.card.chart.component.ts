@@ -278,11 +278,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         marginTop: 0,
         valueText: '[[value]]',
         clickLabel: (graph) => {
-          // const otherVisibleGraphs = graph.chart.graphs.filter(graphObj => !graphObj.hidden);
-          // Stop the user from unselecting the last one
-          // if (visibleGraphs.length === 1 && !graph.hidden) {
-          //   // return;
-          // }
           graph.hidden = !graph.hidden;
           if (graph.hidden) {
             // Reset the color
