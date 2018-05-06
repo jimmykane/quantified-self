@@ -246,7 +246,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       dataProvider: chartData.dataProvider,
       autoMarginOffset: 0,
       // marginRight: 100,
-      autoMargins: true,
+      // autoMargins: true,
       graphs: graphs,
       // autoTransform: false,
       // autoResize: false,
@@ -257,7 +257,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // valueAxes: [{
       //   gridThickness: 0.0,
       // }],
-      startDuration: 0.3,
+      startDuration: 0,
       startEffect: 'elastic',
       sequencedAnimation: false,
       categoryField: 'date',
