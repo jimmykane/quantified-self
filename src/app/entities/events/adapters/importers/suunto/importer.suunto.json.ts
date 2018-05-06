@@ -238,7 +238,7 @@ export class EventImporterSuuntoJSON {
   }
 
   private static hasFusedLocData(sample): boolean {
-    return !!sample.Inertial;
+    return !!sample.Inertial || !!sample.GpsRef ;
   }
 
   private static setIntensityZones(activity: ActivityInterface, object) {
