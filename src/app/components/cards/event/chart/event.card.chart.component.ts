@@ -211,12 +211,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         dataArray.reduce((dataAccumulator: Map<number, any>, data: DataNumber) => {
           dataCount++;
           const dateData = dataAccumulator.get(time) || {};
-          let value = data.getValue().toFixed(1);
-          if (dataType.split(':')[0] === DataHeartRate.type) {
-            value = data.getValue().toFixed(0)
-          }
           dataAccumulator.set(time, Object.assign(dateData, {
-            [dataType]: value,
+            [dataType]: data.getDisplayValue(),
           }));
           return dataAccumulator;
         }, dataMap);
