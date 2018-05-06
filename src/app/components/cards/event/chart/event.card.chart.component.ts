@@ -189,7 +189,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       hideBulletsCount: 1,
       title: data.getType() + ' (' + activity.creator.name + ')',
       valueField: data.getType() + activity.getID(),
-      balloonText: name + '<br><b><span>[[value]] ' + data.getDisplayUnit() + '</span></b></br>' + activity.creator.name,
+      balloonText: data.getType() + '<br><b><span>[[value]] ' + data.getDisplayUnit() + '</span></b></br>' + activity.creator.name,
       legendValueText: '[[value]] ' + data.getDisplayUnit(),
       fillAlphas: 0.05,
       lineThickness: 1.5,
@@ -240,7 +240,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
       graphArray.push(category.graph);
       return graphArray;
-    }, []);
+    }, []).sort((graphA, graphB) => graphA.id.localeCompare(graphB.id));
     if (!graphs.find((graph) => {
       return graph.hidden !== true
     })) {
