@@ -72,6 +72,8 @@ export class EventImporterSuuntoJSON {
   static getFromJSONString(jsonString: string): EventInterface {
     const eventJSONObject = JSON.parse(jsonString);
 
+    debugger;
+
     // Create an event
     const event = new Event();
 
@@ -118,11 +120,6 @@ export class EventImporterSuuntoJSON {
     }).map(lapWindow => {
       return lapWindow.Window
     });
-
-    // Get the move window
-    // const moveWindow = eventJSONObject.DeviceLog.Windows.find((windowObj) => {
-    //   return windowObj.Window.Type === 'Move';
-    // }).Window;
 
     // Create the activities
     const activities = activityStartEventSamples.map((activityStartEventSample, index): ActivityInterface => {
