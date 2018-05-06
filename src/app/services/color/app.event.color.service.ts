@@ -1,10 +1,7 @@
 import {Injectable} from '@angular/core';
 import {EventInterface} from '../../entities/events/event.interface';
 import {ActivityInterface} from '../../entities/activities/activity.interface';
-import {CreatorInterface} from '../../entities/creators/creatorInterface';
-import {AppColors} from './app.colors';
 import {AppDeviceColors} from './app.device.colors';
-
 
 @Injectable()
 export class AppEventColorService {

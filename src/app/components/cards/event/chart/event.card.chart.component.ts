@@ -8,11 +8,6 @@ import {DataLongitudeDegrees} from '../../../../entities/data/data.longitude-deg
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
 import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
-import {DataCadence} from '../../../../entities/data/data.cadence';
-import {DataAltitude} from '../../../../entities/data/data.altitude';
-import {DataSpeed} from '../../../../entities/data/data.speed';
-import {DataVerticalSpeed} from '../../../../entities/data/data.vertical-speed';
-import {DataSeaLevelPressure} from '../../../../entities/data/data.sea-level-pressure';
 import {Log} from 'ng2-logger/client'
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 import {PointInterface} from '../../../../entities/points/point.interface';
@@ -325,43 +320,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         valueLineAlpha: 0.5,
         fullWidth: true,
       },
+      chartScrollbar: this.getScrollbarForGraph(graphs[0]),
       creditsPosition: 'bottom-right',
     }
-  }
-
-  private genColor(key: string) {
-    if (key.includes(DataHeartRate.type + ' 4')) {
-      return '#006064';
-    }
-    if (key.includes(DataHeartRate.type + ' 3')) {
-      return '#ba68c8';
-    }
-    if (key.includes(DataHeartRate.type + ' 2')) {
-      return '#4ab255';
-    }
-    if (key.includes(DataHeartRate.type + ' 1')) {
-      return '#249fe6';
-    }
-    if (key.includes(DataHeartRate.type)) {
-      return '#ff3f07';
-    }
-    if (key.includes(DataAltitude.type)) {
-      return '#4ab255';
-    }
-    if (key.includes(DataCadence.type)) {
-      return '#5b6979';
-    }
-    if (key.includes(DataSpeed.type)) {
-      return '#2261bf';
-    }
-    if (key.includes(DataVerticalSpeed.type)) {
-      return '#add3c3';
-    }
-    if (key.includes(DataSeaLevelPressure.type)) {
-      return '#889bc8';
-    }
-    // noinspection TsLint
-    return '#' + ('000000' + (Math.random() * 0xFFFFFF << 0).toString(16)).slice(-6);
   }
 
   private destroyChart() {
