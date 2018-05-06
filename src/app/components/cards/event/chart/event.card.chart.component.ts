@@ -64,7 +64,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       this.addListenersToChart();
 
       const t1 = performance.now();
-      this.logger.d('Created chart after ' + (t1 - t0) + ' milliseconds or ' + (t1 - t0) / 1000 + ' seconds');
+      this.logger.d('Created chart after ' + (t1 - t0) + ' milliseconds');
       resolve(true);
     });
   }
@@ -130,15 +130,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.selectedActivities.forEach((activity: ActivityInterface, index) => {
       activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
         point.getData().forEach((pointData: DataInterface, key: string) => {
-          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
-            return;
-          }
-          if (!(pointData instanceof DataNumber)) {
+          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1 || !(pointData instanceof DataNumber)) {
             return;
           }
 
           let existingCategory = chartData.categories.get(key + activity.getID());
-
           if (!existingCategory) {
             existingCategory = {
               activity: activity,
@@ -155,7 +151,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
           existingDateData.set(key + activity.getID(), pointData.getDisplayValue());
         });
       });
-
     });
 
     // Flatten the data
@@ -172,10 +167,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return +dataA.date - +dataB.date;
     });
 
-    this.logger.d('Retrieved all data after ' +
-      (performance.now() - t0) + ' milliseconds or ' +
-      (performance.now() - t0) / 1000 + ' seconds',
-    );
+    this.logger.d('Retrieved all data after ' + (performance.now() - t0) + ' milliseconds');
     return chartData;
   }
 
