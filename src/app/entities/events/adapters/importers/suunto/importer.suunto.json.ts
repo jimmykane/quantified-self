@@ -199,11 +199,11 @@ export class EventImporterSuuntoJSON {
     });
 
     // Add the samples that belong to the activity and the ibi data.
-    activities.every((activity) => {
+    activities.forEach((activity) => {
       activity.addStat(new DataFusedLocation(false));
       eventJSONObject.DeviceLog.Samples.forEach((sample) => {
         const point = this.getPointFromSample(sample);
-        if (point && point.getDate() >= activity.startDate && point.getDate() <= activity.endDate) {
+        if (point && (point.getDate() >= activity.startDate) && (point.getDate() <= activity.endDate)) {
           // add the point
           activity.addPoint(point);
           // if the point has fusedLocation data mark the activity by adding a stat
