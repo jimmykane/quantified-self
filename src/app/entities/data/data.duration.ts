@@ -10,13 +10,13 @@ export class DataDuration extends DataNumber {
     const h = Math.floor(d / 3600);
     const m = Math.floor(d % 3600 / 60);
     const s = Math.floor(d % 3600 % 60);
-    if (!m){
+    if (!m) {
       return ('0' + s).slice(-2) + 's';
-    }
-    if (!h) {
+    } else if (!h) {
       return ('0' + m).slice(-2) + 'm ' + ('0' + s).slice(-2) + 's';
+    } else {
+      return ('0' + h).slice(-2) + 'h ' + ('0' + m).slice(-2) + 'm ' + ('0' + s).slice(-2) + 's';
     }
-    return ('0' + h).slice(-2) + 'h ' + ('0' + m).slice(-2) + 'm ' + ('0' + s).slice(-2) + 's';
   }
 
   getDisplayUnit() {
