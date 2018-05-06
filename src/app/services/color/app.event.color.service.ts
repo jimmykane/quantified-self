@@ -9,9 +9,9 @@ import {AppDeviceColors} from './app.device.colors';
 @Injectable()
 export class AppEventColorService {
 
-  private getColorByIndex(index: number): string {
+  public getColorByNumber(number: number): string {
     // Return fixed random
-    return '#' + Math.floor((Math.abs(Math.sin(index + 10) * 16777215)) % 16777215).toString(16);
+    return '#' + Math.floor((Math.abs(Math.sin(number) * 16777215)) % 16777215).toString(16);
   }
 
   public getActivityColor(event: EventInterface, activity: ActivityInterface): string {
@@ -20,7 +20,7 @@ export class AppEventColorService {
       return activity === eventActivity
     });
     if (!AppDeviceColors[activity.creator.name]) {
-      return this.getColorByIndex(activityIndex);
+      return this.getColorByNumber(activityIndex + 10 /* + 10 = pretty */);
     }
 
     // Find the activities that have the same creator
@@ -39,6 +39,6 @@ export class AppEventColorService {
       return AppDeviceColors[activity.creator.name];
     }
     // Else it's not the first one, then return the global activity index color
-    return this.getColorByIndex(activityIndex);
+    return this.getColorByNumber(activityIndex);
   }
 }
