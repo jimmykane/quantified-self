@@ -1,10 +1,10 @@
 export enum AppColors {
   Orange = '#FFA500',
-  Green = '#3fd532',
-  Blue = '#00008B',
-  Pink = '#FF00FF',
-  Purple = '#800080',
-  PurpleBlue = '#a4a8f5',
-  Red = '#cb410f',
+  Green = '#4ab255',
+  Blue = '#249fe6',
+  Pink = '#ff7fc8',
+  Purple = '#ba68c8',
+  PurpleBlue = '#889bc8',
+  Red = '#ff3f07',
   LightGreen = '#82cca1',
 }
