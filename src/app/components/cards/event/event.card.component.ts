@@ -35,6 +35,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges() {
+    debugger;
   }
 
   ngOnInit() {
