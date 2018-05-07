@@ -3,7 +3,7 @@
     [activity]="activity"
     [event]="event"
     [showType]="true"
-    [showTypeIcon]="true">
+    [showDuration]="false">
   </app-activity-header>
   <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
     <ng-container *ngFor="let column of getColumns(activity)" [matColumnDef]="column">
