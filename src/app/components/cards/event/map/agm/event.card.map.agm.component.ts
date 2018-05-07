@@ -1,6 +1,6 @@
 import {
   ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
-  ViewChild
+  ViewChild,
 } from '@angular/core';
 import {EventInterface} from '../../../../../entities/events/event.interface';
 import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
@@ -10,18 +10,28 @@ import {ActivityInterface} from '../../../../../entities/activities/activity.int
 import {LapInterface} from '../../../../../entities/laps/lap.interface';
 import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 
-
 @Component({
   selector: 'app-event-card-map-agm',
   templateUrl: './event.card.map.agm.component.html',
   styleUrls: ['./event.card.map.agm.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
+
+  public mapData: {
+    activity: ActivityInterface,
+    activityPoints: PointInterface[],
+    activityStartPoint: PointInterface,
+    lapsWithPosition: {
+      lap: LapInterface,
+      lapPoints: PointInterface[],
+      lapEndPoint: PointInterface
+    }[]
+  }[] = [];
 
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
@@ -44,20 +54,50 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   onSelectedActivities(activities) {
     this.selectedActivities = activities;
+    this.cacheNewData();
     this.agmMap.triggerResize().then(() => {
       const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
       googleMaps.fitBounds(this.getBounds());
     });
   }
 
+  private cacheNewData() {
+    this.selectedActivities.forEach((activity) => {
+      const activityPoints = this.event.getPointsWithPosition(void 0, void 0, [activity]);
+      // If the activity has no points skip
+      if (!activityPoints.length) {
+        return;
+      }
+      // Check for laps with position
+      const lapsWithPosition = activity.getLaps().reduce((lapsArray, lap) => {
+        const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
+        if (lapPoints.length) {
+          lapsArray.push({
+            lap: lap,
+            lapPoints: lapPoints,
+            lapEndPoint: lapPoints[lapPoints.length - 1],
+          })
+        }
+        return lapsArray;
+      }, []);
+      // Create the object
+      this.mapData.push({
+        activity: activity,
+        activityPoints: activityPoints,
+        activityStartPoint: activityPoints[0],
+        lapsWithPosition: lapsWithPosition,
+      });
+    });
+  }
+
   getBounds(): LatLngBoundsLiteral {
-    const pointsWithPosition = this.event.getPointsWithPosition(void 0, void 0, this.selectedActivities);
+    const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.activityPoints), []);
     if (!pointsWithPosition.length) {
       return <LatLngBoundsLiteral>{
         east: 0,
         west: 0,
         north: 0,
-        south: 0
+        south: 0,
       };
     }
     const mostEast = pointsWithPosition.reduce((acc: PointInterface, point: PointInterface) => {
@@ -76,35 +116,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       east: mostEast.getPosition().longitudeDegrees,
       west: mostWest.getPosition().longitudeDegrees,
       north: mostNorth.getPosition().latitudeDegrees,
-      south: mostSouth.getPosition().latitudeDegrees
+      south: mostSouth.getPosition().latitudeDegrees,
     };
-  }
-
-  getLapsWithPosition(activity: ActivityInterface) {
-    return activity.getLaps().reduce((lapsArray, lap) => {
-      if (this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]).length) {
-        lapsArray.push(lap);
-      }
-      return lapsArray;
-    }, [])
-  }
-
-  getActivitiesWithPosition() {
-    return this.selectedActivities.reduce((activitiesArray, activity) => {
-      if (this.event.getPointsWithPosition(void 0, void 0, [activity]).length) {
-        activitiesArray.push(activity)
-      }
-      return activitiesArray;
-    }, [])
-  }
-
-  getActivityStartPoint(activity: ActivityInterface): PointInterface {
-    return this.event.getPointsWithPosition(void 0, void 0, [activity])[0];
-  }
-
-  getLapEndPoint(activity: ActivityInterface, lap: LapInterface): PointInterface {
-    const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
-    return lapPoints[lapPoints.length - 1];
   }
 
   openLapMarkerInfoWindow(lap) {
