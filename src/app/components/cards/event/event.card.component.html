@@ -43,6 +43,10 @@
       <span class="mat-body-2">{{event.getFirstActivity().weather.weatherItems[0].conditions }}</span>
       conditions
     </mat-card-subtitle>
+    <mat-card-subtitle>
+      <app-activities-checkboxes [event]="event" (selectedActivities)="onSelectedActivities($event)">
+      </app-activities-checkboxes>
+    </mat-card-subtitle>
   </mat-card-header>
 
   <mat-card-content>

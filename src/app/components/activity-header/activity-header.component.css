@@ -1,5 +1,8 @@
 mat-icon {
   vertical-align: middle;
+  font-size: 20px;
+  height: 20px;
+  width: 20px;
 }
 
 section {
@@ -8,12 +11,6 @@ section {
   vertical-align: middle;
 }
 
-mat-chip mat-icon {
-  font-size: 16px;
-  height: 18px;
-  width: 18px;
-}
-
-mat-chip{
+mat-chip {
   font-size: 12px;
 }

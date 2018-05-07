@@ -1,18 +1,23 @@
 <section>
-  <mat-checkbox
-    *ngFor="let activityCheckbox of activitiesCheckboxes; let i = index;"
-    class="margin"
-    [(ngModel)]="activityCheckbox.checked"
-    [disabled]="activityCheckbox.disabled"
-    (change)="onCheckboxChange()">
+  <div *ngFor="let activityCheckbox of activitiesCheckboxes; let i = index;">
+    <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}">
+      watch
+    </mat-icon>
+    <mat-checkbox
+      class="margin"
+      [(ngModel)]="activityCheckbox.checked"
+      [disabled]="activityCheckbox.disabled"
+      (change)="onCheckboxChange()">
       <app-activity-header
         [event]="event"
         [activity]="activityCheckbox.activity"
         [showType]="true"
+        [showIcon]="false"
         [showTypeIcon]="false"
         [showDistance]="true"
         [showSerialNumber]="true"
         [showDuration]="true">
       </app-activity-header>
-  </mat-checkbox>
+    </mat-checkbox>
+  </div>
 </section>

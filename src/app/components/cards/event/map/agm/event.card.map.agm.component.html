@@ -1,13 +1,4 @@
 <mat-card>
-  <mat-card-content>
-    <section>
-      <app-activities-checkboxes [event]="event" (selectedActivities)="onSelectedActivities($event)">
-      </app-activities-checkboxes>
-    </section>
-  </mat-card-content>
-</mat-card>
-
-<mat-card>
 
   <!-- The lines and points -->
   <agm-map
@@ -37,8 +28,6 @@
           [disableAutoPan]="false"
           [latitude]="activityData.activityStartPoint.getPosition().latitudeDegrees"
           [longitude]="activityData.activityStartPoint.getPosition().longitudeDegrees">
-          <app-activity-header [event]="event" [activity]="activityData.activity" [showType]="false"
-                               [showDuration]="false"></app-activity-header>
           <span class="mat-title">Start {{activityData.activity.startDate.toLocaleTimeString()}}</span>
           <mat-divider [inset]="true"></mat-divider>
           <span class="mat-subheading-1">End {{activityData.activity.endDate.toLocaleTimeString()}}</span>
