@@ -86,7 +86,9 @@
         <ng-template matTabLabel>
           <mat-icon>linear_scale</mat-icon>
         </ng-template>
-        <app-event-card-laps [event]="event">
+        <app-event-card-laps
+          [selectedActivities]="selectedActivities"
+          [event]="event">
         </app-event-card-laps>
       </mat-tab>
       <mat-tab label="Tools"
