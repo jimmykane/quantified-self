@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   Input,
   OnChanges,
@@ -17,6 +18,7 @@ import {EventService} from '../../../services/app.event.service';
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
   styleUrls: ['./event.card.component.css'],
+  // changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {

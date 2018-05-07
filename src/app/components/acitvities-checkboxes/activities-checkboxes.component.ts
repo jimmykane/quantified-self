@@ -20,6 +20,9 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   }
 
   ngOnInit() {
+  }
+
+  ngOnChanges(): void {
     // Create the checkboxes
     this.activitiesCheckboxes = [];
     let index = 0;
@@ -33,10 +36,6 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
       index++;
     }
     this.emitChanges();
-  }
-
-  ngOnChanges(): void {
-
   }
 
   onCheckboxChange() {
