@@ -43,17 +43,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
-    if (this.event.getActivities().length === 1) {
-      this.selectedActivities.push(this.event.getFirstActivity());
-    }
-    this.agmMap.triggerResize().then(() => {
-      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-      googleMaps.fitBounds(this.getBounds());
-    });
-  }
-
-  onSelectedActivities(activities) {
-    this.selectedActivities = activities;
     this.cacheNewData();
     this.agmMap.triggerResize().then(() => {
       const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
@@ -62,6 +51,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   private cacheNewData() {
+    this.mapData = [];
     this.selectedActivities.forEach((activity) => {
       const activityPoints = this.event.getPointsWithPosition(void 0, void 0, [activity]);
       // If the activity has no points skip

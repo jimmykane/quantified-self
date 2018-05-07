@@ -3,7 +3,7 @@ import {
   Input,
   OnChanges,
   OnDestroy,
-  OnInit
+  OnInit,
 } from '@angular/core';
 import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
@@ -24,6 +24,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   selectedTabIndex;
 
   private parametersSubscription: Subscription;
+  private selectedActivities: ActivityInterface[];
 
   constructor(private route: ActivatedRoute,
               private router: Router,
@@ -38,8 +39,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.selectedTabIndex = +params['tabIndex'];
+      // found it @todo!!!!
       this.eventPromise = this.eventService.getEvent(params['eventID']);
     });
+  }
+
+  onSelectedActivities(activities) {
+    this.selectedActivities = activities;
   }
 
   ngOnDestroy(): void {
