@@ -1,23 +1,15 @@
 <section>
   <mat-icon *ngIf="showIcon" [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch
   </mat-icon>
-  <span class="mat-body-2">{{ activity.creator.name }}</span>
-  <span *ngIf="showType">
-      <app-activity-icon *ngIf="showTypeIcon" [activity]="activity"></app-activity-icon>
-      {{ activity.type }}
+  <span class="mat-body-2">{{ activity.creator.name }}</span><span>&nbsp;-&nbsp;</span><span
+  class="mat-body-2">{{ activity.type }}</span>
+  <span>&nbsp;for&nbsp;</span>
+  <span class="mat-body-2">
+    {{ activity.getDuration().getDisplayValue() }}
   </span>
-  <span *ngIf="showDuration">
-    <mat-icon>timer</mat-icon>
-      {{ activity.getDuration().getDisplayValue() }}
-    </span>
-  <span *ngIf="showDistance">
-      <mat-icon>trending_flat</mat-icon>
-      {{ activity.getDistance().getDisplayValue() }}
-      {{ activity.getDistance().getDisplayUnit() }}
-    </span>
-  <span *ngIf="showSWInfo && activity.creator.swInfo">v{{ activity.creator.swInfo }}</span>
-  <span *ngIf="showSerialNumber && activity.creator.serialNumber">
-      <mat-icon>info_outline</mat-icon>
-      {{ activity.creator.serialNumber }}
-    </span>
+  <span>&nbsp;and&nbsp;</span>
+  <span class="mat-body-2">
+    {{ activity.getDistance().getDisplayValue() }}
+    {{ activity.getDistance().getDisplayUnit() }}
+  </span>
 </section>
