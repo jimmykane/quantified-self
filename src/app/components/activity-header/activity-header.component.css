@@ -17,7 +17,3 @@ mat-chip mat-icon {
 mat-chip{
   font-size: 12px;
 }
-
-/*/deep/ .mat-chip-list-wrapper {*/
-  /*align-items: center !important;*/
-/*}*/
