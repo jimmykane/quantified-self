@@ -49,9 +49,14 @@
           [isOpen]="openedLapMarkerInfoWindow === lapData.lap"
           [latitude]="lapData.lapEndPoint.getPosition().latitudeDegrees"
           [longitude]="lapData.lapEndPoint.getPosition().latitudeDegrees">
-          <app-activity-header [event]="event" [activity]="activityData.activity" [showType]="false"
-                               [showDuration]="false"></app-activity-header>
-          <span class="mat-title">Lap {{ i +1 }}</span>
+          <app-activity-header
+            [showIcon]="true"
+            [event]="event"
+            [activity]="activityData.activity"
+            [showType]="false"
+            [showDuration]="false">
+          </app-activity-header>
+          <span class="mat-title">Lap {{ i +1 }} <span *ngIf="isLast">(end lap)</span></span>
           <mat-divider [inset]="true"></mat-divider>
           <span class="mat-subheading-1">Duration: {{ lapData.lap.getDuration().getDisplayValue() }}{{ lapData.lap.getDuration().getDisplayUnit() }}</span>
           <mat-divider [inset]="true"></mat-divider>
