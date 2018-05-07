@@ -52,7 +52,7 @@
       <agm-marker
         *ngFor="let lapData of activityData.lapsWithPosition; let i = index; last as isLast"
         (markerClick)="openLapMarkerInfoWindow(lapData.lap)"
-        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=flag|'+ eventColorService.getActivityColor(event, activityData.activity).slice(1)"
+        [iconUrl]="'https://chart.googleapis.com/chart?chst=' + ( isLast ? 'd_map_pin_icon&chld=flag|' : 'd_map_pin_letter&chld=' + (i+1) + '|') + eventColorService.getActivityColor(event, activityData.activity).slice(1)"
         [latitude]="lapData.lapEndPoint.getPosition().latitudeDegrees"
         [longitude]="lapData.lapEndPoint.getPosition().longitudeDegrees">
         <agm-info-window
