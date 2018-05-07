@@ -25,6 +25,7 @@ import {DataHeartRateMax} from '../../../data/data.heart-rate-max';
 import {ActivityTypes} from '../../../activities/activity.types';
 import {DataSpeedAvg} from '../../../data/data.speed-avg';
 import {LapTypes} from '../../../laps/lap.types';
+import {ImporterSuuntoDeviceNames} from './suunto/importer.suunto.device.names';
 
 export class EventImporterTCX {
 
@@ -41,7 +42,7 @@ export class EventImporterTCX {
       const laps = this.getLaps(activityElement.getElementsByTagName('Lap'));
       const activity = new Activity(
         new Date(activityElement.getElementsByTagName('Lap')[0].getAttribute('StartTime')),
-        laps[laps.length - 1].endDate
+        laps[laps.length - 1].endDate,
       );
       event.addActivity(activity);
 
@@ -143,7 +144,10 @@ export class EventImporterTCX {
       creator.name = 'Unknown device';
       return creator;
     }
-    creator.name = creatorElement.getElementsByTagName('Name')[0].textContent;
+    // Try to see if its a listed Suunto Device name
+    creator.name = ImporterSuuntoDeviceNames[creatorElement.getElementsByTagName('Name')[0].textContent]
+      || creatorElement.getElementsByTagName('Name')[0].textContent;
+
     if (creatorElement.getElementsByTagName('Version')[0]) {
       creator.swInfo = creatorElement.getElementsByTagName('Version')[0].textContent;
     }
@@ -157,7 +161,7 @@ export class EventImporterTCX {
         new Date(lapElement.getAttribute('StartTime')),
         new Date(
           +(new Date(lapElement.getAttribute('StartTime'))) +
-          1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent)
+          1000 * Number(lapElement.getElementsByTagName('TotalTimeSeconds')[0].textContent),
         ));
       lap.type = LapTypes[lapElement.getElementsByTagName('TriggerMethod')[0].textContent];
 
