@@ -1,4 +1,4 @@
-<mat-card *ngIf="eventPromise | async as event">
+<mat-card *ngIf="event">
   <mat-card-header>
     <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
     <mat-card-subtitle>
@@ -70,7 +70,7 @@
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
         </ng-template>
-        <app-event-card-chart *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 2 : 1)"
+        <app-event-card-chart [selectedActivities]="selectedActivities" *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 2 : 1)"
                               [event]="event">
         </app-event-card-chart>
       </mat-tab>

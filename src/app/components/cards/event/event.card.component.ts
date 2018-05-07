@@ -20,7 +20,7 @@ import {EventService} from '../../../services/app.event.service';
 })
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
-  @Input() eventPromise: Promise<EventInterface>;
+  @Input() event: EventInterface;
   selectedTabIndex;
 
   private parametersSubscription: Subscription;
@@ -39,8 +39,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.selectedTabIndex = +params['tabIndex'];
-      // found it @todo!!!!
-      this.eventPromise = this.eventService.getEvent(params['eventID']);
+      this.event = this.eventService.getEvent(params['eventID']);
     });
   }
 

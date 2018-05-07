@@ -20,7 +20,7 @@ import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
-  @Input() selectedActivities: ActivityInterface[] = [];
+  @Input() selectedActivities: ActivityInterface[];
 
   public mapData: {
     activity: ActivityInterface,

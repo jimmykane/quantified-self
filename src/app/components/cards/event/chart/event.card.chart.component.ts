@@ -25,9 +25,9 @@ import {ChartDataInterface} from './event.card.chart.data.interface';
 export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @Input() event: EventInterface;
+  @Input() selectedActivities: ActivityInterface[] = [];
 
   private chart: any;
-  private selectedActivities = [];
 
   private logger = Log.create('EventCardChartComponent');
 
@@ -43,12 +43,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(): void {
+    this.destroyChart();
+    if (this.selectedActivities.length) {
+      this.createChart();
+    }
   }
 
   onSelectedActivities(activities) {
-    this.selectedActivities = activities;
-    this.destroyChart();
-    this.createChart();
+
   }
 
 

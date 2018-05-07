@@ -59,15 +59,9 @@ export class EventService {
     return this.events.asObservable();
   }
 
-  public getEvent(eventID: string): Promise<EventInterface> {
-    return new Promise<EventInterface>((resolve, reject) => {
-      const foundEvent = this.events.getValue().find((event: EventInterface) => {
-        return event.getID() === eventID;
-      });
-      if (!foundEvent) {
-        return reject('No event found for this ID');
-      }
-      resolve(foundEvent);
+  public getEvent(eventID: string): EventInterface {
+    return this.events.getValue().find((event: EventInterface) => {
+      return event.getID() === eventID;
     });
   }
 
@@ -86,10 +80,10 @@ export class EventService {
       // Create their promises
       const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
         activityPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition()
+          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(),
         ));
         activityPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate
+          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate,
         ));
         return activityPromises;
       }, []);
