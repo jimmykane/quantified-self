@@ -18,15 +18,15 @@ import {EventService} from '../../../services/app.event.service';
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
   styleUrls: ['./event.card.component.css'],
-  // changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   @Input() event: EventInterface;
-  selectedTabIndex;
+  public selectedTabIndex;
 
   private parametersSubscription: Subscription;
-  private selectedActivities: ActivityInterface[];
+  public selectedActivities: ActivityInterface[];
 
   constructor(private route: ActivatedRoute,
               private router: Router,
@@ -35,7 +35,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges() {
-    debugger;
   }
 
   ngOnInit() {

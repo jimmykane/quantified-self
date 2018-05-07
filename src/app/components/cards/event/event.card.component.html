@@ -59,6 +59,7 @@
           <mat-icon>map</mat-icon>
         </ng-template>
         <app-event-card-map-agm
+          [isVisible]="selectedTabIndex === 0"
           [selectedActivities]="selectedActivities"
           [event]="event"></app-event-card-map-agm>
       </mat-tab>

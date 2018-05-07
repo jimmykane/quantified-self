@@ -20,7 +20,6 @@ export class EventCardLapsComponent implements OnChanges {
   @Input() selectedActivities: ActivityInterface[];
 
   ngOnChanges() {
-    debugger;
   }
 
   getData(activity) {

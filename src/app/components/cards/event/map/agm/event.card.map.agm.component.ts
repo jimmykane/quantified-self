@@ -21,6 +21,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
+  @Input() isVisible: boolean;
+
 
   public mapData: {
     activity: ActivityInterface,
@@ -44,10 +46,12 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   ngOnChanges() {
     this.cacheNewData();
-    this.agmMap.triggerResize().then(() => {
-      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-      googleMaps.fitBounds(this.getBounds());
-    });
+    if (this.isVisible) {
+      this.agmMap.triggerResize().then(() => {
+        const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+        googleMaps.fitBounds(this.getBounds());
+      });
+    }
   }
 
   private cacheNewData() {
