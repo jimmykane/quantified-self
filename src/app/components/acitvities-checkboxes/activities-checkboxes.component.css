@@ -2,14 +2,6 @@ mat-icon {
   vertical-align: middle;
 }
 
-mat-chip-list {
-  display: inline-block;
-}
-
-.mat-card-actions, .mat-card-content, .mat-card-subtitle, .mat-card-title {
-  display: inline-block;
-}
-
 section {
   margin: auto;
   width: 100%;

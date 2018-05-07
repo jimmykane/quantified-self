@@ -9,11 +9,15 @@ section {
 }
 
 mat-chip mat-icon {
-  font-size: 18px;
+  font-size: 16px;
   height: 18px;
   width: 18px;
 }
 
-/deep/ .mat-chip-list-wrapper {
-  align-items: center !important;
+mat-chip{
+  font-size: 12px;
 }
+
+/*/deep/ .mat-chip-list-wrapper {*/
+  /*align-items: center !important;*/
+/*}*/
