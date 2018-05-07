@@ -304,7 +304,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         valueLineAlpha: 0.5,
         fullWidth: true,
       },
-      chartScrollbar: this.getScrollbarForGraph(graphs[0]),
+      chartScrollbar: this.getScrollbarForGraph(graphs.find(graph => !graph.hidden)),
       creditsPosition: 'bottom-right',
     }
   }
