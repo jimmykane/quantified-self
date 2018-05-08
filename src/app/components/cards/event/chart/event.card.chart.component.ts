@@ -317,9 +317,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // There can be the case where the chart has not finished bulding and the user navigated away
     // thus no chart to destroy
     try {
-      if (this.chart) {
-        this.AmCharts.destroyChart(this.chart);
-      }
+      this.AmCharts.destroyChart(this.chart);
+      delete this.chart;
     } catch (e) {
       this.logger.error('Could not destroy chart');
     }
