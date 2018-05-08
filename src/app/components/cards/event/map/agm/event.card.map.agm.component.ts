@@ -44,9 +44,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   ngOnInit() {
   }
 
-  ngOnChanges() {
-    this.cacheNewData();
-    if (this.isVisible) {
+  ngOnChanges(simpleChanges) {
+    if (simpleChanges.event || simpleChanges.selectedActivities) {
+      this.cacheNewData();
+    }
+
+    // Debatable if it should trigger a resize when visible or on above.
+    if (simpleChanges.isVisible && this.isVisible) {
       this.agmMap.triggerResize().then(() => {
         const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
         googleMaps.fitBounds(this.getBounds());
