@@ -43,11 +43,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(): void {
-    // @todo use update
     if (!this.selectedActivities.length) {
       this.destroyChart();
       return;
     }
+    delete this.chart; // Not sure if this is needed but it feels like so
     this.createChart();
   }
 
