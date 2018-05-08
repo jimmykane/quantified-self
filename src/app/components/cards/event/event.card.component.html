@@ -69,7 +69,6 @@
         </ng-template>
         <app-event-card-stats
           [selectedActivites]="selectedActivities"
-          *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 1 : 0)"
           [event]="event">
         </app-event-card-stats>
       </mat-tab>
@@ -97,8 +96,7 @@
         <ng-template matTabLabel>
           <mat-icon>build</mat-icon>
         </ng-template>
-        <app-event-card-tools [event]="event"
-                              *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 4 : 2)"></app-event-card-tools>
+        <app-event-card-tools [event]="event"></app-event-card-tools>
       </mat-tab>
     </mat-tab-group>
   </mat-card-content>
