@@ -14,6 +14,7 @@ import {PointInterface} from '../../../../entities/points/point.interface';
 import {DataNumber} from '../../../../entities/data/data.number';
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 import {ChartDataInterface} from './event.card.chart.data.interface';
+import * as Raven from 'raven-js';
 
 
 @Component({
@@ -316,6 +317,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       delete this.chart;
     } catch (e) {
       this.logger.error('Could not destroy chart');
+      // Log to Sentry
+      Raven.captureException(e);
     }
   }
 
