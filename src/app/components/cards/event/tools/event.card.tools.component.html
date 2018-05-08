@@ -1,89 +1,80 @@
-<mat-accordion [displayMode]="'flat'" [multi]="true">
-  <mat-expansion-panel [expanded]="'true'">
-    <mat-expansion-panel-header>
-      <mat-panel-title>
-        <fa [name]="'heartbeat'"></fa>
-      </mat-panel-title>
-      <mat-panel-description>
-        Filters for activities that have IBI(R-R) data
-      </mat-panel-description>
-    </mat-expansion-panel-header>
-    <mat-list>
-      <mat-list-item>
-        <button mat-raised-button color="accent" (click)="applyFilters(true)"
-                [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
-          Apply default filters
-        </button>
-        <button mat-raised-button color="warn" (click)="applyFilters(false, true)"
-                [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
-          Reset to raw IBI data
-        </button>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-checkbox [(ngModel)]="lowLimitFilterChecked">Remove heart rate below</mat-checkbox>
-        <mat-slider
-          [disabled]="!lowLimitFilterChecked"
-          [max]="220"
-          [min]="0"
-          [step]="1"
-          [thumbLabel]="true"
-          [tickInterval]="true"
-          [(ngModel)]="lowLimitFilterValue"
-          [vertical]="false">
-        </mat-slider>
-        {{ lowLimitFilterValue }} bpm
-      </mat-list-item>
-      <mat-list-item>
-        <mat-checkbox [(ngModel)]="highLimitChecked">Remove heart rate above</mat-checkbox>
-        <mat-slider
-          [disabled]="!highLimitChecked"
-          [max]="300"
-          [min]="0"
-          [step]="1"
-          [thumbLabel]="true"
-          [tickInterval]="true"
-          [(ngModel)]="highLimitValue"
-          [vertical]="false">
-        </mat-slider>
-        {{ highLimitValue }} bpm
-      </mat-list-item>
+<mat-list>
+  <mat-list-item>
+    <fa [name]="'heartbeat'"></fa>&nbsp;Filters for activities that have IBI(R-R) data (more to come soon)
+  </mat-list-item>
+  <mat-list-item>
+    <button mat-raised-button color="accent" (click)="applyFilters(true)"
+            [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
+      Apply default filters
+    </button>
+    <button mat-raised-button color="warn" (click)="applyFilters(false, true)"
+            [disabled]="(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
+      Reset to raw IBI data
+    </button>
+  </mat-list-item>
+  <mat-list-item>
+    <mat-checkbox [(ngModel)]="lowLimitFilterChecked">Remove heart rate below</mat-checkbox>
+    <mat-slider
+      [disabled]="!lowLimitFilterChecked"
+      [max]="220"
+      [min]="0"
+      [step]="1"
+      [thumbLabel]="true"
+      [tickInterval]="true"
+      [(ngModel)]="lowLimitFilterValue"
+      [vertical]="false">
+    </mat-slider>
+    {{ lowLimitFilterValue }} bpm
+  </mat-list-item>
+  <mat-list-item>
+    <mat-checkbox [(ngModel)]="highLimitChecked">Remove heart rate above</mat-checkbox>
+    <mat-slider
+      [disabled]="!highLimitChecked"
+      [max]="300"
+      [min]="0"
+      [step]="1"
+      [thumbLabel]="true"
+      [tickInterval]="true"
+      [(ngModel)]="highLimitValue"
+      [vertical]="false">
+    </mat-slider>
+    {{ highLimitValue }} bpm
+  </mat-list-item>
 
-      <mat-list-item>
-        <mat-checkbox [(ngModel)]="movingMedianChecked">Apply moving median filter</mat-checkbox>
-        <mat-slider
-          [disabled]="!movingMedianChecked"
-          [max]="100"
-          [min]="0"
-          [step]="1"
-          [thumbLabel]="true"
-          [tickInterval]="true"
-          [(ngModel)]="movingMedianValue"
-          [vertical]="false">
-        </mat-slider>
-        {{ movingMedianValue }}
-      </mat-list-item>
+  <mat-list-item>
+    <mat-checkbox [(ngModel)]="movingMedianChecked">Apply moving median filter</mat-checkbox>
+    <mat-slider
+      [disabled]="!movingMedianChecked"
+      [max]="100"
+      [min]="0"
+      [step]="1"
+      [thumbLabel]="true"
+      [tickInterval]="true"
+      [(ngModel)]="movingMedianValue"
+      [vertical]="false">
+    </mat-slider>
+    {{ movingMedianValue }}
+  </mat-list-item>
 
-      <mat-list-item>
-        <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Apply moving weight average filter</mat-checkbox>
-        <mat-slider
-          [disabled]="!movingWeightAverageChecked"
-          [max]="100"
-          [min]="0"
-          [step]="1"
-          [thumbLabel]="true"
-          [tickInterval]="true"
-          [(ngModel)]="movingWeightAverageValue"
-          [vertical]="false">
-        </mat-slider>
-        {{ movingWeightAverageValue }}
-      </mat-list-item>
+  <mat-list-item>
+    <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Apply moving weight average filter</mat-checkbox>
+    <mat-slider
+      [disabled]="!movingWeightAverageChecked"
+      [max]="100"
+      [min]="0"
+      [step]="1"
+      [thumbLabel]="true"
+      [tickInterval]="true"
+      [(ngModel)]="movingWeightAverageValue"
+      [vertical]="false">
+    </mat-slider>
+    {{ movingWeightAverageValue }}
+  </mat-list-item>
 
-      <mat-list-item>
-        <button mat-raised-button color="primary" (click)="applyFilters()"
-                [disabled]="!(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
-          Apply filters
-        </button>
-      </mat-list-item>
-    </mat-list>
-  </mat-expansion-panel>
-</mat-accordion>
+  <mat-list-item>
+    <button mat-raised-button color="primary" (click)="applyFilters()"
+            [disabled]="!(lowLimitFilterChecked || highLimitChecked || movingMedianChecked || movingWeightAverageChecked)">
+      Apply filters
+    </button>
+  </mat-list-item>
+</mat-list>
