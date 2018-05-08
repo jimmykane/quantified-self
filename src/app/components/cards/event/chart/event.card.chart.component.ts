@@ -264,12 +264,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // valueAxes: [{
       //   gridThickness: 0.0,
       // }],
-      startDuration: 0,
-      startEffect: 'elastic',
+      startDuration: 0.2,
+      startEffect: 'easeOutSine',
       sequencedAnimation: false,
       categoryField: 'date',
-      // processCount: 1000,
-      // processTimeout: 2000,
+      processCount: 10000,
+      // processTimeout: 1,
       legend: {
         align: 'center',
         useGraphSettings: true,
