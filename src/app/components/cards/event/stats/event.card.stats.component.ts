@@ -2,22 +2,30 @@ import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/cor
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {MatTableDataSource} from '@angular/material';
 import {DataInterface} from '../../../../entities/data/data.interface';
+import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 
 @Component({
   selector: 'app-event-card-stats',
   templateUrl: './event.card.stats.component.html',
   styleUrls: ['./event.card.stats.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class EventCardStatsComponent implements OnChanges {
   @Input() event: EventInterface;
+  @Input() selectedActivites: ActivityInterface[];
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
 
   ngOnChanges() {
+    if (!this.selectedActivites.length) {
+      this.data = new MatTableDataSource<Object>();
+      this.columns = [];
+      return;
+    }
+
     // Collect all the stat types from all the activities
-    const stats = this.event.getActivities().reduce((statsMap, activity) => {
+    const stats = this.selectedActivites.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
         statsMap.set(stat.getClassName(), stat);
       });
@@ -27,13 +35,13 @@ export class EventCardStatsComponent implements OnChanges {
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
-        this.event.getActivities().reduce((rowObj, activity, index) => {
+        this.selectedActivites.reduce((rowObj, activity, index) => {
           rowObj['#' + index + ' ' + activity.creator.name] =
             (activity.getStat(stat.getClassName()) ? activity.getStat(stat.getClassName()).getDisplayValue() : '') +
             ' ' +
             (activity.getStat(stat.getClassName()) ? activity.getStat(stat.getClassName()).getDisplayUnit() : '');
           return rowObj;
-        }, {Name: stat.getType()})
+        }, {Name: stat.getType()}),
       );
       return array;
     }, []);

@@ -1,21 +1,26 @@
-import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {MatTableDataSource} from '@angular/material';
 import {DataHeartRateAvg} from '../../../../entities/data/data.heart-rate-avg';
 import {DataAscent} from '../../../../entities/data/data.ascent';
 import {DataDescent} from '../../../../entities/data/data.descent';
-import {DataDistance} from "../../../../entities/data/data.distance";
+import {DataDistance} from '../../../../entities/data/data.distance';
+import {ActivityInterface} from '../../../../entities/activities/activity.interface';
 
 @Component({
   selector: 'app-event-card-laps',
   templateUrl: './event.card.laps.component.html',
   styleUrls: ['./event.card.laps.component.css'],
   providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardLapsComponent {
+export class EventCardLapsComponent implements OnChanges {
   @Input() event: EventInterface;
+  @Input() selectedActivities: ActivityInterface[];
+
+  ngOnChanges() {
+  }
 
   getData(activity) {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {

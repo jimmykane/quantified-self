@@ -13,7 +13,7 @@ export class ActivityHeaderComponent {
   @Input() activity: ActivityInterface;
   @Input() event: EventInterface;
   @Input() showType = true;
-  @Input() showTypeIcon = true;
+  @Input() showIcon = false;
   @Input() showDistance = false;
   @Input() showDuration = true;
   @Input() showSWInfo: boolean;

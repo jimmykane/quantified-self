@@ -5,15 +5,17 @@ mat-icon {
 section {
   margin: auto;
   width: 100%;
-  display: flex; /* establish flex container */
-  flex-direction: row; /* make main axis horizontal (default setting) */
-  justify-content: space-around; /* center items horizontally, in this case */
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: start;
+  align-items: start;
   flex-wrap: wrap;
 }
 
-mat-checkbox {
-  margin: 0.5%;
+mat-icon {
+  font-size: 20px;
+  height: 20px;
+  width: 20px;
 }
 
 .mat-checkbox-label {

@@ -1,24 +1,20 @@
 <section>
-  <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">watch</mat-icon>
-  <mat-chip-list>
-    <mat-chip>{{ activity.creator.name }}</mat-chip>
-    <mat-chip *ngIf="showType">
-      <app-activity-icon *ngIf="showTypeIcon" [activity]="activity"></app-activity-icon>
-      {{ activity.type }}
-    </mat-chip>
-    <mat-chip *ngIf="showDuration">
-      <mat-icon>timer</mat-icon>
+  <mat-icon *ngIf="showIcon" [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">
+    watch
+  </mat-icon>
+  <span class="mat-body-2">{{ activity.creator.name }}</span><span>&nbsp;-&nbsp;</span>
+  <span class="mat-body-2">{{ activity.type }}</span>
+  <span *ngIf="showDuration">
+    <span>&nbsp;for</span>
+    <span class="mat-body-2">
       {{ activity.getDuration().getDisplayValue() }}
-    </mat-chip>
-    <mat-chip *ngIf="showDistance">
-      <mat-icon>trending_flat</mat-icon>
+    </span>
+  </span>
+  <span *ngIf="showDistance">
+    <span>&nbsp;and</span>
+    <span class="mat-body-2">
       {{ activity.getDistance().getDisplayValue() }}
       {{ activity.getDistance().getDisplayUnit() }}
-    </mat-chip>
-    <mat-chip *ngIf="showSWInfo && activity.creator.swInfo">v{{ activity.creator.swInfo }}</mat-chip>
-    <mat-chip *ngIf="showSerialNumber && activity.creator.serialNumber">
-      <mat-icon>info_outline</mat-icon>
-      {{ activity.creator.serialNumber }}
-    </mat-chip>
-  </mat-chip-list>
+    </span>
+  </span>
 </section>

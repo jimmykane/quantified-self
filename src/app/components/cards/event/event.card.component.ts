@@ -1,9 +1,10 @@
 import {
+  ChangeDetectionStrategy,
   Component,
   Input,
   OnChanges,
   OnDestroy,
-  OnInit
+  OnInit,
 } from '@angular/core';
 import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
@@ -17,13 +18,15 @@ import {EventService} from '../../../services/app.event.service';
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
   styleUrls: ['./event.card.component.css'],
+  // changeDetection: ChangeDetectionStrategy.OnPush
 })
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
-  @Input() eventPromise: Promise<EventInterface>;
-  selectedTabIndex;
+  @Input() event: EventInterface;
+  public selectedTabIndex;
 
   private parametersSubscription: Subscription;
+  public selectedActivities: ActivityInterface[];
 
   constructor(private route: ActivatedRoute,
               private router: Router,
@@ -38,8 +41,12 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.selectedTabIndex = +params['tabIndex'];
-      this.eventPromise = this.eventService.getEvent(params['eventID']);
+      this.event = this.eventService.getEvent(params['eventID']);
     });
+  }
+
+  onSelectedActivities(activities) {
+    this.selectedActivities = activities;
   }
 
   ngOnDestroy(): void {
