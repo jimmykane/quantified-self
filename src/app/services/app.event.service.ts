@@ -31,20 +31,13 @@ export class EventService {
     }
   }
 
-  public addAndSaveEvent(event: EventInterface) {
-    this.saveEvent(event).then((result) => {
-      this.events.next(this.events.getValue().push(event));
-    });
-  }
-
-  public addAndSaveEvents(events: EventInterface[]) {
-    for (const event of events) {
-      this.addAndSaveEvent(event);
-    }
-  }
-
-  public saveEvent(event: EventInterface): Promise<boolean> {
+  private saveEvent(event: EventInterface) {
     return this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
+  }
+
+  public addAndSaveEvent(event: EventInterface) {
+    this.saveEvent(event);
+    this.events.next(this.events.getValue().push(event));
   }
 
   public deleteEvent(eventToDelete: EventInterface) {

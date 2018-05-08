@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
+  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
@@ -14,7 +14,7 @@ import {IBIData} from '../../../../entities/data/ibi/data.ibi';
   selector: 'app-event-card-tools',
   templateUrl: './event.card.tools.component.html',
   styleUrls: ['./event.card.tools.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
@@ -30,7 +30,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   movingWeightAverageValue = 5;
 
 
-  constructor(private snackBar: MatSnackBar, private eventService: EventService) {
+  constructor(private  changeDetector: ChangeDetectorRef, private snackBar: MatSnackBar, private eventService: EventService) {
   }
 
   ngOnInit() {
@@ -89,12 +89,11 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
           point.addData(new DataHeartRate(value));
           activity.addPoint(point);
         });
-      }
+      },
     );
-    this.eventService.saveEvent(this.event).then((result) => {
-      this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
-        duration: 5000,
-      });
+    this.eventService.addAndSaveEvent(this.event);
+    this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
+      duration: 5000,
     });
   }
 }

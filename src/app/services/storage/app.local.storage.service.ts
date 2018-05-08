@@ -13,14 +13,11 @@ export class LocalStorageService implements StorageServiceInterface {
   constructor() {
   }
 
-  setItem(key: string, data: string): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      localStorage.setItem(
-        this.nameSpace + key,
-        LZString.compress(data)
-      );
-      resolve(true);
-    });
+  setItem(key: string, data: string) {
+    localStorage.setItem(
+      this.nameSpace + key,
+      LZString.compress(data),
+    );
   }
 
   getItem(key: string): Promise<string> {
@@ -30,7 +27,7 @@ export class LocalStorageService implements StorageServiceInterface {
         const decrypted = LZString.decompress(localStorage.getItem(this.nameSpace + key));
         this.logger.d('Decrypted 1 item after ' +
           (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds'
+          (performance.now() - t0) / 1000 + ' seconds',
         );
         resolve(decrypted);
       } catch (Error) {
@@ -60,10 +57,10 @@ export class LocalStorageService implements StorageServiceInterface {
           localStorage.removeItem(localStorageKey);
         }
       });
-      this.logger.d('Decrypted ' + items.length +  ' items from localStorage after ' +
-          (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds'
-        );
+      this.logger.d('Decrypted ' + items.length + ' items from localStorage after ' +
+        (performance.now() - t0) + ' milliseconds or ' +
+        (performance.now() - t0) / 1000 + ' seconds',
+      );
       resolve(items);
     });
   }
