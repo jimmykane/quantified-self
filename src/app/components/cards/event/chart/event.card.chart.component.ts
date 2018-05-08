@@ -46,11 +46,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(simpleChanges): void {
-    // Activities always come even when event is changed
+    // If the only change was to unselect all then clean up and return
+    if (simpleChanges.selectedActivities && !this.selectedActivities.length) {
+      this.destroyChart();
+      this.chartData = null;
+      return;
+    }
+    // If data changed... update
     if (simpleChanges.selectedActivities) {
       this.destroyChart(); // Destroy to recreate (no update as its messy atm)
-      this.chartData = this.getAllData(); // Compute the data (flatten)
+      this.chartData = this.getAllData();
     }
+
+    // If we do not have a chart but we become visible
     if (!this.chart && this.isVisible) { // If there is no chart and the component becomes of is visible
       this.createChart(this.chartData); // Create the chart
     }
@@ -312,6 +320,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private destroyChart() {
+    if (!this.chart) {
+      return;
+    }
     // There can be the case where the chart has not finished bulding and the user navigated away
     // thus no chart to destroy
     try {
