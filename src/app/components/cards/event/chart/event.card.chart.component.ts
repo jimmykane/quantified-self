@@ -51,11 +51,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.createChart();
   }
 
-  onSelectedActivities(activities) {
-
-  }
-
-
   private createChart() {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
