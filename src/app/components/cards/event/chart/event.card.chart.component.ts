@@ -13,7 +13,7 @@ import {ActivityInterface} from '../../../../entities/activities/activity.interf
 import {PointInterface} from '../../../../entities/points/point.interface';
 import {DataNumber} from '../../../../entities/data/data.number';
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
-import {ChartDataInterface} from './event.card.chart.data.interface';
+import {ChartDataSettingsInterface} from './event.card.chart.data.interface';
 import * as Raven from 'raven-js';
 
 
@@ -27,8 +27,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
+  @Input() isVisible: boolean;
 
   private chart: any;
+  private chartData: ChartDataSettingsInterface;
 
   private logger = Log.create('EventCardChartComponent');
 
@@ -43,21 +45,22 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   ngOnInit() {
   }
 
-  ngOnChanges(): void {
-    if (!this.selectedActivities.length) {
-      this.destroyChart();
-      return;
+  ngOnChanges(simpleChanges): void {
+    // Activities always come even when event is changed
+    if (simpleChanges.selectedActivities) {
+      this.destroyChart(); // Destroy to recreate (no update as its messy atm)
+      this.chartData = this.getAllData(); // Compute the data (flatten)
     }
-    delete this.chart; // Not sure if this is needed but it feels like so
-    this.createChart();
+    if (!this.chart && this.isVisible) { // If there is no chart and the component becomes of is visible
+      this.createChart(this.chartData); // Create the chart
+    }
   }
 
-  private createChart() {
+  private createChart(chartData: ChartDataSettingsInterface) {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
-      this.logger.d('Chart Create started after ' + (performance.now() - t0) + ' milliseconds');
       // Create a fresh one
-      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmChartOptions(this.getAllData()), 1);
+      this.chart = this.AmCharts.makeChart('chartdiv', this.getAmChartOptions(chartData), 1);
       this.addListenersToChart();
 
       const t1 = performance.now();
@@ -117,9 +120,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     }
   }
 
-  private getAllData(): ChartDataInterface {
+  private getAllData(): ChartDataSettingsInterface {
     const t0 = performance.now();
-    const chartData: ChartDataInterface = {
+    const chartData: ChartDataSettingsInterface = {
       categories: new Map<string, any>(),
       dataByDateTime: new Map<number, any>(),
       dataProvider: [],
@@ -134,7 +137,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
           let existingCategory = chartData.categories.get(key + activity.getID());
           if (!existingCategory) {
             existingCategory = {
-              activity: activity,
               graph: this.getGraph(activity, pointData),
             };
             chartData.categories.set(key + activity.getID(), existingCategory);
@@ -225,7 +227,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     };
   }
 
-  private getAmChartOptions(chartData: ChartDataInterface) {
+  private getAmChartOptions(chartData: ChartDataSettingsInterface) {
     const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
       graphArray.push(category.graph);
       return graphArray;

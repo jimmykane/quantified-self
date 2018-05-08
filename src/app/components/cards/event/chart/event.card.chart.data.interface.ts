@@ -1,9 +1,7 @@
-import {ActivityInterface} from '../../../../entities/activities/activity.interface';
-
-export interface ChartDataInterface {
+export interface ChartDataSettingsInterface {
   categories: Map<string, {
-    activity: ActivityInterface,
     graph: any,
+    // Add more settings
   }>;
   dataByDateTime: Map<number, Map<string, number | string>>,
   dataProvider: any[],

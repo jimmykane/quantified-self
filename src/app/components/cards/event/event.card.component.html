@@ -77,8 +77,8 @@
           <mat-icon>show_chart</mat-icon>
         </ng-template>
         <app-event-card-chart
+          [isVisible]="selectedTabIndex === (event.hasPointsWithPosition()? 2 : 1)"
           [selectedActivities]="selectedActivities"
-          *ngIf="selectedTabIndex === (event.hasPointsWithPosition()? 2 : 1)"
           [event]="event">
         </app-event-card-chart>
       </mat-tab>
