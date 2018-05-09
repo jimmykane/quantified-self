@@ -1,7 +1,7 @@
 import {Component, EventEmitter, Input, OnChanges, OnInit, Output} from '@angular/core';
 import {EventInterface} from '../../entities/events/event.interface';
 import {ActivityInterface} from '../../entities/activities/activity.interface';
-import {AppEventColorService} from "../../services/color/app.event.color.service";
+import {AppEventColorService} from '../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-activities-checkboxes',
