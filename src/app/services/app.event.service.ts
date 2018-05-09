@@ -31,12 +31,8 @@ export class EventService {
     }
   }
 
-  private saveEvent(event: EventInterface) {
-    return this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
-  }
-
   public addAndSaveEvent(event: EventInterface) {
-    this.saveEvent(event);
+    this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
     this.events.next(this.events.getValue().push(event));
   }
 
