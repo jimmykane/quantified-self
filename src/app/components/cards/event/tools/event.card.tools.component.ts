@@ -19,6 +19,7 @@ import {IBIData} from '../../../../entities/data/ibi/data.ibi';
 export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
   @Input() event: EventInterface;
+  @Input() selectedActivities: ActivityInterface[];
 
   lowLimitFilterChecked: boolean;
   lowLimitFilterValue = 40;
@@ -44,7 +45,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
   applyFilters(defaultFilters?: boolean, resetToRawIBIData?: boolean) {
     // Remove all HR!
-    this.event.getActivities().forEach((activity: ActivityInterface) => {
+    this.selectedActivities.forEach((activity: ActivityInterface) => {
 
         // Create new not to alter existing
         const ibiData = new IBIData(Array.from(activity.ibiData.getIBIDataMap().values()));
