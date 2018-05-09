@@ -65,7 +65,7 @@ export class UploadComponent {
           // Log to Sentry
           Raven.captureException(error);
         }
-        this.eventService.addAndSaveEvent(newEvent);
+        this.eventService.addEvent(newEvent);
         metaData.status = UPLOAD_STATUS.PROCESSED;
         resolve(newEvent);
       };

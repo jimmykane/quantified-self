@@ -31,7 +31,7 @@ export class EventService {
     }
   }
 
-  public addAndSaveEvent(event: EventInterface) {
+  public addEvent(event: EventInterface) {
     this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
     this.events.next(this.events.getValue().push(event));
   }

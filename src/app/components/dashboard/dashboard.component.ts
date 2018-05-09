@@ -31,7 +31,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   mergeEvents($event, event: EventInterface) {
     $event.stopPropagation();
     EventUtilities.mergeEvents([this.selectedEvent, event]).then((mergedEvent: EventInterface) => {
-        this.eventService.addAndSaveEvent(mergedEvent);
+        this.eventService.addEvent(mergedEvent);
     });
   }
 
