@@ -21,9 +21,10 @@ import {EventService} from '../../../services/app.event.service';
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public selectedTabIndex;
+  public selectedActivities: ActivityInterface[];
+  public show: boolean;
 
   private parametersSubscription: Subscription;
-  public selectedActivities: ActivityInterface[];
 
   constructor(private route: ActivatedRoute,
               private router: Router,
@@ -48,6 +49,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnDestroy(): void {
     this.parametersSubscription.unsubscribe();
+  }
+
+  hasLaps(event: EventInterface): boolean {
+    return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
   }
 
   hasIBIData(event: EventInterface) {
