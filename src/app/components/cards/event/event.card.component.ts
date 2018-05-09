@@ -1,7 +1,5 @@
 import {
-  ChangeDetectionStrategy,
   Component,
-  Input,
   OnChanges,
   OnDestroy,
   OnInit,
