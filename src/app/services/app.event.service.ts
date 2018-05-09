@@ -48,7 +48,7 @@ export class EventService {
     return this.events.asObservable();
   }
 
-  public getEvent(eventID: string): EventInterface {
+  public findEvent(eventID: string): EventInterface {
     return this.events.getValue().find((event: EventInterface) => {
       return event.getID() === eventID;
     });
