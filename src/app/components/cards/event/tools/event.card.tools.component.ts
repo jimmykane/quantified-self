@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
+  ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {EventInterface} from '../../../../entities/events/event.interface';
 import {ActivityInterface} from '../../../../entities/activities/activity.interface';
@@ -31,7 +31,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   movingWeightAverageValue = 5;
 
 
-  constructor(private  changeDetector: ChangeDetectorRef, private snackBar: MatSnackBar, private eventService: EventService) {
+  constructor(private snackBar: MatSnackBar, private eventService: EventService) {
   }
 
   ngOnInit() {
@@ -46,22 +46,18 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   applyFilters(defaultFilters?: boolean, resetToRawIBIData?: boolean) {
     // Remove all HR!
     this.selectedActivities.forEach((activity: ActivityInterface) => {
-
         // Create new not to alter existing
         const ibiData = new IBIData(Array.from(activity.ibiData.getIBIDataMap().values()));
-
         if (!ibiData.getIBIDataMap().size) {
           // Exit if this activity does not have ibiData
           return;
         }
-
         // Clear all current HR points
         activity.getPoints().forEach((point: PointInterface) => {
           if (point.getDataByType(DataHeartRate.type)) {
             point.removeDataByType(DataHeartRate.type);
           }
         });
-
         // If we want the defaults
         if (defaultFilters) {
           ibiData
@@ -83,7 +79,6 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
             ibiData.lowPassFilter(this.movingWeightAverageValue);
           }
         }
-
         // Else just get them as BPM and no filter
         ibiData.getAsBPM().forEach((value, key, map) => {
           const point = new Point(new Date(activity.startDate.getTime() + key));
@@ -92,6 +87,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
         });
       },
     );
+    // Add and update via service
     this.eventService.addEvent(this.event);
     this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
       duration: 5000,
