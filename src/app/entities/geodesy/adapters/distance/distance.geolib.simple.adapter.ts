@@ -1,7 +1,6 @@
-import * as GeoLib from 'geolib';
-import PositionAsDecimal = GeoLib.PositionAsDecimal;
 import {DistanceAdapterInterface} from './distance.adapter.interface';
 import {PointInterface} from '../../../points/point.interface';
+import { getDistanceSimple, PositionAsDecimal } from 'geolib';
 
 export class DistanceSimple implements DistanceAdapterInterface {
   getDistance(points: PointInterface[], accuracyInMeters?: number): number {
@@ -17,7 +16,7 @@ export class DistanceSimple implements DistanceAdapterInterface {
         longitude: pointB.getPosition().longitudeDegrees,
         latitude: pointB.getPosition().latitudeDegrees,
       };
-      const calculatedDistance = GeoLib.getDistanceSimple(pointAPositionAsDecimal, pointBPositionAsDecimal, accuracyInMeters);
+      const calculatedDistance = getDistanceSimple(pointAPositionAsDecimal, pointBPositionAsDecimal, accuracyInMeters);
       if (calculatedDistance) {
         distance += calculatedDistance;
       }

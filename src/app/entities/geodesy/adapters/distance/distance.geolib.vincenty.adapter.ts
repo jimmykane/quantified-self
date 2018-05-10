@@ -1,7 +1,7 @@
-import * as GeoLib from 'geolib';
-import PositionAsDecimal = GeoLib.PositionAsDecimal;
 import {DistanceAdapterInterface} from './distance.adapter.interface';
 import {PointInterface} from '../../../points/point.interface';
+import { getDistance, PositionAsDecimal } from 'geolib';
+
 
 export class DistanceVincenty implements DistanceAdapterInterface {
   getDistance(points: PointInterface[], accuracyInMeters?: number, precision?: number): number {
@@ -17,7 +17,7 @@ export class DistanceVincenty implements DistanceAdapterInterface {
         longitude: pointB.getPosition().longitudeDegrees,
         latitude: pointB.getPosition().latitudeDegrees,
       };
-      distance += GeoLib.getDistance(pointAPositionAsDecimal, pointBPositionAsDecimal, accuracyInMeters, precision);
+      distance += getDistance(pointAPositionAsDecimal, pointBPositionAsDecimal, accuracyInMeters, precision);
       pointA = pointB;
     }
     return distance;
