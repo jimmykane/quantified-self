@@ -47,7 +47,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   ngOnChanges(simpleChanges): void {
     // If the only change was to unselect all then clean up and return
-    if (simpleChanges.selectedActivities && !this.selectedActivities.length) {
+    if ((simpleChanges.event || simpleChanges.selectedActivities) && !this.selectedActivities.length) {
       this.destroyChart();
       this.chartData = null;
       return;
