@@ -1,9 +1,9 @@
 import {IDClassInterface} from './id.class.interface';
-import * as UUID from 'uuid/v4.js';
+import { v4 as uuid } from 'uuid';
 
 export abstract class IDClass implements IDClassInterface {
 
-  private id = UUID();
+  private id = uuid();
 
   getID(): string {
     return this.id;
