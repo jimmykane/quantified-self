@@ -1,6 +1,6 @@
 import {IBIData} from './data.ibi';
-import * as CreateMedianFilter from 'moving-median';
-import * as LowPassFilter from 'lowpassf';
+import CreateMedianFilter from 'moving-median';
+import LowPassFilter from 'lowpassf';
 
 /**
  * Collection of filters parsers and converters for IBI (R-R) data
