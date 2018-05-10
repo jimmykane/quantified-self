@@ -1,7 +1,7 @@
-import {ActivityInterface} from 'app/entities/activities/activity.interface';
 import {PointInterface} from '../points/point.interface';
 import {SerializableClassInterface} from '../serializable/serializable.class.interface';
 import {StatsClassInterface} from '../stats/stats.class.interface';
+import {ActivityInterface} from '../activities/activity.interface';
 
 export interface EventInterface extends StatsClassInterface, SerializableClassInterface {
 

@@ -37,7 +37,6 @@ import {DataDuration} from '../../data/data.duration';
 import {DataPause} from '../../data/data.pause';
 import {DataAscent} from '../../data/data.ascent';
 import {DataDescent} from '../../data/data.descent';
-import {P} from "@angular/core/src/render3";
 
 export class EventUtilities {
 
