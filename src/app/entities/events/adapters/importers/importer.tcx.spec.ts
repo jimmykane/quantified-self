@@ -1,7 +1,0 @@
-describe('EventImporterTCX', () => {
-
-  beforeEach(() => {
-
-  });
-
-});
