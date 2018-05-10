@@ -2,8 +2,8 @@ import {Component, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {ActivatedRoute, Params} from '@angular/router';
 import {List} from 'immutable';
-import {EventInterface} from '../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 
 @Component({

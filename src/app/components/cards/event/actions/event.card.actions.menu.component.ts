@@ -1,10 +1,10 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input} from '@angular/core';
 import {FileService} from '../../../../services/app.file.service';
 import {EventService} from '../../../../services/app.event.service';
-import {EventExporterTCX} from '../../../../entities/events/adapters/exporters/exporter.tcx';
-import {EventInterface} from '../../../../entities/events/event.interface';
 import {Router} from '@angular/router';
-import {EventUtilities} from '../../../../entities/events/utilities/event.utilities';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
 
 @Component({
   selector: 'app-event-card-actions-menu',

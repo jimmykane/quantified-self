@@ -3,11 +3,11 @@ import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {UPLOAD_STATUS} from './status';
 import {MatSnackBar} from '@angular/material';
-import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/suunto/importer.suunto.json';
-import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
-import {EventInterface} from '../../entities/events/event.interface';
-import {EventImporterFIT} from '../../entities/events/adapters/importers/fit/importer.fit';
 import * as Raven from 'raven-js';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
+import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
+import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/importer.tcx';
 
 @Component({
   selector: 'app-upload',

@@ -2,14 +2,14 @@ import {Injectable} from '@angular/core';
 import {BehaviorSubject} from 'rxjs/BehaviorSubject';
 import {List} from 'immutable';
 import {Observable} from 'rxjs/Observable';
-import {EventInterface} from '../entities/events/event.interface';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
 import 'rxjs/add/observable/forkJoin';
-import {GeoLocationInfo} from '../entities/geo-location-info/geo-location-info';
-import {Weather} from '../entities/weather/app.weather';
-import {EventImporterJSON} from '../entities/events/adapters/importers/importer.json';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/importer.json';
+import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
+import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 
 @Injectable()
 export class EventService {

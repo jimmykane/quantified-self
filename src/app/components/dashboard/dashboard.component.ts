@@ -6,8 +6,8 @@ import {EventService} from '../../services/app.event.service';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {List} from 'immutable';
 import {Subscription} from 'rxjs/Subscription';
-import {EventInterface} from '../../entities/events/event.interface';
-import {EventUtilities} from '../../entities/events/utilities/event.utilities';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 
 @Component({
   selector: 'app-dashboard',

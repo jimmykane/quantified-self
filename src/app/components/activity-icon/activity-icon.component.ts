@@ -1,5 +1,5 @@
 import {Component, Input} from '@angular/core';
-import {ActivityInterface} from '../../entities/activities/activity.interface';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 
 @Component({
   selector: 'app-activity-icon',
