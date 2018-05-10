@@ -1,5 +1,5 @@
 Quantified Self
---------------- 
+==============
 
 Master
 
@@ -14,13 +14,21 @@ Develop
 [![Build Status](https://travis-ci.org/jimmykane/quantified-self.svg?branch=develop)](https://travis-ci.org/jimmykane/quantified-self)
 [![codecov](https://codecov.io/gh/jimmykane/quantified-self/branch/develop/graph/badge.svg)](https://codecov.io/gh/jimmykane/quantified-self)
 
+About
+-----
+
+Quantified self is a tool for importing viewing and comparing tcx, fit and json files from activity trackers
+and smart-watches such as Garmin, Suunto, Polar etc
+
+You can see it in action at [Quantified-Self.io](http://www.quantified-self.io/)
+
 Donations:
+---------
 
+**Bitcoin**: 17rixc85L5tXsheNyAwrQpFWZgQJP84dLQ
 
-Bitcoin: 17rixc85L5tXsheNyAwrQpFWZgQJP84dLQ
+**Etherium**: 0xAfa27f022058aB235F8CB0BEE7042427BeCa8394
 
-Etherium: 0xAfa27f022058aB235F8CB0BEE7042427BeCa8394
-
-Litecoin: LNZGY8R2oDHCuMJvdxif5J76j52JKEadqb
+**Litecoin**: LNZGY8R2oDHCuMJvdxif5J76j52JKEadqb
     
 Paypal: [Paypal](paypal.me/DKanellopoulos)
