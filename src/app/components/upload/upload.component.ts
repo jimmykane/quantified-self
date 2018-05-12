@@ -49,13 +49,13 @@ export class UploadComponent {
           } else if (extension === 'tcx') {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
           } else if (extension === 'fit') {
-            newEvent = EventImporterFIT.getFromArrayBuffer(fileReader.result);
+            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
           newEvent.name = activityName;
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
           Raven.captureException(error);
-          console.error(`Could not load event from file  ${file.name}`, error); // Should check with Sentry
+          console.error(`Could not load event from file  ${file.name}`, error);
           resolve(); // no-op here!
           return;
         }
