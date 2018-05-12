@@ -22,7 +22,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public selectedTabIndex;
   public selectedActivities: ActivityInterface[];
-  public show: boolean;
+  public eventHasPointsWithPosition: boolean;
 
   private parametersSubscription: Subscription;
 
@@ -40,6 +40,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.selectedTabIndex = +params['tabIndex'];
       this.event = this.eventService.findEvent(params['eventID']);
+      this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length
     });
   }
 

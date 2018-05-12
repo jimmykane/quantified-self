@@ -10,6 +10,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/importer.json';
 import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
+import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 
 @Injectable()
 export class EventService {
@@ -75,10 +76,10 @@ export class EventService {
       // Create their promises
       const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
         activityPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(),
+          <DataPositionInterface>event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(),
         ));
         activityPromises.push(this.weatherService.getWeather(
-          event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate,
+          <DataPositionInterface>event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate,
         ));
         return activityPromises;
       }, []);

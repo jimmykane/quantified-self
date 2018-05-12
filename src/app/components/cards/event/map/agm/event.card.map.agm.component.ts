@@ -9,6 +9,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
+import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -99,16 +100,25 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       };
     }
     const mostEast = pointsWithPosition.reduce((acc: PointInterface, point: PointInterface) => {
-      return (acc.getPosition().longitudeDegrees < point.getPosition().longitudeDegrees) ? point : acc;
+      const pointPosition = <DataPositionInterface>point.getPosition();
+      const accPosition = <DataPositionInterface>acc.getPosition();
+      return (accPosition.longitudeDegrees < pointPosition.longitudeDegrees) ? point : acc;
     });
     const mostWest = pointsWithPosition.reduce((acc: any, point: PointInterface) => {
-      return (acc.getPosition().longitudeDegrees > point.getPosition().longitudeDegrees) ? point : acc;
+      const pointPosition = <DataPositionInterface>point.getPosition();
+      const accPosition = <DataPositionInterface>acc.getPosition();
+
+      return (accPosition.longitudeDegrees > pointPosition.longitudeDegrees) ? point : acc;
     });
     const mostNorth = pointsWithPosition.reduce((acc: any, point: PointInterface) => {
-      return (acc.getPosition().latitudeDegrees < point.getPosition().latitudeDegrees) ? point : acc;
+      const pointPosition = <DataPositionInterface>point.getPosition();
+      const accPosition = <DataPositionInterface>acc.getPosition();
+      return (accPosition.latitudeDegrees < pointPosition.latitudeDegrees) ? point : acc;
     });
     const mostSouth = pointsWithPosition.reduce((acc: any, point: PointInterface) => {
-      return (acc.getPosition().latitudeDegrees > point.getPosition().latitudeDegrees) ? point : acc;
+      const pointPosition = <DataPositionInterface>point.getPosition();
+      const accPosition = <DataPositionInterface>acc.getPosition();
+      return (accPosition.latitudeDegrees > pointPosition.latitudeDegrees) ? point : acc;
     });
     return <LatLngBoundsLiteral>{
       east: mostEast.getPosition().longitudeDegrees,
