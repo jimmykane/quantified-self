@@ -43,7 +43,7 @@
     "material-design-icons": "^3.0.1",
     "ng2-logger": "^2.0.35",
     "ngx-disqus": "^2.3.7",
-    "quantified-self-lib": "github:jimmykane/quantified-self-lib#feature/typescript-strict",
+    "quantified-self-lib": "github:jimmykane/quantified-self-lib#develop",
     "raven-js": "^3.25.1",
     "roboto-fontface": "^0.9.0",
     "rxjs": "^6.1.0",
