@@ -39,7 +39,6 @@ after_success:
 
 deploy:
     provider: gae
-    # Skip cleanup so api_key.py and vendored dependencies are still there
     skip_cleanup: true
     keyfile: client-secret.json
     project: quantified-self-173712
