@@ -7,10 +7,10 @@ import {GeoLocationInfoService} from './geo-location/app.geo-location-info.servi
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
 import 'rxjs/add/observable/forkJoin';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/importer.json';
 import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
+import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 
 @Injectable()
 export class EventService {

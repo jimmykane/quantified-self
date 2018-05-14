@@ -7,7 +7,7 @@ import * as Raven from 'raven-js';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
-import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/importer.tcx';
+import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
 
 @Component({
   selector: 'app-upload',
