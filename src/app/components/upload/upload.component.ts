@@ -8,6 +8,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
 import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
+import {EventImporterGPX} from '../../../../../quantified-self-lib/src/events/adapters/importers/gpx/importer.gpx';
 
 @Component({
   selector: 'app-upload',
@@ -48,6 +49,8 @@ export class UploadComponent {
             newEvent = EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
           } else if (extension === 'tcx') {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
+          } else if (extension === 'gpx') {
+            newEvent = EventImporterGPX.getFromString(fileReader.result);
           } else if (extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
