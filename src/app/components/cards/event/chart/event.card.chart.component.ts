@@ -15,6 +15,7 @@ import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {DataNumber} from 'quantified-self-lib/lib/data/data.number';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
+import {DataAltitude} from '../../../../../../../quantified-self-lib/src/data/data.altitude';
 
 
 @Component({
@@ -46,6 +47,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(simpleChanges): void {
+    debugger;
     // If the only change was to unselect all then clean up and return
     if ((simpleChanges.event || simpleChanges.selectedActivities) && !this.selectedActivities.length) {
       this.destroyChart();
@@ -138,7 +140,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.selectedActivities.forEach((activity: ActivityInterface, index) => {
       activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
         point.getData().forEach((pointData: DataInterface, key: string) => {
-          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1 || !(pointData instanceof DataNumber)) {
+          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
             return;
           }
 
