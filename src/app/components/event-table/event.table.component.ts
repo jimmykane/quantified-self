@@ -8,16 +8,16 @@ import {
   OnInit,
   ViewChild
 } from '@angular/core';
-import {EventInterface} from '../../entities/events/event.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/material';
-import {EventUtilities} from '../../entities/events/utilities/event.utilities';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
-import {GeoLocationInfo} from '../../entities/geo-location-info/geo-location-info';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
 
 
 @Component({

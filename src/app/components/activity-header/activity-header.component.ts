@@ -1,7 +1,7 @@
 import {Component, Input} from '@angular/core';
-import {ActivityInterface} from '../../entities/activities/activity.interface';
 import {AppEventColorService} from '../../services/color/app.event.color.service';
-import {EventInterface} from '../../entities/events/event.interface';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 
 @Component({
   selector: 'app-activity-header',

@@ -1,14 +1,14 @@
 import {
   ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
-import {EventInterface} from '../../../../entities/events/event.interface';
-import {ActivityInterface} from '../../../../entities/activities/activity.interface';
-import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
-import {Point} from '../../../../entities/points/point';
-import {PointInterface} from '../../../../entities/points/point.interface';
 import {MatSnackBar} from '@angular/material';
 import {EventService} from '../../../../services/app.event.service';
-import {IBIData} from '../../../../entities/data/ibi/data.ibi';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
+import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
+import {IBIData} from 'quantified-self-lib/lib/data/ibi/data.ibi';
+import {Point} from 'quantified-self-lib/lib/points/point';
 
 @Component({
   selector: 'app-event-card-tools',

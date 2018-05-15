@@ -3,11 +3,12 @@ import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {UPLOAD_STATUS} from './status';
 import {MatSnackBar} from '@angular/material';
-import {EventImporterSuuntoJSON} from '../../entities/events/adapters/importers/suunto/importer.suunto.json';
-import {EventImporterTCX} from '../../entities/events/adapters/importers/importer.tcx';
-import {EventInterface} from '../../entities/events/event.interface';
-import {EventImporterFIT} from '../../entities/events/adapters/importers/fit/importer.fit';
 import * as Raven from 'raven-js';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
+import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
+import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
+import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
 
 @Component({
   selector: 'app-upload',
@@ -34,11 +35,11 @@ export class UploadComponent {
       const fileReader = new FileReader;
       const {name} = file,
         nameParts = name.split('.'),
-        extension = nameParts.pop(),
+        extension = nameParts.pop().toLowerCase(),
         activityName = nameParts.join('.'),
         metaData = {
           name: activityName,
-          status: UPLOAD_STATUS.PROCESSING
+          status: UPLOAD_STATUS.PROCESSING,
         };
       this.activitiesMetaData.push(metaData);
       fileReader.onload = async () => {
@@ -48,6 +49,8 @@ export class UploadComponent {
             newEvent = EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
           } else if (extension === 'tcx') {
             newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
+          } else if (extension === 'gpx') {
+            newEvent = EventImporterGPX.getFromString(fileReader.result);
           } else if (extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
@@ -55,7 +58,7 @@ export class UploadComponent {
         } catch (error) {
           metaData.status = UPLOAD_STATUS.ERROR;
           Raven.captureException(error);
-          console.error('Could not load event from file' + file.name, error); // Should check with Sentry
+          console.error(`Could not load event from file  ${file.name}`, error);
           resolve(); // no-op here!
           return;
         }

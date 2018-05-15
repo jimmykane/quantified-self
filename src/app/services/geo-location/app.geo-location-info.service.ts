@@ -1,10 +1,9 @@
 import {Injectable} from '@angular/core';
 import {MapsAPILoader} from '@agm/core';
-import {GeoLocationInfo} from '../../entities/geo-location-info/geo-location-info';
-import {Observable} from 'rxjs/Observable';
 import 'rxjs/add/observable/fromPromise';
 import 'rxjs/operators/first';
-import {DataPositionInterface} from '../../entities/data/data.position.interface';
+import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
+import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 
 declare const google: any;
 
