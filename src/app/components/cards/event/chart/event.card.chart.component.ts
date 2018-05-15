@@ -12,11 +12,8 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
-import {DataNumber} from 'quantified-self-lib/lib/data/data.number';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
-import {DataAltitude} from '../../../../../../../quantified-self-lib/src/data/data.altitude';
-
 
 @Component({
   selector: 'app-event-card-chart',

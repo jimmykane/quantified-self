@@ -8,7 +8,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
 import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
-import {EventImporterGPX} from '../../../../../quantified-self-lib/src/events/adapters/importers/gpx/importer.gpx';
+import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
 
 @Component({
   selector: 'app-upload',
