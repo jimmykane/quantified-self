@@ -2,20 +2,18 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
-import {DataInterface} from '../../../../entities/data/data.interface';
-import {DataLatitudeDegrees} from '../../../../entities/data/data.latitude-degrees';
-import {DataLongitudeDegrees} from '../../../../entities/data/data.longitude-degrees';
-import {EventInterface} from '../../../../entities/events/event.interface';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
-import {DataHeartRate} from '../../../../entities/data/data.heart-rate';
 import {Log} from 'ng2-logger/client'
-import {ActivityInterface} from '../../../../entities/activities/activity.interface';
-import {PointInterface} from '../../../../entities/points/point.interface';
-import {DataNumber} from '../../../../entities/data/data.number';
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 import {ChartDataSettingsInterface} from './event.card.chart.data.interface';
 import * as Raven from 'raven-js';
-
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
+import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
+import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -138,7 +136,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.selectedActivities.forEach((activity: ActivityInterface, index) => {
       activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
         point.getData().forEach((pointData: DataInterface, key: string) => {
-          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1 || !(pointData instanceof DataNumber)) {
+          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
             return;
           }
 

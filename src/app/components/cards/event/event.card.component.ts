@@ -4,12 +4,12 @@ import {
   OnDestroy,
   OnInit,
 } from '@angular/core';
-import {EventInterface} from '../../../entities/events/event.interface';
 import {Subscription} from 'rxjs/Subscription';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
-import {ActivityInterface} from '../../../entities/activities/activity.interface';
 import {EventService} from '../../../services/app.event.service';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 
 @Component({
@@ -22,7 +22,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public selectedTabIndex;
   public selectedActivities: ActivityInterface[];
-  public show: boolean;
+  public eventHasPointsWithPosition: boolean;
 
   private parametersSubscription: Subscription;
 
@@ -40,6 +40,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.selectedTabIndex = +params['tabIndex'];
       this.event = this.eventService.findEvent(params['eventID']);
+      this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length
     });
   }
 

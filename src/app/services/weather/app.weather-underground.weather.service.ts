@@ -1,11 +1,11 @@
 import {Injectable} from '@angular/core';
-import {WeatherItem} from '../../entities/weather/app.weather.item';
-import {Weather} from '../../entities/weather/app.weather';
 import {WeatherServiceInterface} from 'app/services/weather/app.weather.service.interface';
 import {map} from 'rxjs/operators'
 import {reject} from 'q';
-import {DataPositionInterface} from '../../entities/data/data.position.interface';
 import {HttpClient} from '@angular/common/http';
+import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
+import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
+import {WeatherItem} from 'quantified-self-lib/lib/weather/app.weather.item';
 
 @Injectable()
 export class WeatherUndergroundWeatherService implements WeatherServiceInterface {

@@ -1,11 +1,11 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {EventInterface} from '../../../../entities/events/event.interface';
 import {MatTableDataSource} from '@angular/material';
-import {DataHeartRateAvg} from '../../../../entities/data/data.heart-rate-avg';
-import {DataAscent} from '../../../../entities/data/data.ascent';
-import {DataDescent} from '../../../../entities/data/data.descent';
-import {DataDistance} from '../../../../entities/data/data.distance';
-import {ActivityInterface} from '../../../../entities/activities/activity.interface';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
+import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 
 @Component({
   selector: 'app-event-card-laps',

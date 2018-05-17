@@ -1,8 +1,8 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {EventInterface} from '../../../../entities/events/event.interface';
 import {MatTableDataSource} from '@angular/material';
-import {DataInterface} from '../../../../entities/data/data.interface';
-import {ActivityInterface} from '../../../../entities/activities/activity.interface';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 
 @Component({
   selector: 'app-event-card-stats',
@@ -36,10 +36,11 @@ export class EventCardStatsComponent implements OnChanges {
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
         this.selectedActivites.reduce((rowObj, activity, index) => {
+          const activityStat = activity.getStat(stat.getClassName());
           rowObj['#' + index + ' ' + activity.creator.name] =
-            (activity.getStat(stat.getClassName()) ? activity.getStat(stat.getClassName()).getDisplayValue() : '') +
+            (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
-            (activity.getStat(stat.getClassName()) ? activity.getStat(stat.getClassName()).getDisplayUnit() : '');
+            (activityStat ? activityStat.getDisplayUnit() : '');
           return rowObj;
         }, {Name: stat.getType()}),
       );

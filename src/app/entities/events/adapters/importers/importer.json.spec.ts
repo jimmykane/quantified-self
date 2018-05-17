@@ -1,7 +1,0 @@
-describe('EventImporterJSON', () => {
-
-  beforeEach(() => {
-
-  });
-
-});

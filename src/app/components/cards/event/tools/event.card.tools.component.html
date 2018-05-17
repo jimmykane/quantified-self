@@ -45,7 +45,7 @@
     <mat-checkbox [(ngModel)]="movingMedianChecked">Apply moving median filter</mat-checkbox>
     <mat-slider
       [disabled]="!movingMedianChecked"
-      [max]="100"
+      [max]="20"
       [min]="0"
       [step]="1"
       [thumbLabel]="true"
@@ -60,7 +60,7 @@
     <mat-checkbox [(ngModel)]="movingWeightAverageChecked">Apply moving weight average filter</mat-checkbox>
     <mat-slider
       [disabled]="!movingWeightAverageChecked"
-      [max]="100"
+      [max]="20"
       [min]="0"
       [step]="1"
       [thumbLabel]="true"
