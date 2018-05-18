@@ -30,7 +30,7 @@ before_script:
 
 script:
   - ng test --watch=false --code-coverage --progress
-  - ng build
+  - npm run build-production
 
 after_success:
   - codecov
