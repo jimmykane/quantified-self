@@ -20,7 +20,7 @@ About
 Quantified Self is a tool for importing viewing and comparing tcx, fit and json files from activity trackers
 and smart-watches such as Garmin, Suunto, Polar etc
 
-You can see it in action at [Quantified-Self.io](http://www.quantified-self.io/)
+You can see it in action at [quantified-self.io](https://www.quantified-self.io/)
 
 Donations:
 ---------
