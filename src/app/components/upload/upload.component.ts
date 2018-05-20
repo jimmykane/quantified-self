@@ -55,18 +55,18 @@ export class UploadComponent {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }
           newEvent.name = activityName;
-        } catch (error) {
+        } catch (e) {
           metaData.status = UPLOAD_STATUS.ERROR;
-          Raven.captureException(error);
-          console.error(`Could not load event from file  ${file.name}`, error);
+          Raven.captureException(e);
+          console.error(`Could not load event from file  ${file.name}`, e);
           resolve(); // no-op here!
           return;
         }
         try {
           await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
-        } catch (error) {
+        } catch (e) {
           // Log to Sentry
-          Raven.captureException(error);
+          Raven.captureException(e);
         }
         this.eventService.addEvent(newEvent);
         metaData.status = UPLOAD_STATUS.PROCESSED;
