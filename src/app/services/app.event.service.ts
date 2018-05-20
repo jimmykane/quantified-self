@@ -11,6 +11,7 @@ import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-loc
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
+import * as Raven from 'raven-js';
 
 @Injectable()
 export class EventService {
@@ -27,7 +28,13 @@ export class EventService {
   private getInitialData() {
     for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
       this.eventLocalStorageService.getItem(localStorageKey).then((localStorageData) => {
-        this.events.next(this.events.getValue().push(EventImporterJSON.getFromJSONString(localStorageData)));
+        try {
+          this.events.next(this.events.getValue().push(EventImporterJSON.getFromJSONString(localStorageData)));
+        } catch (e) {
+          Raven.captureException(e);
+          console.error(e);
+          this.eventLocalStorageService.removeItem(localStorageKey).then(() => console.log(`Removed event with id: ${localStorageKey}`));
+        }
       });
     }
   }
