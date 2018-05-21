@@ -182,8 +182,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getGraph(activity: ActivityInterface, data: DataInterface) {
-
-    const graph:any = {
+    const graph = {
       id: data.getType() + activity.getID(),
       activity: activity,
       dataType: data.getType(),
@@ -200,9 +199,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       type: 'line',
       hidden: data.getType() !== DataHeartRate.type,
     };
-    if (data.getType() === DataPace.type) {
-      graph.valueAxis = graph.id;
-    }
     return graph;
   }
 
@@ -271,14 +267,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       //   enabled: false
       // },
       valueAxes: graphs.reduce((array, graph) => {
-        const valueAxis: any = {};
-        if (graph.dataType === DataPace.type){
-          valueAxis.id = graph.id;
-          valueAxis.reversed = true;
-          valueAxis.fillAlpha = 0;
-          valueAxis.duration = 'ss';
-        }
-        array.push(valueAxis);
+        // const valueAxis: any = {};
+        // if (graph.dataType === DataPace.type) {
+        //   valueAxis.id = graph.id;
+        //   // valueAxis.reversed = true;
+        //   // valueAxis.fillAlpha = 0;
+        //   // valueAxis.duration = 'ss';
+        // }
+        // array.push(valueAxis);
         return array;
       }, []),
       startDuration: 0.2,
