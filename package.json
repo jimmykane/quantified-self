@@ -1,7 +1,7 @@
 {
-  "name": "track-tools",
-  "version": "0.9.9",
-  "license": "MIT",
+  "name": "quantified-self",
+  "version": "1.0.0-pre1",
+  "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
