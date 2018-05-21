@@ -30,11 +30,11 @@ export class LocalStorageService implements StorageServiceInterface {
           (performance.now() - t0) / 1000 + ' seconds',
         );
         resolve(decrypted);
-      } catch (Error) {
+      } catch (e) {
         // If not able to decode remove from storage
         console.error('Could not decode entry from local storage ' + key);
         localStorage.removeItem(key);
-        reject(Error);
+        reject(e);
       }
     });
   }

@@ -14,6 +14,7 @@ import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
+import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -89,12 +90,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     }
 
     if (!this.chart.events.dataUpdated.length) {
-      // this.chart.addListener('dataUpdated', (event) => {
-      //   event.chart.valueAxes.forEach((valueAxis) => {
-      //     valueAxis.guides = this.getAverageGuide();
-      //   });
-      //   event.chart.validateNow();
-      // });
+      this.chart.addListener('dataUpdated', (event) => {
+        event.chart.valueAxes.forEach((valueAxis) => {
+          // valueAxis.guides = this.getAverageGuide();
+        });
+        // event.chart.validateNow();
+      });
       this.logger.d('DataUpdated')
 
     }
@@ -153,7 +154,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             existingDateData = new Map<string, number>();
             chartData.dataByDateTime.set(point.getDate().getTime(), existingDateData);
           }
-          existingDateData.set(key + activity.getID(), pointData.getDisplayValue());
+          if (pointData.getType() === DataPace.type) {
+            existingDateData.set(key + activity.getID(), Number(pointData.getValue()).toFixed(0));
+          } else {
+            existingDateData.set(key + activity.getID(), pointData.getDisplayValue());
+          }
         });
       });
     });
@@ -177,10 +182,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getGraph(activity: ActivityInterface, data: DataInterface) {
-    return {
+    const graph = {
       id: data.getType() + activity.getID(),
       activity: activity,
-      valueAxis: data.getType() + activity.getID(),
+      dataType: data.getType(),
       lineColor: data.getType() !== DataHeartRate.type ? false : this.eventColorService.getActivityColor(this.event, activity),
       bulletBorderThickness: 3,
       hideBulletsCount: 1,
@@ -193,21 +198,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       useLineColorForBulletBorder: true,
       type: 'line',
       hidden: data.getType() !== DataHeartRate.type,
-    }
-  }
-
-  private getAverageGuide(graph) {
-    return {
-      value: 120,
-      // toValue: 120,
-      lineAlpha: 0.5,
-      lineThickness: 0.5,
-      lineColor: '#000000',
-      label: 'Z1',
-      position: 'right',
-      inside: true,
-      boldLabel: true,
     };
+    return graph;
   }
 
   private getScrollbarForGraph(graph) {
@@ -234,6 +226,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getAmChartOptions(chartData: ChartDataSettingsInterface) {
+    // Get and short, and if none is visible then show the first one
     const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
       graphArray.push(category.graph);
       return graphArray;
@@ -250,6 +243,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       theme: 'light',
       dataProvider: chartData.dataProvider,
       autoMarginOffset: 0,
+      parseDates: true,
       // marginRight: 100,
       // autoMargins: true,
       graphs: graphs,
@@ -259,9 +253,17 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // responsive: {
       //   enabled: false
       // },
-      // valueAxes: [{
-      //   gridThickness: 0.0,
-      // }],
+      valueAxes: graphs.reduce((array, graph) => {
+        // const valueAxis: any = {};
+        // if (graph.dataType === DataPace.type) {
+        //   valueAxis.id = graph.id;
+        //   // valueAxis.reversed = true;
+        //   // valueAxis.fillAlpha = 0;
+        //   // valueAxis.duration = 'ss';
+        // }
+        // array.push(valueAxis);
+        return array;
+      }, []),
       startDuration: 0.2,
       startEffect: 'easeOutSine',
       sequencedAnimation: false,
