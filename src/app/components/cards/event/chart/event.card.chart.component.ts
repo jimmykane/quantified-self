@@ -202,20 +202,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return graph;
   }
 
-  private getAverageGuide(graph) {
-    return {
-      value: 120,
-      // toValue: 120,
-      lineAlpha: 0.5,
-      lineThickness: 0.5,
-      lineColor: '#000000',
-      label: 'Z1',
-      position: 'right',
-      inside: true,
-      boldLabel: true,
-    };
-  }
-
   private getScrollbarForGraph(graph) {
     return {
       hideResizeGrips: true,
@@ -240,6 +226,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getAmChartOptions(chartData: ChartDataSettingsInterface) {
+    // Get and short, and if none is visible then show the first one
     const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
       graphArray.push(category.graph);
       return graphArray;
