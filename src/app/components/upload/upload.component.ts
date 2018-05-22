@@ -65,7 +65,7 @@ export class UploadComponent {
         try {
           await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
         } catch (e) {
-          // Log to Sentry
+          console.error(e);
           Raven.captureException(e);
         }
         this.eventService.addEvent(newEvent);
