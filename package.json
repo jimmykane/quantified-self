@@ -5,7 +5,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build --verbose --sourcemaps",
+    "build": "ng build --verbose",
     "build-production": "ng build --verbose --prod",
     "deploy": "gcloud app deploy --quiet --promote --stop-previous-version --version=v1",
     "build-and-deploy-prod": "npm run build-production && npm run deploy",
