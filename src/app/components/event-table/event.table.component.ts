@@ -1,12 +1,12 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
-  Component,
+  Component, HostListener,
   Input,
   OnChanges,
   OnDestroy,
   OnInit,
-  ViewChild
+  ViewChild,
 } from '@angular/core';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
@@ -64,7 +64,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
         Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
         Duration: event.getDuration().getDisplayValue(),
-        Location: this.getLocationString(event.getFirstActivity().geoLocationInfo),
+        // Location: this.getLocationString(event.getFirstActivity().geoLocationInfo),
         Device:
           this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
         Actions:
