@@ -1,50 +1,28 @@
-<div style="padding: 2vmin;">
-  <mat-card>
-    <mat-card-header>
-      <div matCardAvatar>
-        <mat-icon>explore</mat-icon>
-      </div>
-      <mat-card-title><h1>Welcome to Quantified Self v{{ appVersion }}</h1></mat-card-title>
-      <mat-card-subtitle>an OpenSource project under development</mat-card-subtitle>
-      <mat-card-subtitle>Hosted on Google App Engine, made with Angular</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <p>Quantified Self is a tool for importing viewing and comparing tcx, fit and json files from activity trackers
-        and smart-watches such as Garmin, Suunto, Polar etc.</p>
+<mat-card>
+  <mat-card-header>
+    <div matCardAvatar>
+      <mat-icon>explore</mat-icon>
+    </div>
+    <mat-card-title><h1>Welcome to Quantified Self v{{ appVersion }}</h1></mat-card-title>
+    <mat-card-subtitle>an OpenSource project under development</mat-card-subtitle>
+    <mat-card-subtitle>Hosted on Google App Engine, made with Angular</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <p>Quantified Self is a tool for importing viewing and comparing tcx, fit and json files from activity trackers
+      and smart-watches such as Garmin, Suunto, Polar etc.</p>
 
-      <p>Currently the support is limit to the main formats: GPX, TCX, FIT and JSON*</p>
+    <p>Currently the support is limit to the main formats: GPX, TCX, FIT and JSON*</p>
 
-      <p class="mat-small">*JSON is for specific services while GPX, TCX, FIT should be compatible with the move common
-        services, such as Strava, Movescount, Garmin, Polar and any other service that supprots the above exports.</p>
-
-      <b><a target="_blank" href="https://github.com/jimmykane/quantified-self">GitHub</a></b>
-    </mat-card-content>
-  </mat-card>
-
-  <mat-card>
-    <mat-card-header>
-      <mat-card-title><h1>Donations to boost this up </h1></mat-card-title>
-      <mat-card-subtitle>... I don't have a job at the moment</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <span class="mat-body-2">Bitcoin </span>17rixc85L5tXsheNyAwrQpFWZgQJP84dLQ <br/>
-      <span class="mat-body-2">Etherium </span>0xAfa27f022058aB235F8CB0BEE7042427BeCa8394 <br/>
-      <span class="mat-body-2">Litecoin </span>LNZGY8R2oDHCuMJvdxif5J76j52JKEadqb <br/>
-      <span class="mat-body-2">PayPal </span><a href="//paypal.me/DKanellopoulos" target="_blank">paypal.me/DKanellopoulos</a><br/>
-    </mat-card-content>
-  </mat-card>
-
-  <mat-card>
-    <mat-card-header>
-      <mat-card-title><h1>Feedback and comments</h1></mat-card-title>
-      <mat-card-subtitle>
-        ...please be constructive
-      </mat-card-subtitle>
-
-    </mat-card-header>
-    <mat-card-content>
-      <disqus [identifier]="'/about'"></disqus>
-    </mat-card-content>
-  </mat-card>
-
-</div>
+    <p class="mat-small">*JSON is for specific services while GPX, TCX, FIT should be compatible with the move common
+      services, such as Strava, Movescount, Garmin, Polar and any other service that supprots the above exports.</p>
+    <span class="mat-body-2">Project on GitHub </span><a target="_blank" href="https://github.com/jimmykane/quantified-self">GitHub</a><br/>
+    <span class="mat-body-2">Bitcoin </span>17rixc85L5tXsheNyAwrQpFWZgQJP84dLQ <br/>
+    <span class="mat-body-2">Etherium </span>0xAfa27f022058aB235F8CB0BEE7042427BeCa8394 <br/>
+    <span class="mat-body-2">Litecoin </span>LNZGY8R2oDHCuMJvdxif5J76j52JKEadqb <br/>
+    <span class="mat-body-2">PayPal </span><a href="//paypal.me/DKanellopoulos"
+                                              target="_blank">paypal.me/DKanellopoulos</a><br/>
+  </mat-card-content>
+  <mat-card-content>
+    <disqus [identifier]="'/about'"></disqus>
+  </mat-card-content>
+</mat-card>
