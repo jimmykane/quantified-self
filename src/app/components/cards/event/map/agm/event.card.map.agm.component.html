@@ -4,7 +4,8 @@
   <agm-map
     [fullscreenControl]="true"
     [mapTypeControl]="true"
-    [scaleControl]="true">
+    [scaleControl]="true"
+    [mapTypeControlOptions]="mapTypeControlOptions">
     <agm-polyline
       *ngFor="let data of mapData"
       [strokeColor]="eventColorService.getActivityColor(event, data.activity)"

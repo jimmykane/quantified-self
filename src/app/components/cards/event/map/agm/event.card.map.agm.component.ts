@@ -10,6 +10,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
+import {ControlPosition, MapTypeControlOptions, MapTypeId} from '@agm/core/services/google-maps-types';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -23,6 +24,11 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
+
+  public mapTypeControlOptions: MapTypeControlOptions = {
+    // mapTypeIds: [MapTypeId.TERRAIN],
+    position: ControlPosition.TOP_RIGHT,
+  };
 
 
   public mapData: {
@@ -57,6 +63,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       });
     }
   }
+
 
   private cacheNewData() {
     this.mapData = [];
