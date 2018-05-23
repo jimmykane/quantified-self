@@ -18,9 +18,15 @@
                       (change)="$event ? checkBoxClick(row) : null"
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
-        <span *ngIf="column !== 'Checkbox' && column !== 'Actions'">{{ row[column] }}</span>
-        <span *ngIf="column === 'Actions'"><app-event-card-actions-menu
-          [event]="row[column]"></app-event-card-actions-menu></span>
+        <span *ngIf="column === 'Actions'">
+          <app-event-card-actions-menu [event]="row[column]"></app-event-card-actions-menu>
+        </span>
+        <span *ngIf="column === 'Name'" matTooltip="{{ row[column] }}">
+          {{ row[column] | slice:0:10 }}
+        </span>
+        <span *ngIf="column !== 'Checkbox' && column !== 'Actions' && column !== 'Name'">
+          {{ row[column] }}
+        </span>
       </mat-cell>
     </ng-container>
     <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
