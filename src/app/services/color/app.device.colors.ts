@@ -12,6 +12,7 @@ export enum AppDeviceColors {
   'Suunto 8' = AppColors.Green,
   'Suunto 9' = AppColors.Green,
   'Suunto Ambit3 Sport' = AppColors.Orange,
+  'Suunto Ambit3 Run' = AppColors.Orange,
   'Suunto Ambit3 Peak' = AppColors.Orange,
   'Suunto Spartan Ultra' = AppColors.Blue,
   'Suunto 3 Fitness' = AppColors.Pink,
