@@ -5,7 +5,7 @@ import {
 import {EventService} from '../../services/app.event.service';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {List} from 'immutable';
-import {Subscription} from 'rxjs/Subscription';
+import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 @Component({

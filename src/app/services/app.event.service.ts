@@ -1,18 +1,15 @@
 import {Injectable} from '@angular/core';
-import {BehaviorSubject} from 'rxjs/BehaviorSubject';
 import {List} from 'immutable';
-import {Observable} from 'rxjs/Observable';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
-import 'rxjs/add/observable/forkJoin';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import * as Raven from 'raven-js';
-
+import { Observable, BehaviorSubject} from 'rxjs';
 @Injectable()
 export class EventService {
 

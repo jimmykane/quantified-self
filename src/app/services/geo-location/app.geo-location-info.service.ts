@@ -1,7 +1,5 @@
 import {Injectable} from '@angular/core';
 import {MapsAPILoader} from '@agm/core';
-import 'rxjs/add/observable/fromPromise';
-import 'rxjs/operators/first';
 import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 

@@ -5,7 +5,7 @@ import {
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatSidenav} from '@angular/material';
-import {Subscription} from 'rxjs/Subscription';
+import {Subscription} from 'rxjs';
 
 @Component({
   selector: 'app-root',
