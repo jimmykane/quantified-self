@@ -40,6 +40,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.selectedTabIndex = +params['tabIndex'];
       this.event = this.eventService.findEvent(params['eventID']);
+      if (!this.event) {
+        this.router.navigate(['/dashboard']);
+        return;
+      }
       this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length
     });
   }
