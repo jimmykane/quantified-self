@@ -6,6 +6,10 @@
     <mat-card-title><h1>Welcome to Quantified Self v{{ appVersion }}</h1></mat-card-title>
     <mat-card-subtitle>an OpenSource project under development</mat-card-subtitle>
     <mat-card-subtitle>Hosted on Google App Engine, made with Angular</mat-card-subtitle>
+    <mat-card-subtitle><span class="mat-body-2">Source: </span>
+      <a target="_blank"
+         href="https://github.com/jimmykane/quantified-self">GitHub</a><br/>
+    </mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
     <p>Quantified Self is a tool for importing viewing and comparing tcx, fit and json files from activity trackers
@@ -15,14 +19,35 @@
 
     <p class="mat-small">*JSON is for specific services while GPX, TCX, FIT should be compatible with the move common
       services, such as Strava, Movescount, Garmin, Polar and any other service that supprots the above exports.</p>
-    <span class="mat-body-2">Project on GitHub </span><a target="_blank" href="https://github.com/jimmykane/quantified-self">GitHub</a><br/>
+  </mat-card-content>
+  <mat-card-content>
+    <p>Quantified Self and
+      <a target="_blank" href="https://www.quantified-self.io">quantified-self.io</a>
+      do not process any information from visitors as the application runs locally and stores data only on the vistors
+      browser
+      and not on any other service or provider.
+    </p>
+    Quantified Self however, uses services such as Analytics and Sentry to report:
+    <ul>
+      <li>Anatomized non IP and non visitor identifiable data, for the purposes of visit counting.</li>
+      <li>Anatomized non IP and non visitor identifiable data, for the purposes of error alerts.</li>
+    </ul>
+    <p>
+      The above cases are application specific and contain NO USER Data but only following:
+    </p>
+    <ul>
+      <li>Browser version (application specific)</li>
+      <li>Country</li>
+      <li>Crash error message such as 'could not find laps' (application specific)</li>
+    </ul>
+  </mat-card-content>
+  <mat-card-content>
+    <p>For Donations</p>
     <span class="mat-body-2">Bitcoin </span>17rixc85L5tXsheNyAwrQpFWZgQJP84dLQ <br/>
     <span class="mat-body-2">Etherium </span>0xAfa27f022058aB235F8CB0BEE7042427BeCa8394 <br/>
     <span class="mat-body-2">Litecoin </span>LNZGY8R2oDHCuMJvdxif5J76j52JKEadqb <br/>
-    <span class="mat-body-2">PayPal </span><a href="//paypal.me/DKanellopoulos"
-                                              target="_blank">paypal.me/DKanellopoulos</a><br/>
-  </mat-card-content>
-  <mat-card-content>
-    <disqus [identifier]="'/about'"></disqus>
+    <span class="mat-body-2">PayPal </span>
+    <a href="//paypal.me/DKanellopoulos"
+       target="_blank">paypal.me/DKanellopoulos</a>
   </mat-card-content>
 </mat-card>
