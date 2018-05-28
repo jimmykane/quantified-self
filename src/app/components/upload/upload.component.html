@@ -3,7 +3,7 @@
           ondragenter="event.stopPropagation(); event.preventDefault();"
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
-  <button mat-button (click)="inputFile.click()">Click to open .gpx, .tcx, .fit or .json<span class="mat-small">*</span></button>
+  <button mat-button (click)="inputFile.click()">Click to open .gpx, .tcx, .fit or .json files<span class="mat-small">*</span></button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx" multiple [style.display]="'none'"
          (change)="getFiles($event)">
   or drag one or more files here...
