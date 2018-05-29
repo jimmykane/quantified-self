@@ -17,7 +17,7 @@ export class AppEventColorService {
       return activity === eventActivity
     });
     if (!AppDeviceColors[activity.creator.name]) {
-      return this.getColorByNumber(activityIndex + 10 /* + 10 = pretty */);
+      return this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
     }
 
     // Find the activities that have the same creator
