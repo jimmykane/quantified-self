@@ -80,7 +80,8 @@ export class RavenErrorHandler implements ErrorHandler {
     AppRoutingModule,
     HttpClientModule,
     AgmCoreModule.forRoot({
-      apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ'
+      apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ',
+      apiVersion: '3.31'
     }),
     MatExpansionModule,
     MatButtonModule,
