@@ -22,7 +22,28 @@ and smart-watches such as Garmin, Suunto, Polar etc
 
 You can see it in action at [quantified-self.io](https://www.quantified-self.io/)
 
-Donations:
+
+How to run this project
+-----------------------
+
+- Clone this project
+
+  `git clone https://github.com/jimmykane/quantified-self.git`
+  
+
+- Install the dependencies
+
+  `npm install`
+  
+- Start the Angular Server
+  
+  `npm start`
+  
+- Open it on your browser
+ 
+  `http://localhost:4200/`
+
+Donations
 ---------
 
 **Bitcoin**: 17rixc85L5tXsheNyAwrQpFWZgQJP84dLQ
