@@ -46,11 +46,11 @@ export class UploadComponent {
         let newEvent;
         try {
           if (extension === 'json') {
-            newEvent = EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
+            newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
           } else if (extension === 'tcx') {
-            newEvent = EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
+            newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
           } else if (extension === 'gpx') {
-            newEvent = EventImporterGPX.getFromString(fileReader.result);
+            newEvent = await EventImporterGPX.getFromString(fileReader.result);
           } else if (extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
           }

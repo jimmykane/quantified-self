@@ -9,7 +9,8 @@ import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import * as Raven from 'raven-js';
-import { Observable, BehaviorSubject} from 'rxjs';
+import {Observable, BehaviorSubject} from 'rxjs';
+
 @Injectable()
 export class EventService {
 
@@ -22,25 +23,25 @@ export class EventService {
     this.getInitialData();
   }
 
-  private getInitialData() {
+  private async getInitialData() {
     for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
-      this.eventLocalStorageService.getItem(localStorageKey).then((localStorageData) => {
-        try {
-          this.events.next(this.events.getValue().push(EventImporterJSON.getFromJSONString(localStorageData)));
-        } catch (e) {
-          Raven.captureException(e);
-          console.error(e);
-          this.eventLocalStorageService.removeItem(localStorageKey).then(() => console.log(`Removed event with id: ${localStorageKey}`));
-        }
-      });
+      const localStorageData = await this.eventLocalStorageService.getItem(localStorageKey);
+      const event = await EventImporterJSON.getFromJSONString(localStorageData);
+      try {
+        this.events.next(this.events.getValue().push(event));
+      } catch (e) {
+        Raven.captureException(e);
+        console.error(e);
+        this.eventLocalStorageService.removeItem(localStorageKey).then(() => console.log(`Removed event with id: ${localStorageKey}`));
+      }
     }
   }
 
-  public addEvent(event: EventInterface) {
+  public async addEvent(event: EventInterface) {
     // If the event is already in the list create a new one as of update
     if (this.findEvent(event.getID())) {
       this.deleteEvent(event); // Delete first
-      event = EventImporterJSON.getFromJSONString(JSON.stringify(event)); // Create new obj to trigger change detection
+      event = await EventImporterJSON.getFromJSONString(JSON.stringify(event)); // Create new obj to trigger change detection
     }
     // Set to local storage and to list
     this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));

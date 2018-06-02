@@ -22,10 +22,11 @@ export class EventCardActionsMenuComponent {
 
   downloadEventAsTCX(event: EventInterface) {
     EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
+      debugger;
       FileService.downloadFile(
         blob,
         event.name,
-        (new EventExporterTCX).getfileExtension()
+        EventExporterTCX.fileExtension
       );
     });
   }
