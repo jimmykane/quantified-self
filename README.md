@@ -22,6 +22,8 @@ and smart-watches such as Garmin, Suunto, Polar etc
 
 You can see it in action at [quantified-self.io](https://www.quantified-self.io/)
 
+This project uses [Quantified Self Lib](https://github.com/jimmykane/quantified-self-lib) under the hood for processing the gpx, tcx and fit files
+
 
 Contribution and assistance is very much welcome
 
