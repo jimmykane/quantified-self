@@ -23,6 +23,8 @@ and smart-watches such as Garmin, Suunto, Polar etc
 You can see it in action at [quantified-self.io](https://www.quantified-self.io/)
 
 
+Contribution and assistance is very much welcome
+
 How to run this project
 -----------------------
 
