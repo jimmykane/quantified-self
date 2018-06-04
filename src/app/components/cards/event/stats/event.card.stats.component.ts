@@ -4,7 +4,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {AppColors} from '../../../../services/color/app.colors';
-import {DynamicDataLoader} from '../../../../../../../quantified-self-lib/src/data/data.store';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 
 @Component({
   selector: 'app-event-card-stats',
