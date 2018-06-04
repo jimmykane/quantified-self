@@ -56,7 +56,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       this.destroyChart(); // Destroy to recreate (no update as its messy atm)
       this.chartData = this.getAllData();
     }
-
     // If we do not have a chart but we become visible
     if (!this.chart && this.isVisible) { // If there is no chart and the component becomes of is visible
       this.createChart(this.chartData); // Create the chart
