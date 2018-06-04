@@ -3,6 +3,8 @@ import {MatTableDataSource} from '@angular/material';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {AppColors} from '../../../../services/color/app.colors';
+import {DynamicDataLoader} from '../../../../../../../quantified-self-lib/src/data/data.store';
 
 @Component({
   selector: 'app-event-card-stats',
@@ -16,6 +18,7 @@ export class EventCardStatsComponent implements OnChanges {
   @Input() selectedActivites: ActivityInterface[];
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
+  appColors = AppColors;
 
   ngOnChanges() {
     if (!this.selectedActivites.length) {
@@ -64,10 +67,13 @@ export class EventCardStatsComponent implements OnChanges {
         if (typeof firstActivityStatValue !== 'number' || typeof secondActivityStatValue !== 'number') {
           return;
         }
-        data[index]['Difference'] = Math.round(100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2))) + '%';
+        // Create an obj
+        data[index]['Difference'] = {};
+        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstance(stat.getClassName(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + stat.getDisplayUnit();
+        data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
         // Correct the NaN with both 0's
         if (firstActivityStatValue === 0 && secondActivityStatValue === 0){
-          data[index]['Difference'] = 0 + '%'
+          data[index]['Difference']['percent'] = 0
         }
       })
     }
