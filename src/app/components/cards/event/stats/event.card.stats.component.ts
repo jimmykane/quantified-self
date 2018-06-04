@@ -69,7 +69,7 @@ export class EventCardStatsComponent implements OnChanges {
         }
         // Create an obj
         data[index]['Difference'] = {};
-        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstance(stat.getClassName(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + stat.getDisplayUnit();
+        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstance(stat.getClassName(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstance(stat.getClassName(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
         data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
         // Correct the NaN with both 0's
         if (firstActivityStatValue === 0 && secondActivityStatValue === 0){
