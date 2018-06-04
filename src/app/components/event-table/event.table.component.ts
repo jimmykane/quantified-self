@@ -149,6 +149,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             this.actionButtonService.removeActionButton('mergeEvents');
             this.eventService.addEvent(mergedEvent);
             this.eventSelectionMap.clear();
+            this.selection.clear();
             this.router.navigate(['/eventDetails'], {
               queryParams: {
                 eventID: mergedEvent.getID(),
@@ -173,6 +174,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.actionButtonService.removeActionButton('mergeEvents');
           this.selection.selected.map(selected => selected.Checkbox).forEach((event) => this.eventService.deleteEvent(event));
           this.eventSelectionMap.clear();
+          this.selection.clear();
           this.snackBar.open('Events deleted', null, {
             duration: 5000,
           });
