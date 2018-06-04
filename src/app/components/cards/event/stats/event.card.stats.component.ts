@@ -37,7 +37,10 @@ export class EventCardStatsComponent implements OnChanges {
       array.push(
         this.selectedActivites.reduce((rowObj, activity, index) => {
           const activityStat = activity.getStat(stat.getClassName());
-          rowObj['#' + index + ' ' + activity.creator.name] =
+          if (!activityStat) {
+            return rowObj;
+          }
+          rowObj[activity.creator.name] =
             (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
@@ -46,6 +49,28 @@ export class EventCardStatsComponent implements OnChanges {
       );
       return array;
     }, []);
+
+    // If we are comparing only 2 activities then add a diff column.
+    // @todo support more than 2 activities for diff
+    if (this.selectedActivites.length === 2) {
+      Array.from(stats.values()).forEach((stat: DataInterface, index) => {
+        const firstActivityStat = this.selectedActivites[0].getStat(stat.getClassName());
+        const secondActivityStat = this.selectedActivites[1].getStat(stat.getClassName());
+        if (!firstActivityStat || !secondActivityStat) {
+          return;
+        }
+        const firstActivityStatValue = firstActivityStat.getValue();
+        const secondActivityStatValue = secondActivityStat.getValue();
+        if (typeof firstActivityStatValue !== 'number' || typeof secondActivityStatValue !== 'number') {
+          return;
+        }
+        data[index]['Difference'] = Math.round(100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2))) + '%';
+        // Correct the NaN with both 0's
+        if (firstActivityStatValue === 0 && secondActivityStatValue === 0){
+          data[index]['Difference'] = 0 + '%'
+        }
+      })
+    }
 
     // Get the columns
     this.columns = (Object.keys(data[0]));
