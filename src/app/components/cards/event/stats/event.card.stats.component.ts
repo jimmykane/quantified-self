@@ -43,7 +43,7 @@ export class EventCardStatsComponent implements OnChanges {
           if (!activityStat) {
             return rowObj;
           }
-          rowObj[activity.creator.name] =
+          rowObj[activity.creator.name +  (new Array(index + 1).join( ' ' ))] =
             (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
