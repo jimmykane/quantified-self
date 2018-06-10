@@ -26,8 +26,8 @@ export class EventService {
   private async getInitialData() {
     for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
       const localStorageData = await this.eventLocalStorageService.getItem(localStorageKey);
-      const event = await EventImporterJSON.getFromJSONString(localStorageData);
       try {
+        const event = await EventImporterJSON.getFromJSONString(localStorageData);
         this.events.next(this.events.getValue().push(event));
       } catch (e) {
         Raven.captureException(e);
