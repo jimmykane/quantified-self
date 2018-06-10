@@ -16,7 +16,7 @@ export class LocalStorageService implements StorageServiceInterface {
   setItem(key: string, data: string) {
     localStorage.setItem(
       this.nameSpace + key,
-      LZString.compress(data),
+      LZString.compressToUTF16(data),
     );
   }
 
@@ -24,7 +24,7 @@ export class LocalStorageService implements StorageServiceInterface {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
       try {
-        const decrypted = LZString.decompress(localStorage.getItem(this.nameSpace + key));
+        const decrypted = LZString.decompressFromUTF16(localStorage.getItem(this.nameSpace + key));
         this.logger.d('Decrypted 1 item after ' +
           (performance.now() - t0) + ' milliseconds or ' +
           (performance.now() - t0) / 1000 + ' seconds',
@@ -50,7 +50,7 @@ export class LocalStorageService implements StorageServiceInterface {
       this.getAllKeys().map((localStorageKey) => {
         // Try to decode
         try {
-          items.push(LZString.decompress(localStorage.getItem(localStorageKey)));
+          items.push(LZString.decompressFromUTF16(localStorage.getItem(localStorageKey)));
         } catch (Error) {
           // If not able to decode remove from storage
           console.error('Could not decode entry from local storage ' + localStorageKey);
