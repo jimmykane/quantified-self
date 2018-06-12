@@ -10,7 +10,6 @@ import {AboutComponent} from './components/about/about.component';
 import {LocalStorageService} from './services/storage/app.local.storage.service';
 import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
-import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {
@@ -97,7 +96,6 @@ export class RavenErrorHandler implements ErrorHandler {
     MatTableModule,
     CdkTableModule,
     MatChipsModule,
-    AmChartsModule,
     MatCheckboxModule,
     MatSliderModule,
     MatSnackBarModule,

@@ -17,12 +17,7 @@
             "tsConfig": "src/tsconfig.app.json",
             "polyfills": "src/polyfills.ts",
             "assets": [
-              "src/assets",
-              {
-                "glob": "**/*",
-                "input": "node_modules/amcharts3/amcharts/images",
-                "output": "/amcharts/images"
-              }
+              "src/assets"
             ],
             "styles": [
               "node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
@@ -32,10 +27,6 @@
               "src/styles.scss"
             ],
             "scripts": [
-              "node_modules/amcharts3/amcharts/amcharts.js",
-              "node_modules/amcharts3/amcharts/serial.js",
-              "node_modules/amcharts3/amcharts/themes/light.js",
-              "node_modules/amcharts3/amcharts/plugins/animate/animate.js"
             ]
           },
           "configurations": {
@@ -83,10 +74,6 @@
             "polyfills": "src/polyfills.ts",
             "tsConfig": "src/tsconfig.spec.json",
             "scripts": [
-              "node_modules/amcharts3/amcharts/amcharts.js",
-              "node_modules/amcharts3/amcharts/serial.js",
-              "node_modules/amcharts3/amcharts/themes/light.js",
-              "node_modules/amcharts3/amcharts/plugins/animate/animate.js"
             ],
             "styles": [
               "node_modules/@angular/material/prebuilt-themes/indigo-pink.css",
@@ -96,12 +83,7 @@
               "src/styles.scss"
             ],
             "assets": [
-              "src/assets",
-              {
-                "glob": "**/*",
-                "input": "node_modules/amcharts3/amcharts/images",
-                "output": "/amcharts/images"
-              }
+              "src/assets"
             ]
           }
         },
