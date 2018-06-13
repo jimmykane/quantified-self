@@ -67,15 +67,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     }
 
     if (this.chart && (simpleChanges.selectedActivities || simpleChanges.event)){
-      debugger;
       this.chart.series.setAll(this.getChartSeries());
     }
 
     if (this.isViewInitialized && !this.chart && this.isVisible) {
       this.createChart().then((chart) => {
         this.chart = chart;
-        const b =this.getChartSeries();
-        debugger;
         this.getChartSeries().forEach(series => this.chart.series.push(series));
       })
     }
@@ -86,9 +83,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return new Promise((resolve, reject) => {
       this.zone.runOutsideAngular(() => {
         const chart = am4core.create("chartdiv", am4charts.XYChart);
-        chart.nonScaling = true;
-        chart.resizable = false;
+        // chart.nonScaling = true;
+        // chart.resizable = false;
         let categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
+
         let valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
         chart.legend = new am4charts.Legend();
         chart.legend.nonScaling = true;
