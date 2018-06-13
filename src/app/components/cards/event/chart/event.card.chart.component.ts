@@ -46,47 +46,39 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngAfterViewInit() {
-    debugger
-    if (this.isVisible) {
+    if (this.isVisible && !this.chart) {
       this.createChart();
     }
   }
 
   ngOnInit() {
-debugger;
+
   }
 
   ngOnChanges(simpleChanges): void {
-    debugger
-    // // If the only change was to unselect all then clean up and return
-    if ((simpleChanges.event || simpleChanges.selectedActivities) && !this.selectedActivities.length) {
-      this.destroyChart();
-      return;
-    }
-    // If data changed... update
-    if (simpleChanges.selectedActivities || simpleChanges.event) {
-      this.chartSeries = this.getChartSeries();
-    }
-    // If we do not have a chart but we become visible
-    if (this.chart && simpleChanges.isVisible && this.isVisible) { // If there is no chart and the component becomes of is visible
-      this.chart.show();
+    if (this.isVisible && !this.chart) {
+      this.createChart();
+      this.chartSeries = this.getChartSeries()
     }
   }
 
 
-  private createChart(){
-    this.zone.runOutsideAngular(() => {
-      this.chart = am4core.create("chartdiv", am4charts.XYChart);
-      this.chart.nonScaling = true;
-      this.chart.resizable = false;
-      let categoryAxis = this.chart.xAxes.push(new am4charts.DateAxis());
-      let valueAxis = this.chart.yAxes.push(new am4charts.ValueAxis());
-      this.chart.legend = new am4charts.Legend();
-      this.chart.legend.nonScaling = true;
-      this.chart.cursor = new am4charts.XYCursor();
-      this.chartSeries.forEach(series => this.chart.series.push(series));
+  private createChart(): Promise<am4charts.XYChart> {
+    return new Promise((resolve, reject) => {
+      this.zone.runOutsideAngular(() => {
+        const chart = am4core.create("chartdiv", am4charts.XYChart);
+        chart.nonScaling = true;
+        chart.resizable = false;
+        let categoryAxis = this.chart.xAxes.push(new am4charts.DateAxis());
+        let valueAxis = this.chart.yAxes.push(new am4charts.ValueAxis());
+        chart.legend = new am4charts.Legend();
+        chart.legend.nonScaling = true;
+        chart.cursor = new am4charts.XYCursor();
+        resolve(chart);
+      });
     });
   }
+
   // private getAmChartOptions(chartData: ChartDataSettingsInterface) {
   //   // Get and short, and if none is visible then show the first one
   //   const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
@@ -225,57 +217,6 @@ debugger;
       return lineSeriesArray
     }, []);
   }
-
-  // private addListenersToChart() {
-  //   if (!this.chart.events.rendered.length) {
-  //     this.chart.addListener('rendered', () => {
-  //       this.logger.d('Rendered')
-  //     });
-  //   }
-  //
-  //   if (!this.chart.events.init.length) {
-  //     this.chart.addListener('init', () => {
-  //       this.logger.d('Init')
-  //     });
-  //   }
-  //
-  //   if (!this.chart.events.dataUpdated.length) {
-  //     this.chart.addListener('dataUpdated', (event) => {
-  //       event.chart.valueAxes.forEach((valueAxis) => {
-  //         // valueAxis.guides = this.getAverageGuide();
-  //       });
-  //       // event.chart.validateNow();
-  //     });
-  //     this.logger.d('DataUpdated')
-  //
-  //   }
-  //
-  //   if (!this.chart.events.resized.length) {
-  //     this.chart.addListener('resized', () => {
-  //     });
-  //   }
-  //
-  //   if (!this.chart.events.zoomed.length) {
-  //     this.chart.addListener('zoomed', (event) => {
-  //     });
-  //   }
-  //
-  //   if (!this.chart.events.buildStarted.length) {
-  //     this.chart.addListener('buildStarted', () => {
-  //     });
-  //   }
-  //
-  //   if (!this.chart.events.changed.length) {
-  //     this.chart.addListener('changed', () => {
-  //     });
-  //   }
-  //
-  //   if (!this.chart.events.drawn.length) {
-  //     this.chart.addListener('drawn', () => {
-  //       this.logger.d('Drawn')
-  //     });
-  //   }
-  // }
 
   private destroyChart() {
     if (!this.chart) {
