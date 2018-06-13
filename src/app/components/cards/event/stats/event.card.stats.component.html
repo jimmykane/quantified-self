@@ -7,10 +7,10 @@
     <mat-cell *matCellDef="let row">
       <span *ngIf="column == 'Difference' && row[column]">
         {{ row[column].display }}
-        <span *ngIf="row[column].percent <= 1" [ngStyle]="{'color': appColors.Green}">
+        <span *ngIf="row[column].percent <= 2" [ngStyle]="{'color': appColors.Green}">
         {{ row[column].percent.toFixed(1) }}%
         </span>
-       <span *ngIf="row[column].percent > 1 && row[column].percent <= 5" [ngStyle]="{'color': appColors.Orange}">
+       <span *ngIf="row[column].percent > 2 && row[column].percent <= 5" [ngStyle]="{'color': appColors.Orange}">
         {{ row[column].percent.toFixed(1) }}%
         </span>
         <span *ngIf="row[column].percent > 5" [ngStyle]="{'color': appColors.Red}">
