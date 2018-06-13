@@ -35,6 +35,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
 
+  private isViewInitialized = false;
   private chart: am4charts.XYChart;
   private chartSeries: am4charts.LineSeries[];
 
@@ -46,8 +47,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngAfterViewInit() {
-    if (this.isVisible && !this.chart) {
-      this.createChart();
+    this.isViewInitialized = true;
+    if (this.isVisible) {
+      this.createChart().then((chart) => {
+        this.chart = chart;
+        this.getChartSeries().forEach(series => this.chart.series.push(series));
+      })
     }
   }
 
@@ -56,9 +61,23 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(simpleChanges): void {
-    if (this.isVisible && !this.chart) {
-      this.createChart();
-      this.chartSeries = this.getChartSeries()
+    if (!this.selectedActivities.length || !this.event) {
+      this.destroyChart();
+      return;
+    }
+
+    if (this.chart && (simpleChanges.selectedActivities || simpleChanges.event)){
+      debugger;
+      this.chart.series.setAll(this.getChartSeries());
+    }
+
+    if (this.isViewInitialized && !this.chart && this.isVisible) {
+      this.createChart().then((chart) => {
+        this.chart = chart;
+        const b =this.getChartSeries();
+        debugger;
+        this.getChartSeries().forEach(series => this.chart.series.push(series));
+      })
     }
   }
 
@@ -69,8 +88,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         const chart = am4core.create("chartdiv", am4charts.XYChart);
         chart.nonScaling = true;
         chart.resizable = false;
-        let categoryAxis = this.chart.xAxes.push(new am4charts.DateAxis());
-        let valueAxis = this.chart.yAxes.push(new am4charts.ValueAxis());
+        let categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
+        let valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
         chart.legend = new am4charts.Legend();
         chart.legend.nonScaling = true;
         chart.cursor = new am4charts.XYCursor();
@@ -219,18 +238,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private destroyChart() {
-    if (!this.chart) {
-      return;
-    }
-    // There can be the case where the chart has not finished bulding and the user navigated away
-    // thus no chart to destroy
     try {
       this.zone.runOutsideAngular(() => {
         if (this.chart) {
           this.chart.dispose();
+          delete this.chart;
         }
       });
-      delete this.chart;
     } catch (e) {
       this.logger.error('Could not destroy chart');
       // Log to Sentry
