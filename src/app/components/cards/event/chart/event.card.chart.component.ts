@@ -1,6 +1,15 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit, NgZone,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  NgZone,
+  ElementRef,
+  ViewChild,
 } from '@angular/core';
 import {Log} from 'ng2-logger/client'
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
@@ -31,14 +40,12 @@ am4core.useTheme(am4themes_material);
 })
 export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
+  @ViewChild('chartDiv') chartDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
 
-  private isViewInitialized = false;
   private chart: am4charts.XYChart;
-  private chartSeries: am4charts.LineSeries[];
-
   private logger = Log.create('EventCardChartComponent');
 
   constructor(private  changeDetector: ChangeDetectorRef,
@@ -47,34 +54,22 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngAfterViewInit() {
-    this.isViewInitialized = true;
-    if (this.isVisible) {
-      this.createChart().then((chart) => {
-        this.chart = chart;
-        this.getChartSeries().forEach(series => this.chart.series.push(series));
-      })
-    }
+    this.createChart().then((chart) => {
+      this.chart = chart;
+      this.getChartSeries().forEach(series => this.chart.series.push(series));
+    })
   }
 
   ngOnInit() {
-
   }
 
   ngOnChanges(simpleChanges): void {
-    if (!this.selectedActivities.length || !this.event) {
-      this.destroyChart();
-      return;
-    }
-
-    if (this.chart && (simpleChanges.selectedActivities || simpleChanges.event)){
-      this.chart.series.setAll(this.getChartSeries());
-    }
-
-    if (this.isViewInitialized && !this.chart && this.isVisible) {
-      this.createChart().then((chart) => {
-        this.chart = chart;
-        this.getChartSeries().forEach(series => this.chart.series.push(series));
-      })
+    if (this.chart && (simpleChanges.selectedActivities || simpleChanges.event)) {
+      if (this.selectedActivities.length) {
+        this.chart.series.setAll(this.getChartSeries());
+      } else {
+        this.chart.series.clear();
+      }
     }
   }
 
@@ -82,113 +77,35 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private createChart(): Promise<am4charts.XYChart> {
     return new Promise((resolve, reject) => {
       this.zone.runOutsideAngular(() => {
-        const chart = am4core.create("chartdiv", am4charts.XYChart);
-        // chart.nonScaling = true;
+        const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
+
+        chart.fontSize = '12px';
         // chart.resizable = false;
         let categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
-
         let valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+
         chart.legend = new am4charts.Legend();
         chart.legend.nonScaling = true;
         chart.cursor = new am4charts.XYCursor();
+
+        chart.events.on("validated", (ev) => {
+          this.logger.d('Validated');
+          const eventChart: am4charts.XYChart = ev.target;
+          eventChart.svgContainer.style.height = String(100 + ((eventChart.series.length - 1) * 100)) + '%';
+          eventChart.legend.height = new am4core.Percent(50);
+
+        });
+        chart.events.on("inited", (ev) => {
+          this.logger.d('inited');
+        });
+        chart.events.on("valueschanged", (ev) => {
+          this.logger.d('valueschanged');
+        });
+
         resolve(chart);
       });
     });
   }
-
-  // private getAmChartOptions(chartData: ChartDataSettingsInterface) {
-  //   // Get and short, and if none is visible then show the first one
-  //   const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
-  //     graphArray.push(category.graph);
-  //     return graphArray;
-  //   }, []).sort((graphA, graphB) => graphA.id.localeCompare(graphB.id));
-  //   if (!graphs.find((graph) => {
-  //     return graph.hidden !== true
-  //   })) {
-  //     if (graphs[0]) {
-  //       graphs[0].hidden = false;
-  //     }
-  //   }
-  //   return {
-  //     type: 'serial',
-  //     theme: 'light',
-  //     dataProvider: chartData.dataProvider,
-  //     autoMarginOffset: 0,
-  //     parseDates: true,
-  //     // marginRight: 100,
-  //     // autoMargins: true,
-  //     graphs: graphs,
-  //     // autoTransform: false,
-  //     // autoResize: false,
-  //     // autoDisplay: false,
-  //     // responsive: {
-  //     //   enabled: false
-  //     // },
-  //     valueAxes: graphs.reduce((array, graph) => {
-  //       // const valueAxis: any = {};
-  //       // if (graph.dataType === DataPace.type) {
-  //       //   valueAxis.id = graph.id;
-  //       //   // valueAxis.reversed = true;
-  //       //   // valueAxis.fillAlpha = 0;
-  //       //   // valueAxis.duration = 'ss';
-  //       // }
-  //       // array.push(valueAxis);
-  //       return array;
-  //     }, []),
-  //     startDuration: 0.2,
-  //     startEffect: 'easeOutSine',
-  //     sequencedAnimation: false,
-  //     categoryField: 'date',
-  //     processCount: 10000,
-  //     // processTimeout: 1,
-  //     legend: {
-  //       align: 'center',
-  //       useGraphSettings: true,
-  //       autoMargins: true,
-  //       marginTop: 0,
-  //       valueText: '[[value]]',
-  //       clickLabel: (graph) => {
-  //         graph.hidden = !graph.hidden;
-  //         if (graph.hidden) {
-  //           // Reset the color
-  //           delete graph.lineColor;
-  //           // Update the chart
-  //           graph.chart.invalidateSize();
-  //           return;
-  //         }
-  //         // Focus the scrollbar (get it)
-  //         graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
-  //         const sameActivityVisibleGraphs = graph.chart.graphs.filter(graphObj => !graphObj.hidden && graph.activity === graphObj.activity);
-  //         // If the graphs are less than the selected activities add the device color, else
-  //         if (sameActivityVisibleGraphs.length < this.selectedActivities.length) {
-  //           graph.lineColor = this.eventColorService.getActivityColor(this.event, graph.activity);
-  //         }
-  //         graph.chart.invalidateSize();
-  //       },
-  //     },
-  //     synchronizeGrid: true,
-  //     categoryAxis: {
-  //       parseDates: true,
-  //       minPeriod: 'fff',
-  //       axisColor: '#DADADA',
-  //       gridThickness: 0.0,
-  //       offset: 0,
-  //       labelOffset: 0,
-  //       minorGridEnabled: true,
-  //     },
-  //     chartCursor: {
-  //       valueZoomable: true,
-  //       categoryBalloonDateFormat: 'JJ:NN:SS',
-  //       cursorAlpha: 0,
-  //       valueLineEnabled: true,
-  //       valueLineBalloonEnabled: true,
-  //       valueLineAlpha: 0.5,
-  //       fullWidth: true,
-  //     },
-  //     chartScrollbar: graphs.length ? this.getScrollbarForGraph(graphs.find(graph => !graph.hidden)) : false,
-  //     creditsPosition: 'bottom-right',
-  //   }
-  // }
 
   private getChartSeries(): am4charts.LineSeries[] {
     return this.selectedActivities.reduce((lineSeriesArray: am4charts.LineSeries[], activity: ActivityInterface, index): am4charts.LineSeries[] => {
@@ -254,3 +171,98 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.destroyChart();
   }
 }
+
+
+// private getAmChartOptions(chartData: ChartDataSettingsInterface) {
+//   // Get and short, and if none is visible then show the first one
+//   const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
+//     graphArray.push(category.graph);
+//     return graphArray;
+//   }, []).sort((graphA, graphB) => graphA.id.localeCompare(graphB.id));
+//   if (!graphs.find((graph) => {
+//     return graph.hidden !== true
+//   })) {
+//     if (graphs[0]) {
+//       graphs[0].hidden = false;
+//     }
+//   }
+//   return {
+//     type: 'serial',
+//     theme: 'light',
+//     dataProvider: chartData.dataProvider,
+//     autoMarginOffset: 0,
+//     parseDates: true,
+//     // marginRight: 100,
+//     // autoMargins: true,
+//     graphs: graphs,
+//     // autoTransform: false,
+//     // autoResize: false,
+//     // autoDisplay: false,
+//     // responsive: {
+//     //   enabled: false
+//     // },
+//     valueAxes: graphs.reduce((array, graph) => {
+//       // const valueAxis: any = {};
+//       // if (graph.dataType === DataPace.type) {
+//       //   valueAxis.id = graph.id;
+//       //   // valueAxis.reversed = true;
+//       //   // valueAxis.fillAlpha = 0;
+//       //   // valueAxis.duration = 'ss';
+//       // }
+//       // array.push(valueAxis);
+//       return array;
+//     }, []),
+//     startDuration: 0.2,
+//     startEffect: 'easeOutSine',
+//     sequencedAnimation: false,
+//     categoryField: 'date',
+//     processCount: 10000,
+//     // processTimeout: 1,
+//     legend: {
+//       align: 'center',
+//       useGraphSettings: true,
+//       autoMargins: true,
+//       marginTop: 0,
+//       valueText: '[[value]]',
+//       clickLabel: (graph) => {
+//         graph.hidden = !graph.hidden;
+//         if (graph.hidden) {
+//           // Reset the color
+//           delete graph.lineColor;
+//           // Update the chart
+//           graph.chart.invalidateSize();
+//           return;
+//         }
+//         // Focus the scrollbar (get it)
+//         graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
+//         const sameActivityVisibleGraphs = graph.chart.graphs.filter(graphObj => !graphObj.hidden && graph.activity === graphObj.activity);
+//         // If the graphs are less than the selected activities add the device color, else
+//         if (sameActivityVisibleGraphs.length < this.selectedActivities.length) {
+//           graph.lineColor = this.eventColorService.getActivityColor(this.event, graph.activity);
+//         }
+//         graph.chart.invalidateSize();
+//       },
+//     },
+//     synchronizeGrid: true,
+//     categoryAxis: {
+//       parseDates: true,
+//       minPeriod: 'fff',
+//       axisColor: '#DADADA',
+//       gridThickness: 0.0,
+//       offset: 0,
+//       labelOffset: 0,
+//       minorGridEnabled: true,
+//     },
+//     chartCursor: {
+//       valueZoomable: true,
+//       categoryBalloonDateFormat: 'JJ:NN:SS',
+//       cursorAlpha: 0,
+//       valueLineEnabled: true,
+//       valueLineBalloonEnabled: true,
+//       valueLineAlpha: 0.5,
+//       fullWidth: true,
+//     },
+//     chartScrollbar: graphs.length ? this.getScrollbarForGraph(graphs.find(graph => !graph.hidden)) : false,
+//     creditsPosition: 'bottom-right',
+//   }
+// }
