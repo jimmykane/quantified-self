@@ -21,16 +21,16 @@ import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
-import * as am4core from "@amcharts/amcharts4/core";
-import * as am4charts from "@amcharts/amcharts4/charts";
-import am4themes_animated from "@amcharts/amcharts4/themes/animated";
-import am4themes_material from "@amcharts/amcharts4/themes/material";
-import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
+import * as am4core from '@amcharts/amcharts4/core';
+import * as am4charts from '@amcharts/amcharts4/charts';
+import am4themes_animated from '@amcharts/amcharts4/themes/animated';
+import am4themes_material from '@amcharts/amcharts4/themes/material';
+import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
 
 // am4core.useTheme(am4themes_animated);
-am4core.useTheme(am4themes_material);
+// am4core.useTheme(am4themes_material);
 
-// am4core.useTheme(am4themes_kelly);
+am4core.useTheme(am4themes_kelly);
 
 @Component({
   selector: 'app-event-card-chart',
@@ -54,21 +54,28 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngAfterViewInit() {
-    this.createChart().then((chart) => {
-      this.chart = chart;
-      this.getChartSeries().forEach(series => this.chart.series.push(series));
-    })
+    // this.createChart().then((chart) => {
+    //   this.chart = chart;
+    //   this.getChartSeries().forEach(series => this.chart.series.push(series));
+    // })
   }
 
   ngOnInit() {
   }
 
   ngOnChanges(simpleChanges): void {
-    if (this.chart && (simpleChanges.selectedActivities || simpleChanges.event)) {
-      if (this.selectedActivities.length) {
+    // If there are data changes
+    if ((simpleChanges.selectedActivities || simpleChanges.event)) {
+      if (!this.chart && this.selectedActivities.length) {
+        this.createChart().then((chart) => {
+          this.chart = chart;
+          this.getChartSeries().forEach(series => this.chart.series.push(series));
+        })
+      } else if (this.selectedActivities.length && this.chart) {
+        this.chart.series.clear();
         this.chart.series.setAll(this.getChartSeries());
       } else {
-        this.chart.series.clear();
+        this.destroyChart();
       }
     }
   }
@@ -81,24 +88,24 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
         chart.fontSize = '12px';
         // chart.resizable = false;
-        let categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
-        let valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+        const categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
+        const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
         chart.legend = new am4charts.Legend();
         chart.legend.nonScaling = true;
         chart.cursor = new am4charts.XYCursor();
 
-        chart.events.on("validated", (ev) => {
+        chart.events.on('validated', (ev) => {
           this.logger.d('Validated');
-          const eventChart: am4charts.XYChart = ev.target;
-          eventChart.svgContainer.style.height = String(100 + ((eventChart.series.length - 1) * 100)) + '%';
-          eventChart.legend.height = new am4core.Percent(50);
+          // const eventChart: am4charts.XYChart = ev.target;
+          // eventChart.svgContainer.style.height = String(100 + ((eventChart.series.length - 1) * 100)) + '%';
+          // eventChart.legend.height = new am4core.Percent(50);
 
         });
-        chart.events.on("inited", (ev) => {
+        chart.events.on('inited', (ev) => {
           this.logger.d('inited');
         });
-        chart.events.on("valueschanged", (ev) => {
+        chart.events.on('valueschanged', (ev) => {
           this.logger.d('valueschanged');
         });
 
@@ -122,15 +129,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             existingLineSeries.id = pointData.getClassName() + activity.getID();
             existingLineSeries.name = key + ' (' + activity.creator.name + ')';
 
-            existingLineSeries.dataFields.dateX = "date";
+            existingLineSeries.dataFields.dateX = 'date';
             existingLineSeries.dataFields.valueY = key;
             if (key !== DataHeartRate.type) {
               existingLineSeries.disabled = true
             }
-            existingLineSeries.tooltipText = "{valueY} " + pointData.getDisplayUnit();
-            existingLineSeries.legendSettings.labelText = "{name}";
+            existingLineSeries.tooltipText = '{valueY} ' + pointData.getDisplayUnit();
+            existingLineSeries.legendSettings.labelText = '{name}';
             // existingLineSeries.legendSettings.valueText = "{valueY.close}";
-            existingLineSeries.legendSettings.itemValueText = "{valueY} " + pointData.getDisplayUnit();
+            existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
             existingLineSeries.defaultState.transitionDuration = 1000;
 
             existingLineSeries.strokeWidth = 1;
@@ -157,7 +164,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       this.zone.runOutsideAngular(() => {
         if (this.chart) {
           this.chart.dispose();
-          delete this.chart;
         }
       });
     } catch (e) {
