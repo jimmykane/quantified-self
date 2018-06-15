@@ -27,10 +27,10 @@ import am4themes_animated from '@amcharts/amcharts4/themes/animated';
 import am4themes_material from '@amcharts/amcharts4/themes/material';
 import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
 
-// am4core.useTheme(am4themes_animated);
+am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_material);
 
-am4core.useTheme(am4themes_kelly);
+// am4core.useTheme(am4themes_kelly);
 
 @Component({
   selector: 'app-event-card-chart',
@@ -92,8 +92,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
         chart.legend = new am4charts.Legend();
-        chart.legend.nonScaling = true;
         chart.cursor = new am4charts.XYCursor();
+        chart.cursor.fullWidthLineX = true;
+
 
         chart.events.on('validated', (ev) => {
           this.logger.d('Validated');
@@ -138,7 +139,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             existingLineSeries.legendSettings.labelText = '{name}';
             // existingLineSeries.legendSettings.valueText = "{valueY.close}";
             existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
-            existingLineSeries.defaultState.transitionDuration = 1000;
+            // existingLineSeries.defaultState.transitionDuration = 2000;
 
             existingLineSeries.strokeWidth = 1;
             existingLineSeries.fillOpacity = 0.05;
