@@ -3,7 +3,8 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import {ErrorStateMatcher, MAT_DIALOG_DATA} from '@angular/material';
+import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import * as Raven from 'raven-js';
 
 
 @Component({
@@ -23,10 +24,10 @@ export class EventFormComponent implements OnInit {
   public eventFormGroup: FormGroup;
 
   constructor(
+    public dialogRef: MatDialogRef<EventFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: EventService,
-    private changeDetectorRef: ChangeDetectorRef,
-    private router: Router,
+    private snackBar: MatSnackBar,
     private formBuilder: FormBuilder) {
     this.event = data.event;
   }
@@ -42,15 +43,26 @@ export class EventFormComponent implements OnInit {
     });
   }
 
-  isFieldValid(field: string) {
-    return !this.eventFormGroup.get(field).valid && this.eventFormGroup.get(field).touched;
+  hasError(field: string) {
+    return !(this.eventFormGroup.get(field).valid && this.eventFormGroup.get(field).touched);
   }
 
-  onSubmit() {
-    if (this.eventFormGroup.valid) {
-      this.eventService.addAndReplace(this.event).then();
-    } else {
+  async onSubmit() {
+    if (!this.eventFormGroup.valid) {
       this.validateAllFormFields(this.eventFormGroup);
+    }
+    try {
+      await this.eventService.addAndReplace(this.event);
+      this.snackBar.open('Event saved', null, {
+        duration: 5000,
+      });
+    } catch (e) {
+      this.snackBar.open('Could not save event', null, {
+        duration: 5000,
+      });
+      Raven.captureException(e);
+    } finally {
+      this.dialogRef.close()
     }
   }
 
