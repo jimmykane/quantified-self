@@ -8,7 +8,7 @@ import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
 import {LocalStorageService} from './services/storage/app.local.storage.service';
-import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
+import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
@@ -119,7 +119,7 @@ export class RavenErrorHandler implements ErrorHandler {
     EventTableComponent,
     EventCardMapAGMComponent,
     EventCardStatsComponent,
-    EventCardActionsMenuComponent,
+    EventActionsComponent,
     EventCardLapsComponent,
     EventCardChartComponent,
     EventCardToolsComponent,

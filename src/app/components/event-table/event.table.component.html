@@ -19,7 +19,7 @@
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
         <span *ngIf="column === 'Actions'">
-          <app-event-card-actions-menu [event]="row[column]"></app-event-card-actions-menu>
+          <app-event-actions [event]="row[column]"></app-event-actions>
         </span>
         <span *ngIf="column === 'Name'" matTooltip="{{ row[column] }}">
           {{ row[column] | slice:0:10 }}

@@ -1,6 +1,6 @@
 <mat-card *ngIf="event">
   <mat-card-header>
-    <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
+    <app-event-actions [event]="event" align="end"></app-event-actions>
     <mat-card-subtitle>
       <app-activity-icon [activity]="event.getFirstActivity()"
                          *ngIf="event.getActivities().length === 1 "></app-activity-icon>
