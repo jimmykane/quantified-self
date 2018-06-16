@@ -5,19 +5,32 @@ import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.uti
 import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
 import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
+import {EventFormComponent} from '../event-form/event.form.component';
+import {MatDialog} from '@angular/material';
 
 @Component({
   selector: 'app-event-actions',
   templateUrl: './event.actions.component.html',
   styleUrls: ['./event.actions.component.css'],
   providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 
 })
 export class EventActionsComponent {
   @Input() event: EventInterface;
 
-  constructor(private eventService: EventService, private changeDetectorRef: ChangeDetectorRef, private router: Router) {
+  constructor(private eventService: EventService, private changeDetectorRef: ChangeDetectorRef, private router: Router, public dialog: MatDialog) {
+  }
+
+  editEvent(event: EventInterface) {
+    let dialogRef = this.dialog.open(EventFormComponent, {
+      width: '250px',
+      data: {},
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      console.log('The dialog was closed');
+    });
   }
 
   downloadEventAsTCX(event: EventInterface) {
@@ -25,7 +38,7 @@ export class EventActionsComponent {
       FileService.downloadFile(
         blob,
         event.name,
-        EventExporterTCX.fileExtension
+        EventExporterTCX.fileExtension,
       );
     });
   }

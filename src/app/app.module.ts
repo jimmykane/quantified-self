@@ -32,7 +32,7 @@ import {
   MatSnackBarModule,
   MatInputModule,
   MatListModule,
-  MatSortModule, MatTooltipModule
+  MatSortModule, MatTooltipModule, MatDialogModule,
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -56,6 +56,7 @@ import {ActivityHeaderComponent} from './components/activity-header/activity-hea
 import * as Raven from 'raven-js';
 import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
+import {EventFormComponent} from './components/event-form/event.form.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -107,6 +108,7 @@ export class RavenErrorHandler implements ErrorHandler {
     MatTableModule,
     MatSortModule,
     MatTooltipModule,
+    MatDialogModule,
   ],
   declarations: [
     AppComponent,
@@ -116,6 +118,7 @@ export class RavenErrorHandler implements ErrorHandler {
     ActivityIconComponent,
     ActivitiesCheckboxesComponent,
     EventCardComponent,
+    EventActionsComponent,
     EventTableComponent,
     EventCardMapAGMComponent,
     EventCardStatsComponent,
@@ -126,6 +129,10 @@ export class RavenErrorHandler implements ErrorHandler {
     AboutComponent,
     UploadInfoComponent,
     ActivityHeaderComponent,
+    EventFormComponent,
+  ],
+  entryComponents: [
+    EventFormComponent,
   ],
   providers: [
     LocalStorageService,
