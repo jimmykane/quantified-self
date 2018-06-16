@@ -24,8 +24,8 @@ export class EventActionsComponent {
 
   editEvent(event: EventInterface) {
     let dialogRef = this.dialog.open(EventFormComponent, {
-      width: '250px',
-      data: {},
+      width: '75vh',
+      data: {event: event},
     });
 
     dialogRef.afterClosed().subscribe(result => {
