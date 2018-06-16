@@ -33,7 +33,7 @@ export class EventFormComponent implements OnInit {
 
   ngOnInit(): void {
     this.eventFormGroup = new FormGroup({
-      'name': new FormControl(this.event.name, [
+      name: new FormControl(this.event.name, [
         Validators.required,
         Validators.minLength(4),
       ]),
@@ -44,5 +44,24 @@ export class EventFormComponent implements OnInit {
 
   isFieldValid(field: string) {
     return !this.eventFormGroup.get(field).valid && this.eventFormGroup.get(field).touched;
+  }
+
+  onSubmit() {
+    if (this.eventFormGroup.valid) {
+      this.eventService.addAndReplace(this.event).then();
+    } else {
+      this.validateAllFormFields(this.eventFormGroup);
+    }
+  }
+
+  validateAllFormFields(formGroup: FormGroup) {
+    Object.keys(formGroup.controls).forEach(field => {
+      const control = formGroup.get(field);
+      if (control instanceof FormControl) {
+        control.markAsTouched({onlySelf: true});
+      } else if (control instanceof FormGroup) {
+        this.validateAllFormFields(control);
+      }
+    });
   }
 }

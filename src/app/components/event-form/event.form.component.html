@@ -1,9 +1,11 @@
 <form [formGroup]="eventFormGroup">
-   <mat-form-field>
-    <input matInput placeholder="Name"   formControlName="name" [ngModel]="event.name">
+  <mat-form-field>
+    <input matInput placeholder="Name" formControlName="name" [(ngModel)]="event.name">
     <!--<mat-hint></mat-hint>-->
     <mat-error *ngIf="!isFieldValid('name')">
       Please enter a valid name
     </mat-error>
   </mat-form-field>
+  <button mat-button mat-dialog-close>Cancel</button>
+  <button mat-button (click)="onSubmit()">Save</button>
 </form>

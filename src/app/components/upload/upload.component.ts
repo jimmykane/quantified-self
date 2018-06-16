@@ -68,7 +68,7 @@ export class UploadComponent {
           console.error(e);
           Raven.captureException(e);
         }
-        this.eventService.addEvent(newEvent);
+        this.eventService.addAndReplace(newEvent);
         metaData.status = UPLOAD_STATUS.PROCESSED;
         resolve(newEvent);
       };
