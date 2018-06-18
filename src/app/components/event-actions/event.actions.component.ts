@@ -6,7 +6,7 @@ import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporter
 import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
-import {MatDialog} from '@angular/material';
+import {MatDialog, MatSnackBar} from '@angular/material';
 
 @Component({
   selector: 'app-event-actions',
@@ -19,7 +19,12 @@ import {MatDialog} from '@angular/material';
 export class EventActionsComponent {
   @Input() event: EventInterface;
 
-  constructor(private eventService: EventService, private changeDetectorRef: ChangeDetectorRef, private router: Router, public dialog: MatDialog) {
+  constructor(
+    private eventService: EventService,
+    private changeDetectorRef: ChangeDetectorRef,
+    private router: Router,
+    private snackBar: MatSnackBar,
+    public dialog: MatDialog) {
   }
 
   editEvent(event: EventInterface) {
@@ -40,11 +45,17 @@ export class EventActionsComponent {
         event.name,
         EventExporterTCX.fileExtension,
       );
+      this.snackBar.open('File served', null, {
+        duration: 5000,
+      });
     });
   }
 
   deleteEvent(event: EventInterface) {
     this.eventService.deleteEvent(event);
     this.router.navigate(['/dashboard']);
+    this.snackBar.open('Event deleted', null, {
+      duration: 5000,
+    });
   }
 }
