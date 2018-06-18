@@ -23,6 +23,7 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges(): void {
+    debugger;
     // Create the checkboxes
     this.activitiesCheckboxes = [];
     let index = 0;

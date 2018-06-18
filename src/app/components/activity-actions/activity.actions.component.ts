@@ -39,10 +39,14 @@ export class ActivityActionsComponent {
   }
 
   deleteActivity() {
+    console.log(this.event.getActivities().length);
     // @todo fix event stats
     this.event.removeActivity(this.activity);
+    this.event.name = 'sdsad'
+    console.log(this.event.getActivities().length);
+
     this.eventService.addAndReplace(this.event).then((event) => {
-      this.changeDetectorRef.markForCheck();
+      // this.router.navigate(['/eventDetails'], {queryParams: {eventID: this.event.getID(), tabIndex: 0}});
       this.snackBar.open('Activity deleted', null, {
         duration: 5000,
       });
