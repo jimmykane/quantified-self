@@ -58,6 +58,7 @@ import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
 import {EventFormComponent} from './components/event-form/event.form.component';
 import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
+import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -132,10 +133,12 @@ export class RavenErrorHandler implements ErrorHandler {
     UploadInfoComponent,
     ActivityHeaderComponent,
     EventFormComponent,
+    ActivityFormComponent,
     ActivityActionsComponent,
   ],
   entryComponents: [
     EventFormComponent,
+    ActivityFormComponent,
   ],
   providers: [
     LocalStorageService,

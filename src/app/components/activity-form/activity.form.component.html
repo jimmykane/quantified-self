@@ -1,0 +1,11 @@
+<form [formGroup]="eventFormGroup">
+  <mat-form-field>
+    <input matInput placeholder="Name" formControlName="name" [(ngModel)]="activity.name">
+    <!--<mat-hint></mat-hint>-->
+    <mat-error *ngIf="hasError('name')">
+      Please enter a valid name of 4 minumum charactes
+    </mat-error>
+  </mat-form-field>
+  <button mat-button (click)="close()">Cancel</button>
+  <button mat-button (click)="onSubmit()">Save</button>
+</form>
