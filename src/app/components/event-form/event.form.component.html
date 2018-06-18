@@ -6,6 +6,6 @@
       Please enter a valid name of 4 minumum charactes
     </mat-error>
   </mat-form-field>
-  <button mat-button mat-dialog-close>Cancel</button>
+  <button mat-button (click)="close()">Cancel</button>
   <button mat-button (click)="onSubmit()">Save</button>
 </form>

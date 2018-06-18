@@ -20,6 +20,9 @@ import * as Raven from 'raven-js';
 export class EventFormComponent implements OnInit {
 
   public event: EventInterface;
+  public originalValues: {
+    name: string;
+  };
 
   public eventFormGroup: FormGroup;
 
@@ -28,8 +31,10 @@ export class EventFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: EventService,
     private snackBar: MatSnackBar,
-    private formBuilder: FormBuilder) {
+    private formBuilder: FormBuilder
+  ) {
     this.event = data.event;
+    this.originalValues = {name: this.event.name};
   }
 
   ngOnInit(): void {
@@ -75,5 +80,14 @@ export class EventFormComponent implements OnInit {
         this.validateAllFormFields(control);
       }
     });
+  }
+
+  close() {
+    this.restoreOriginalValues();
+    this.dialogRef.close();
+  }
+
+  restoreOriginalValues() {
+    this.event.name = this.originalValues.name;
   }
 }
