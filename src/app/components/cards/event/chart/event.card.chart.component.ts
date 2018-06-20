@@ -85,7 +85,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     return new Promise((resolve, reject) => {
       this.zone.runOutsideAngular(() => {
         const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
-
+        chart.pixelPerfect = false;
         chart.fontSize = '12px';
         // chart.resizable = false;
         const categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
@@ -133,7 +133,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             existingLineSeries.dataFields.dateX = 'date';
             existingLineSeries.dataFields.valueY = key;
             if (key !== DataHeartRate.type) {
-              existingLineSeries.disabled = true
+              // existingLineSeries.visible = false
             }
             existingLineSeries.tooltipText = '{valueY} ' + pointData.getDisplayUnit();
             existingLineSeries.legendSettings.labelText = '{name}';
@@ -143,6 +143,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
             existingLineSeries.strokeWidth = 1;
             existingLineSeries.fillOpacity = 0.05;
+            existingLineSeries.nonScalingStroke = false;
             if (pointData.getType() === DataHeartRate.type) {
               existingLineSeries.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
             }
