@@ -27,7 +27,7 @@ import am4themes_animated from '@amcharts/amcharts4/themes/animated';
 import am4themes_material from '@amcharts/amcharts4/themes/material';
 import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
 
-am4core.useTheme(am4themes_animated);
+// am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_material);
 
 // am4core.useTheme(am4themes_kelly);
@@ -56,7 +56,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   ngAfterViewInit() {
     // this.createChart().then((chart) => {
     //   this.chart = chart;
-    //   this.getChartSeries().forEach(series => this.chart.series.push(series));
+    //   this.getChartData().forEach(series => this.chart.series.push(series));
     // })
   }
 
@@ -69,11 +69,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       if (!this.chart && this.selectedActivities.length) {
         this.createChart().then((chart) => {
           this.chart = chart;
-          this.getChartSeries().forEach(series => this.chart.series.push(series));
+          const chartData = this.getChartData();
+          chartData.series.forEach(series => this.chart.series.push(series));
+          this.chart.data = chartData.data;
         })
       } else if (this.selectedActivities.length && this.chart) {
-        this.chart.series.clear();
-        this.chart.series.setAll(this.getChartSeries());
+        const chartData = this.getChartData();
+        chartData.series.forEach(series => this.chart.series.push(series));
+        this.chart.data = chartData.data;
       } else {
         this.destroyChart();
       }
@@ -115,50 +118,60 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     });
   }
 
-  private getChartSeries(): am4charts.LineSeries[] {
-    return this.selectedActivities.reduce((lineSeriesArray: am4charts.LineSeries[], activity: ActivityInterface, index): am4charts.LineSeries[] => {
-      activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
-        point.getData().forEach((pointData: DataInterface, key: string) => {
-          if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
-            return;
-          }
-
-          let existingLineSeries = lineSeriesArray.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
-
-          if (!existingLineSeries) {
-            existingLineSeries = new am4charts.LineSeries();
-            existingLineSeries.id = pointData.getClassName() + activity.getID();
-            existingLineSeries.name = key + ' (' + activity.creator.name + ')';
-
-            existingLineSeries.dataFields.dateX = 'date';
-            existingLineSeries.dataFields.valueY = key;
-            if (key !== DataHeartRate.type) {
-              // existingLineSeries.visible = false
-            }
-            existingLineSeries.tooltipText = '{valueY} ' + pointData.getDisplayUnit();
-            existingLineSeries.legendSettings.labelText = '{name}';
-            // existingLineSeries.legendSettings.valueText = "{valueY.close}";
-            existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
-            // existingLineSeries.defaultState.transitionDuration = 2000;
-
-            existingLineSeries.strokeWidth = 1;
-            existingLineSeries.fillOpacity = 0.05;
-            existingLineSeries.nonScalingStroke = false;
-            if (pointData.getType() === DataHeartRate.type) {
-              existingLineSeries.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+  private getChartData(): { series: am4charts.LineSeries[], data: any[] } {
+    const chartData = {series: [], data: []};
+    // Use a map for quick lookup
+    const data = new Map<number, any>();
+    // Parse the series while constructing data
+    this.selectedActivities
+      .forEach((activity: ActivityInterface, index) => {
+        activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
+          point.getData().forEach((pointData: DataInterface, key: string) => {
+            if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
+              return;
             }
 
-            lineSeriesArray.push(existingLineSeries);
-          }
+            let existingLineSeries = chartData.series.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
 
-          existingLineSeries.data.push({
-            date: point.getDate().getTime(),
-            [key]: pointData.getDisplayValue(),
-          })
+            if (!existingLineSeries) {
+              existingLineSeries = new am4charts.LineSeries();
+              existingLineSeries.id = pointData.getClassName() + activity.getID();
+              existingLineSeries.name = key + ' (' + activity.creator.name + ')';
+
+              existingLineSeries.dataFields.dateX = 'date';
+              existingLineSeries.dataFields.valueY = pointData.getClassName() + activity.getID();
+              if (key !== DataHeartRate.type) {
+                existingLineSeries.visible = false
+              }
+              existingLineSeries.tooltipText = activity.creator.name + ' ' + pointData.getType() + '{valueY} ' + pointData.getDisplayUnit();
+              existingLineSeries.legendSettings.labelText = '{name}';
+              // existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
+              // existingLineSeries.defaultState.transitionDuration = 2000;
+
+              existingLineSeries.strokeWidth = 1;
+              existingLineSeries.fillOpacity = 0.05;
+              // existingLineSeries.nonScalingStroke = false;
+              if (pointData.getType() === DataHeartRate.type) {
+                existingLineSeries.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+              }
+              chartData.series.push(existingLineSeries);
+            }
+
+            let existingData = data.get(point.getDate().getTime());
+            if (!existingData) {
+              existingData = {};
+              data.set(point.getDate().getTime(), existingData);
+            }
+            existingData[pointData.getClassName() + activity.getID()] = pointData.getDisplayValue();
+          });
         });
       });
-      return lineSeriesArray
-    }, []);
+
+    // Flatten
+    data.forEach(((value, key, map) => {
+      chartData.data.push(Object.assign({date: new Date(key)}, value))
+    }));
+    return chartData;
   }
 
   private destroyChart() {
