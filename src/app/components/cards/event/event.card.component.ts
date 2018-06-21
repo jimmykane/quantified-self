@@ -45,7 +45,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
       this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
-      this.selectedActivities = [this.event.getFirstActivity()];
+      this.selectedActivities = this.selectedActivities || [this.event.getFirstActivity()];
     });
   }
 

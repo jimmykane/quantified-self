@@ -14,18 +14,13 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
-  activitiesCheckboxes: any[];
+  activitiesCheckboxes: { activity: ActivityInterface, checked: boolean, intermediate: boolean, disabled: boolean }[] = [];
 
   constructor(public eventColorService: AppEventColorService) {
 
   }
 
   ngOnInit() {
-  }
-
-
-  ngOnChanges(simpleChanges): void {
-    // Create the checkboxes
     this.activitiesCheckboxes = this.event.getActivities().reduce((activitiesCheckboxes, activity) => {
       activitiesCheckboxes.push({
         activity: activity,
@@ -34,17 +29,26 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
         disabled: false,
       });
       return activitiesCheckboxes;
-
     }, []);
+  }
+
+
+  ngOnChanges(simpleChanges): void {
+    // Create the checkboxes
+    this.activitiesCheckboxes.forEach((activityCheckBox) => {
+      activityCheckBox.checked = !!this.selectedActivities
+        .find(selectedActivity => selectedActivity.getID() === activityCheckBox.activity.getID());
+    });
+
   }
 
   onCheckboxChange() {
     this.selectedActivities = this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
-        if (activityCheckbox.checked) {
-          activities.push(activityCheckbox.activity)
-        }
-        return activities;
-      }, []);
+      if (activityCheckbox.checked) {
+        activities.push(activityCheckbox.activity)
+      }
+      return activities;
+    }, []);
     this.selectedActivitiesChange.emit(this.selectedActivities);
   }
 }
