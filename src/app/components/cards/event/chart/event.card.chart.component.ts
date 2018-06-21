@@ -131,7 +131,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
               return;
             }
 
-            let existingLineSeries = chartData.series.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
+            let existingLineSeries: am4charts.LineSeries = chartData.series.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
 
             if (!existingLineSeries) {
               existingLineSeries = new am4charts.LineSeries();
@@ -141,7 +141,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
               existingLineSeries.dataFields.dateX = 'date';
               existingLineSeries.dataFields.valueY = pointData.getClassName() + activity.getID();
               if (key !== DataHeartRate.type) {
-                existingLineSeries.visible = false
+                existingLineSeries.disabled = true;
               }
               existingLineSeries.tooltipText = activity.creator.name + ' ' + pointData.getType() + '{valueY} ' + pointData.getDisplayUnit();
               existingLineSeries.legendSettings.labelText = '{name}';
