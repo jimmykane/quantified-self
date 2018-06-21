@@ -12,7 +12,8 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 // @todo use selection model
 export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
-  @Output() selectedActivities: EventEmitter<ActivityInterface[]> = new EventEmitter();
+  @Input() selectedActivities: ActivityInterface[];
+  @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
   activitiesCheckboxes: any[];
 
   constructor(public eventColorService: AppEventColorService) {
@@ -22,34 +23,28 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   ngOnInit() {
   }
 
-  ngOnChanges(): void {
+
+  ngOnChanges(simpleChanges): void {
     // Create the checkboxes
-    this.activitiesCheckboxes = [];
-    let index = 0;
-    for (const activity of this.event.getActivities()) {
-      this.activitiesCheckboxes.push({
+    this.activitiesCheckboxes = this.event.getActivities().reduce((activitiesCheckboxes, activity) => {
+      activitiesCheckboxes.push({
         activity: activity,
-        checked: index === 0, // force the 1st
+        checked: !!this.selectedActivities.find(selectedActivity => selectedActivity === activity),
         intermediate: false,
         disabled: false,
       });
-      index++;
-    }
-    this.emitChanges();
+      return activitiesCheckboxes;
+
+    }, []);
   }
 
   onCheckboxChange() {
-    this.emitChanges();
-  }
-
-  private emitChanges() {
-    this.selectedActivities.emit(
-      this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
+    this.selectedActivities = this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
         if (activityCheckbox.checked) {
           activities.push(activityCheckbox.activity)
         }
         return activities;
-      }, [])
-    );
+      }, []);
+    this.selectedActivitiesChange.emit(this.selectedActivities);
   }
 }

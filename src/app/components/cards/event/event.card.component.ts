@@ -44,12 +44,9 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         this.router.navigate(['/dashboard']);
         return;
       }
-      this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length
+      this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
+      this.selectedActivities = [this.event.getFirstActivity()];
     });
-  }
-
-  onSelectedActivities(activities) {
-    this.selectedActivities = activities;
   }
 
   ngOnDestroy(): void {

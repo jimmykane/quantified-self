@@ -44,7 +44,7 @@
       conditions
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <app-activities-checkboxes [event]="event" (selectedActivities)="onSelectedActivities($event)">
+      <app-activities-checkboxes [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
     </mat-card-subtitle>
   </mat-card-header>
@@ -68,7 +68,7 @@
           <mat-icon>insert_chart</mat-icon>
         </ng-template>
         <app-event-card-stats
-          [selectedActivites]="selectedActivities"
+          [selectedActivities]="selectedActivities"
           [event]="event">
         </app-event-card-stats>
       </mat-tab>

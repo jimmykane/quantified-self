@@ -22,7 +22,7 @@ import {ControlPosition, MapTypeControlOptions, MapTypeId} from '@agm/core/servi
 export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
-  @Input() selectedActivities: ActivityInterface[];
+  @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
 
   public mapTypeControlOptions: MapTypeControlOptions = {
