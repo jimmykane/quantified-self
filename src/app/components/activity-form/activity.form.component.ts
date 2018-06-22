@@ -24,7 +24,7 @@ export class ActivityFormComponent implements OnInit {
     name: string;
   };
 
-  public eventFormGroup: FormGroup;
+  public activityFormGroup: FormGroup;
 
   constructor(
     public dialogRef: MatDialogRef<ActivityFormComponent>,
@@ -38,7 +38,7 @@ export class ActivityFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.eventFormGroup = new FormGroup({
+    this.activityFormGroup = new FormGroup({
       name: new FormControl(this.event.name, [
         Validators.required,
         Validators.minLength(4),
@@ -47,12 +47,12 @@ export class ActivityFormComponent implements OnInit {
   }
 
   hasError(field: string) {
-    return !(this.eventFormGroup.get(field).valid && this.eventFormGroup.get(field).touched);
+    return !(this.activityFormGroup.get(field).valid && this.activityFormGroup.get(field).touched);
   }
 
   async onSubmit() {
-    if (!this.eventFormGroup.valid) {
-      this.validateAllFormFields(this.eventFormGroup);
+    if (!this.activityFormGroup.valid) {
+      this.validateAllFormFields(this.activityFormGroup);
     }
     try {
       await this.eventService.addAndReplace(this.event);
