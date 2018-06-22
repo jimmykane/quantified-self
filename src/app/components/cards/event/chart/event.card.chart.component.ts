@@ -64,22 +64,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   ngOnChanges(simpleChanges): void {
+    this.destroyChart();
+    if (!this.isVisible) {
+      return;
+    }
+
     // If there are data changes
-    if ((simpleChanges.selectedActivities || simpleChanges.event)) {
-      if (!this.chart && this.selectedActivities.length) {
-        this.createChart().then((chart) => {
-          this.chart = chart;
-          const chartData = this.getChartData();
-          chartData.series.forEach(series => this.chart.series.push(series));
-          this.chart.data = chartData.data;
-        })
-      } else if (this.selectedActivities.length && this.chart) {
+    if (this.selectedActivities.length) {
+      this.createChart().then((chart) => {
+        this.chart = chart;
         const chartData = this.getChartData();
         chartData.series.forEach(series => this.chart.series.push(series));
         this.chart.data = chartData.data;
-      } else {
-        this.destroyChart();
-      }
+      })
     }
   }
 
