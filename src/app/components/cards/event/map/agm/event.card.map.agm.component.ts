@@ -2,7 +2,7 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
   ViewChild,
 } from '@angular/core';
-import {AgmMap, LatLngBoundsLiteral} from '@agm/core';
+import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
 import {AppEventColorService} from '../../../../../services/color/app.event.color.service';
 import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -10,7 +10,8 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
-import {ControlPosition, MapTypeControlOptions, MapTypeId} from '@agm/core/services/google-maps-types';
+import {ControlPosition, MapTypeControlOptions} from '@agm/core/services/google-maps-types';
+import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -44,6 +45,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
+
+
+  private clickedPoint: PointInterface;
 
   constructor(private changeDetectorRef: ChangeDetectorRef, public eventColorService: AppEventColorService) {
   }
@@ -142,6 +146,20 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   openActivityStartMarkerInfoWindow(activity) {
     this.openedActivityStartMarkerInfoWindow = activity;
     this.openedLapMarkerInfoWindow = void 0;
+  }
+
+  lineClick(event: PolyMouseEvent, points: PointInterface[]) {
+    const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
+      latitudeDegrees: event.latLng.lat(),
+      longitudeDegrees: event.latLng.lng(),
+    }, points);
+    if (nearestPoint) {
+      this.clickedPoint = nearestPoint;
+    }
+  }
+
+  getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
+    return Array.from(map.values());
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])

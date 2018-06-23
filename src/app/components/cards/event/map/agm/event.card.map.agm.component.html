@@ -7,14 +7,32 @@
     [scaleControl]="true"
     [mapTypeControlOptions]="mapTypeControlOptions">
     <agm-polyline
+      #polyline
       *ngFor="let data of mapData"
+      (lineClick)="lineClick($event, data.activityPoints)"
       [strokeColor]="eventColorService.getActivityColor(event, data.activity)"
       [strokeWeight]="4">
-      <agm-polyline-point
-        *ngFor="let point of data.activityPoints"
-        [latitude]="point.getPosition().latitudeDegrees"
-        [longitude]="point.getPosition().longitudeDegrees">
-      </agm-polyline-point>
+      <ng-container *ngFor="let point of data.activityPoints">
+        <agm-polyline-point
+          [latitude]="point.getPosition().latitudeDegrees"
+          [longitude]="point.getPosition().longitudeDegrees">
+        </agm-polyline-point>
+        <agm-info-window
+          [latitude]="point.getPosition().latitudeDegrees"
+          [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="true"
+          [isOpen]="point == clickedPoint">
+          <span class="mat-subheading-1"><mat-icon>info</mat-icon>Point Details</span>
+          <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
+          <span class="mat-subheading-1">Time: </span><span>{{ point.getDate() | date: 'mediumTime' }}</span>
+          <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
+          <ng-container *ngFor="let pointData of getMapValuesAsArray(point.getData()); last as isLast">
+            <span class="mat-subheading-1">{{pointData.getType()}}: </span><span> {{ pointData.getDisplayValue() }} {{ pointData.getDisplayUnit() }}</span>
+            <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
+          </ng-container>
+        </agm-info-window>
+
+      </ng-container>
+
     </agm-polyline>
 
     <!-- Laps and infowindows -->
