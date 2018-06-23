@@ -1,5 +1,11 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Input, OnChanges, OnInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  HostListener,
+  Input,
+  OnChanges,
+  OnInit,
   ViewChild,
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
@@ -14,6 +20,7 @@ import {ControlPosition, MapTypeControlOptions} from '@agm/core/services/google-
 import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
 import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
 import {Log} from 'ng2-logger/client';
+import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -27,6 +34,11 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
+  @Input() showAutoLaps = true;
+  @Input() showManualLaps = false;
+  @Input() showData = false;
+  @Input() showDataWarnings = false;
+
 
   public mapData: MapData[] = [];
   public openedLapMarkerInfoWindow: LapInterface;
@@ -36,16 +48,19 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     // mapTypeIds: [MapTypeId.TERRAIN],
     position: ControlPosition.TOP_RIGHT,
   };
-  private logger = Log.create('EventCardMapAGMComponent');
 
-  constructor(private changeDetectorRef: ChangeDetectorRef, public eventColorService: AppEventColorService) {
+  private logger = Log.create('EventCardMapAGMComponent')
+
+  constructor(
+    private changeDetectorRef: ChangeDetectorRef,
+    public eventColorService: AppEventColorService) {
   }
 
   ngOnInit() {
   }
 
   ngOnChanges(simpleChanges) {
-    if (simpleChanges.event || simpleChanges.selectedActivities) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAutoLaps || simpleChanges.showManualLaps) {
       this.mapData = this.cacheNewData();
     }
 
@@ -56,7 +71,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       });
     }
   }
-
 
   private cacheNewData(): MapData[] {
     const t0 = performance.now();
@@ -75,17 +89,27 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
         return;
       }
       // Check for laps with position
-      const lapsWithPosition = activity.getLaps().reduce((lapsArray, lap) => {
-        const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
-        if (lapPoints.length) {
-          lapsArray.push({
-            lap: lap,
-            lapPoints: lapPoints,
-            lapEndPoint: lapPoints[lapPoints.length - 1],
-          })
-        }
-        return lapsArray;
-      }, []);
+      const lapsWithPosition = activity.getLaps()
+        .filter((lap) => {
+          if (!this.showAutoLaps && lap.type === LapTypes.AutoLap) {
+            return false;
+          }
+          if (!this.showManualLaps && lap.type === LapTypes.Manual) {
+            return false;
+          }
+          return true;
+        })
+        .reduce((lapsArray, lap) => {
+          const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
+          if (lapPoints.length) {
+            lapsArray.push({
+              lap: lap,
+              lapPoints: lapPoints,
+              lapEndPoint: lapPoints[lapPoints.length - 1],
+            })
+          }
+          return lapsArray;
+        }, []);
       // Create the object
       mapData.push({
         activity: activity,

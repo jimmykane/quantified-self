@@ -1,0 +1,37 @@
+<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
+  <mat-icon>more_vert</mat-icon>
+</button>
+<mat-menu #menu="matMenu">
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showAutoLaps">
+      Show Auto Laps
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showManualLaps">
+      Show Manual Laps
+    </mat-slide-toggle>
+  </section>
+   <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showDataWarnings">
+      Show Data Warnings
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showData">
+      Show Data
+    </mat-slide-toggle>
+  </section>
+</mat-menu>

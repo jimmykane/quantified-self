@@ -42,7 +42,6 @@ export class ActivityActionsComponent {
     console.log(this.event.getActivities().length);
     // @todo fix event stats
     this.event.removeActivity(this.activity);
-    this.event.name = 'sdsad'
     console.log(this.event.getActivities().length);
 
     this.eventService.addAndReplace(this.event).then((event) => {

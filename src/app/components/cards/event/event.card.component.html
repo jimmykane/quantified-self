@@ -57,9 +57,20 @@
       <mat-tab label="Map" *ngIf="eventHasPointsWithPosition">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
+          <app-map-actions
+            [(showAutoLaps)]="showMapAutoLaps"
+            [(showManualLaps)]="showMapManualLaps"
+            [(showDataWarnings)]="showMapDataWarnings"
+            [(showData)]="showData"
+            align="end">
+          </app-map-actions>
         </ng-template>
         <app-event-card-map-agm
           [isVisible]="selectedTabIndex === 0"
+          [showAutoLaps]="showMapAutoLaps"
+          [showManualLaps]="showMapManualLaps"
+          [showDataWarnings]="showMapDataWarnings"
+          [showData]="showData"
           [selectedActivities]="selectedActivities"
           [event]="event"></app-event-card-map-agm>
       </mat-tab>

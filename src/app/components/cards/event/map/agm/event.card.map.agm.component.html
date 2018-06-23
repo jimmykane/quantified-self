@@ -1,5 +1,4 @@
 <mat-card>
-
   <!-- The lines and points -->
   <agm-map
     [fullscreenControl]="true"
@@ -17,9 +16,9 @@
           [latitude]="point.getPosition().latitudeDegrees"
           [longitude]="point.getPosition().longitudeDegrees">
         </agm-polyline-point>
-        <agm-info-window
+        <agm-info-window *ngIf="showData"
           [latitude]="point.getPosition().latitudeDegrees"
-          [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="true"
+          [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="false"
           [isOpen]="point == clickedPoint">
           <span class="mat-subheading-1"><mat-icon>info</mat-icon>Point Details</span>
           <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>

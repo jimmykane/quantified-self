@@ -24,6 +24,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public selectedActivities: ActivityInterface[];
   public eventHasPointsWithPosition: boolean;
 
+  public showMapAutoLaps = true;
+  public showMapManualLaps = false;
+  public showMapDataWarnings = false;
+  public showData = false;
+
   private parametersSubscription: Subscription;
 
   constructor(private route: ActivatedRoute,
