@@ -12,6 +12,8 @@ import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {ControlPosition, MapTypeControlOptions} from '@agm/core/services/google-maps-types';
 import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
+import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
+import {Log} from 'ng2-logger/client';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -26,28 +28,15 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
 
+  public mapData: MapData[] = [];
+  public openedLapMarkerInfoWindow: LapInterface;
+  public openedActivityStartMarkerInfoWindow: ActivityInterface;
+  public clickedPoint: PointInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
     // mapTypeIds: [MapTypeId.TERRAIN],
     position: ControlPosition.TOP_RIGHT,
   };
-
-
-  public mapData: {
-    activity: ActivityInterface,
-    activityPoints: PointInterface[],
-    activityStartPoint: PointInterface,
-    lapsWithPosition: {
-      lap: LapInterface,
-      lapPoints: PointInterface[],
-      lapEndPoint: PointInterface
-    }[]
-  }[] = [];
-
-  public openedLapMarkerInfoWindow: LapInterface;
-  public openedActivityStartMarkerInfoWindow: ActivityInterface;
-
-
-  private clickedPoint: PointInterface;
+  private logger = Log.create('EventCardMapAGMComponent');
 
   constructor(private changeDetectorRef: ChangeDetectorRef, public eventColorService: AppEventColorService) {
   }
@@ -57,7 +46,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   ngOnChanges(simpleChanges) {
     if (simpleChanges.event || simpleChanges.selectedActivities) {
-      this.cacheNewData();
+      this.mapData = this.cacheNewData();
     }
 
     if (this.isVisible) {
@@ -69,10 +58,18 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
 
-  private cacheNewData() {
-    this.mapData = [];
+  private cacheNewData(): MapData[] {
+    const t0 = performance.now();
+    const mapData = [];
     this.selectedActivities.forEach((activity) => {
-      const activityPoints = this.event.getPointsWithPosition(void 0, void 0, [activity]);
+      const activityPoints = activity.getPointsInterpolated().filter((point) => point.getPosition());
+      const lowNumberOfSatellitesPoints = activityPoints.filter((point) => {
+        const numberOfSatellitesData = point.getDataByType(DataNumberOfSatellites.type);
+        if (!numberOfSatellitesData) {
+          return false
+        }
+        return numberOfSatellitesData.getValue() < 8;
+      });
       // If the activity has no points skip
       if (!activityPoints.length) {
         return;
@@ -90,13 +87,17 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
         return lapsArray;
       }, []);
       // Create the object
-      this.mapData.push({
+      mapData.push({
         activity: activity,
         activityPoints: activityPoints,
+        lowNumberOfSatellitesPoints: lowNumberOfSatellitesPoints,
         activityStartPoint: activityPoints[0],
         lapsWithPosition: lapsWithPosition,
       });
     });
+    const t1 = performance.now();
+    this.logger.d(`Parsed data after ${t1 - t0}ms`);
+    return mapData;
   }
 
   getBounds(): LatLngBoundsLiteral {
@@ -170,3 +171,14 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 }
 
+export interface MapData {
+  activity: ActivityInterface,
+  activityPoints: PointInterface[],
+  lowNumberOfSatellitesPoints: PointInterface[],
+  activityStartPoint: PointInterface,
+  lapsWithPosition: {
+    lap: LapInterface,
+    lapPoints: PointInterface[],
+    lapEndPoint: PointInterface
+  }[]
+}
