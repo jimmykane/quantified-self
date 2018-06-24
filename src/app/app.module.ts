@@ -60,6 +60,7 @@ import {EventFormComponent} from './components/event-form/event.form.component';
 import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
+import {AmChartsModule} from '@amcharts/amcharts3-angular';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -86,6 +87,7 @@ export class RavenErrorHandler implements ErrorHandler {
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ',
       apiVersion: '3.31'
     }),
+    AmChartsModule,
     ReactiveFormsModule,
     MatExpansionModule,
     MatButtonModule,
