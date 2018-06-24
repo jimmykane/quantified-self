@@ -8,18 +8,18 @@
     <agm-polyline
       #polyline
       *ngFor="let data of mapData"
-      (lineClick)="lineClick($event, data.activityPoints)"
+      (lineClick)="lineClick($event, data.points)"
       [strokeColor]="eventColorService.getActivityColor(event, data.activity)"
       [strokeWeight]="4">
-      <ng-container *ngFor="let point of data.activityPoints">
+      <ng-container *ngFor="let point of data.points">
         <agm-polyline-point
           [latitude]="point.getPosition().latitudeDegrees"
           [longitude]="point.getPosition().longitudeDegrees">
         </agm-polyline-point>
         <agm-info-window *ngIf="showData"
-          [latitude]="point.getPosition().latitudeDegrees"
-          [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="false"
-          [isOpen]="point == clickedPoint">
+                         [latitude]="point.getPosition().latitudeDegrees"
+                         [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="false"
+                         [isOpen]="point == clickedPoint">
           <span class="mat-subheading-1"><mat-icon>info</mat-icon>Point Details</span>
           <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
           <span class="mat-subheading-1">Time: </span><span>{{ point.getDate() | date: 'mediumTime' }}</span>
@@ -32,10 +32,19 @@
 
       </ng-container>
 
+
+      <agm-marker
+        *ngFor="let point of data.lowNumberOfSatellitesPoints"
+        iconUrl="//maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png"
+        [latitude]="point.getPosition().latitudeDegrees"
+        [longitude]="point.getPosition().longitudeDegrees">
+      </agm-marker>
+
     </agm-polyline>
 
-    <!-- Laps and infowindows -->
 
+    <!-- Laps and infowindows -->
+    <!-- @todo merge this with the activity for performance -->
     <ng-container *ngFor="let activityData of mapData">
       <agm-marker (markerClick)="openActivityStartMarkerInfoWindow(activityData.activity)"
                   [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activityData.activity).slice(1)"

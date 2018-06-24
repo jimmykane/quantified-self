@@ -5,7 +5,7 @@ import {
   HostListener,
   Input,
   OnChanges,
-  OnInit,
+  OnInit, SimpleChange,
   ViewChild,
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
@@ -49,7 +49,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     position: ControlPosition.TOP_RIGHT,
   };
 
-  private logger = Log.create('EventCardMapAGMComponent')
+  private logger = Log.create('EventCardMapAGMComponent');
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -60,7 +60,12 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges(simpleChanges) {
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAutoLaps || simpleChanges.showManualLaps) {
+    if (simpleChanges.event
+      || simpleChanges.selectedActivities
+      || simpleChanges.showAutoLaps
+      || simpleChanges.showManualLaps
+      || simpleChanges.showData
+      || simpleChanges.showDataWarnings) {
       this.mapData = this.cacheNewData();
     }
 
@@ -76,14 +81,23 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     const t0 = performance.now();
     const mapData = [];
     this.selectedActivities.forEach((activity) => {
-      const activityPoints = activity.getPointsInterpolated().filter((point) => point.getPosition());
-      const lowNumberOfSatellitesPoints = activityPoints.filter((point) => {
-        const numberOfSatellitesData = point.getDataByType(DataNumberOfSatellites.type);
-        if (!numberOfSatellitesData) {
-          return false
-        }
-        return numberOfSatellitesData.getValue() < 8;
-      });
+      let activityPoints: PointInterface[];
+      if (this.showData){
+        activityPoints = activity.getPointsInterpolated();
+      }else {
+        activityPoints = activity.getPoints()
+      }
+      activityPoints = activityPoints.filter((point) => point.getPosition());
+      let lowNumberOfSatellitesPoints: PointInterface[] = [];
+      if (this.showDataWarnings) {
+        lowNumberOfSatellitesPoints = activityPoints.filter((point) => {
+          const numberOfSatellitesData = point.getDataByType(DataNumberOfSatellites.type);
+          if (!numberOfSatellitesData) {
+            return false
+          }
+          return numberOfSatellitesData.getValue() < 7;
+        });
+      }
       // If the activity has no points skip
       if (!activityPoints.length) {
         return;
@@ -113,7 +127,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       // Create the object
       mapData.push({
         activity: activity,
-        activityPoints: activityPoints,
+        points: activityPoints,
         lowNumberOfSatellitesPoints: lowNumberOfSatellitesPoints,
         activityStartPoint: activityPoints[0],
         lapsWithPosition: lapsWithPosition,
@@ -125,7 +139,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   getBounds(): LatLngBoundsLiteral {
-    const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.activityPoints), []);
+    const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.points), []);
     if (!pointsWithPosition.length) {
       return <LatLngBoundsLiteral>{
         east: 0,
@@ -197,7 +211,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
 export interface MapData {
   activity: ActivityInterface,
-  activityPoints: PointInterface[],
+  points: PointInterface[],
   lowNumberOfSatellitesPoints: PointInterface[],
   activityStartPoint: PointInterface,
   lapsWithPosition: {
