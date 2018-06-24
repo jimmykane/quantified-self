@@ -21,7 +21,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public selectedTabIndex;
-  public selectedActivities: ActivityInterface[];
+  public selectedActivities: ActivityInterface[] = [];
   public eventHasPointsWithPosition: boolean;
 
   public showMapAutoLaps = true;
@@ -43,14 +43,19 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   ngOnInit() {
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-      this.selectedTabIndex = +params['tabIndex'];
+      // Reset the selected activities
+      if (this.event && this.event.getID() !==  params['eventID']) {
+        this.selectedActivities = [];
+      }
       this.event = this.eventService.findEvent(params['eventID']);
       if (!this.event) {
         this.router.navigate(['/dashboard']);
         return;
       }
+
+      this.selectedTabIndex = +params['tabIndex'];
       this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
-      this.selectedActivities = this.selectedActivities || [this.event.getFirstActivity()];
+      this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : [this.event.getFirstActivity()];
     });
   }
 

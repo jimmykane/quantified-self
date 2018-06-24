@@ -21,6 +21,29 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   }
 
   ngOnInit() {
+
+  }
+
+
+  ngOnChanges(simpleChanges): void {
+    if (simpleChanges.event){
+      this.createCheckboxes();
+      return;
+    }
+    this.updateCheckboxes();
+  }
+
+  onCheckboxChange() {
+    this.selectedActivities = this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
+      if (activityCheckbox.checked) {
+        activities.push(activityCheckbox.activity)
+      }
+      return activities;
+    }, []);
+    this.selectedActivitiesChange.emit(this.selectedActivities);
+  }
+
+  private createCheckboxes(){
     this.activitiesCheckboxes = this.event.getActivities().reduce((activitiesCheckboxes, activity) => {
       activitiesCheckboxes.push({
         activity: activity,
@@ -32,23 +55,10 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
     }, []);
   }
 
-
-  ngOnChanges(simpleChanges): void {
-    // Create the checkboxes
+  private updateCheckboxes(){
     this.activitiesCheckboxes.forEach((activityCheckBox) => {
       activityCheckBox.checked = !!this.selectedActivities
         .find(selectedActivity => selectedActivity.getID() === activityCheckBox.activity.getID());
     });
-
-  }
-
-  onCheckboxChange() {
-    this.selectedActivities = this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
-      if (activityCheckbox.checked) {
-        activities.push(activityCheckbox.activity)
-      }
-      return activities;
-    }, []);
-    this.selectedActivitiesChange.emit(this.selectedActivities);
   }
 }
