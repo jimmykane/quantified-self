@@ -13,6 +13,7 @@ import {EventService} from '../../services/app.event.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {MapSettingsService} from '../../services/app.map.settings.service';
 
 @Component({
   selector: 'app-map-actions',
@@ -20,7 +21,8 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
   styleUrls: ['./map.actions.component.css'],
   providers: [],
 })
-export class MapActionsComponent implements OnChanges{
+
+export class MapActionsComponent implements OnChanges {
 
   @Input() showAutoLaps: boolean;
   @Input() showManualLaps: boolean;
@@ -33,26 +35,30 @@ export class MapActionsComponent implements OnChanges{
   @Output() showDataWarningsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
 
-
   constructor(
     private eventService: EventService,
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
+    private mapSettingsService: MapSettingsService,
     private snackBar: MatSnackBar,
     public dialog: MatDialog) {
   }
 
-  checkBoxChanged(event){
+  checkBoxChanged(event) {
     // debugger;
     this.showAutoLapsChange.emit(this.showAutoLaps);
     this.showManualLapsChange.emit(this.showManualLaps);
     this.showDataChange.emit(this.showData);
     this.showDataWarningsChange.emit(this.showDataWarnings);
+    this.mapSettingsService.setShowAutoLaps(this.showAutoLaps);
+    this.mapSettingsService.setShowManualLaps(this.showManualLaps);
+    this.mapSettingsService.setShowData(this.showData);
+    this.mapSettingsService.setShowDataWarnings(this.showDataWarnings);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
   }
 
-  ngOnChanges(simpleChanges){
+  ngOnChanges(simpleChanges) {
     // debugger;
   }
 }

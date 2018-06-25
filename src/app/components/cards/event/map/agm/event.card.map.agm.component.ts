@@ -21,6 +21,8 @@ import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.ada
 import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
 import {Log} from 'ng2-logger/client';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {MapSettingsLocalStorageService} from '../../../../../services/storage/app.map.settings.local.storage.service';
+import {MapSettingsService} from '../../../../../services/app.map.settings.service';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -34,10 +36,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
-  @Input() showAutoLaps = true;
-  @Input() showManualLaps = false;
-  @Input() showData = false;
-  @Input() showDataWarnings = false;
+  @Input() showAutoLaps: boolean;
+  @Input() showManualLaps: boolean;
+  @Input() showData: boolean;
+  @Input() showDataWarnings: boolean;
 
 
   public mapData: MapData[] = [];

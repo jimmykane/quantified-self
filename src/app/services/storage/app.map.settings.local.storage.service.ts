@@ -7,5 +7,4 @@ import {Log} from 'ng2-logger/client';
 export class MapSettingsLocalStorageService extends LocalStorageService {
   protected nameSpace = 'map.settings.service.';
   protected logger = Log.create('MapSettingsLocalStorageService');
-
 }

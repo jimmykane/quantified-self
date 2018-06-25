@@ -7,7 +7,6 @@ import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
-import {LocalStorageService} from './services/storage/app.local.storage.service';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
@@ -62,6 +61,7 @@ import {ActivityFormComponent} from './components/activity-form/activity.form.co
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
+import {MapSettingsService} from './services/app.map.settings.service';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -147,9 +147,9 @@ export class RavenErrorHandler implements ErrorHandler {
     ActivityFormComponent,
   ],
   providers: [
-    LocalStorageService,
     EventLocalStorageService,
     MapSettingsLocalStorageService,
+    MapSettingsService,
     EventService,
     ActionButtonService,
     WeatherUndergroundWeatherService,
