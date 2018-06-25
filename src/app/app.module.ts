@@ -61,6 +61,7 @@ import {ActivityActionsComponent} from './components/activity-actions/activity.a
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
+import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -148,6 +149,7 @@ export class RavenErrorHandler implements ErrorHandler {
   providers: [
     LocalStorageService,
     EventLocalStorageService,
+    MapSettingsLocalStorageService,
     EventService,
     ActionButtonService,
     WeatherUndergroundWeatherService,

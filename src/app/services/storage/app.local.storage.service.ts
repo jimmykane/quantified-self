@@ -5,10 +5,10 @@ import {Log} from 'ng2-logger/client';
 
 
 @Injectable()
-export class LocalStorageService implements StorageServiceInterface {
+export abstract class LocalStorageService implements StorageServiceInterface {
 
   protected nameSpace = 'quantified-self';
-  private logger = Log.create('LocalStorageService');
+  protected logger = Log.create('LocalStorageService');
 
   constructor() {
   }
