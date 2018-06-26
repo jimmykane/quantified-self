@@ -1,0 +1,45 @@
+<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
+  <mat-icon>more_vert</mat-icon>
+</button>
+<mat-menu #menu="matMenu">
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showAutoLaps">
+      <span matTooltip="When enabled auto lap markers will be added to the map">
+        Auto Laps
+      </span>
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showManualLaps">
+      <span matTooltip="When enabled manual lap markers will be added to the map">
+        Manual Laps
+      </span>
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showDataWarnings">
+      <span matTooltip="When enabled the map will show little 'targets' were satellite count was low (<7). The watch registers these 'events' periodically">
+        Data Warnings
+      </span>
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showData">
+      <span matTooltip="!!!WARNING!!! This is CPU intense atm. When this is enabled clicking on the map will popup an info window with the current position stats for example heart rate, speed, pace, altitude and so on">
+        Stats on Click
+      </span>
+    </mat-slide-toggle>
+  </section>
+</mat-menu>

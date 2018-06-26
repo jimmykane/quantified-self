@@ -15,20 +15,21 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 
 export class EventCardStatsComponent implements OnChanges {
   @Input() event: EventInterface;
-  @Input() selectedActivites: ActivityInterface[];
+  @Input() selectedActivities: ActivityInterface[];
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
   appColors = AppColors;
 
-  ngOnChanges() {
-    if (!this.selectedActivites.length) {
+  ngOnChanges(simpleChanges) {
+    // If no activities selected
+    if (!this.selectedActivities.length) {
       this.data = new MatTableDataSource<Object>();
       this.columns = [];
       return;
     }
 
     // Collect all the stat types from all the activities
-    const stats = this.selectedActivites.reduce((statsMap, activity) => {
+    const stats = this.selectedActivities.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
         statsMap.set(stat.getClassName(), stat);
       });
@@ -38,7 +39,7 @@ export class EventCardStatsComponent implements OnChanges {
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
-        this.selectedActivites.reduce((rowObj, activity, index) => {
+        this.selectedActivities.reduce((rowObj, activity, index) => {
           const activityStat = activity.getStat(stat.getClassName());
           if (!activityStat) {
             return rowObj;
@@ -55,10 +56,10 @@ export class EventCardStatsComponent implements OnChanges {
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
-    if (this.selectedActivites.length === 2) {
+    if (this.selectedActivities.length === 2) {
       Array.from(stats.values()).forEach((stat: DataInterface, index) => {
-        const firstActivityStat = this.selectedActivites[0].getStat(stat.getClassName());
-        const secondActivityStat = this.selectedActivites[1].getStat(stat.getClassName());
+        const firstActivityStat = this.selectedActivities[0].getStat(stat.getClassName());
+        const secondActivityStat = this.selectedActivities[1].getStat(stat.getClassName());
         if (!firstActivityStat || !secondActivityStat) {
           return;
         }

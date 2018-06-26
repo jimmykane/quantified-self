@@ -12,44 +12,53 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 // @todo use selection model
 export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
-  @Output() selectedActivities: EventEmitter<ActivityInterface[]> = new EventEmitter();
-  activitiesCheckboxes: any[];
+  @Input() selectedActivities: ActivityInterface[];
+  @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
+  activitiesCheckboxes: { activity: ActivityInterface, checked: boolean, intermediate: boolean, disabled: boolean }[] = [];
 
   constructor(public eventColorService: AppEventColorService) {
 
   }
 
   ngOnInit() {
+
   }
 
-  ngOnChanges(): void {
-    // Create the checkboxes
-    this.activitiesCheckboxes = [];
-    let index = 0;
-    for (const activity of this.event.getActivities()) {
-      this.activitiesCheckboxes.push({
-        activity: activity,
-        checked: index === 0, // force the 1st
-        intermediate: false,
-        disabled: false,
-      });
-      index++;
+
+  ngOnChanges(simpleChanges): void {
+    if (simpleChanges.event){
+      this.createCheckboxes();
+      return;
     }
-    this.emitChanges();
+    this.updateCheckboxes();
   }
 
   onCheckboxChange() {
-    this.emitChanges();
+    this.selectedActivities = this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
+      if (activityCheckbox.checked) {
+        activities.push(activityCheckbox.activity)
+      }
+      return activities;
+    }, []);
+    this.selectedActivitiesChange.emit(this.selectedActivities);
   }
 
-  private emitChanges() {
-    this.selectedActivities.emit(
-      this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
-        if (activityCheckbox.checked) {
-          activities.push(activityCheckbox.activity)
-        }
-        return activities;
-      }, [])
-    );
+  private createCheckboxes(){
+    this.activitiesCheckboxes = this.event.getActivities().reduce((activitiesCheckboxes, activity) => {
+      activitiesCheckboxes.push({
+        activity: activity,
+        checked: !!this.selectedActivities.find(selectedActivity => selectedActivity === activity),
+        intermediate: false,
+        disabled: false,
+      });
+      return activitiesCheckboxes;
+    }, []);
+  }
+
+  private updateCheckboxes(){
+    this.activitiesCheckboxes.forEach((activityCheckBox) => {
+      activityCheckBox.checked = !!this.selectedActivities
+        .find(selectedActivity => selectedActivity.getID() === activityCheckBox.activity.getID());
+    });
   }
 }

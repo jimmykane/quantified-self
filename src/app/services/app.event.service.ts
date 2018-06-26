@@ -37,7 +37,7 @@ export class EventService {
     }
   }
 
-  public async addEvent(event: EventInterface) {
+  public async addAndReplace(event: EventInterface) {
     // If the event is already in the list create a new one as of update
     if (this.findEvent(event.getID())) {
       this.deleteEvent(event); // Delete first

@@ -5,6 +5,12 @@
 
   <title>Quantified Self</title>
 
+  <base href="/">
+
+  <!-- View Port -->
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimal-ui"/>
+
   <meta name="keywords"
         content="quantified, self, quantified, self, .fit, .gpx, .tcx, .sml, .json, suunto, polar, garmin, running, activities, parser, tcx, fit, tool, comparison, data, fitness, TCX, sport, sportwatch, Polar, Garmin, Tomtom, Nike, GPX, convertor, creator, tool, GPS, HRM, XML, heart-rate, Running, Cycling, Swimming, Strava, Endomondo, Runkeeper, Mapmyrun, Mapmyfitness"/>
   <meta name="description"
@@ -12,10 +18,16 @@
          and services such as Strava, Movescount, Garmin Connect, Polar Flow. Supported file types are .fit, .tcx, .gpx and json"/>
   <meta name="author" content="Dimitrios Kanellopoulos"/>
 
-  <base href="/">
+  <!-- OG:META -->
+  <meta property="og:title" content="Quantified Self">
+  <meta property="og:description" content="Quantified Self is a tool for importing viewing and comparing gpx, tcx, fit and json files from activity trackers and smart-watches such as Garmin, Suunto, Polar
+         and services such as Strava, Movescount, Garmin Connect, Polar Flow. Supported file types are .fit, .tcx, .gpx and json">
+  <meta property="og:image" content="assets/images/og-image.png">
+  <meta property="og:url" content="https://quantified-self.io">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:site_name" content="Quantified Self">
+  <meta name="twitter:image:alt" content="Chart">
 
-  <meta name="viewport"
-        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimal-ui"/>
 
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicons/favicon-32x32.png">
@@ -38,7 +50,7 @@
       // then append it to the document so that its eval-ed synchronously
       // this is required because the method used for IE is not reliable with other non-evergreen browsers
       var xhr = new XMLHttpRequest();
-      xhr.addEventListener("load", function() {
+      xhr.addEventListener("load", function () {
         var s = document.createElement('script');
         s.type = 'text/javascript';
         var code = this.responseText;

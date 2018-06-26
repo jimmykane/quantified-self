@@ -7,10 +7,8 @@ import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
-import {LocalStorageService} from './services/storage/app.local.storage.service';
-import {EventCardActionsMenuComponent} from 'app/components/cards/event/actions/event.card.actions.menu.component';
+import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
-import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {
@@ -33,7 +31,7 @@ import {
   MatSnackBarModule,
   MatInputModule,
   MatListModule,
-  MatSortModule, MatTooltipModule
+  MatSortModule, MatTooltipModule, MatDialogModule, MatSlideToggleModule,
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -47,7 +45,7 @@ import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.c
 import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
-import {FormsModule} from '@angular/forms';
+import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
 import {AppEventColorService} from './services/color/app.event.color.service';
@@ -57,6 +55,13 @@ import {ActivityHeaderComponent} from './components/activity-header/activity-hea
 import * as Raven from 'raven-js';
 import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
+import {EventFormComponent} from './components/event-form/event.form.component';
+import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
+import {MapActionsComponent} from './components/map-actions/map.actions.component';
+import {AmChartsModule} from '@amcharts/amcharts3-angular';
+import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
+import {MapSettingsService} from './services/app.map.settings.service';
+import {EventCardChartNewComponent} from './components/cards/event/chart-new/event.card.chart.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -83,6 +88,8 @@ export class RavenErrorHandler implements ErrorHandler {
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ',
       apiVersion: '3.31'
     }),
+    AmChartsModule,
+    ReactiveFormsModule,
     MatExpansionModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -97,7 +104,6 @@ export class RavenErrorHandler implements ErrorHandler {
     MatTableModule,
     CdkTableModule,
     MatChipsModule,
-    AmChartsModule,
     MatCheckboxModule,
     MatSliderModule,
     MatSnackBarModule,
@@ -109,6 +115,8 @@ export class RavenErrorHandler implements ErrorHandler {
     MatTableModule,
     MatSortModule,
     MatTooltipModule,
+    MatDialogModule,
+    MatSlideToggleModule,
   ],
   declarations: [
     AppComponent,
@@ -118,20 +126,29 @@ export class RavenErrorHandler implements ErrorHandler {
     ActivityIconComponent,
     ActivitiesCheckboxesComponent,
     EventCardComponent,
+    EventActionsComponent,
     EventTableComponent,
     EventCardMapAGMComponent,
     EventCardStatsComponent,
-    EventCardActionsMenuComponent,
+    EventActionsComponent,
     EventCardLapsComponent,
     EventCardChartComponent,
     EventCardToolsComponent,
     AboutComponent,
     UploadInfoComponent,
     ActivityHeaderComponent,
+    EventFormComponent,
+    ActivityActionsComponent,
+    MapActionsComponent,
+    EventCardChartNewComponent,
+  ],
+  entryComponents: [
+    EventFormComponent,
   ],
   providers: [
-    LocalStorageService,
     EventLocalStorageService,
+    MapSettingsLocalStorageService,
+    MapSettingsService,
     EventService,
     ActionButtonService,
     WeatherUndergroundWeatherService,

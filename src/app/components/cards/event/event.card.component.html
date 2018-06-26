@@ -1,6 +1,6 @@
 <mat-card *ngIf="event">
   <mat-card-header>
-    <app-event-card-actions-menu [event]="event" align="end"></app-event-card-actions-menu>
+    <app-event-actions [event]="event" align="end"></app-event-actions>
     <mat-card-subtitle>
       <app-activity-icon [activity]="event.getFirstActivity()"
                          *ngIf="event.getActivities().length === 1 "></app-activity-icon>
@@ -44,7 +44,7 @@
       conditions
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <app-activities-checkboxes [event]="event" (selectedActivities)="onSelectedActivities($event)">
+      <app-activities-checkboxes [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
     </mat-card-subtitle>
   </mat-card-header>
@@ -57,9 +57,20 @@
       <mat-tab label="Map" *ngIf="eventHasPointsWithPosition">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
+          <app-map-actions
+            [(showAutoLaps)]="showMapAutoLaps"
+            [(showManualLaps)]="showMapManualLaps"
+            [(showDataWarnings)]="showMapDataWarnings"
+            [(showData)]="showData"
+            align="end">
+          </app-map-actions>
         </ng-template>
         <app-event-card-map-agm
           [isVisible]="selectedTabIndex === 0"
+          [showAutoLaps]="showMapAutoLaps"
+          [showManualLaps]="showMapManualLaps"
+          [showDataWarnings]="showMapDataWarnings"
+          [showData]="showData"
           [selectedActivities]="selectedActivities"
           [event]="event"></app-event-card-map-agm>
       </mat-tab>
@@ -68,7 +79,7 @@
           <mat-icon>insert_chart</mat-icon>
         </ng-template>
         <app-event-card-stats
-          [selectedActivites]="selectedActivities"
+          [selectedActivities]="selectedActivities"
           [event]="event">
         </app-event-card-stats>
       </mat-tab>

@@ -1,16 +1,22 @@
-import {Injectable} from '@angular/core';
 import {StorageServiceInterface} from './app.storage.service.interface';
 import * as LZString from 'lz-string';
-import {Log} from 'ng2-logger/client';
+import {Log, Logger} from 'ng2-logger/client';
 
 
-@Injectable()
-export class LocalStorageService implements StorageServiceInterface {
+export abstract class LocalStorageService implements StorageServiceInterface {
 
-  protected nameSpace = 'quantified-self';
-  private logger = Log.create('LocalStorageService');
+  protected abstract nameSpace: string;
+  protected abstract logger: Logger<{}>;
 
   constructor() {
+  }
+
+  getLogger(): Logger<{}>{
+    return this.logger;
+  }
+
+  getNameSpace(): string{
+    return this.nameSpace;
   }
 
   setItem(key: string, data: string) {
@@ -23,6 +29,10 @@ export class LocalStorageService implements StorageServiceInterface {
   getItem(key: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const t0 = performance.now();
+      if (!localStorage.getItem(this.nameSpace + key)){
+        reject('No item found');
+        return;
+      }
       try {
         const decrypted = LZString.decompressFromUTF16(localStorage.getItem(this.nameSpace + key));
         this.logger.d('Decrypted 1 item after ' +

@@ -1,5 +1,6 @@
 import {Component, Input} from '@angular/core';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import * as Raven from 'raven-js';
 
 @Component({
   selector: 'app-activity-icon',
@@ -11,7 +12,10 @@ export class ActivityIconComponent {
   @Input() activity: ActivityInterface;
 
   getActivityIcon() {
-    // @todo optimize
+    if (!this.activity.type) {
+      Raven.captureException(new Error('Activity type is not set'));
+      return 'beenhere';
+    }
     if (this.activity.type.toLocaleLowerCase().includes('run')) {
       return 'directions_run';
     }
