@@ -1,10 +1,9 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ChangeDetectionStrategy, Component, Inject, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
-import {Router} from '@angular/router';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import {FormBuilder, FormControl, FormGroup, Validators} from '@angular/forms';
+import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 
 
 @Component({
@@ -19,7 +18,7 @@ import * as Raven from 'raven-js';
 
 export class ActivityFormComponent implements OnInit {
 
-  public event: EventInterface;
+  public activity: ActivityInterface;
   public originalValues: {
     name: string;
   };
@@ -33,7 +32,7 @@ export class ActivityFormComponent implements OnInit {
     private snackBar: MatSnackBar,
     private formBuilder: FormBuilder
   ) {
-    this.event = data.event;
+    this.activity = data.activity;
     this.originalValues = {name: this.event.name};
   }
 
