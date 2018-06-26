@@ -38,7 +38,14 @@
       <!-- Data Warnings -->
       <agm-marker
         *ngFor="let point of data.lowNumberOfSatellitesPoints"
-        iconUrl="//maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png"
+        [iconUrl]="{
+          url: '//maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png',
+          scaledSize: {
+            height: 32,
+            width: 32
+          },
+          anchor: {x: 16, y: 16}
+        }"
         [latitude]="point.getPosition().latitudeDegrees"
         [longitude]="point.getPosition().longitudeDegrees">
       </agm-marker>
