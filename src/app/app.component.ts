@@ -36,6 +36,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   }
 
+  reset(){
+    localStorage.clear();
+    window.location.reload();
+  }
+
   /**
    * See https://github.com/angular/angular/issues/14748
    */

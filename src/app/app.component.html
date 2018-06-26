@@ -18,6 +18,11 @@
        routerLinkActive #about="routerLinkActive"
        [active]="about.isActive">About</a>
 
+    <a matTabLink
+              routerLink="/dashboard"
+
+       (click)="reset()">Reset</a>
+
   </nav>
 
   <router-outlet></router-outlet>
