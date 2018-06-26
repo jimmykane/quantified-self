@@ -1,25 +1,30 @@
 <mat-card>
-  <!-- The lines and points -->
+  <!-- Map -->
   <agm-map
     [fullscreenControl]="true"
     [mapTypeControl]="true"
     [scaleControl]="true"
     [mapTypeControlOptions]="mapTypeControlOptions">
+    <!-- Line -->
     <agm-polyline
       #polyline
       *ngFor="let data of mapData"
       (lineClick)="lineClick($event, data.points)"
       [strokeColor]="eventColorService.getActivityColor(event, data.activity)"
       [strokeWeight]="4">
-      <ng-container *ngFor="let point of data.points">
-        <agm-polyline-point
+      <!-- Points -->
+      <agm-polyline-point
+        *ngFor="let point of data.points"
+        [latitude]="point.getPosition().latitudeDegrees"
+        [longitude]="point.getPosition().longitudeDegrees">
+      </agm-polyline-point>
+      <!-- Data -->
+      <ng-container *ngIf="showData">
+        <agm-info-window
+          *ngFor="let point of data.points"
           [latitude]="point.getPosition().latitudeDegrees"
-          [longitude]="point.getPosition().longitudeDegrees">
-        </agm-polyline-point>
-        <agm-info-window *ngIf="showData"
-                         [latitude]="point.getPosition().latitudeDegrees"
-                         [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="false"
-                         [isOpen]="point == clickedPoint">
+          [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="false"
+          [isOpen]="point == clickedPoint">
           <span class="mat-subheading-1"><mat-icon>info</mat-icon>Point Details</span>
           <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
           <span class="mat-subheading-1">Time: </span><span>{{ point.getDate() | date: 'mediumTime' }}</span>
@@ -29,21 +34,18 @@
             <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
           </ng-container>
         </agm-info-window>
-
       </ng-container>
-
-
+      <!-- Data Warnings -->
       <agm-marker
         *ngFor="let point of data.lowNumberOfSatellitesPoints"
         iconUrl="//maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png"
         [latitude]="point.getPosition().latitudeDegrees"
         [longitude]="point.getPosition().longitudeDegrees">
       </agm-marker>
-
     </agm-polyline>
 
 
-    <!-- Laps and infowindows -->
+    <!-- Laps and Info -->
     <!-- @todo merge this with the activity for performance -->
     <ng-container *ngFor="let activityData of mapData">
       <agm-marker (markerClick)="openActivityStartMarkerInfoWindow(activityData.activity)"
