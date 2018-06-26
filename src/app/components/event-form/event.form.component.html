@@ -3,7 +3,7 @@
     <input matInput placeholder="Name" formControlName="name" [(ngModel)]="event.name">
     <!--<mat-hint></mat-hint>-->
     <mat-error *ngIf="hasError('name')">
-      Please enter a valid name of 4 minumum charactes
+      Name must not be empty
     </mat-error>
   </mat-form-field>
   <button mat-button (click)="close()">Cancel</button>

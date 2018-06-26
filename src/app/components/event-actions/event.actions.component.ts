@@ -30,6 +30,7 @@ export class EventActionsComponent {
   editEvent(event: EventInterface) {
     const dialogRef = this.dialog.open(EventFormComponent, {
       width: '75vh',
+      disableClose: true,
       data: {event: event},
     });
 

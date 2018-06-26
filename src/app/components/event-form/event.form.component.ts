@@ -41,7 +41,7 @@ export class EventFormComponent implements OnInit {
     this.eventFormGroup = new FormGroup({
       name: new FormControl(this.event.name, [
         Validators.required,
-        Validators.minLength(4),
+        // Validators.minLength(4),
       ]),
       // 'alterEgo': new FormControl(this.hero.alterEgo),
       // 'power': new FormControl(this.hero.power, Validators.required)
@@ -55,6 +55,7 @@ export class EventFormComponent implements OnInit {
   async onSubmit() {
     if (!this.eventFormGroup.valid) {
       this.validateAllFormFields(this.eventFormGroup);
+      return;
     }
     try {
       await this.eventService.addAndReplace(this.event);
