@@ -57,7 +57,6 @@ import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
 import {EventFormComponent} from './components/event-form/event.form.component';
 import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
-import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
@@ -139,14 +138,12 @@ export class RavenErrorHandler implements ErrorHandler {
     UploadInfoComponent,
     ActivityHeaderComponent,
     EventFormComponent,
-    ActivityFormComponent,
     ActivityActionsComponent,
     MapActionsComponent,
     EventCardChartNewComponent,
   ],
   entryComponents: [
     EventFormComponent,
-    ActivityFormComponent,
   ],
   providers: [
     EventLocalStorageService,
