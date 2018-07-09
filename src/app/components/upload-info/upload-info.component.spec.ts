@@ -33,15 +33,15 @@ describe('UploadInfoComponent', () => {
 
 
   it('should get the correct status icon', () => {
-    expect(component.getActivityStatusIcon({
+    expect(component.activityMetaDataStatusIcon({
       name: 'test',
       status: UPLOAD_STATUS.PROCESSING
     })).toBe('autorenew');
-    expect(component.getActivityStatusIcon({
+    expect(component.activityMetaDataStatusIcon({
       name: 'test',
       status: UPLOAD_STATUS.PROCESSED
     })).toBe('done');
-    expect(component.getActivityStatusIcon({
+    expect(component.activityMetaDataStatusIcon({
       name: 'test',
       status: UPLOAD_STATUS.ERROR
     })).toBe('sync_problem');

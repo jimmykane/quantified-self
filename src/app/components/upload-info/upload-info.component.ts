@@ -1,5 +1,5 @@
 import {Component, OnInit, Input} from '@angular/core';
-import {UPLOAD_STATUS} from '../upload/status';
+import {UPLOAD_STATUS} from '../upload/upload.component';
 
 /**
  * Component responsible for displaying a progree bar
@@ -14,20 +14,6 @@ export class UploadInfoComponent implements OnInit {
   @Input() activitiesMetaData = [];
 
   constructor() {
-  }
-
-  /**
-   * return the activity process icon
-   */
-  getActivityStatusIcon(activity): string {
-    switch (activity.status) {
-      case UPLOAD_STATUS.PROCESSED:
-        return 'done';
-      case UPLOAD_STATUS.PROCESSING:
-        return 'autorenew';
-      default:
-        return 'sync_problem';
-    }
   }
 
   getOverallProgress() {

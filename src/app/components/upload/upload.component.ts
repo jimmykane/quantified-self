@@ -1,13 +1,14 @@
 import {Component} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatSnackBar} from '@angular/material';
+import {MatDialog, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
 import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
+import {UploadErrorComponent} from '../upload-error/upload-error.component';
 
 @Component({
   selector: 'app-upload',
@@ -21,7 +22,11 @@ export class UploadComponent {
   isUploadActive = false;
   activitiesMetaData = [];
 
-  constructor(private snackBar: MatSnackBar, private eventService: EventService, private router: Router) {
+  constructor(
+    private snackBar: MatSnackBar,
+    public dialog: MatDialog,
+    private eventService: EventService,
+    private router: Router) {
   }
 
   /**
@@ -102,6 +107,21 @@ export class UploadComponent {
     this.snackBar.open('Processed ' + processPromises.length + ' files', null, {
       duration: 5000,
     });
+
+
+    // If there is an error show a modal
+
+    if (this.activitiesMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
+      const dialogRef = this.dialog.open(UploadErrorComponent, {
+        width: '75vh',
+        disableClose: true,
+        data: {activitiesMetaData: this.activitiesMetaData},
+      });
+      dialogRef.afterClosed().subscribe(result => {
+        console.log('The dialog was closed');
+      });
+    }
+
     // Remove all;
     this.activitiesMetaData = [];
     // Pass event to removeDragData for cleanup
@@ -118,7 +138,7 @@ export class UploadComponent {
 }
 
 export const UPLOAD_STATUS = {
-    PROCESSED: 1,
-    PROCESSING: 2,
-    ERROR: 3
+  PROCESSED: 1,
+  PROCESSING: 2,
+  ERROR: 3,
 };
