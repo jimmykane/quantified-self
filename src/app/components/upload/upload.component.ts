@@ -1,7 +1,6 @@
 import {Component} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {UPLOAD_STATUS} from './status';
 import {MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -117,3 +116,9 @@ export class UploadComponent {
     event.target.value = '';
   }
 }
+
+export const UPLOAD_STATUS = {
+    PROCESSED: 1,
+    PROCESSING: 2,
+    ERROR: 3
+};
