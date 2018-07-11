@@ -32,20 +32,21 @@ describe('UploadInfoComponent', () => {
   });
 
 
-  it('should get the correct status icon', () => {
-    expect(component.activityMetaDataStatusIcon({
-      name: 'test',
-      status: UPLOAD_STATUS.PROCESSING
-    })).toBe('autorenew');
-    expect(component.activityMetaDataStatusIcon({
-      name: 'test',
-      status: UPLOAD_STATUS.PROCESSED
-    })).toBe('done');
-    expect(component.activityMetaDataStatusIcon({
-      name: 'test',
-      status: UPLOAD_STATUS.ERROR
-    })).toBe('sync_problem');
-  });
+  // @todo move this to where it belongs
+  // it('should get the correct status icon', () => {
+  //   expect(component.activityMetaDataStatusIcon({
+  //     name: 'test',
+  //     status: UPLOAD_STATUS.PROCESSING
+  //   })).toBe('autorenew');
+  //   expect(component.activityMetaDataStatusIcon({
+  //     name: 'test',
+  //     status: UPLOAD_STATUS.PROCESSED
+  //   })).toBe('done');
+  //   expect(component.activityMetaDataStatusIcon({
+  //     name: 'test',
+  //     status: UPLOAD_STATUS.ERROR
+  //   })).toBe('sync_problem');
+  // });
 
   it('should get the correct amount of processed activities', () => {
     component.activitiesMetaData = [
