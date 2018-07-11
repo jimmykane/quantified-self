@@ -62,21 +62,27 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges(simpleChanges) {
-    if (simpleChanges.event
+    // If no operational changes return
+    if (!(simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.showAutoLaps
       || simpleChanges.showManualLaps
       || simpleChanges.showData
-      || simpleChanges.showDataWarnings) {
-      this.mapData = this.cacheNewData();
+      || simpleChanges.showDataWarnings)) {
+      return;
     }
+    // Get the new data
+    this.mapData = this.cacheNewData();
+    // No need to do anything if the base did not change (Event)
+    if (!simpleChanges.event) {
+      return;
+    }
+    // If the event has changed then fit the bounds to show the new location
+    this.agmMap.triggerResize().then(() => {
+      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+      googleMaps.fitBounds(this.getBounds());
+    });
 
-    if (this.isVisible) {
-      this.agmMap.triggerResize().then(() => {
-        const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-        googleMaps.fitBounds(this.getBounds());
-      });
-    }
   }
 
   private cacheNewData(): MapData[] {
@@ -84,9 +90,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
     const mapData = [];
     this.selectedActivities.forEach((activity) => {
       let activityPoints: PointInterface[];
-      if (this.showData){
+      if (this.showData) {
         activityPoints = activity.getPointsInterpolated();
-      }else {
+      } else {
         activityPoints = activity.getPoints()
       }
       activityPoints = activityPoints.filter((point) => point.getPosition());
