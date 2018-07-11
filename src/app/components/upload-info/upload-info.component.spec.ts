@@ -7,7 +7,7 @@ import {
   MatList, MatListItem, MatProgressBar,
   MatRipple
 } from '@angular/material';
-import {UPLOAD_STATUS} from '../upload/status';
+import {UPLOAD_STATUS} from '../upload/upload.component';
 
 describe('UploadInfoComponent', () => {
   let component: UploadInfoComponent;
