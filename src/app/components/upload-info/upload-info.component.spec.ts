@@ -8,6 +8,7 @@ import {
   MatRipple
 } from '@angular/material';
 import {UPLOAD_STATUS} from '../upload/upload.component';
+import {ActivityMetadataComponent} from '../activity-metadata/activity-metadata.component';
 
 describe('UploadInfoComponent', () => {
   let component: UploadInfoComponent;
@@ -15,7 +16,7 @@ describe('UploadInfoComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard,
+      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard, ActivityMetadataComponent
       ]
     })
       .compileComponents();
