@@ -4,15 +4,25 @@
   </mat-form-field>
   <mat-table *ngIf="data" [dataSource]="data" matSort>
     <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
-      <mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="isFirst || isLast">
-        <mat-checkbox *ngIf="isFirst" (change)="$event ? masterToggle() : null"
-                      [checked]="selection.hasValue() && isAllSelected()"
-                      [indeterminate]="selection.hasValue() && !isAllSelected()">
-        </mat-checkbox>
-        <span *ngIf="!isFirst && !isLast">
+      <ng-container *ngIf="isFirst">
+        <mat-header-cell *matHeaderCellDef>
+          <mat-checkbox (change)="$event ? masterToggle() : null"
+                        [checked]="selection.hasValue() && isAllSelected()"
+                        [indeterminate]="selection.hasValue() && !isAllSelected()">
+          </mat-checkbox>
+        </mat-header-cell>
+      </ng-container>
+      <ng-container *ngIf="isLast">
+        <mat-header-cell *matHeaderCellDef>
+        </mat-header-cell>
+      </ng-container>
+      <ng-container *ngIf="!isFirst && !isLast">
+        <mat-header-cell *matHeaderCellDef mat-sort-header>
+        <span>
             <mat-icon *ngIf="getColumnIcon(column)">{{ getColumnIcon(column) }}</mat-icon>
         </span>
-      </mat-header-cell>
+        </mat-header-cell>
+      </ng-container>
       <mat-cell *matCellDef="let row">
         <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
                       (change)="$event ? checkBoxClick(row) : null"
