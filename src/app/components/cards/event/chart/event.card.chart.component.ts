@@ -197,9 +197,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             chartData.dataByDateTime.set(point.getDate().getTime(), existingDateData);
           }
           if (pointData.getType() === DataPace.type) {
-            existingDateData.set(key + activity.getID(), Number(pointData.getValue()).toFixed(0));
+            existingDateData.set(key + activity.getID(), Math.round(Number(pointData.getValue())));
           } else {
-            existingDateData.set(key + activity.getID(), pointData.getDisplayValue());
+            existingDateData.set(key + activity.getID(), Number(pointData.getValue()));
           }
         });
       });
