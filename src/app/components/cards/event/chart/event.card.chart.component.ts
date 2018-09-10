@@ -15,6 +15,7 @@ import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -196,10 +197,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             existingDateData = new Map<string, number>();
             chartData.dataByDateTime.set(point.getDate().getTime(), existingDateData);
           }
-          if (pointData.getType() === DataPace.type) {
+          // @todo solve this
+          if (pointData.getType() === DataPace.type || pointData.getType() === DataDistance.type) {
             existingDateData.set(key + activity.getID(), Math.round(Number(pointData.getValue())));
           } else {
-            existingDateData.set(key + activity.getID(), Number(pointData.getValue()));
+            existingDateData.set(key + activity.getID(), Number(pointData.getDisplayValue()));
           }
         });
       });
