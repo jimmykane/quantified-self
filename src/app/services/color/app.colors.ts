@@ -6,5 +6,5 @@ export enum AppColors {
   Purple = '#ba68c8',
   PurpleBlue = '#889bc8',
   Red = '#ff3f07',
-  LightGreen = '#82cca1',
+  LightGreen = '#bcf15b',
 }
