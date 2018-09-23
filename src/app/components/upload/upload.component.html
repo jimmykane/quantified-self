@@ -1,14 +1,17 @@
-<mat-card class="mat-elevation-z4"
+<mat-card class="mat-elevation-z0"
           (drop)="getFiles($event);"
           ondragenter="event.stopPropagation(); event.preventDefault();"
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
-  <button mat-button (click)="inputFile.click()">Click to open .gpx, .tcx, .fit or .json files<span class="mat-small">*</span></button>
+  <button mat-stroked-button color="primary" (click)="inputFile.click()">
+    <p>Select files<span class="mat-small"></span></p>
+    <p class="mat-small">GPX, TCX, FIT and JSON files or drag and drop</p></button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx" multiple [style.display]="'none'"
-         (change)="getFiles($event)">
-  or drag one or more files here...
-  <p class="mat-small">* Importing GPX, TCX, FIT and JSON files has been tested and supported for services such as Movescount (Suunto), Polar Flow (Polar), Garmin Connect (Garmin), Strava, SportsTracker and Zwift</p>
-  <p class="mat-small">if you encounter any issues with uploading, such as from another service, you can send the file via email at <a href="mailto:jimmykane9@gmail.com" target="_blank">jimmykane9@gmail.com</a></p>
+         (change)="getFiles($event)"/>
+  <button mat-stroked-button color="accent"  href="mailto:jimmykane9@gmail.com" target="_blank">
+    <p>email for debug</p>
+    <p class="mat-small">Issues uploading?</p>
+  </button>
   <app-upload-info *ngIf="isUploadActive" [activitiesMetaData]="activitiesMetaData" ></app-upload-info>
 </mat-card>
 

@@ -1,11 +1,10 @@
-<mat-card class="container">
-  <mat-card>
+<mat-card>
     <mat-card-header>
       <div matCardAvatar>
         <mat-icon>explore</mat-icon>
       </div>
       <mat-card-title><h1>Welcome to Quantified Self v{{ appVersion }}</h1></mat-card-title>
-      <mat-card-subtitle>an OpenSource project under development</mat-card-subtitle>
+      <mat-card-subtitle>The tool to compare GPX, TCX, FIT files</mat-card-subtitle>
       <mat-card-subtitle>Hosted on Google App Engine, made with Angular</mat-card-subtitle>
       <mat-card-subtitle><span class="mat-body-2">Source: </span>
         <a target="_blank"
@@ -19,10 +18,9 @@
 
     <p class="mat-small">*JSON is for specific services while GPX, TCX, FIT should be compatible with the more common
       services, such as Strava, Movescount, Garmin, Polar and any other service that supports the above exports.</p>
-  </mat-card>
 
   <mat-accordion>
-    <mat-expansion-panel>
+    <mat-expansion-panel class="mat-elevation-z0">
       <mat-expansion-panel-header>
         <mat-panel-title>
           Privacy
@@ -51,7 +49,7 @@
         <li>Crash error message such as 'could not find laps' (application specific)</li>
       </ul>
     </mat-expansion-panel>
-    <mat-expansion-panel>
+    <mat-expansion-panel class="mat-elevation-z0">
       <mat-expansion-panel-header>
         <mat-panel-title>
           Donations

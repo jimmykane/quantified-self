@@ -1,4 +1,3 @@
-.container{
-  min-height: 100vh;
+mat-card{
+  height: 100vh;
 }
-
