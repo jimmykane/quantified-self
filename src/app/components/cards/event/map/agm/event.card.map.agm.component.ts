@@ -113,13 +113,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       // Check for laps with position
       const lapsWithPosition = activity.getLaps()
         .filter((lap) => {
-          if (!this.showAutoLaps && lap.type === LapTypes.AutoLap) {
-            return false;
+          if (this.showAutoLaps && (lap.type === LapTypes.AutoLap || lap.type === LapTypes.Distance)) {
+            return true;
           }
-          if (!this.showManualLaps && lap.type === LapTypes.Manual) {
-            return false;
+          if (this.showManualLaps && lap.type === LapTypes.Manual) {
+            return true;
           }
-          return true;
+          return false;
         })
         .reduce((lapsArray, lap) => {
           const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
