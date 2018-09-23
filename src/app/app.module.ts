@@ -88,7 +88,7 @@ export class RavenErrorHandler implements ErrorHandler {
     HttpClientModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ',
-      apiVersion: '3.31'
+      // apiVersion: '3.31'
     }),
     AmChartsModule,
     ReactiveFormsModule,
