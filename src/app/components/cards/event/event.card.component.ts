@@ -68,7 +68,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
       this.selectedTabIndex = +params['tabIndex'];
       this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
-      this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : [this.event.getFirstActivity()];
+      this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : this.event.getActivities();
     });
 
   }
