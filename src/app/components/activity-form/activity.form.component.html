@@ -1,6 +1,6 @@
 <form [formGroup]="activityFormGroup">
   <mat-form-field>
-    <input matInput placeholder="Name" formControlName="name" [(ngModel)]="event.name">
+    <!--<input matInput placeholder="Name" formControlName="name" [(ngModel)]="event.name">-->
     <!--<mat-hint></mat-hint>-->
     <mat-error *ngIf="hasError('name')">
       Name must not be empty
