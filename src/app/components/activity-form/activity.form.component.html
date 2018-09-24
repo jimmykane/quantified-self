@@ -1,0 +1,11 @@
+<form [formGroup]="activityFormGroup">
+  <mat-form-field>
+    <input matInput placeholder="Name" formControlName="name" [(ngModel)]="event.name">
+    <!--<mat-hint></mat-hint>-->
+    <mat-error *ngIf="hasError('name')">
+      Name must not be empty
+    </mat-error>
+  </mat-form-field>
+  <button mat-button (click)="close()">Cancel</button>
+  <button mat-button (click)="onSubmit()">Save</button>
+</form>
