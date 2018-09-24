@@ -1,6 +1,9 @@
 mat-card{
   /*margin-bottom: 1vh;*/
+  text-align: center;
 }
 button{
   margin-right: 1vw;
+  min-width: 45%;
+  margin-bottom: 2%;
 }
