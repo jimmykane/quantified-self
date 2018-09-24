@@ -17,7 +17,7 @@
   },
   "private": true,
   "dependencies": {
-    "@agm/core": "^1.0.0-beta.4",
+    "@agm/core": "^1.0.0-beta.5",
     "@amcharts/amcharts3-angular": "^2.2.1",
     "@amcharts/amcharts4": "^4.0.0-beta.54",
     "@angular/animations": "6.1.8",
