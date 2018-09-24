@@ -18,18 +18,18 @@
         [latitude]="point.getPosition().latitudeDegrees"
         [longitude]="point.getPosition().longitudeDegrees">
       </agm-polyline-point>
-      <!-- Data -->
+      <!-- Clicked Point Data info window -->
       <ng-container *ngIf="showData">
         <agm-info-window
-          *ngFor="let point of data.points"
-          [latitude]="point.getPosition().latitudeDegrees"
-          [longitude]="point.getPosition().longitudeDegrees" [disableAutoPan]="false"
-          [isOpen]="point == clickedPoint">
+          *ngIf="clickedPoint"
+          [latitude]="clickedPoint.getPosition().latitudeDegrees"
+          [longitude]="clickedPoint.getPosition().longitudeDegrees" [disableAutoPan]="false"
+          [isOpen]="true">
           <span class="mat-subheading-1"><mat-icon>info</mat-icon>Point Details</span>
           <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
-          <span class="mat-subheading-1">Time: </span><span>{{ point.getDate() | date: 'mediumTime' }}</span>
+          <span class="mat-subheading-1">Time: </span><span>{{ clickedPoint.getDate() | date: 'mediumTime' }}</span>
           <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
-          <ng-container *ngFor="let pointData of getMapValuesAsArray(point.getData()); last as isLast">
+          <ng-container *ngFor="let pointData of getMapValuesAsArray(clickedPoint.getData()); last as isLast">
             <span class="mat-subheading-1">{{pointData.getType()}}: </span><span> {{ pointData.getDisplayValue() }} {{ pointData.getDisplayUnit() }}</span>
             <mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>
           </ng-container>
