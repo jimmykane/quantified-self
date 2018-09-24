@@ -35,12 +35,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   private parametersSubscription: Subscription;
 
   constructor(
+    public router: Router,
     private route: ActivatedRoute,
-    private router: Router,
     private eventService: EventService,
     private mapSettingsService: MapSettingsService,
-    public eventColorService: AppEventColorService)
-  {
+    public eventColorService: AppEventColorService) {
   }
 
   ngOnChanges() {
