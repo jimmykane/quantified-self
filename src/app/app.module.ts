@@ -64,6 +64,7 @@ import {MapSettingsService} from './services/app.map.settings.service';
 import {EventCardChartNewComponent} from './components/cards/event/chart-new/event.card.chart.component';
 import {UploadErrorComponent} from './components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from './components/activity-metadata/activity-metadata.component';
+import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -140,6 +141,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UploadInfoComponent,
     ActivityHeaderComponent,
     EventFormComponent,
+    ActivityFormComponent,
     ActivityActionsComponent,
     MapActionsComponent,
     EventCardChartNewComponent,
@@ -148,6 +150,7 @@ export class RavenErrorHandler implements ErrorHandler {
   ],
   entryComponents: [
     EventFormComponent,
+    ActivityFormComponent,
     UploadErrorComponent,
   ],
   providers: [
