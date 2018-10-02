@@ -4,14 +4,14 @@
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
   <button mat-stroked-button color="primary" (click)="inputFile.click()">
-    <p>Select files<span class="mat-small"></span></p>
-    <p class="mat-small">GPX, TCX, FIT and JSON files or drag and drop</p></button>
+    <span>Select files<span class="mat-small"></span></span><br/>
+    <span class="mat-small">GPX, TCX, FIT and JSON files or drag and drop</span></button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>
-  <button mat-stroked-button color="accent"  href="mailto:jimmykane9@gmail.com" target="_blank">
-    <p>email for debug</p>
-    <p class="mat-small">Issues uploading?</p>
-  </button>
+  <a mat-stroked-button color="accent"  href="mailto:jimmykane9@gmail.com" target="_blank">
+    <span>email for debug</span><br/>
+    <span class="mat-small">Issues uploading?</span>
+  </a>
   <app-upload-info *ngIf="isUploadActive" [activitiesMetaData]="activitiesMetaData" ></app-upload-info>
 </mat-card>
 

@@ -2,8 +2,8 @@ mat-card{
   /*margin-bottom: 1vh;*/
   text-align: center;
 }
-button{
+button, a{
   margin-right: 1vw;
   min-width: 45%;
-  margin-bottom: 2%;
+  vertical-align: middle;
 }
