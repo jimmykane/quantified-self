@@ -31,7 +31,7 @@ import {
   MatSnackBarModule,
   MatInputModule,
   MatListModule,
-  MatSortModule, MatTooltipModule, MatDialogModule, MatSlideToggleModule,
+  MatSortModule, MatTooltipModule, MatDialogModule, MatSlideToggleModule, MatDatepickerModule, MatNativeDateModule,
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -120,6 +120,8 @@ export class RavenErrorHandler implements ErrorHandler {
     MatTooltipModule,
     MatDialogModule,
     MatSlideToggleModule,
+    MatDatepickerModule,
+    MatNativeDateModule
   ],
   declarations: [
     AppComponent,

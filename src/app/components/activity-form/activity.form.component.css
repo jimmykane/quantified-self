@@ -1,7 +1,7 @@
 form{
-  width: 100%;
-  padding: 1%;
+  /*width: 100%;*/
+  padding: 2%;
 }
 mat-form-field{
-  width: 100%;
+  margin: 2%;
 }

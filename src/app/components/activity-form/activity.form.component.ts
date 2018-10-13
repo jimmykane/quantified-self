@@ -20,8 +20,10 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 export class ActivityFormComponent implements OnInit {
 
   public activity: ActivityInterface;
+  public event: EventInterface;
   public originalValues: {
-    // name: string;
+     activityStartDate: Date;
+     activityEndDate: Date;
   };
 
   public activityFormGroup: FormGroup;
@@ -34,15 +36,21 @@ export class ActivityFormComponent implements OnInit {
     private formBuilder: FormBuilder
   ) {
     this.activity = data.activity;
-    this.originalValues = {};
+    this.event = data.event;
+    this.originalValues = {
+      activityStartDate: this.activity.startDate,
+      activityEndDate: this.activity.endDate
+    };
   }
 
   ngOnInit(): void {
     this.activityFormGroup = new FormGroup({
-      // name: new FormControl(this.activity.name, [
-      //   Validators.required,
-      //   // Validators.minLength(4),
-      // ]),
+      startDate: new FormControl(this.activity.startDate, [
+        Validators.required,
+      ]),
+      endDate: new FormControl(this.activity.endDate, [
+        Validators.required,
+      ]),
       // 'alterEgo': new FormControl(this.hero.alterEgo),
       // 'power': new FormControl(this.hero.power, Validators.required)
     });
@@ -57,13 +65,20 @@ export class ActivityFormComponent implements OnInit {
       this.validateAllFormFields(this.activityFormGroup);
       return;
     }
+    if (this.activity.startDate < this.event.startDate){
+      this.event.startDate = this.activity.startDate;
+    }
+    if (this.activity.endDate > this.event.endDate){
+      this.event.endDate = this.activity.endDate;
+    }
     try {
-      // await this.eventService.addAndReplace(this.event);
-      this.snackBar.open('Event saved', null, {
+      await this.eventService.addAndReplace(this.event);
+      this.snackBar.open('Activity saved', null, {
         duration: 5000,
       });
     } catch (e) {
-      this.snackBar.open('Could not save event', null, {
+      debugger;
+      this.snackBar.open('Could not save activity', null, {
         duration: 5000,
       });
       Raven.captureException(e);
@@ -89,6 +104,7 @@ export class ActivityFormComponent implements OnInit {
   }
 
   restoreOriginalValues() {
-    // this.event.name = this.originalValues.name;
+    this.activity.startDate = this.originalValues.activityStartDate;
+    this.activity.endDate = this.originalValues.activityEndDate;
   }
 }
