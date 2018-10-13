@@ -44,7 +44,7 @@
     "lz-string": "^1.4.4",
     "material-design-icons": "^3.0.1",
     "ng2-logger": "^2.0.35",
-    "quantified-self-lib": "^2.0.7",
+    "quantified-self-lib": "^2.0.8",
     "raven-js": "^3.27.0",
     "roboto-fontface": "^0.10.0",
     "rxjs": "^6.3.3",
