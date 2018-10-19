@@ -41,9 +41,11 @@ export class EventService {
     // If the event is already in the list create a new one as of update
     if (this.findEvent(event.getID())) {
       this.deleteEvent(event); // Delete first
+      // @todo call exporter
       event = await EventImporterJSON.getFromJSONString(JSON.stringify(event)); // Create new obj to trigger change detection
     }
     // Set to local storage and to list
+    // @todo call exporter
     this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
     this.events.next(this.events.getValue().push(event));
   }

@@ -7,6 +7,7 @@ import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog, MatSnackBar} from '@angular/material';
+import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 
 @Component({
   selector: 'app-event-actions',
@@ -45,6 +46,19 @@ export class EventActionsComponent {
         blob,
         event.name,
         EventExporterTCX.fileExtension,
+      );
+      this.snackBar.open('File served', null, {
+        duration: 5000,
+      });
+    });
+  }
+
+  downloadEventAsJSON(event: EventInterface) {
+    EventUtilities.getEventAsJSONBloB(event).then((blob: Blob) => {
+      FileService.downloadFile(
+        blob,
+        event.name,
+        EventExporterJSON.fileExtension,
       );
       this.snackBar.open('File served', null, {
         duration: 5000,
