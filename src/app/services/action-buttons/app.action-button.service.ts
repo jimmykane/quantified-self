@@ -1,7 +1,6 @@
 import {Injectable} from '@angular/core';
 import {ActionButton} from './app.action-button';
-import {BehaviorSubject} from 'rxjs';
-import {Observable} from 'rxjs';
+import {BehaviorSubject, Observable} from 'rxjs';
 
 @Injectable()
 export class ActionButtonService {
