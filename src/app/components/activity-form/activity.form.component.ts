@@ -5,6 +5,7 @@ import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validat
 import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 
 
 @Component({
@@ -51,6 +52,12 @@ export class ActivityFormComponent implements OnInit {
       endDate: new FormControl(this.activity.endDate, [
         Validators.required,
       ]),
+      startDistance: new FormControl(0, [
+        Validators.required,
+      ]),
+      endDistance: new FormControl(this.activity.getDistance().getValue(), [
+        Validators.required,
+      ]),
       // 'alterEgo': new FormControl(this.hero.alterEgo),
       // 'power': new FormControl(this.hero.power, Validators.required)
     });
@@ -71,6 +78,18 @@ export class ActivityFormComponent implements OnInit {
     if (this.activity.endDate > this.event.endDate){
       this.event.endDate = this.activity.endDate;
     }
+
+    if (
+      this.activity.getDistance().getValue() !== this.activityFormGroup.get('endDistance').value
+      || this.activityFormGroup.get('startDistance').value !== 0
+    ){
+      debugger;
+      // Should trim distance
+      EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
+      // Regenerate stats
+      EventUtilities.generateStats(this.event);
+    }
+    debugger;
     try {
       await this.eventService.addAndReplace(this.event);
       this.snackBar.open('Activity saved', null, {
@@ -83,7 +102,9 @@ export class ActivityFormComponent implements OnInit {
       });
       Raven.captureException(e);
     } finally {
-      this.dialogRef.close()
+      this.dialogRef.close();
+      // @todo reload the event as it should be done in the card component
+      location.reload();
     }
   }
 
