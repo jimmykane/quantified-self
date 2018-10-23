@@ -1,11 +1,21 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import {
+  FormBuilder,
+  FormControl,
+  FormGroup,
+  FormGroupDirective,
+  NgForm,
+  ValidationErrors,
+  ValidatorFn,
+  Validators,
+} from '@angular/forms';
 import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {activityDistanceValidator} from './activity.form.distance.validator';
 
 
 @Component({
@@ -23,8 +33,8 @@ export class ActivityFormComponent implements OnInit {
   public activity: ActivityInterface;
   public event: EventInterface;
   public originalValues: {
-     activityStartDate: Date;
-     activityEndDate: Date;
+    activityStartDate: Date;
+    activityEndDate: Date;
   };
 
   public activityFormGroup: FormGroup;
@@ -34,37 +44,43 @@ export class ActivityFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: EventService,
     private snackBar: MatSnackBar,
-    private formBuilder: FormBuilder
+    private formBuilder: FormBuilder,
   ) {
     this.activity = data.activity;
     this.event = data.event;
     this.originalValues = {
       activityStartDate: this.activity.startDate,
-      activityEndDate: this.activity.endDate
+      activityEndDate: this.activity.endDate,
     };
   }
 
   ngOnInit(): void {
     this.activityFormGroup = new FormGroup({
-      startDate: new FormControl(this.activity.startDate, [
-        Validators.required,
-      ]),
-      endDate: new FormControl(this.activity.endDate, [
-        Validators.required,
-      ]),
-      startDistance: new FormControl(0, [
-        Validators.required,
-      ]),
-      endDistance: new FormControl(this.activity.getDistance().getValue(), [
-        Validators.required,
-      ]),
-      // 'alterEgo': new FormControl(this.hero.alterEgo),
-      // 'power': new FormControl(this.hero.power, Validators.required)
-    });
+        activity: new FormControl(this.activity),
+        startDate: new FormControl(this.activity.startDate, [
+          Validators.required,
+        ]),
+        endDate: new FormControl(this.activity.endDate, [
+          Validators.required,
+        ]),
+        startDistance: new FormControl(0, [
+          Validators.required,
+        ]),
+        endDistance: new FormControl(this.activity.getDistance().getValue(), [
+          Validators.required,
+        ]),
+        // 'alterEgo': new FormControl(this.hero.alterEgo),
+        // 'power': new FormControl(this.hero.power, Validators.required)
+      },
+      {validators: activityDistanceValidator});
   }
 
-  hasError(field: string) {
-    return !(this.activityFormGroup.get(field).valid && this.activityFormGroup.get(field).touched);
+
+  hasError(field?: string) {
+    if (!field) {
+      return !this.activityFormGroup.valid;
+    }
+    return !this.activityFormGroup.get(field).valid;
   }
 
   async onSubmit() {
@@ -72,23 +88,16 @@ export class ActivityFormComponent implements OnInit {
       this.validateAllFormFields(this.activityFormGroup);
       return;
     }
-    if (this.activity.startDate < this.event.startDate){
+    if (this.activity.startDate < this.event.startDate) {
       this.event.startDate = this.activity.startDate;
     }
-    if (this.activity.endDate > this.event.endDate){
+    if (this.activity.endDate > this.event.endDate) {
       this.event.endDate = this.activity.endDate;
     }
-
-    if (
-      this.activity.getDistance().getValue() !== this.activityFormGroup.get('endDistance').value
-      || this.activityFormGroup.get('startDistance').value !== 0
-    ){
-      debugger;
-      // Should trim distance
-      EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
-      // Regenerate stats
-      EventUtilities.generateStats(this.event);
-    }
+    // Should trim distance
+    EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
+    // Regenerate stats
+    EventUtilities.generateStats(this.event);
     debugger;
     try {
       await this.eventService.addAndReplace(this.event);
@@ -129,3 +138,4 @@ export class ActivityFormComponent implements OnInit {
     this.activity.endDate = this.originalValues.activityEndDate;
   }
 }
+
