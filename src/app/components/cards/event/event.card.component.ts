@@ -10,9 +10,7 @@ import {AppEventColorService} from '../../../services/color/app.event.color.serv
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {MapSettingsLocalStorageService} from '../../../services/storage/app.map.settings.local.storage.service';
 import {MapSettingsService} from '../../../services/app.map.settings.service';
-import {t} from '@angular/core/src/render3';
 
 
 @Component({

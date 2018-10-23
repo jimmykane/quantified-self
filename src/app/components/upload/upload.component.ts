@@ -48,15 +48,17 @@ export class UploadComponent {
       this.activitiesMetaData.push(metaData);
       fileReader.onload = async () => {
         let newEvent;
+        const fileReaderResult = fileReader.result;
         try {
-          if (extension === 'json') {
-            newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReader.result);
-          } else if (extension === 'tcx') {
-            newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReader.result, 'application/xml'));
-          } else if (extension === 'gpx') {
-            newEvent = await EventImporterGPX.getFromString(fileReader.result);
-          } else if (extension === 'fit') {
-            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReader.result);
+
+          if ((typeof fileReaderResult === 'string') && extension === 'json') {
+            newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
+          } else if ((typeof fileReaderResult === 'string') && extension === 'tcx') {
+            newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
+          } else if ((typeof fileReaderResult === 'string') && extension === 'gpx') {
+            newEvent = await EventImporterGPX.getFromString(fileReaderResult);
+          } else if ((fileReaderResult instanceof  ArrayBuffer) && extension === 'fit') {
+            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
           }
           newEvent.name = activityName;
         } catch (e) {
