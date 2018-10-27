@@ -25,7 +25,7 @@ if (environment.production) {
 }
 
 if (appVersion !== localStorage.getItem('version')) {
-  // localStorage.clear();
+  localStorage.clear();
   localStorage.setItem('version', appVersion);
 }
 
