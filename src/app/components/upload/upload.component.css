@@ -1,9 +1,18 @@
-mat-card{
+mat-card {
   /*margin-bottom: 1vh;*/
   text-align: center;
 }
-button, a{
-  margin-right: 1vw;
-  min-width: 45%;
+
+button {
+  min-width: 100%;
   vertical-align: middle;
+}
+
+a {
+  min-width: 49%;
+  margin-top: 1%;
+}
+
+a:last-child{
+  margin-left: 2%;
 }

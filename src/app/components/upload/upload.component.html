@@ -3,12 +3,16 @@
           ondragenter="event.stopPropagation(); event.preventDefault();"
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
-  <button mat-stroked-button color="primary" (click)="inputFile.click()">
+  <button mat-stroked-button  color="primary" (click)="inputFile.click()">
     <span>Select files<span class="mat-small"></span></span><br/>
     <span class="mat-small">GPX, TCX, FIT and JSON files or drag and drop</span></button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>
-  <a mat-stroked-button color="accent"  href="mailto:jimmykane9@gmail.com" target="_blank">
+  <a mat-stroked-button color="accent" href="//paypal.me/DKanellopoulos" target="_blank">
+    <span>Donate via PayPal</span><br/>
+    <span class="mat-small">Show 🤓 me 🧐 some 😍 love</span>
+  </a>
+  <a mat-stroked-button href="mailto:jimmykane9@gmail.com" target="_blank">
     <span>email for debug</span><br/>
     <span class="mat-small">Issues uploading?</span>
   </a>
