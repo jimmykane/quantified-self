@@ -3,6 +3,5 @@ export interface ChartDataSettingsInterface {
     graph: any,
     // Add more settings
   }>;
-  dataByDateTime: Map<number, Map<string, number | string>>,
   dataProvider: any[],
 }

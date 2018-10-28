@@ -28,6 +28,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
+  @Input() useDistanceAxis: boolean;
 
   private chart: any;
   private chartData: ChartDataSettingsInterface;
@@ -53,7 +54,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return;
     }
     // If data changed... update
-    if (simpleChanges.selectedActivities || simpleChanges.event) {
+    if (simpleChanges.selectedActivities || simpleChanges.event || simpleChanges.useDistanceAxis) {
+      // debugger
+      // @todo should not get triggered twice like atm
       this.destroyChart(); // Destroy to recreate (no update as its messy atm)
       this.chartData = this.getAllData();
     }
@@ -94,7 +97,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       theme: 'light',
       dataProvider: chartData.dataProvider,
       autoMarginOffset: 0,
-      parseDates: true,
       // marginRight: 100,
       // autoMargins: true,
       graphs: graphs,
@@ -118,7 +120,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       startDuration: 0.2,
       startEffect: 'easeOutSine',
       sequencedAnimation: false,
-      categoryField: 'date',
+      categoryField: this.useDistanceAxis ? 'distance' : 'date',
       processCount: 10000,
       // processTimeout: 1,
       legend: {
@@ -148,8 +150,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       },
       synchronizeGrid: true,
       categoryAxis: {
-        parseDates: true,
+        parseDates: !this.useDistanceAxis,
         minPeriod: 'fff',
+        labelFunction: (valueText, date, categoryAxis) => {
+          if (valueText) {
+            return valueText + (this.useDistanceAxis ? ' m' : '');
+          }
+        },
         axisColor: '#DADADA',
         gridThickness: 0.0,
         offset: 0,
@@ -172,9 +179,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private getAllData(): ChartDataSettingsInterface {
     const t0 = performance.now();
+    const dataByDateTime = new Map<number, any>();
+    const dataByDistance = new Map<number, any>();
     const chartData: ChartDataSettingsInterface = {
       categories: new Map<string, any>(),
-      dataByDateTime: new Map<number, any>(),
       dataProvider: [],
     };
     this.selectedActivities.forEach((activity: ActivityInterface, index) => {
@@ -192,35 +200,62 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
             chartData.categories.set(key + activity.getID(), existingCategory);
           }
 
-          let existingDateData = chartData.dataByDateTime.get(point.getDate().getTime());
+          // @todo Majorly refactor this with the new chart engine (AmCharts v4)
+          // Adds too much memory
+          const pointDistanceData = point.getDataByType(DataDistance.type);
+          let existingDistanceData = new Map<string, number>();
+          if (pointDistanceData instanceof DataDistance) {
+            existingDistanceData = dataByDistance.get(pointDistanceData.getValue()) || existingDistanceData;
+            if (existingDistanceData) {
+              dataByDistance.set(pointDistanceData.getValue(), existingDistanceData)
+            }
+          }
+
+          let existingDateData = dataByDateTime.get(point.getDate().getTime());
           if (!existingDateData) {
             existingDateData = new Map<string, number>();
-            chartData.dataByDateTime.set(point.getDate().getTime(), existingDateData);
+            dataByDateTime.set(point.getDate().getTime(), existingDateData);
           }
+
+          // Finally set the latest
           // @todo solve this
           if (pointData.getType() === DataPace.type || pointData.getType() === DataDistance.type) {
             existingDateData.set(key + activity.getID(), Math.round(Number(pointData.getValue())));
+            existingDistanceData.set(key + activity.getID(), Math.round(Number(pointData.getValue())));
           } else {
             existingDateData.set(key + activity.getID(), Number(pointData.getDisplayValue()));
+            existingDistanceData.set(key + activity.getID(), Number(pointData.getDisplayValue()));
           }
         });
       });
     });
 
-    // Flatten the data
-    chartData.dataByDateTime.forEach((dataMap, dateTime, map) => {
-      chartData.dataProvider.push(Object.assign({
-        date: new Date(dateTime),
-      }, Array.from(dataMap).reduce((obj, [key, value]) => (
-        Object.assign(obj, {[key]: value})
-      ), {})));
-    });
-
-    // Sort them
-    chartData.dataProvider.sort((dataA: any, dataB: any) => {
-      return +dataA.date - +dataB.date;
-    });
-
+    // Flatten the data accordingly
+    if (this.useDistanceAxis) {
+      dataByDistance.forEach((dataMap, distance, map) => {
+        chartData.dataProvider.push(Object.assign({
+          distance: distance,
+        }, Array.from(dataMap).reduce((obj, [key, value]) => (
+          Object.assign(obj, {[key]: value})
+        ), {})));
+      });
+      // Sort them
+      chartData.dataProvider.sort((dataA: any, dataB: any) => {
+        return dataA.distance - dataB.distance;
+      });
+    } else {
+      dataByDateTime.forEach((dataMap, dateTime, map) => {
+        chartData.dataProvider.push(Object.assign({
+          date: new Date(dateTime),
+        }, Array.from(dataMap).reduce((obj, [key, value]) => (
+          Object.assign(obj, {[key]: value})
+        ), {})));
+      });
+      // Sort them
+      chartData.dataProvider.sort((dataA: any, dataB: any) => {
+        return +dataA.date - +dataB.date;
+      });
+    }
     this.logger.d('Retrieved all data after ' + (performance.now() - t0) + ' milliseconds');
     return chartData;
   }
