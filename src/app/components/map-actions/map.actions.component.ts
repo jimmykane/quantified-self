@@ -13,7 +13,7 @@ import {EventService} from '../../services/app.event.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {MapSettingsService} from '../../services/app.map.settings.service';
+import {UserSettingsService} from '../../services/app.user.settings.service';
 
 @Component({
   selector: 'app-map-actions',
@@ -39,7 +39,7 @@ export class MapActionsComponent implements OnChanges {
     private eventService: EventService,
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
-    private mapSettingsService: MapSettingsService,
+    private mapSettingsService: UserSettingsService,
     private snackBar: MatSnackBar,
     public dialog: MatDialog) {
   }

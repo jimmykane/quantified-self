@@ -86,6 +86,10 @@
       <mat-tab label="Chart">
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
+          <app-chart-actions
+            [(useDistanceAxis)]="useDistanceAxis"
+            align="end">
+          </app-chart-actions>
         </ng-template>
         <!--<app-event-card-chart-new-->
           <!--[isVisible]="selectedTabIndex === (eventHasPointsWithPosition? 2 : 1)"-->

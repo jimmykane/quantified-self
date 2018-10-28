@@ -10,7 +10,7 @@ import {AppEventColorService} from '../../../services/color/app.event.color.serv
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {MapSettingsService} from '../../../services/app.map.settings.service';
+import {UserSettingsService} from '../../../services/app.user.settings.service';
 
 
 @Component({
@@ -30,13 +30,15 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showMapDataWarnings: boolean;
   public showData: boolean;
 
+  public useDistanceAxis: boolean;
+
   private parametersSubscription: Subscription;
 
   constructor(
     public router: Router,
     private route: ActivatedRoute,
     private eventService: EventService,
-    private mapSettingsService: MapSettingsService,
+    private userSettingsService: UserSettingsService,
     public eventColorService: AppEventColorService) {
   }
 
@@ -45,11 +47,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
-    this.mapSettingsService.getShowAutoLaps().then(value => this.showMapAutoLaps = value);
-    this.mapSettingsService.getShowManualLaps().then(value => this.showMapManualLaps = value);
-    this.mapSettingsService.getShowData().then(value => this.showData = value);
-    this.mapSettingsService.showDataWarnings().then(value => this.showMapDataWarnings = value);
-
+    this.userSettingsService.getShowAutoLaps().then(value => this.showMapAutoLaps = value);
+    this.userSettingsService.getShowManualLaps().then(value => this.showMapManualLaps = value);
+    this.userSettingsService.getShowData().then(value => this.showData = value);
+    this.userSettingsService.showDataWarnings().then(value => this.showMapDataWarnings = value);
+    this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
 
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {

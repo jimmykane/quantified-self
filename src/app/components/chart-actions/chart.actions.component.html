@@ -1,0 +1,15 @@
+<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
+  <mat-icon>more_vert</mat-icon>
+</button>
+<mat-menu #menu="matMenu">
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="useDistanceAxis">
+      <span matTooltip="Use Distance for X Axis">
+        Use distance Axis
+      </span>
+    </mat-slide-toggle>
+  </section>
+</mat-menu>
