@@ -19,7 +19,7 @@
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
     "@amcharts/amcharts3-angular": "^2.2.2",
-    "@amcharts/amcharts4": "^4.0.0-beta.64",
+    "@amcharts/amcharts4": "^4.0.0-beta.66",
     "@angular/animations": "7.0.1",
     "@angular/cdk": "^7.0.2",
     "@angular/common": "7.0.1",
@@ -64,7 +64,7 @@
     "karma-cli": "~1.0.1",
     "karma-coverage-istanbul-reporter": "^2.0.4",
     "karma-jasmine": "~1.1.2",
-    "karma-jasmine-html-reporter": "^1.3.1",
+    "karma-jasmine-html-reporter": "^1.4.0",
     "protractor": "~5.4.1",
     "ts-node": "~7.0.1",
     "tslint": "~5.11.0",
