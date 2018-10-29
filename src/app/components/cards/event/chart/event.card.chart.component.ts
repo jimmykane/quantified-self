@@ -54,9 +54,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return;
     }
     // If data changed... update
-    if (simpleChanges.selectedActivities || simpleChanges.event || simpleChanges.useDistanceAxis) {
-      // debugger
-      // @todo should not get triggered twice like atm
+    if (simpleChanges.selectedActivities || simpleChanges.event || simpleChanges.useDistanceAxis.currentValue !== this.useDistanceAxis ) {
       this.destroyChart(); // Destroy to recreate (no update as its messy atm)
       this.chartData = this.getAllData();
     }
