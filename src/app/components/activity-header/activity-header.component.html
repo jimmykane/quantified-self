@@ -2,7 +2,13 @@
   <mat-icon *ngIf="showIcon" [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">
     watch
   </mat-icon>
-  <span class="mat-body-2">{{ activity.creator.name }}</span><span>&nbsp;-&nbsp;</span>
+  <span class="mat-body-2">{{ activity.creator.name }}
+  <span *ngIf="showSWInfo &&  activity.creator.swInfo">
+    <span class="mat-body-2">
+      v{{ activity.creator.swInfo }}
+    </span>
+  </span>
+  </span><span>&nbsp;-&nbsp;</span>
   <span class="mat-body-2">{{ activity.type }}</span>
   <span *ngIf="showDuration">
     <span>&nbsp;for</span>
