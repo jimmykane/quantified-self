@@ -67,6 +67,7 @@ import {ActivityMetadataComponent} from './components/activity-metadata/activity
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 import {ChartActionsComponent} from './components/chart-actions/chart.actions.component';
 import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
+import {UserSettingsService} from './services/app.user.settings.service';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {

@@ -106,10 +106,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.events.on('inited', (ev) => {
           this.logger.d('inited');
         });
-        chart.events.on('valueschanged', (ev) => {
-          this.logger.d('valueschanged');
-        });
-
         resolve(chart);
       });
     });
