@@ -19,7 +19,7 @@
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
     "@amcharts/amcharts3-angular": "^2.2.2",
-    "@amcharts/amcharts4": "^4.0.0-beta.74",
+    "@amcharts/amcharts4": "^4.0.0-beta.77",
     "@angular/animations": "7.0.3",
     "@angular/cdk": "^7.0.3",
     "@angular/common": "7.0.3",
@@ -55,7 +55,7 @@
     "@angular/cli": "7.0.5",
     "@angular/compiler-cli": "7.0.3",
     "@types/jasmine": "2.8.11",
-    "@types/node": "^10.12.4",
+    "@types/node": "^10.12.5",
     "codelyzer": "~4.5.0",
     "jasmine-core": "^3.3.0",
     "jasmine-spec-reporter": "~4.2.1",
