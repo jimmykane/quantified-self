@@ -60,7 +60,6 @@ import {ActivityActionsComponent} from './components/activity-actions/activity.a
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
 import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
-import {MapSettingsService} from './services/app.map.settings.service';
 import {EventCardChartNewComponent} from './components/cards/event/chart-new/event.card.chart.component';
 import {UploadErrorComponent} from './components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from './components/activity-metadata/activity-metadata.component';
