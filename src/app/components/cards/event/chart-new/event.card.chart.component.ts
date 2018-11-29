@@ -134,12 +134,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
               existingLineSeries.dataFields.dateX = 'date';
               existingLineSeries.dataFields.valueY = pointData.getClassName() + activity.getID();
               if (key !== DataHeartRate.type) {
-                existingLineSeries.visible = false;
+                existingLineSeries.hidden = true;
               }
               existingLineSeries.tooltipText = activity.creator.name + ' ' + pointData.getType() + '{valueY} ' + pointData.getDisplayUnit();
               existingLineSeries.legendSettings.labelText = '{name}';
               existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
-              existingLineSeries.defaultState.transitionDuration = 2000;
+              existingLineSeries.defaultState.transitionDuration = 0;
 
               existingLineSeries.strokeWidth = 1;
               existingLineSeries.fillOpacity = 0.05;
