@@ -67,13 +67,17 @@ import {ActivityFormComponent} from './components/activity-form/activity.form.co
 import {ChartActionsComponent} from './components/chart-actions/chart.actions.component';
 import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
 import {UserSettingsService} from './services/app.user.settings.service';
+import {AngularFireModule} from '@angular/fire';
+import {AngularFirestoreModule} from '@angular/fire/firestore';
+import {AngularFireAuthModule} from '@angular/fire/auth';
+import {AngularFireStorageModule} from '@angular/fire/storage';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
     environment: environment.production ? 'Production' : 'Development',
     shouldSendCallback: function () {
       return environment.production;
-    }
+    },
   })
   .install();
 
@@ -89,6 +93,10 @@ export class RavenErrorHandler implements ErrorHandler {
     BrowserAnimationsModule,
     AppRoutingModule,
     HttpClientModule,
+    AngularFireModule.initializeApp(environment.firebase),
+    AngularFirestoreModule,
+    AngularFireStorageModule,
+    AngularFireAuthModule, // imports firebase/auth, only needed for auth features,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyAV0ilIsl02eRaIibidoeZ2SX03a5ud-bQ',
       // apiVersion: '3.31'
@@ -123,7 +131,7 @@ export class RavenErrorHandler implements ErrorHandler {
     MatDialogModule,
     MatSlideToggleModule,
     MatDatepickerModule,
-    MatNativeDateModule
+    MatNativeDateModule,
   ],
   declarations: [
     AppComponent,
@@ -169,9 +177,9 @@ export class RavenErrorHandler implements ErrorHandler {
     GeoLocationInfoService,
     AppEventColorService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
-    {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler}
+    {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
   ],
-  bootstrap: [AppComponent]
+  bootstrap: [AppComponent],
 })
 
 export class AppModule {

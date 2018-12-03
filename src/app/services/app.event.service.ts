@@ -1,4 +1,4 @@
-import {Injectable} from '@angular/core';
+import {Injectable, OnDestroy} from '@angular/core';
 import {List} from 'immutable';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
@@ -8,64 +8,75 @@ import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-loc
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
-import * as Raven from 'raven-js';
-import {Observable, BehaviorSubject} from 'rxjs';
+import {Observable} from 'rxjs';
+import {AngularFirestore} from '@angular/fire/firestore';
+import {map, mergeMap} from 'rxjs/operators';
+import {AngularFireStorage} from '@angular/fire/storage';
+import {firestore} from 'firebase/app';
+import * as Pako from 'pako';
+import {getSize} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.interface';
 
 @Injectable()
-export class EventService {
-
-  private events: BehaviorSubject<List<EventInterface>> = new BehaviorSubject(List([]));
+export class EventService implements OnDestroy {
 
   constructor(private eventLocalStorageService: EventLocalStorageService,
+              private storage: AngularFireStorage,
               private weatherService: WeatherUndergroundWeatherService,
+              private afs: AngularFirestore,
               private geoLocationInfoService: GeoLocationInfoService) {
-    // Fetch existing events
-    this.getInitialData();
   }
 
-  private async getInitialData() {
-    for (const localStorageKey of this.eventLocalStorageService.getAllKeys()) {
-      const localStorageData = await this.eventLocalStorageService.getItem(localStorageKey);
-      try {
-        const event = await EventImporterJSON.getFromJSONString(localStorageData);
-        this.events.next(this.events.getValue().push(event));
-      } catch (e) {
-        Raven.captureException(e);
-        console.error(e);
-        this.eventLocalStorageService.removeItem(localStorageKey).then(() => console.log(`Removed event with id: ${localStorageKey}`));
-      }
-    }
+  public getEvent(eventID: string): Observable<EventInterface> {
+    return this.afs.collection("events").doc(eventID).snapshotChanges().pipe(
+      mergeMap(document => {
+        return EventImporterJSON.getFromJSON(document.payload.data())
+      }),
+    );
   }
 
-  public async addAndReplace(event: EventInterface) {
-    // If the event is already in the list create a new one as of update
-    if (this.findEvent(event.getID())) {
-      this.deleteEvent(event); // Delete first
-      // @todo call exporter
-      event = await EventImporterJSON.getFromJSONString(JSON.stringify(event)); // Create new obj to trigger change detection
-    }
-    // Set to local storage and to list
-    // @todo call exporter
-    this.eventLocalStorageService.setItem(event.getID(), JSON.stringify(event));
-    this.events.next(this.events.getValue().push(event));
+  public getEvents(): Observable<EventInterface[]> {
+    return this.afs.collection("events").snapshotChanges().pipe(
+      map(eventSnapshots => {
+        return eventSnapshots.reduce((eventsArray: EventInterface[], eventSnapshot) => {
+          eventsArray.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.doc.data()));
+          return eventsArray;
+        }, []);
+      }),
+    );
+  }
+
+  public async addEvent(event: EventInterface): Promise<void[]> {
+    // Set the id to the ref // @todo perhaps make the ID non generated or solve this properly
+    event.setID(this.afs.createId());
+    event.getActivities().forEach((activity) => activity.setID(this.afs.createId()));
+
+    const promises: Promise<void>[] = [];
+
+    promises.push(this.afs.collection('events').doc(event.getID()).set(event.toJSON()));
+
+    event.getActivities()
+      .forEach((activity) => {
+        promises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
+        activity.streams.forEach((stream) => {
+          // console.log(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
+          promises.push(this.afs
+            .collection('events')
+            .doc(event.getID())
+            .collection('activities')
+            .doc(activity.getID())
+            .collection('streams')
+            .doc(stream.type)
+            .set({[stream.type]: firestore.Blob.fromBase64String(btoa(Pako.gzip(stream.data, {to: 'string'})))}))
+        });
+      });
+    return Promise.all(promises);
   }
 
   public deleteEvent(eventToDelete: EventInterface) {
-    this.eventLocalStorageService.removeItem(eventToDelete.getID()).then(() => {
-      this.events.next(this.events.getValue().delete(this.events.getValue().findIndex((event: EventInterface) => {
-        return eventToDelete.getID() === event.getID();
-      })));
-    });
-  }
 
-  public getEvents(): Observable<List<EventInterface>> {
-    return this.events.asObservable();
-  }
-
-  public findEvent(eventID: string): EventInterface {
-    return this.events.getValue().find((event: EventInterface) => {
-      return event.getID() === eventID;
-    });
+    this.afs.collection('events').doc(eventToDelete.getID()).collection('activities').snapshotChanges();
+    // this.afs.collection('events').doc(eventToDelete.getID()).delete();
   }
 
   /**
@@ -113,4 +124,23 @@ export class EventService {
       });
     }));
   }
+
+  ngOnDestroy() {
+  }
 }
+
+// // Save the whole event to a json file
+// // Save the points as a json string in storage and link to id etc
+// const filePath = event.getID();
+// const ref = this.storage.ref(filePath);
+// const task = ref.putString(JSON.stringify(event.toJSON()));
+//
+//
+// task.snapshotChanges().pipe(
+//     finalize(() => {
+//       debugger
+//       batch.commit();
+//     })
+//  )
+// .subscribe()
+

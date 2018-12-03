@@ -22,6 +22,7 @@ import {UserSettingsService} from '../../../services/app.user.settings.service';
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public selectedTabIndex;
+  public eventID: string;
   public selectedActivities: ActivityInterface[] = [];
   public eventHasPointsWithPosition: boolean;
 
@@ -33,6 +34,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public useDistanceAxis: boolean;
 
   private parametersSubscription: Subscription;
+  private eventSubscription: Subscription;
 
   constructor(
     public router: Router,
@@ -55,25 +57,29 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     // Subscribe to route changes
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-      // Reset the selected activities
-      if (this.event && this.event.getID() !== params['eventID']) {
-        this.selectedActivities = [];
-      }
-      this.event = this.eventService.findEvent(params['eventID']);
-      if (!this.event) {
-        this.router.navigate(['/dashboard']);
-        return;
-      }
-
       this.selectedTabIndex = +params['tabIndex'];
-      this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
-      this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : this.event.getActivities();
-    });
 
+      // If there is an ID change then unsubscribe and resubscribe to the new id
+      if (this.eventID !== params['eventID']) {
+        debugger;
+        this.eventID = params['eventID'];
+        if (this.eventSubscription) {
+          this.eventSubscription.unsubscribe();
+        }
+        this.selectedActivities = [];
+        // Subscribe to event changes
+        this.eventSubscription = this.eventService.getEvent(this.eventID).subscribe((event: EventInterface) => {
+          this.event = event;
+          this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
+          this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : this.event.getActivities();
+        });
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.parametersSubscription.unsubscribe();
+    this.eventSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {

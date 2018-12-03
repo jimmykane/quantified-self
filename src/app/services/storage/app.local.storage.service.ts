@@ -1,5 +1,4 @@
 import {StorageServiceInterface} from './app.storage.service.interface';
-import * as LZString from 'lz-string';
 import {Log, Logger} from 'ng2-logger/client';
 
 
@@ -22,30 +21,17 @@ export abstract class LocalStorageService implements StorageServiceInterface {
   setItem(key: string, data: string) {
     localStorage.setItem(
       this.nameSpace + key,
-      LZString.compressToUTF16(data),
+      data,
     );
   }
 
   getItem(key: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      const t0 = performance.now();
       if (!localStorage.getItem(this.nameSpace + key)){
         reject('No item found');
         return;
       }
-      try {
-        const decrypted = LZString.decompressFromUTF16(localStorage.getItem(this.nameSpace + key));
-        this.logger.d('Decrypted 1 item after ' +
-          (performance.now() - t0) + ' milliseconds or ' +
-          (performance.now() - t0) / 1000 + ' seconds',
-        );
-        resolve(decrypted);
-      } catch (e) {
-        // If not able to decode remove from storage
-        console.error('Could not decode entry from local storage ' + key);
-        localStorage.removeItem(key);
-        reject(e);
-      }
+      resolve(localStorage.getItem(this.nameSpace + key));
     });
   }
 
@@ -55,22 +41,10 @@ export abstract class LocalStorageService implements StorageServiceInterface {
 
   getAllItems(): Promise<string[]> {
     return new Promise((resolve, reject) => {
-      const t0 = performance.now();
       const items = [];
       this.getAllKeys().map((localStorageKey) => {
-        // Try to decode
-        try {
-          items.push(LZString.decompressFromUTF16(localStorage.getItem(localStorageKey)));
-        } catch (Error) {
-          // If not able to decode remove from storage
-          console.error('Could not decode entry from local storage ' + localStorageKey);
-          localStorage.removeItem(localStorageKey);
-        }
+          items.push(localStorage.getItem(localStorageKey));
       });
-      this.logger.d('Decrypted ' + items.length + ' items from localStorage after ' +
-        (performance.now() - t0) + ' milliseconds or ' +
-        (performance.now() - t0) / 1000 + ' seconds',
-      );
       resolve(items);
     });
   }

@@ -57,7 +57,7 @@ export class EventFormComponent implements OnInit {
       return;
     }
     try {
-      await this.eventService.addAndReplace(this.event);
+      await this.eventService.addEvent(this.event);
       this.snackBar.open('Event saved', null, {
         duration: 5000,
       });

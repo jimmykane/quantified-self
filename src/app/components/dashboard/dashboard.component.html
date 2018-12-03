@@ -1,4 +1,4 @@
 <mat-card>
   <app-upload></app-upload>
-  <app-event-table *ngIf="events.size > 0" [events]="events"></app-event-table>
+  <app-event-table *ngIf="events?.length > 0" [events]="events"></app-event-table>
 </mat-card>

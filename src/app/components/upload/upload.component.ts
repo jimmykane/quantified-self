@@ -74,8 +74,14 @@ export class UploadComponent {
           console.error(e);
           Raven.captureException(e);
         }
-        this.eventService.addAndReplace(newEvent);
-        metaData.status = UPLOAD_STATUS.PROCESSED;
+        try {
+          await this.eventService.addEvent(newEvent);
+          metaData.status = UPLOAD_STATUS.PROCESSED;
+        }catch (e) {
+          console.error(e);
+          Raven.captureException(e);
+          metaData.status = UPLOAD_STATUS.ERROR;
+        }
         resolve(newEvent);
       };
       // Read it depending on the extension

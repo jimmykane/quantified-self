@@ -44,7 +44,7 @@ export class ActivityActionsComponent {
     this.event.removeActivity(this.activity);
     console.log(this.event.getActivities().length);
 
-    this.eventService.addAndReplace(this.event).then((event) => {
+    this.eventService.addEvent(this.event).then((event) => {
       this.router.navigate(['/dashboard']);
       // this.router.navigate(['/dashboard'], {queryParams: {eventID: this.event.getID(), tabIndex: 0}});
       this.snackBar.open('Activity deleted', null, {
