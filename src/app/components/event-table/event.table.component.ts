@@ -147,7 +147,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.actionButtonService.removeActionButton('mergeEvents');
           EventUtilities.mergeEvents(this.selection.selected.map(selected => selected.Checkbox)).then((mergedEvent: EventInterface) => {
             this.actionButtonService.removeActionButton('mergeEvents');
-            this.eventService.addEvent(mergedEvent);
+            this.eventService.setEvent(mergedEvent);
             this.eventSelectionMap.clear();
             this.selection.clear();
             this.router.navigate(['/eventDetails'], {

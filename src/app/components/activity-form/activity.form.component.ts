@@ -100,7 +100,7 @@ export class ActivityFormComponent implements OnInit {
     EventUtilities.generateStats(this.event);
     debugger;
     try {
-      await this.eventService.addEvent(this.event);
+      await this.eventService.setEvent(this.event);
       this.snackBar.open('Activity saved', null, {
         duration: 5000,
       });

@@ -3,7 +3,7 @@ import {
   OnInit
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
-import {Observable, Subscription} from 'rxjs';
+import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 @Component({
@@ -14,9 +14,10 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   events: EventInterface[];
+  eventsSubscription: Subscription;
 
   constructor(private eventService: EventService) {
-    this.eventService.getEvents().subscribe((eventsArray) => {
+    this.eventsSubscription = this.eventService.getEvents().subscribe((eventsArray) => {
       this.events = eventsArray;
     });
   }
@@ -28,5 +29,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
+    this.eventsSubscription.unsubscribe();
   }
 }
