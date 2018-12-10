@@ -1,7 +1,6 @@
 import {Component, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {ActivatedRoute, Params} from '@angular/router';
-import {List} from 'immutable';
 import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
@@ -13,7 +12,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 })
 export class SideNavComponent implements OnInit {
 
-  public events: List<EventInterface> = List([]);
+  public events: EventInterface[] = [];
   public selectedEvent: EventInterface;
 
   private parametersEventID: string;

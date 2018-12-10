@@ -19,7 +19,7 @@ import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.
 import {ControlPosition, MapTypeControlOptions} from '@agm/core/services/google-maps-types';
 import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
 import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
-import {Log} from 'ng2-logger/client';
+import {Log} from 'ng2-logger/browser';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 @Component({

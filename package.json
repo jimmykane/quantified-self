@@ -43,7 +43,7 @@
     "font-awesome": "^4.7.0",
     "hammerjs": "^2.0.8",
     "material-design-icons": "^3.0.1",
-    "ng2-logger": "2.0.35",
+    "ng2-logger": "2.0.44",
     "quantified-self-lib": "^2.2.3",
     "raven-js": "^3.27.0",
     "roboto-fontface": "^0.10.0",

@@ -3,7 +3,7 @@ import {
   ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {AmChartsService} from '@amcharts/amcharts3-angular';
-import {Log} from 'ng2-logger/client'
+import {Log} from 'ng2-logger/browser'
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 import {ChartDataSettingsInterface} from './event.card.chart.data.interface';
 import * as Raven from 'raven-js';

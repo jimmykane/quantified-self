@@ -1,5 +1,5 @@
 import {Injectable} from '@angular/core';
-import {Log} from 'ng2-logger/client';
+import {Log} from 'ng2-logger/browser';
 import {MapSettingsLocalStorageService} from './storage/app.map.settings.local.storage.service';
 import {ChartSettingsLocalStorageService} from './storage/app.chart.settings.local.storage.service';
 

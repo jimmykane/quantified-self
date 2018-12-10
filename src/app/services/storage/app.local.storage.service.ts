@@ -1,5 +1,5 @@
 import {StorageServiceInterface} from './app.storage.service.interface';
-import {Log, Logger} from 'ng2-logger/client';
+import {Logger} from 'ng2-logger/browser';
 
 
 export abstract class LocalStorageService implements StorageServiceInterface {
@@ -8,10 +8,6 @@ export abstract class LocalStorageService implements StorageServiceInterface {
   protected abstract logger: Logger<{}>;
 
   constructor() {
-  }
-
-  getLogger(): Logger<{}>{
-    return this.logger;
   }
 
   getNameSpace(): string{
