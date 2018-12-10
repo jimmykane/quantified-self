@@ -42,7 +42,6 @@
     "firebase": "^5.7.0",
     "font-awesome": "^4.7.0",
     "hammerjs": "^2.0.8",
-    "immutable": "^4.0.0-rc.12",
     "material-design-icons": "^3.0.1",
     "ng2-logger": "2.0.35",
     "quantified-self-lib": "^2.2.3",

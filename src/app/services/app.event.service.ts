@@ -1,5 +1,4 @@
 import {Injectable, OnDestroy} from '@angular/core';
-import {List} from 'immutable';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
 import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
