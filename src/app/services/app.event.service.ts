@@ -32,16 +32,17 @@ export class EventService implements OnDestroy {
     return combineLatest(
       this.afs.collection("events").doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
-          debugger;
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data())
+          // debugger;
+          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID);
         }),
       ), this.getActivities(eventID),
     ).pipe(catchError((error) => {
       return of([])
     }))
       .pipe(map(([event, activities]) => {
-        debugger;
+        // debugger;
         event.clearActivities();
+
         activities.forEach((activity) => event.addActivity(activity));
         return event;
       })).pipe(catchError((error) => {
@@ -57,14 +58,13 @@ export class EventService implements OnDestroy {
       }, []);
     })).pipe(switchMap((eventIDS) => {
       // Should check if there are event ids else not return
-      debugger;
+      // debugger;
       if (!eventIDS.length) {
         return of([]);
       }
       return combineLatest.apply(this, eventIDS.map((eventID) => {
-        debugger;
+        // debugger;
         return this.getEvent(eventID);
-
       }))
     }))
   }
@@ -73,7 +73,7 @@ export class EventService implements OnDestroy {
     return this.afs.collection("events").doc(eventID).collection('activities').snapshotChanges().pipe(
       map(activitySnapshots => {
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
-          activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()));
+          activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
           return activitiesArray;
         }, []);
       }),
