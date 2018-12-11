@@ -7,9 +7,9 @@ import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-loc
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
-import {combineLatest, merge, Observable} from 'rxjs';
+import {combineLatest, merge, Observable, EMPTY, of} from 'rxjs';
 import {AngularFirestore} from '@angular/fire/firestore';
-import {map, mergeMap, zip} from 'rxjs/operators';
+import {catchError, map, mergeMap, switchMap} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
@@ -28,20 +28,25 @@ export class EventService implements OnDestroy {
               private geoLocationInfoService: GeoLocationInfoService) {
   }
 
-  public getEvent(eventID: string) {
+  public getEvent(eventID: string): Observable<EventInterface | boolean> {
     return combineLatest(
       this.afs.collection("events").doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
-          // debugger;
+          debugger;
           return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data())
         }),
       ), this.getActivities(eventID),
-    ).pipe(map(([event, activities]) => {
-      // debugger;
-      event.clearActivities();
-      activities.forEach((activity) => event.addActivity(activity));
-      return event;
+    ).pipe(catchError((error) => {
+      return of([])
     }))
+      .pipe(map(([event, activities]) => {
+        debugger;
+        event.clearActivities();
+        activities.forEach((activity) => event.addActivity(activity));
+        return event;
+      })).pipe(catchError((error) => {
+        return  EMPTY;
+      }))
   }
 
   public getEvents(): Observable<EventInterface[]> {
@@ -50,9 +55,17 @@ export class EventService implements OnDestroy {
         eventIDS.push(eventSnapshot.payload.doc.id);
         return eventIDS;
       }, []);
-    })).pipe(mergeMap((eventIDS) => {
-      // debugger;
-      return combineLatest.apply(this, eventIDS.map((eventID) => this.getEvent(eventID)))
+    })).pipe(switchMap((eventIDS) => {
+      // Should check if there are event ids else not return
+      debugger;
+      if (!eventIDS.length) {
+        return of([]);
+      }
+      return combineLatest.apply(this, eventIDS.map((eventID) => {
+        debugger;
+        return this.getEvent(eventID);
+
+      }))
     }))
   }
 
