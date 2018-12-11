@@ -17,6 +17,8 @@ import {getSize} from 'quantified-self-lib/lib/events/utilities/event.utilities'
 import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.interface';
 import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity.json.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
+import {StreamJSONInterface} from 'quantified-self-lib/lib/streams/stream.json.interface';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -28,26 +30,27 @@ export class EventService implements OnDestroy {
               private geoLocationInfoService: GeoLocationInfoService) {
   }
 
-  public getEvent(eventID: string): Observable<EventInterface | boolean> {
+  public getEvent(eventID: string): Observable<EventInterface> {
+    // See
+    // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     return combineLatest(
       this.afs.collection("events").doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
           // debugger;
           return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID);
-        }),
-      ), this.getActivities(eventID),
+        })),
+      this.getActivities(eventID),
     ).pipe(catchError((error) => {
+      // debugger;
       return of([])
+    })).pipe(map(([event, activities]) => {
+      // debugger;
+      event.clearActivities();
+      activities.forEach((activity) => event.addActivity(activity));
+      return event;
+    })).pipe(catchError((error) => {
+      return EMPTY;
     }))
-      .pipe(map(([event, activities]) => {
-        // debugger;
-        event.clearActivities();
-
-        activities.forEach((activity) => event.addActivity(activity));
-        return event;
-      })).pipe(catchError((error) => {
-        return  EMPTY;
-      }))
   }
 
   public getEvents(): Observable<EventInterface[]> {
@@ -80,6 +83,34 @@ export class EventService implements OnDestroy {
     )
   }
 
+  public getAllStreams(eventID: string, activityID: string): Observable<StreamInterface[]> {
+    return this.afs
+      .collection('events')
+      .doc(eventID)
+      .collection('activities')
+      .doc(activityID)
+      .collection('streams')
+      .snapshotChanges()
+      .pipe(map((streamSnapshots) => {
+        return streamSnapshots.reduce((streamArray, streamSnapshot) => {
+          streamArray.push(EventImporterJSON.getStreamFromJSON(<StreamJSONInterface>streamSnapshot.payload.doc.data()));
+          return streamArray
+        }, [])
+      }))
+  }
+
+  public getStreams(eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
+    return combineLatest.apply(this, types.map((type) => {
+      return this.afs
+        .collection('events')
+        .doc(eventID)
+        .collection('activities')
+        .doc(activityID)
+        .collection('streams', ref => ref.where('type', '==', type))
+        .snapshotChanges()
+    }))
+  }
+
   public async setEvent(event: EventInterface): Promise<void[]> {
     const promises: Promise<void>[] = [];
     event.setID(event.getID() || this.afs.createId());
@@ -96,8 +127,8 @@ export class EventService implements OnDestroy {
             .collection('activities')
             .doc(activity.getID())
             .collection('streams')
-            .doc(stream.type)
-            .set({[stream.type]: firestore.Blob.fromBase64String(btoa(Pako.gzip(stream.data, {to: 'string'})))}))
+            .doc(stream.type) // @todo check this how it behaves
+            .set({type: firestore.Blob.fromBase64String(btoa(Pako.gzip(stream.data, {to: 'string'})))}))
         });
       });
     return Promise.all(promises);
