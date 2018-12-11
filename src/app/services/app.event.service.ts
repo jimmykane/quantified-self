@@ -65,8 +65,7 @@ export class EventService implements OnDestroy {
       if (!eventIDS.length) {
         return of([]);
       }
-      return combineLatest.apply(this, eventIDS.map((eventID) => {
-        // debugger;
+      return combineLatest(eventIDS.map((eventID) => {
         return this.getEvent(eventID);
       }))
     }))
@@ -108,6 +107,12 @@ export class EventService implements OnDestroy {
         .doc(activityID)
         .collection('streams', ref => ref.where('type', '==', type))
         .snapshotChanges()
+        .pipe(map((streamSnapshots) => {
+          return streamSnapshots.reduce((streamArray, streamSnapshot) => {
+            streamArray.push(EventImporterJSON.getStreamFromJSON(<StreamJSONInterface>streamSnapshot.payload.doc.data()));
+            return streamArray
+          }, [])
+        }))
     }))
   }
 
@@ -128,7 +133,10 @@ export class EventService implements OnDestroy {
             .doc(activity.getID())
             .collection('streams')
             .doc(stream.type) // @todo check this how it behaves
-            .set({type: firestore.Blob.fromBase64String(btoa(Pako.gzip(stream.data, {to: 'string'})))}))
+            .set({
+              type: stream.type,
+              data: firestore.Blob.fromBase64String(btoa(Pako.gzip(stream.data, {to: 'string'}))),
+            }))
         });
       });
     return Promise.all(promises);
