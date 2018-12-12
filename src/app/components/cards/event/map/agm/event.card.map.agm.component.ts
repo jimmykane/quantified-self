@@ -4,7 +4,7 @@ import {
   Component,
   HostListener,
   Input,
-  OnChanges,
+  OnChanges, OnDestroy,
   OnInit, SimpleChange,
   ViewChild,
 } from '@angular/core';
@@ -21,6 +21,10 @@ import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.ada
 import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
 import {Log} from 'ng2-logger/browser';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {EventService} from '../../../../../services/app.event.service';
+import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
+import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
+import {Subscription} from 'rxjs';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -29,7 +33,7 @@ import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapAGMComponent implements OnChanges, OnInit {
+export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
@@ -40,6 +44,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
   @Input() showDataWarnings: boolean;
 
 
+  private streamsSubscriptions: Subscription[] = [];
   public mapData: MapData[] = [];
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
@@ -53,33 +58,102 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
+    private eventService: EventService,
     public eventColorService: AppEventColorService) {
   }
 
   ngOnInit() {
+    this.selectedActivities.forEach((activity) => {
+
+      // this.mapData = [];         // Todo seek and slice
+      this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
+        debugger;
+
+        const latLongArray = [];
+        const latData = streams[0].data.filter(data => !!data);
+        const longData = streams[1].data.filter(data => !!data);
+
+        const b = latData.forEach((value, index, array) => {
+          latLongArray[index] = {
+            latitude: latData[index],
+            longitude: longData[index],
+          }
+        });
+        // debugger;
+        this.mapData.push({
+          activity: activity,
+          points: latLongArray,
+        });
+
+        // debugger;
+
+        this.agmMap.triggerResize().then(() => {
+          const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+          googleMaps.fitBounds(this.getBounds());
+        });
+
+        this.changeDetectorRef.detectChanges();
+
+      }))
+    })
+
+    // this.mapData.push({activity: 123, points: []})
   }
 
   ngOnChanges(simpleChanges) {
-    // If no operational changes return
-    if (!(simpleChanges.event
-      || simpleChanges.selectedActivities
-      || simpleChanges.showAutoLaps
-      || simpleChanges.showManualLaps
-      || simpleChanges.showData
-      || simpleChanges.showDataWarnings)) {
-      return;
-    }
-    // Get the new data
-    this.mapData = this.cacheNewData();
-    // No need to do anything if the base did not change (Event)
-    if (!simpleChanges.event) {
-      return;
-    }
-    // If the event has changed then fit the bounds to show the new location
-    this.agmMap.triggerResize().then(() => {
-      const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-      googleMaps.fitBounds(this.getBounds());
-    });
+      this.selectedActivities.forEach((activity) => {
+      // this.mapData = [];         // Todo seek and slice
+      this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
+        // debugger;
+
+        const latLongArray = [];
+        const latData = streams[0].data.filter(data => !!data);
+        const longData = streams[1].data.filter(data => !!data);
+
+        const b = latData.forEach((value, index, array) => {
+          latLongArray[index] = {
+            latitude: latData[index],
+            longitude: longData[index],
+          }
+        });
+        // debugger;
+        this.mapData.push({
+          activity: activity,
+          points: latLongArray,
+        });
+
+        // debugger;
+
+        // this.agmMap.triggerResize().then(() => {
+        //   const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+        //   googleMaps.fitBounds(this.getBounds());
+        // });
+
+        this.changeDetectorRef.detectChanges();
+
+      }))
+    })
+
+    // // If no operational changes return
+    // if (!(simpleChanges.event
+    //   || simpleChanges.selectedActivities
+    //   || simpleChanges.showAutoLaps
+    //   || simpleChanges.showManualLaps
+    //   || simpleChanges.showData
+    //   || simpleChanges.showDataWarnings)) {
+    //   return;
+    // }
+    // // Get the new data
+    // this.mapData = this.cacheNewData();
+    // // No need to do anything if the base did not change (Event)
+    // if (!simpleChanges.event) {
+    //   return;
+    // }
+    // // If the event has changed then fit the bounds to show the new location
+    // this.agmMap.triggerResize().then(() => {
+    //   const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
+    //   googleMaps.fitBounds(this.getBounds());
+    // });
 
   }
 
@@ -146,7 +220,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
 
   getBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.points), []);
+    debugger;
     if (!pointsWithPosition.length) {
+      debugger;
       return <LatLngBoundsLiteral>{
         east: 0,
         west: 0,
@@ -154,32 +230,26 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
         south: 0,
       };
     }
-    const mostEast = pointsWithPosition.reduce((acc: PointInterface, point: PointInterface) => {
-      const pointPosition = <DataPositionInterface>point.getPosition();
-      const accPosition = <DataPositionInterface>acc.getPosition();
-      return (accPosition.longitudeDegrees < pointPosition.longitudeDegrees) ? point : acc;
+    const mostEast = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+      return (acc.longitude < latLongPair.longitude) ? latLongPair : acc;
     });
-    const mostWest = pointsWithPosition.reduce((acc: any, point: PointInterface) => {
-      const pointPosition = <DataPositionInterface>point.getPosition();
-      const accPosition = <DataPositionInterface>acc.getPosition();
+     const mostWest = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+      return (acc.longitude > latLongPair.longitude) ? latLongPair : acc;
+    });
 
-      return (accPosition.longitudeDegrees > pointPosition.longitudeDegrees) ? point : acc;
+     const mostNorth = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+      return (acc.latitude < latLongPair.latitude) ? latLongPair : acc;
     });
-    const mostNorth = pointsWithPosition.reduce((acc: any, point: PointInterface) => {
-      const pointPosition = <DataPositionInterface>point.getPosition();
-      const accPosition = <DataPositionInterface>acc.getPosition();
-      return (accPosition.latitudeDegrees < pointPosition.latitudeDegrees) ? point : acc;
+
+    const mostSouth = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+      return (acc.latitude > latLongPair.latitude) ? latLongPair : acc;
     });
-    const mostSouth = pointsWithPosition.reduce((acc: any, point: PointInterface) => {
-      const pointPosition = <DataPositionInterface>point.getPosition();
-      const accPosition = <DataPositionInterface>acc.getPosition();
-      return (accPosition.latitudeDegrees > pointPosition.latitudeDegrees) ? point : acc;
-    });
+
     return <LatLngBoundsLiteral>{
-      east: mostEast.getPosition().longitudeDegrees,
-      west: mostWest.getPosition().longitudeDegrees,
-      north: mostNorth.getPosition().latitudeDegrees,
-      south: mostSouth.getPosition().latitudeDegrees,
+      east: mostEast.longitude,
+      west: mostWest.longitude,
+      north: mostNorth.latitude,
+      south: mostSouth.latitude,
     };
   }
 
@@ -213,16 +283,24 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit {
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
   }
+
+  ngOnDestroy(): void {
+    this.streamsSubscriptions.forEach((streamsSubscription) => {
+      streamsSubscription.unsubscribe()
+    })
+  }
+
+
 }
 
 export interface MapData {
   activity: ActivityInterface,
-  points: PointInterface[],
-  lowNumberOfSatellitesPoints: PointInterface[],
-  activityStartPoint: PointInterface,
-  lapsWithPosition: {
-    lap: LapInterface,
-    lapPoints: PointInterface[],
-    lapEndPoint: PointInterface
-  }[]
+  points: { latitude: number, longitude: number }[], // @todo points here can cointain any datatype
+  // lowNumberOfSatellitesPoints: PointInterface[],
+  // activityStartPoint: PointInterface,
+  // lapsWithPosition: {
+  //   lap: LapInterface,
+  //   lapPoints: PointInterface[],
+  //   lapEndPoint: PointInterface
+  // }[]
 }
