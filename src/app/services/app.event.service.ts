@@ -19,9 +19,12 @@ import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {StreamJSONInterface} from 'quantified-self-lib/lib/streams/stream.json.interface';
+import {Log} from 'ng2-logger/browser';
 
 @Injectable()
 export class EventService implements OnDestroy {
+
+  protected logger = Log.create('EventService');
 
   constructor(private eventLocalStorageService: EventLocalStorageService,
               private storage: AngularFireStorage,
@@ -118,8 +121,8 @@ export class EventService implements OnDestroy {
               data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
             }));
             return streamArray
-          }, [])
-        }))
+          }, [])[0] // Get the first element of the return
+        }))         // since the return with equality on the query should only fetch one afaik in my model
     }))
   }
 
@@ -132,7 +135,7 @@ export class EventService implements OnDestroy {
         activity.setID(activity.getID() || this.afs.createId());
         promises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
         activity.streams.forEach((stream) => {
-          // console.log(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
+          this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
           promises.push(this.afs
             .collection('events')
             .doc(event.getID())
