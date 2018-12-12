@@ -4,7 +4,7 @@ import {
   OnDestroy,
   OnInit,
 } from '@angular/core';
-import {combineLatest, Subscription} from 'rxjs';
+import {combineLatest, Observable, of, Subscription} from 'rxjs';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
@@ -38,7 +38,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public useDistanceAxis: boolean;
 
   private parametersSubscription: Subscription;
-  private eventSubscription: Subscription;
 
   constructor(
     public router: Router,
@@ -60,26 +59,37 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
 
     // @todo test maps , switchmap etc with delete and order firing etc
-    this.route.queryParams.pipe(map((params) => {
+    this.parametersSubscription = this.route.queryParams.pipe(map((params) => {
       this.selectedTabIndex = +params['tabIndex'];
       return params
-    }))
-      .pipe(switchMap((params) => {
-        return this.eventService.getEvent(params['eventID']);
-      }))
-      .pipe(map((event) => {
-        this.event = event;
-        this.selectedActivities = event.getActivities();
-        return this.selectedActivities;
-      }))
-      .pipe(mergeMap((activities) => {
-        return combineLatest(activities.map((activity) => {
-          return this.eventService.getStreams(this.event.getID(), activity.getID(), ['Latitude', 'Longitude'])
-        }))
-      })).pipe(map((a) => {
-      debugger
-    }))
-      .subscribe()
+    })).pipe(switchMap((params) => {
+      return this.eventService.getEvent(params['eventID']);
+    })).pipe(map((event) => {
+      this.event = event;
+      this.selectedActivities = event.getActivities();
+      return this.selectedActivities;
+    })).pipe(map((activities) => {
+      return activities.reduce((activityStreamPairArray, activity) => {
+        activityStreamPairArray.push({
+            activity: activity,
+            activityStreams: this.eventService.getStreams(this.event.getID(), activity.getID(), ['Latitude', 'Longitude']),
+          });
+        return activityStreamPairArray
+      }, [])
+    })).pipe(mergeMap((activityStreamPairArray) => {
+      return combineLatest(activityStreamPairArray.reduce((flattenedArray, activityStreamPair) => {
+        flattenedArray.push(of(activityStreamPair.activity), activityStreamPair.activityStreams);
+        return flattenedArray
+      }, []))
+    })).pipe(map((resultsArray) => {
+      resultsArray.forEach((arrayElement, index, array) => {
+        if (index %2 ===0 ){
+          (<ActivityInterface>array[index]).streams.push(<StreamInterface>array[index+1])
+        }
+      })
+    })).subscribe()
+
+    // // Perhaps this should be a combine latest
 
 
     // // Subscribe to route changes
@@ -108,7 +118,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnDestroy(): void {
     this.parametersSubscription.unsubscribe();
-    this.eventSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {
