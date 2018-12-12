@@ -54,7 +54,7 @@
       [dynamicHeight]="true"
       [selectedIndex]="selectedTabIndex"
       (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {eventID: event.getID(), tabIndex: $event}})">
-      <mat-tab label="Map" *ngIf="hasMapData">
+      <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
           <app-map-actions
