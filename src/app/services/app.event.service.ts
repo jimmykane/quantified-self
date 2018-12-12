@@ -91,8 +91,12 @@ export class EventService implements OnDestroy {
       .collection('streams')
       .snapshotChanges()
       .pipe(map((streamSnapshots) => {
+        // @todo merge this to it's own function
         return streamSnapshots.reduce((streamArray, streamSnapshot) => {
-          streamArray.push(EventImporterJSON.getStreamFromJSON(<StreamJSONInterface>streamSnapshot.payload.doc.data()));
+          streamArray.push(EventImporterJSON.getStreamFromJSON({
+            type: <string>streamSnapshot.payload.doc.data().type,
+            data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
+          }));
           return streamArray
         }, [])
       }))
@@ -109,7 +113,10 @@ export class EventService implements OnDestroy {
         .snapshotChanges()
         .pipe(map((streamSnapshots) => {
           return streamSnapshots.reduce((streamArray, streamSnapshot) => {
-            streamArray.push(EventImporterJSON.getStreamFromJSON(<StreamJSONInterface>streamSnapshot.payload.doc.data()));
+            streamArray.push(EventImporterJSON.getStreamFromJSON({
+              type: <string>streamSnapshot.payload.doc.data().type,
+              data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
+            }));
             return streamArray
           }, [])
         }))
@@ -135,7 +142,7 @@ export class EventService implements OnDestroy {
             .doc(stream.type) // @todo check this how it behaves
             .set({
               type: stream.type,
-              data: firestore.Blob.fromBase64String(btoa(Pako.gzip(stream.data, {to: 'string'}))),
+              data: this.getBlobFromStreamData(stream.data),
             }))
         });
       });
@@ -193,8 +200,17 @@ export class EventService implements OnDestroy {
     }));
   }
 
+  private getBlobFromStreamData(streamData: number[]): firestore.Blob {
+    return firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(streamData), {to: 'string'})))
+  }
+
+  private getStreamDataFromBlob(blob: firestore.Blob): number[] {
+    return JSON.parse(Pako.ungzip(atob(blob.toBase64()), {to: 'string'}));
+  }
+
   ngOnDestroy() {
   }
+
 }
 
 // // Save the whole event to a json file

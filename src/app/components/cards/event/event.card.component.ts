@@ -4,13 +4,17 @@ import {
   OnDestroy,
   OnInit,
 } from '@angular/core';
-import {Subscription} from 'rxjs';
+import {combineLatest, Subscription} from 'rxjs';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
+import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
+import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
+import {map, mergeMap, switchMap} from 'rxjs/operators';
+import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 
 
 @Component({
@@ -22,9 +26,9 @@ import {UserSettingsService} from '../../../services/app.user.settings.service';
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public selectedTabIndex;
-  public eventID: string;
+  public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
-  public eventHasPointsWithPosition: boolean;
+  public hasMapData: boolean;
 
   public showMapAutoLaps: boolean;
   public showMapManualLaps: boolean;
@@ -55,26 +59,51 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.showDataWarnings().then(value => this.showMapDataWarnings = value);
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
 
-    // Subscribe to route changes
-    this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
+    // @todo test maps , switchmap etc with delete and order firing etc
+    this.route.queryParams.pipe(map((params) => {
       this.selectedTabIndex = +params['tabIndex'];
+      return params
+    }))
+      .pipe(switchMap((params) => {
+        return this.eventService.getEvent(params['eventID']);
+      }))
+      .pipe(map((event) => {
+        this.event = event;
+        this.selectedActivities = event.getActivities();
+        return this.selectedActivities;
+      }))
+      .pipe(mergeMap((activities) => {
+        return combineLatest(activities.map((activity) => {
+          return this.eventService.getStreams(this.event.getID(), activity.getID(), ['Latitude', 'Longitude'])
+        }))
+      })).pipe(map((a) => {
+      debugger
+    }))
+      .subscribe()
 
-      // If there is an ID change then unsubscribe and resubscribe to the new id
-      if (this.eventID !== params['eventID']) {
-        debugger;
-        this.eventID = params['eventID'];
-        if (this.eventSubscription) {
-          this.eventSubscription.unsubscribe();
-        }
-        this.selectedActivities = [];
-        // Subscribe to event changes
-        this.eventSubscription = this.eventService.getEvent(this.eventID).subscribe((event: EventInterface) => {
-          this.event = event;
-          this.eventHasPointsWithPosition = !!this.event.getPointsWithPosition().length;
-          this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : this.event.getActivities();
-        });
-      }
-    });
+
+    // // Subscribe to route changes
+    // this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
+    //   this.selectedTabIndex = +params['tabIndex'];
+    //
+    //   // If there is an ID change then unsubscribe and resubscribe to the new id
+    //   if (this.eventID !== params['eventID']) {
+    //     debugger;
+    //     this.eventID = params['eventID'];
+    //     if (this.eventSubscription) {
+    //       this.eventSubscription.unsubscribe();
+    //     }
+    //     this.selectedActivities = [];
+    //     // Subscribe to event changes
+    //     this.eventSubscription = this.eventService.getEvent(this.eventID).subscribe((event: EventInterface) => {
+    //       this.event = event;
+    //       event.getActivities().forEach((activity)=> {
+    //         this.eventService.getStreams(event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+    //       });
+    //       this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : this.event.getActivities();
+    //     });
+    //   }
+    // });
   }
 
   ngOnDestroy(): void {

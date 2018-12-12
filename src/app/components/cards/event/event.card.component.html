@@ -54,7 +54,7 @@
       [dynamicHeight]="true"
       [selectedIndex]="selectedTabIndex"
       (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {eventID: event.getID(), tabIndex: $event}})">
-      <mat-tab label="Map" *ngIf="eventHasPointsWithPosition">
+      <mat-tab label="Map" *ngIf="hasMapData">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
           <app-map-actions
@@ -86,18 +86,18 @@
       <mat-tab label="Chart">
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
-          <app-chart-actions *ngIf="eventHasPointsWithPosition"
+          <app-chart-actions *ngIf="hasMapData"
             [(useDistanceAxis)]="useDistanceAxis"
             align="end">
           </app-chart-actions>
         </ng-template>
         <!--<app-event-card-chart-new-->
-          <!--[isVisible]="selectedTabIndex === (eventHasPointsWithPosition? 2 : 1)"-->
+          <!--[isVisible]="selectedTabIndex === (hasMapData? 2 : 1)"-->
           <!--[selectedActivities]="selectedActivities"-->
           <!--[event]="event">-->
         <!--</app-event-card-chart-new>-->
         <app-event-card-chart
-          [isVisible]="selectedTabIndex === (eventHasPointsWithPosition? 2 : 1)"
+          [isVisible]="selectedTabIndex === (hasMapData? 2 : 1)"
           [useDistanceAxis]="useDistanceAxis"
           [selectedActivities]="selectedActivities"
           [event]="event">
