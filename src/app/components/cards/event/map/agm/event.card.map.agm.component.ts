@@ -38,7 +38,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
-  @Input() isVisible: boolean;
   @Input() showAutoLaps: boolean;
   @Input() showManualLaps: boolean;
   @Input() showData: boolean;
