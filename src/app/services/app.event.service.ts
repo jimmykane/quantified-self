@@ -9,7 +9,7 @@ import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import {combineLatest, merge, Observable, EMPTY, of} from 'rxjs';
 import {AngularFirestore} from '@angular/fire/firestore';
-import {catchError, map, mergeMap, switchMap} from 'rxjs/operators';
+import {catchError, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
@@ -114,7 +114,7 @@ export class EventService implements OnDestroy {
         .doc(activityID)
         .collection('streams', ref => ref.where('type', '==', type))
         .snapshotChanges()
-        .pipe(map((streamSnapshots) => {
+        .pipe(map((streamSnapshots) => { // @todo should be reduce
           return streamSnapshots.reduce((streamArray, streamSnapshot) => {
             streamArray.push(EventImporterJSON.getStreamFromJSON({
               type: <string>streamSnapshot.payload.doc.data().type,
@@ -123,6 +123,8 @@ export class EventService implements OnDestroy {
             return streamArray
           }, [])[0] // Get the first element of the return
         }))         // since the return with equality on the query should only fetch one afaik in my model
+    })).pipe(map((streams: StreamInterface[]) => { // if the above is structured well no reduce here is needed
+      return streams.filter((stream)=> !!stream)
     }))
   }
 
