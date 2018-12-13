@@ -65,6 +65,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
   ngOnInit() {
     this.selectedActivities.forEach((activity) => {
+      // @todo probably unsubscribe from all
       this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
         if (!streams.length) {
           return;
@@ -248,11 +249,17 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   ngOnDestroy(): void {
+    this.unSubscribeFromAll();
     this.streamsSubscriptions.forEach((streamsSubscription) => {
       streamsSubscription.unsubscribe()
     })
   }
 
+  private unSubscribeFromAll() {
+    this.streamsSubscriptions.forEach((streamsSubscription) => {
+      streamsSubscription.unsubscribe()
+    });
+  }
 
 }
 
