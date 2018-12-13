@@ -27,6 +27,9 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import am4themes_animated from '@amcharts/amcharts4/themes/animated';
 import am4themes_material from '@amcharts/amcharts4/themes/material';
 import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
+import {Subscription} from 'rxjs';
+import {EventService} from '../../../../services/app.event.service';
+import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 
 // am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_material);
@@ -46,39 +49,68 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
 
+  private streamsSubscriptions: Subscription[] = [];
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
 
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
+              private eventService: EventService,
               private eventColorService: AppEventColorService) {
   }
 
   ngAfterViewInit() {
-    // this.createChart().then((chart) => {
-    //   this.chart = chart;
-    //   this.getChartData().forEach(series => this.chart.series.push(series));
-    // })
+
   }
 
   ngOnInit() {
   }
 
-  ngOnChanges(simpleChanges): void {
-    this.destroyChart();
-    if (!this.isVisible) {
+  async ngOnChanges(simpleChanges) {
+    if (this.isVisible && !this.chart){
+      this.chart = await this.createChart();
+    }
+    if (!this.isVisible){
       return;
     }
+    // debugger;
+    this.unSubscribeFromAll();
+    this.selectedActivities.forEach((activity) => {
+      this.streamsSubscriptions.push(
+        this.eventService.getStreams(
+          this.event.getID(), activity.getID(),
+          [
+            DataHeartRate.type,
+            DataAltitude.type
+          ],
+        ).subscribe((streams) => {
+          if (!streams.length) {
+            return;
+          }
+          // debugger;
+          streams.forEach((stream) => {
+            const series = new am4charts.LineSeries();
+            series.dataFields.valueY = "value";
+            series.dataFields.dateX = "date";
+            series.strokeWidth = 1;
+            series.fillOpacity = 0.6;
+            // series.tensionX = 10;
+            // series.bullets.push(new am4charts.CircleBullet());
+            series.data = stream.data.reduce((dataArray, streamData, index) => {
+              if (streamData) {
+                dataArray.push({
+                  date: new Date(activity.startDate.getTime() + index * 1000),
+                  value: streamData,
+                })
+              }
+              return dataArray
+            }, []);
 
-    // If there are data changes
-    if (this.selectedActivities.length) {
-      this.createChart().then((chart) => {
-        this.chart = chart;
-        const chartData = this.getChartData();
-        chartData.series.forEach(series => this.chart.series.push(series));
-        this.chart.data = chartData.data;
-      })
-    }
+            this.chart.series.push(series)
+          });
+          // debugger;
+        }))
+    })
   }
 
 
@@ -89,7 +121,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.pixelPerfect = false;
         chart.fontSize = '12px';
         // chart.resizable = false;
-        const categoryAxis = chart.xAxes.push(new am4charts.DateAxis());
+        const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
         const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
         chart.legend = new am4charts.Legend();
@@ -183,7 +215,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   ngOnDestroy() {
+    this.unSubscribeFromAll();
     this.destroyChart();
+  }
+
+  private unSubscribeFromAll() {
+    this.streamsSubscriptions.forEach((streamsSubscription) => {
+      streamsSubscription.unsubscribe()
+    });
   }
 }
 
