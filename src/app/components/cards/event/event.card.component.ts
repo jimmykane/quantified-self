@@ -4,7 +4,7 @@ import {
   OnDestroy,
   OnInit,
 } from '@angular/core';
-import {combineLatest, Observable, of, Subscription} from 'rxjs';
+import {combineLatest, EMPTY, Observable, of, Subscription} from 'rxjs';
 import {ActivatedRoute, Params, Router} from '@angular/router';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
@@ -60,11 +60,21 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     // @todo test maps , switchmap etc with delete and order firing etc
     this.parametersSubscription = this.route.queryParams.pipe(map((params) => {
+
       this.selectedTabIndex = +params['tabIndex'];
       return params
-    })).pipe(switchMap((params) => {
+    })).pipe(mergeMap((params) => {
+      // debugger;
+      // If the current event is the same then return empty
+      if (this.event && this.event.getID() === params['eventID']) {
+        return EMPTY
+      }
       return this.eventService.getEvent(params['eventID']);
     })).pipe(map((event) => {
+      // debugger;
+      if (!event) {
+        return
+      }
       this.event = event;
       this.selectedActivities = event.getActivities();
     }))
