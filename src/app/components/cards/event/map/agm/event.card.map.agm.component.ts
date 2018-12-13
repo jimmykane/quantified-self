@@ -1,4 +1,5 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
@@ -33,7 +34,7 @@ import {Subscription} from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy {
+export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
@@ -62,13 +63,17 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy {
     public eventColorService: AppEventColorService) {
   }
 
+
   ngOnInit() {
+    // For ngchange
+    // this.mapData = [];         // Todo seek and slice
+
     this.selectedActivities.forEach((activity) => {
 
-      // this.mapData = [];         // Todo seek and slice
       this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
-        debugger;
-
+        if (!streams.length) {
+          return;
+        }
         const latLongArray = [];
         const latData = streams[0].data.filter(data => !!data);
         const longData = streams[1].data.filter(data => !!data);
@@ -86,53 +91,23 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy {
         });
 
         // debugger;
+
+        this.changeDetectorRef.detectChanges();
 
         this.agmMap.triggerResize().then(() => {
           const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
           googleMaps.fitBounds(this.getBounds());
         });
-
-        this.changeDetectorRef.detectChanges();
-
       }))
     })
 
-    // this.mapData.push({activity: 123, points: []})
   }
 
+  ngAfterViewInit(): void {
+  }
+
+
   ngOnChanges(simpleChanges) {
-      this.selectedActivities.forEach((activity) => {
-      // this.mapData = [];         // Todo seek and slice
-      this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
-        // debugger;
-
-        const latLongArray = [];
-        const latData = streams[0].data.filter(data => !!data);
-        const longData = streams[1].data.filter(data => !!data);
-
-        const b = latData.forEach((value, index, array) => {
-          latLongArray[index] = {
-            latitude: latData[index],
-            longitude: longData[index],
-          }
-        });
-        // debugger;
-        this.mapData.push({
-          activity: activity,
-          points: latLongArray,
-        });
-
-        // debugger;
-
-        // this.agmMap.triggerResize().then(() => {
-        //   const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-        //   googleMaps.fitBounds(this.getBounds());
-        // });
-
-        this.changeDetectorRef.detectChanges();
-
-      }))
-    })
 
     // // If no operational changes return
     // if (!(simpleChanges.event
@@ -220,9 +195,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy {
 
   getBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.points), []);
-    debugger;
     if (!pointsWithPosition.length) {
-      debugger;
       return <LatLngBoundsLiteral>{
         east: 0,
         west: 0,
@@ -230,18 +203,18 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy {
         south: 0,
       };
     }
-    const mostEast = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+    const mostEast = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
       return (acc.longitude < latLongPair.longitude) ? latLongPair : acc;
     });
-     const mostWest = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+    const mostWest = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
       return (acc.longitude > latLongPair.longitude) ? latLongPair : acc;
     });
 
-     const mostNorth = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+    const mostNorth = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
       return (acc.latitude < latLongPair.latitude) ? latLongPair : acc;
     });
 
-    const mostSouth = pointsWithPosition.reduce((acc: {latitude: number, longitude: number}, latLongPair: {latitude: number, longitude: number}) => {
+    const mostSouth = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
       return (acc.latitude > latLongPair.latitude) ? latLongPair : acc;
     });
 
