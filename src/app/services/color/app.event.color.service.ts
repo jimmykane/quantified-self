@@ -14,7 +14,7 @@ export class AppEventColorService {
   public getActivityColor(event: EventInterface, activity: ActivityInterface): string {
     // Get the index of the requested activity among all activities
     const activityIndex = event.getActivities().findIndex((eventActivity) => {
-      return activity === eventActivity
+      return activity.getID() === eventActivity.getID();
     });
     if (!AppDeviceColors[activity.creator.name]) {
       return this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
