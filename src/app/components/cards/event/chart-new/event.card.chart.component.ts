@@ -67,10 +67,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
-    if (this.isVisible && !this.chart){
+    if (this.isVisible && !this.chart) {
       this.chart = await this.createChart();
     }
-    if (!this.isVisible){
+    if (!this.isVisible) {
+      return;
+    }
+    // If this is visible but nothing internaly changed noop
+    if (!simpleChanges.selectedActivities && !simpleChanges.event){
       return;
     }
     // debugger;
@@ -81,7 +85,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.event.getID(), activity.getID(),
           [
             DataHeartRate.type,
-            DataAltitude.type
+            // DataAltitude.type,
           ],
         ).subscribe((streams) => {
           if (!streams.length) {
@@ -89,24 +93,34 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           }
           // debugger;
           streams.forEach((stream) => {
-            const series = new am4charts.LineSeries();
-            series.dataFields.valueY = "value";
-            series.dataFields.dateX = "date";
-            series.strokeWidth = 1;
-            series.fillOpacity = 0.6;
-            // series.tensionX = 10;
-            // series.bullets.push(new am4charts.CircleBullet());
+            let series = this.chart.series.values.find((series) => {
+              return stream.type === series.id
+            });
+
+            if (!series) {
+              // debugger;
+              series = new am4charts.LineSeries();
+              series.id = `${activity.getID()}${stream.type}`;
+              series.name = stream.type;
+              series.dataFields.valueY = "value";
+              series.dataFields.dateX = "date";
+              series.strokeWidth = 1;
+              series.fillOpacity = 0.6;
+              series.interactionsEnabled = false;
+
+              this.chart.series.push(series)
+            }
+
             series.data = stream.data.reduce((dataArray, streamData, index) => {
               if (streamData) {
                 dataArray.push({
-                  date: new Date(activity.startDate.getTime() + index * 1000),
+                  date: new Date(activity.startDate.getTime() + (index * 1000)),
                   value: streamData,
                 })
               }
               return dataArray
             }, []);
 
-            this.chart.series.push(series)
           });
           // debugger;
         }))
@@ -122,6 +136,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.fontSize = '12px';
         // chart.resizable = false;
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+        dateAxis.title.text = "Time";
         const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
         chart.legend = new am4charts.Legend();
