@@ -31,6 +31,7 @@ import {Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 
+
 // am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_material);
 
@@ -67,17 +68,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
-    if (this.isVisible && !this.chart) {
+    // If it does not have a chart create no matter what change happened
+    if (!this.chart) {
       this.chart = await this.createChart();
     }
-    if (!this.isVisible) {
-      return;
-    }
-    // If this is visible but nothing internaly changed noop
+
+    // if there is a change on
     if (!simpleChanges.selectedActivities && !simpleChanges.event){
       return;
     }
-    // debugger;
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
       this.streamsSubscriptions.push(
@@ -85,7 +84,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.event.getID(), activity.getID(),
           [
             DataHeartRate.type,
-            // DataAltitude.type,
+            DataAltitude.type,
           ],
         ).subscribe((streams) => {
           if (!streams.length) {
@@ -104,10 +103,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
               series.name = stream.type;
               series.dataFields.valueY = "value";
               series.dataFields.dateX = "date";
-              series.strokeWidth = 1;
+              // series.minDistance = 1;
+              // series.strokeWidth = 3;
               series.fillOpacity = 0.6;
               series.interactionsEnabled = false;
-
               this.chart.series.push(series)
             }
 
