@@ -64,42 +64,33 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnInit() {
-    // For ngchange
-    // this.mapData = [];         // Todo seek and slice
-
     this.selectedActivities.forEach((activity) => {
-
       this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
         if (!streams.length) {
           return;
         }
-        const latLongArray = [];
+        // Remove nulls
         const latData = streams[0].data.filter(data => !!data);
         const longData = streams[1].data.filter(data => !!data);
-
-        const b = latData.forEach((value, index, array) => {
-          latLongArray[index] = {
-            latitude: latData[index],
-            longitude: longData[index],
-          }
-        });
         // debugger;
         this.mapData.push({
           activity: activity,
-          points: latLongArray,
+          points: latData.reduce((latLongArray, value, index) => {
+            latLongArray[index] = {
+              latitude: latData[index],
+              longitude: longData[index],
+            };
+            return latLongArray
+          }, []),
         });
-
         // debugger;
-
         this.changeDetectorRef.detectChanges();
-
         this.agmMap.triggerResize().then(() => {
           const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
           googleMaps.fitBounds(this.getBounds());
         });
       }))
     })
-
   }
 
   ngAfterViewInit(): void {
