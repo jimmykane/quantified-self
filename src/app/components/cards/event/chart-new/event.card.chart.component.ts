@@ -64,18 +64,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   }
 
-  ngOnInit() {
-  }
-
-  async ngOnChanges(simpleChanges) {
-    // If it does not have a chart create no matter what change happened
+  async ngOnInit() {
+      // If it does not have a chart create no matter what change happened
     if (!this.chart) {
       this.chart = await this.createChart();
-    }
-
-    // if there is a change on
-    if (!simpleChanges.selectedActivities && !simpleChanges.event){
-      return;
     }
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
@@ -103,15 +95,26 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
               series.name = stream.type;
               series.dataFields.valueY = "value";
               series.dataFields.dateX = "date";
+              // debugger;
+
+              // @todo fix this
+              series.hide()
+
               // series.minDistance = 1;
               // series.strokeWidth = 3;
               series.fillOpacity = 0.6;
               series.interactionsEnabled = false;
-              this.chart.series.push(series)
+              debugger;
+              this.chart.series.push(series);
+
             }
 
+
+
             series.data = stream.data.reduce((dataArray, streamData, index) => {
-              if (streamData) {
+              // Slice the data dirty for now till performance is achieved
+              // @todo fix
+              if (streamData && (index % 10 === 0)) {
                 dataArray.push({
                   date: new Date(activity.startDate.getTime() + (index * 1000)),
                   value: streamData,
@@ -119,11 +122,69 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
               }
               return dataArray
             }, []);
-
-          });
-          // debugger;
+            });
         }))
     })
+  }
+
+  async ngOnChanges(simpleChanges) {
+    // If it does not have a chart create no matter what change happened
+    // if (!this.chart) {
+    //   this.chart = await this.createChart();
+    // }
+    //
+    // // if there is a change on
+    // if (!simpleChanges.selectedActivities && !simpleChanges.event){
+    //   return;
+    // }
+    // this.unSubscribeFromAll();
+    // this.selectedActivities.forEach((activity) => {
+    //   this.streamsSubscriptions.push(
+    //     this.eventService.getStreams(
+    //       this.event.getID(), activity.getID(),
+    //       [
+    //         DataHeartRate.type,
+    //         DataAltitude.type,
+    //       ],
+    //     ).subscribe((streams) => {
+    //       if (!streams.length) {
+    //         return;
+    //       }
+    //       // debugger;
+    //       streams.forEach((stream) => {
+    //         let series = this.chart.series.values.find((series) => {
+    //           return stream.type === series.id
+    //         });
+    //
+    //         if (!series) {
+    //           // debugger;
+    //           series = new am4charts.LineSeries();
+    //           series.id = `${activity.getID()}${stream.type}`;
+    //           series.name = stream.type;
+    //           series.dataFields.valueY = "value";
+    //           series.dataFields.dateX = "date";
+    //           // series.minDistance = 1;
+    //           // series.strokeWidth = 3;
+    //           series.fillOpacity = 0.6;
+    //           series.interactionsEnabled = false;
+    //           this.chart.series.push(series)
+    //         }
+    //
+    //         series.data = stream.data.reduce((dataArray, streamData, index) => {
+    //           // Slice the data dirty for now till performance is achieved
+    //           // @todo fix
+    //           if (streamData && (index % 20 === 0)) {
+    //             dataArray.push({
+    //               date: new Date(activity.startDate.getTime() + (index * 1000)),
+    //               value: streamData,
+    //             })
+    //           }
+    //           return dataArray
+    //         }, []);
+    //         });
+    //       // debugger;
+    //     }))
+    // })
   }
 
 
