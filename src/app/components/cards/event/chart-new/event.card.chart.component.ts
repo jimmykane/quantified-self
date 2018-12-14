@@ -52,7 +52,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
 
-  private streamsSubscriptions: Subscription[] = [];
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
@@ -272,108 +271,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   ngOnDestroy() {
-    this.unSubscribeFromAll();
     this.destroyChart();
   }
 
   private unSubscribeFromAll() {
-    this.streamsSubscriptions.forEach((streamsSubscription) => {
-      streamsSubscription.unsubscribe()
-    });
+    if (this.streamsSubscription) {
+      this.streamsSubscription.unsubscribe();
+    }
   }
 }
-
-
-// private getAmChartOptions(chartData: ChartDataSettingsInterface) {
-//   // Get and short, and if none is visible then show the first one
-//   const graphs = Array.from(chartData.categories.values()).reduce((graphArray, category) => {
-//     graphArray.push(category.graph);
-//     return graphArray;
-//   }, []).sort((graphA, graphB) => graphA.id.localeCompare(graphB.id));
-//   if (!graphs.find((graph) => {
-//     return graph.hidden !== true
-//   })) {
-//     if (graphs[0]) {
-//       graphs[0].hidden = false;
-//     }
-//   }
-//   return {
-//     type: 'serial',
-//     theme: 'light',
-//     dataProvider: chartData.dataProvider,
-//     autoMarginOffset: 0,
-//     parseDates: true,
-//     // marginRight: 100,
-//     // autoMargins: true,
-//     graphs: graphs,
-//     // autoTransform: false,
-//     // autoResize: false,
-//     // autoDisplay: false,
-//     // responsive: {
-//     //   enabled: false
-//     // },
-//     valueAxes: graphs.reduce((array, graph) => {
-//       // const valueAxis: any = {};
-//       // if (graph.dataType === DataPace.type) {
-//       //   valueAxis.id = graph.id;
-//       //   // valueAxis.reversed = true;
-//       //   // valueAxis.fillAlpha = 0;
-//       //   // valueAxis.duration = 'ss';
-//       // }
-//       // array.push(valueAxis);
-//       return array;
-//     }, []),
-//     startDuration: 0.2,
-//     startEffect: 'easeOutSine',
-//     sequencedAnimation: false,
-//     categoryField: 'date',
-//     processCount: 10000,
-//     // processTimeout: 1,
-//     legend: {
-//       align: 'center',
-//       useGraphSettings: true,
-//       autoMargins: true,
-//       marginTop: 0,
-//       valueText: '[[value]]',
-//       clickLabel: (graph) => {
-//         graph.hidden = !graph.hidden;
-//         if (graph.hidden) {
-//           // Reset the color
-//           delete graph.lineColor;
-//           // Update the chart
-//           graph.chart.invalidateSize();
-//           return;
-//         }
-//         // Focus the scrollbar (get it)
-//         graph.chart.chartScrollbar = this.getScrollbarForGraph(graph);
-//         const sameActivityVisibleGraphs = graph.chart.graphs.filter(graphObj => !graphObj.hidden && graph.activity === graphObj.activity);
-//         // If the graphs are less than the selected activities add the device color, else
-//         if (sameActivityVisibleGraphs.length < this.selectedActivities.length) {
-//           graph.lineColor = this.eventColorService.getActivityColor(this.event, graph.activity);
-//         }
-//         graph.chart.invalidateSize();
-//       },
-//     },
-//     synchronizeGrid: true,
-//     categoryAxis: {
-//       parseDates: true,
-//       minPeriod: 'fff',
-//       axisColor: '#DADADA',
-//       gridThickness: 0.0,
-//       offset: 0,
-//       labelOffset: 0,
-//       minorGridEnabled: true,
-//     },
-//     chartCursor: {
-//       valueZoomable: true,
-//       categoryBalloonDateFormat: 'JJ:NN:SS',
-//       cursorAlpha: 0,
-//       valueLineEnabled: true,
-//       valueLineBalloonEnabled: true,
-//       valueLineAlpha: 0.5,
-//       fullWidth: true,
-//     },
-//     chartScrollbar: graphs.length ? this.getScrollbarForGraph(graphs.find(graph => !graph.hidden)) : false,
-//     creditsPosition: 'bottom-right',
-//   }
-// }
