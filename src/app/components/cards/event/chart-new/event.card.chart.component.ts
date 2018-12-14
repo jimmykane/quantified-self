@@ -203,6 +203,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.cursor = new am4charts.XYCursor();
         chart.cursor.fullWidthLineX = true;
 
+        // Add watermark
+        const watermark = new am4core.Label();
+        watermark.text = "Quantified Self (https://quantified-self.io)";
+        chart.plotContainer.children.push(watermark);
+        watermark.align = "right";
+        watermark.valign = "bottom";
+        watermark.fontSize = 20;
+        watermark.opacity = 0.2;
+        watermark.marginRight = 10;
+        watermark.marginBottom = 5;
+
 
         chart.events.on('validated', (ev) => {
           this.logger.d('Validated');
