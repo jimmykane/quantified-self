@@ -65,19 +65,19 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnInit() {
-      // If it does not have a chart create no matter what change happened
+    // If it does not have a chart create no matter what change happened
     if (!this.chart) {
       this.chart = await this.createChart();
     }
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
       this.streamsSubscriptions.push(
-        this.eventService.getStreams(
+        this.eventService.getAllStreams(
           this.event.getID(), activity.getID(),
-          [
-            DataHeartRate.type,
-            DataAltitude.type,
-          ],
+          // [
+          //   DataHeartRate.type,
+          //   DataAltitude.type,
+          // ],
         ).subscribe((streams) => {
           if (!streams.length) {
             return;
@@ -95,20 +95,22 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
               series.name = stream.type;
               series.dataFields.valueY = "value";
               series.dataFields.dateX = "date";
+              series.hidden = true;
               // debugger;
 
-              // @todo fix this
-              series.hide()
+              // hide all except the first one
+              if (this.chart.series.length > 0) {
+                // series.hide()
+              }
 
               // series.minDistance = 1;
               // series.strokeWidth = 3;
               series.fillOpacity = 0.6;
               series.interactionsEnabled = false;
-              debugger;
+              // debugger;
               this.chart.series.push(series);
-
+              this.chart.invalidateData();
             }
-
 
 
             series.data = stream.data.reduce((dataArray, streamData, index) => {
@@ -122,78 +124,20 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
               }
               return dataArray
             }, []);
-            });
+          });
         }))
     })
   }
 
   async ngOnChanges(simpleChanges) {
-    // If it does not have a chart create no matter what change happened
-    // if (!this.chart) {
-    //   this.chart = await this.createChart();
-    // }
-    //
-    // // if there is a change on
-    // if (!simpleChanges.selectedActivities && !simpleChanges.event){
-    //   return;
-    // }
-    // this.unSubscribeFromAll();
-    // this.selectedActivities.forEach((activity) => {
-    //   this.streamsSubscriptions.push(
-    //     this.eventService.getStreams(
-    //       this.event.getID(), activity.getID(),
-    //       [
-    //         DataHeartRate.type,
-    //         DataAltitude.type,
-    //       ],
-    //     ).subscribe((streams) => {
-    //       if (!streams.length) {
-    //         return;
-    //       }
-    //       // debugger;
-    //       streams.forEach((stream) => {
-    //         let series = this.chart.series.values.find((series) => {
-    //           return stream.type === series.id
-    //         });
-    //
-    //         if (!series) {
-    //           // debugger;
-    //           series = new am4charts.LineSeries();
-    //           series.id = `${activity.getID()}${stream.type}`;
-    //           series.name = stream.type;
-    //           series.dataFields.valueY = "value";
-    //           series.dataFields.dateX = "date";
-    //           // series.minDistance = 1;
-    //           // series.strokeWidth = 3;
-    //           series.fillOpacity = 0.6;
-    //           series.interactionsEnabled = false;
-    //           this.chart.series.push(series)
-    //         }
-    //
-    //         series.data = stream.data.reduce((dataArray, streamData, index) => {
-    //           // Slice the data dirty for now till performance is achieved
-    //           // @todo fix
-    //           if (streamData && (index % 20 === 0)) {
-    //             dataArray.push({
-    //               date: new Date(activity.startDate.getTime() + (index * 1000)),
-    //               value: streamData,
-    //             })
-    //           }
-    //           return dataArray
-    //         }, []);
-    //         });
-    //       // debugger;
-    //     }))
-    // })
   }
-
 
   private createChart(): Promise<am4charts.XYChart> {
     return new Promise((resolve, reject) => {
       this.zone.runOutsideAngular(() => {
         const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
         chart.pixelPerfect = false;
-        chart.fontSize = '12px';
+        // chart.fontSize = '12px';
         // chart.resizable = false;
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
         dateAxis.title.text = "Time";
@@ -210,9 +154,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.align = "right";
         watermark.valign = "bottom";
         watermark.fontSize = 20;
-        watermark.opacity = 0.2;
+        watermark.opacity = 0.9;
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
+        // watermark.zIndex = 100;
+        watermark.fontWeight  = 'bold';
 
 
         chart.events.on('validated', (ev) => {
@@ -222,6 +168,23 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           // eventChart.legend.height = new am4core.Percent(50);
 
         });
+
+        chart.events.on('datavalidated', (ev) => {
+          this.logger.d('DataValidated');
+          var chart:am4charts.XYChart = ev.target;
+          var categoryAxis = chart.yAxes.getIndex(0);
+          debugger;
+          var adjustHeight = chart.pixelHeight + categoryAxis.pixelHeight;
+          // get current chart height
+          var targetHeight = chart.pixelHeight + adjustHeight;
+
+          // debugger
+          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
+          console.log(targetHeight)
+
+          // debugger;
+        });
+
         chart.events.on('inited', (ev) => {
           this.logger.d('inited');
         });
