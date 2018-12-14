@@ -8,7 +8,7 @@ import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import {combineLatest, merge, Observable, EMPTY, of} from 'rxjs';
-import {AngularFirestore} from '@angular/fire/firestore';
+import {AngularFirestore, DocumentChangeAction} from '@angular/fire/firestore';
 import {catchError, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
@@ -94,14 +94,7 @@ export class EventService implements OnDestroy {
       .collection('streams')
       .snapshotChanges()
       .pipe(map((streamSnapshots) => {
-        // @todo merge this to it's own function
-        return streamSnapshots.reduce((streamArray, streamSnapshot) => {
-          streamArray.push(EventImporterJSON.getStreamFromJSON({
-            type: <string>streamSnapshot.payload.doc.data().type,
-            data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
-          }));
-          return streamArray
-        }, [])
+        return this.processStreamSnapshots(streamSnapshots);
       }))
   }
 
@@ -115,17 +108,21 @@ export class EventService implements OnDestroy {
         .collection('streams', ref => ref.where('type', '==', type))
         .snapshotChanges()
         .pipe(map((streamSnapshots) => { // @todo should be reduce
-          return streamSnapshots.reduce((streamArray, streamSnapshot) => {
-            streamArray.push(EventImporterJSON.getStreamFromJSON({
-              type: <string>streamSnapshot.payload.doc.data().type,
-              data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
-            }));
-            return streamArray
-          }, [])[0] // Get the first element of the return
-        }))         // since the return with equality on the query should only fetch one afaik in my model
-    })).pipe(map((streams: StreamInterface[]) => { // if the above is structured well no reduce here is needed
-      return streams.filter((stream)=> !!stream)
+          return this.processStreamSnapshots(streamSnapshots)[0] // Get the first element of the return
+        }))                                                      // since the return with equality on the query should only fetch one afaik in my model
+    })).pipe(map((streams: StreamInterface[]) => {
+      return streams.filter((stream) => !!stream)
     }))
+  }
+
+  private processStreamSnapshots(streamSnapshots: DocumentChangeAction<firestore.DocumentData>[]): StreamInterface[] {
+    return streamSnapshots.reduce((streamArray, streamSnapshot) => {
+      streamArray.push(EventImporterJSON.getStreamFromJSON({
+        type: <string>streamSnapshot.payload.doc.data().type,
+        data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
+      }));
+      return streamArray
+    }, [])
   }
 
   public async setEvent(event: EventInterface): Promise<void[]> {
