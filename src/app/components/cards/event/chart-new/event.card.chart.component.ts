@@ -27,9 +27,11 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import am4themes_animated from '@amcharts/amcharts4/themes/animated';
 import am4themes_material from '@amcharts/amcharts4/themes/material';
 import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
-import {Subscription} from 'rxjs';
+import {combineLatest, EMPTY, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
+import {map} from 'rxjs/operators';
+import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -51,6 +53,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() isVisible: boolean;
 
   private streamsSubscriptions: Subscription[] = [];
+  private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
 
@@ -70,63 +73,69 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.chart = await this.createChart();
     }
     this.unSubscribeFromAll();
-    this.selectedActivities.forEach((activity) => {
-      this.streamsSubscriptions.push(
-        this.eventService.getAllStreams(
-          this.event.getID(), activity.getID(),
-          // [
-          //   DataHeartRate.type,
-          //   DataAltitude.type,
-          // ],
-        ).subscribe((streams) => {
-          if (!streams.length) {
-            return;
-          }
-          // debugger;
-          streams.forEach((stream) => {
-            let series = this.chart.series.values.find((series) => {
-              return stream.type === series.id
-            });
+    this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
+      return this.eventService.getStreams(
+        this.event.getID(), activity.getID(),
+        [
+          DataHeartRate.type,
+          DataAltitude.type,
+        ],
+      ).pipe(map((streams) => {
+        if (!streams.length) {
+          return [];
+        }
+        // debugger;
+        return streams.map((stream) => {
+          let series = this.chart.series.values.find((series) => {
+            return stream.type === series.id
+          });
 
-            if (!series) {
-              // debugger;
-              series = new am4charts.LineSeries();
-              series.id = `${activity.getID()}${stream.type}`;
-              series.name = stream.type;
-              series.dataFields.valueY = "value";
-              series.dataFields.dateX = "date";
-              series.hidden = true;
-              // debugger;
+          if (!series) {
+            // debugger;
+            series = new am4charts.LineSeries();
+            series.id = `${activity.getID()}${stream.type}`;
+            series.name = stream.type + ` ${activity.creator.name}`;
+            series.dataFields.valueY = "value";
+            series.dataFields.dateX = "date";
+            series.hidden = true;
+            // debugger;
 
-              // hide all except the first one
-              if (this.chart.series.length > 0) {
-                // series.hide()
-              }
-
-              // series.minDistance = 1;
-              // series.strokeWidth = 3;
-              series.fillOpacity = 0.6;
-              series.interactionsEnabled = false;
-              // debugger;
-              this.chart.series.push(series);
-              this.chart.invalidateData();
+            // hide all except the first one
+            if (this.chart.series.length > 0) {
+              // series.hide()
             }
 
+            // series.minDistance = 1;
+            // series.strokeWidth = 3;
+            series.fillOpacity = 0.6;
+            series.interactionsEnabled = false;
+            // debugger;
+          }
 
-            series.data = stream.data.reduce((dataArray, streamData, index) => {
-              // Slice the data dirty for now till performance is achieved
-              // @todo fix
-              if (streamData && (index % 10 === 0)) {
-                dataArray.push({
-                  date: new Date(activity.startDate.getTime() + (index * 1000)),
-                  value: streamData,
-                })
-              }
-              return dataArray
-            }, []);
-          });
-        }))
-    })
+          // @todo for performance this should be moved to the other pipe
+          series.data = stream.data.reduce((dataArray, streamData, index) => {
+            // Slice the data dirty for now till performance is achieved
+            // @todo fix
+            if (streamData && (index % 10 === 0)) {
+              dataArray.push({
+                date: new Date(activity.startDate.getTime() + (index * 1000)),
+                value: streamData,
+              })
+            }
+            return dataArray
+          }, []);
+          return series
+        });
+      }))
+    })).pipe(map((seriesArrayOfArrays) => {
+      return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.LineSeries[] => accu.concat(item), [])
+    })).subscribe((series) => {
+      // debugger;
+
+      this.chart.series.setAll(series);
+
+      this.chart.invalidateData();
+    });
   }
 
   async ngOnChanges(simpleChanges) {
@@ -158,7 +167,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
         // watermark.zIndex = 100;
-        watermark.fontWeight  = 'bold';
+        watermark.fontWeight = 'bold';
 
 
         chart.events.on('validated', (ev) => {
@@ -171,16 +180,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         chart.events.on('datavalidated', (ev) => {
           this.logger.d('DataValidated');
-          var chart:am4charts.XYChart = ev.target;
+          var chart: am4charts.XYChart = ev.target;
           var categoryAxis = chart.yAxes.getIndex(0);
-          debugger;
+          // debugger;
           var adjustHeight = chart.pixelHeight + categoryAxis.pixelHeight;
           // get current chart height
           var targetHeight = chart.pixelHeight + adjustHeight;
 
           // debugger
-          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
-          console.log(targetHeight)
+          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight/4 + 'px';
 
           // debugger;
         });
