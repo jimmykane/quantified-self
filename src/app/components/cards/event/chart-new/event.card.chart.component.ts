@@ -27,7 +27,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import am4themes_animated from '@amcharts/amcharts4/themes/animated';
 import am4themes_material from '@amcharts/amcharts4/themes/material';
 import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
-import {combineLatest, EMPTY, Subscription} from 'rxjs';
+import {combineLatest, EMPTY, Observable, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 import {map} from 'rxjs/operators';
@@ -60,6 +60,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
+  @Input() showAdvancedStats: boolean;
 
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
@@ -80,12 +81,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
+    debugger;
     // If it does not have a chart create no matter what change happened
     if (!this.chart) {
       this.chart = await this.createChart();
     }
 
-    if (simpleChanges.event || simpleChanges.selectedActivities) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
+      debugger;
       this.bindToNewData();
     }
   }
@@ -93,7 +96,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private bindToNewData() {
     this.unSubscribeFromAll();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      return this.eventService.getStreams(
+      let allOrSomeSubscription = this.eventService.getStreams(
         this.event.getID(), activity.getID(),
         [
           // DataHeartRate.type,
@@ -106,7 +109,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           // DataSpeed.type,
           // DataVerticalSpeed.type,
         ],
-      ).pipe(map((streams) => {
+      );
+      if (this.showAdvancedStats){
+        allOrSomeSubscription  = this.eventService.getAllStreams(this.event.getID(), activity.getID());
+      }
+
+      return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
           return [];
         }
@@ -165,9 +173,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })).subscribe((series: am4charts.XYSeries[]) => {
       // debugger;
       series.forEach((serrie, index) => {
-        if (index > 4) {
-          serrie.hide()
-        }
+        // if (index > 4) {
+        //   serrie.hide()
+        // }
       });
       // Perhaps here pass all data as one from all series to the chart
 
@@ -234,13 +242,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         });
 
         chart.events.on('datavalidated', (ev) => {
-          this.logger.d('datavalidated');
+          // this.logger.d('datavalidated');
           var chart: am4charts.XYChart = ev.target;
           var categoryAxis = chart.yAxes.getIndex(0);
           this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed());
           this.logger.d(categoryAxis.pixelHeight.toFixed());
           chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
-          // chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
+          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
         });
         resolve(chart);
       });
@@ -250,11 +258,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private getSamplingRateInSeconds(numberOfSamples: number): number {
     let samplingRate = 1;
     // Each sample is 1s so x number is x seconds
-    const hoursToKeep1sSamplingRate = 1;
+    const hoursToKeep1sSamplingRate = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
     // If we are in less than 3 hours return 1s sampling rate
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.floor(numberOfSamplesToHours / hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours  * 2.5 )/ hoursToKeep1sSamplingRate)
     }
     this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;

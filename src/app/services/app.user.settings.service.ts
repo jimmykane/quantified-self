@@ -62,6 +62,16 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
+   public async showAdvancedStats(): Promise<boolean> {
+    let defaultValue = 'false';
+    try {
+      defaultValue = await this.chartSettingsLocalStorageService.getItem('showAdvancedStats');
+    } catch (e) {
+      this.chartSettingsLocalStorageService.setItem('showAdvancedStats', defaultValue);
+    }
+    return defaultValue === 'true';
+  }
+
   public setShowAutoLaps(value: boolean) {
     this.mapSettingsLocalStorageService.setItem('showAutoLaps', String(value));
   }
@@ -80,6 +90,9 @@ export class UserSettingsService {
 
   public setUseDistanceAxis(value: boolean) {
     this.chartSettingsLocalStorageService.setItem('useDistanceAxis', String(value));
+  }
+  public setShowAdvancedStats(value: boolean) {
+    this.chartSettingsLocalStorageService.setItem('showAdvancedStats', String(value));
   }
 }
 

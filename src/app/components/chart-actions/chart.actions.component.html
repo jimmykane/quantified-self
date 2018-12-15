@@ -12,4 +12,14 @@
       </span>
     </mat-slide-toggle>
   </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showAdvancedStats">
+      <span matTooltip="Show more data on the chart">
+        Show advanced data
+      </span>
+    </mat-slide-toggle>
+  </section>
 </mat-menu>
