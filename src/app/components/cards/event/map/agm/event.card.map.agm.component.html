@@ -1,6 +1,6 @@
-<mat-card *ngIf="mapData.length > 0">
+<mat-card>
   <!-- Map -->
-  <agm-map
+  <agm-map *ngIf="mapData.length > 0"
     [fullscreenControl]="true"
     [mapTypeControl]="true"
     [scaleControl]="true"
