@@ -28,7 +28,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public selectedTabIndex;
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
-  public hasMapData: boolean;
 
   public showMapAutoLaps: boolean;
   public showMapManualLaps: boolean;
