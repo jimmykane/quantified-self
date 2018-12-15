@@ -17,7 +17,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
-import {ControlPosition, MapTypeControlOptions} from '@agm/core/services/google-maps-types';
+import {ControlPosition, MapTypeControlOptions, MapTypeId} from '@agm/core/services/google-maps-types';
 import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
 import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
 import {Log} from 'ng2-logger/browser';
@@ -38,6 +38,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
+  @Input() isVisible: boolean;
   @Input() showAutoLaps: boolean;
   @Input() showManualLaps: boolean;
   @Input() showData: boolean;
@@ -50,7 +51,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
   public clickedPoint: PointInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
-    // mapTypeIds: [MapTypeId.TERRAIN],
+    // mapTypeIds: [MapTypeId],
     position: ControlPosition.TOP_RIGHT,
   };
 
@@ -64,34 +65,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnInit() {
-    this.selectedActivities.forEach((activity) => {
-      // @todo probably unsubscribe from all
-      this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).subscribe((streams) => {
-        if (!streams.length) {
-          return;
-        }
-        // Remove nulls
-        const latData = streams[0].data.filter(data => !!data);
-        const longData = streams[1].data.filter(data => !!data);
-        // debugger;
-        this.mapData.push({
-          activity: activity,
-          points: latData.reduce((latLongArray, value, index) => {
-            latLongArray[index] = {
-              latitude: latData[index],
-              longitude: longData[index],
-            };
-            return latLongArray
-          }, []),
-        });
-        // debugger;
-        this.changeDetectorRef.detectChanges();
-        this.agmMap.triggerResize().then(() => {
-          const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-          googleMaps.fitBounds(this.getBounds());
-        });
-      }))
-    })
+    this.bindToNewData()
   }
 
   ngAfterViewInit(): void {
@@ -99,7 +73,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnChanges(simpleChanges) {
-
     // // If no operational changes return
     // if (!(simpleChanges.event
     //   || simpleChanges.selectedActivities
@@ -121,6 +94,35 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
     //   googleMaps.fitBounds(this.getBounds());
     // });
 
+  }
+
+  private bindToNewData() {
+    this.unSubscribeFromAll();
+    this.selectedActivities.forEach((activity) => {
+      this.streamsSubscriptions
+        .push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+          .subscribe((streams) => {
+            if (!streams.length) {
+              return;
+            }
+            // Remove nulls
+            const latData = streams[0].data.filter(data => !!data);
+            const longData = streams[1].data.filter(data => !!data);
+            // debugger;
+            this.mapData.push({
+              activity: activity,
+              points: latData.reduce((latLongArray, value, index) => {
+                latLongArray[index] = {
+                  latitude: latData[index],
+                  longitude: longData[index],
+                };
+                return latLongArray
+              }, []),
+            });
+            // debugger;
+            this.changeDetectorRef.detectChanges();
+          }))
+    })
   }
 
   private cacheNewData(): MapData[] {
@@ -243,9 +245,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
   onResize(width) {
-    this.agmMap.triggerResize().then(() => {
-      this.agmMap._mapsWrapper.fitBounds(this.getBounds())
-    });
+    this.resizeMapToBounds();
   }
 
   ngOnDestroy(): void {
@@ -258,6 +258,12 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   private unSubscribeFromAll() {
     this.streamsSubscriptions.forEach((streamsSubscription) => {
       streamsSubscription.unsubscribe()
+    });
+  }
+
+  private resizeMapToBounds() {
+    this.agmMap.triggerResize().then(() => {
+      this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
   }
 

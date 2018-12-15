@@ -2,8 +2,10 @@
   <mat-card-header>
     <app-event-actions [event]="event" align="end"></app-event-actions>
     <mat-card-subtitle>
-      <app-activity-icon [activity]="event.getFirstActivity()"
-                         *ngIf="event.getActivities().length === 1 "></app-activity-icon>
+      <app-activity-icon
+        [activity]="event.getFirstActivity()"
+        *ngIf="event.getActivities().length === 1 ">
+      </app-activity-icon>
       <mat-icon *ngIf="event.getActivities().length > 1 ">
         compare_arrows
       </mat-icon>
@@ -54,7 +56,7 @@
       [dynamicHeight]="true"
       [selectedIndex]="selectedTabIndex"
       (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {eventID: event.getID(), tabIndex: $event}})">
-      <mat-tab label="Map">
+      <mat-tab #matTab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
           <app-map-actions
@@ -66,6 +68,7 @@
           </app-map-actions>
         </ng-template>
         <app-event-card-map-agm
+          [isVisible]="matTab.isActive"
           [showAutoLaps]="showMapAutoLaps"
           [showManualLaps]="showMapManualLaps"
           [showDataWarnings]="showMapDataWarnings"
@@ -82,24 +85,24 @@
           [event]="event">
         </app-event-card-stats>
       </mat-tab>
-      <mat-tab label="Chart">
+      <mat-tab #matTab label="Chart">
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
-          <app-chart-actions *ngIf="hasMapData"
+          <app-chart-actions
             [(useDistanceAxis)]="useDistanceAxis"
             align="end">
           </app-chart-actions>
         </ng-template>
         <app-event-card-chart-new
-          [isVisible]="selectedTabIndex === 2"
+          [isVisible]="matTab.isActive"
           [selectedActivities]="selectedActivities"
           [event]="event">
         </app-event-card-chart-new>
         <!--<app-event-card-chart-->
-          <!--[isVisible]="selectedTabIndex === (eventHasPointsWithPosition? 2 : 1)"-->
-          <!--[useDistanceAxis]="useDistanceAxis"-->
-          <!--[selectedActivities]="selectedActivities"-->
-          <!--[event]="event">-->
+        <!--[isVisible]="selectedTabIndex === (eventHasPointsWithPosition? 2 : 1)"-->
+        <!--[useDistanceAxis]="useDistanceAxis"-->
+        <!--[selectedActivities]="selectedActivities"-->
+        <!--[event]="event">-->
         <!--</app-event-card-chart>-->
       </mat-tab>
       <mat-tab label="Laps" *ngIf="hasLaps(event)">

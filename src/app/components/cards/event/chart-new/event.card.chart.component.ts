@@ -141,6 +141,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
+    debugger;
   }
 
   private createChart(): Promise<am4charts.XYChart> {
