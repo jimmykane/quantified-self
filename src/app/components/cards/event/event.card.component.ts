@@ -133,10 +133,4 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   hasLaps(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
   }
-
-  hasIBIData(event: EventInterface) {
-    return event.getActivities().find((activity: ActivityInterface) => {
-      return activity.ibiData && !!activity.ibiData.getIBIDataMap().size;
-    })
-  }
 }

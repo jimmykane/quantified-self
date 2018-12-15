@@ -98,12 +98,6 @@
           [selectedActivities]="selectedActivities"
           [event]="event">
         </app-event-card-chart-new>
-        <!--<app-event-card-chart-->
-        <!--[isVisible]="selectedTabIndex === (eventHasPointsWithPosition? 2 : 1)"-->
-        <!--[useDistanceAxis]="useDistanceAxis"-->
-        <!--[selectedActivities]="selectedActivities"-->
-        <!--[event]="event">-->
-        <!--</app-event-card-chart>-->
       </mat-tab>
       <mat-tab label="Laps" *ngIf="hasLaps(event)">
         <ng-template matTabLabel>
@@ -114,8 +108,7 @@
           [event]="event">
         </app-event-card-laps>
       </mat-tab>
-      <mat-tab label="Tools"
-               *ngIf="hasIBIData(event)">
+      <mat-tab label="Tools">
         <ng-template matTabLabel>
           <mat-icon>build</mat-icon>
         </ng-template>

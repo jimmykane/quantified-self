@@ -113,10 +113,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           }
 
           // @todo for performance this should be moved to the other pipe
+          const samplingRate = this.getSamplingRateInSeconds(stream.data.length);
           series.data = stream.data.reduce((dataArray, streamData, index) => {
             // Slice the data dirty for now till performance is achieved
             // @todo fix
-            if (streamData && (index % this.getSamplingRateInSeconds(stream.data.length) === 0)) {
+            if (streamData && (index % samplingRate === 0)) {
               dataArray.push({
                 date: new Date(activity.startDate.getTime() + (index * 1000)),
                 value: streamData,
@@ -141,7 +142,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
-    debugger;
   }
 
   private createChart(): Promise<am4charts.XYChart> {
@@ -204,27 +204,26 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.logger.d('datavalidated');
           var chart: am4charts.XYChart = ev.target;
           var categoryAxis = chart.yAxes.getIndex(0);
-          // debugger;
-          var adjustHeight = chart.pixelHeight + categoryAxis.pixelHeight;
-          // get current chart height
-          var targetHeight = chart.pixelHeight + adjustHeight;
-
-          // debugger
-
-
-          this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed())
-          this.logger.d(categoryAxis.pixelHeight.toFixed())
+          this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed());
+          this.logger.d(categoryAxis.pixelHeight.toFixed());
           chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
         });
-
-
         resolve(chart);
       });
     });
   }
 
   private getSamplingRateInSeconds(numberOfSamples: number): number {
-    return 10;
+    let samplingRate = 1;
+    // Each sample is 1s so x number is x seconds
+    const hoursToKeep1sSamplingRate = 1;
+    const numberOfSamplesToHours = numberOfSamples / 3600;
+    // If we are in less than 3 hours return 1s sampling rate
+    if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
+      samplingRate = Math.ceil(numberOfSamplesToHours / hoursToKeep1sSamplingRate) * 3
+    }
+    this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
+    return samplingRate;
   }
 
 
