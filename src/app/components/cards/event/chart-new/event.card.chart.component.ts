@@ -71,14 +71,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (!this.chart) {
       this.chart = await this.createChart();
     }
-    this.unSubscribeFromAll();
+    this.logger.info(`Sampling rate ${this.getSamplingRateInSeconds(100)}`);
+
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      return this.eventService.getStreams(
+      return this.eventService.getAllStreams(
         this.event.getID(), activity.getID(),
-        [
-          DataHeartRate.type,
-          DataAltitude.type,
-        ],
+        // [
+        //   DataHeartRate.type,
+        //   DataAltitude.type,
+        // ],
       ).pipe(map((streams) => {
         if (!streams.length) {
           return [];
@@ -86,7 +87,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // debugger;
         return streams.map((stream) => {
           let series = this.chart.series.values.find((series) => {
-            return stream.type === series.id
+            return `${activity.getID()}${stream.type}` === series.id
           });
 
           if (!series) {
@@ -115,11 +116,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           series.data = stream.data.reduce((dataArray, streamData, index) => {
             // Slice the data dirty for now till performance is achieved
             // @todo fix
-            if (streamData && (index % 10 === 0)) {
+            if (streamData && (index % this.getSamplingRateInSeconds(stream.data.length) === 0)) {
               dataArray.push({
                 date: new Date(activity.startDate.getTime() + (index * 1000)),
                 value: streamData,
-              })
+              });
             }
             return dataArray
           }, []);
@@ -127,12 +128,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
+      // debugger;
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.LineSeries[] => accu.concat(item), [])
     })).subscribe((series) => {
       // debugger;
 
-      this.chart.series.setAll(series);
+      // Perhaps here pass all data as one from all series to the chart
 
+      this.chart.series.setAll(series);
       this.chart.invalidateData();
     });
   }
@@ -149,6 +152,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // chart.resizable = false;
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
         dateAxis.title.text = "Time";
+        // dateAxis.baseInterval = {
+        //   timeUnit: "second",
+        //   count: this.getSamplingRateInSeconds(this.selectedActivities),
+        // };
         const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
         chart.legend = new am4charts.Legend();
@@ -170,15 +177,30 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
 
         chart.events.on('validated', (ev) => {
-          this.logger.d('Validated');
-          // const eventChart: am4charts.XYChart = ev.target;
-          // eventChart.svgContainer.style.height = String(100 + ((eventChart.series.length - 1) * 100)) + '%';
-          // eventChart.legend.height = new am4core.Percent(50);
+          this.logger.d('validated');
+        });
 
+        chart.events.on('visibilitychanged', (ev) => {
+          this.logger.d('visibilitychanged');
+        });
+
+        chart.events.on('resize', (ev) => {
+          this.logger.d('resize');
+        });
+
+        chart.events.on('hidden', (ev) => {
+          this.logger.d('hidden');
+        });
+        chart.events.on('shown', (ev) => {
+          this.logger.d('shown');
+        });
+
+        chart.events.on('inited', (ev) => {
+          this.logger.d('inited');
         });
 
         chart.events.on('datavalidated', (ev) => {
-          this.logger.d('DataValidated');
+          this.logger.d('datavalidated');
           var chart: am4charts.XYChart = ev.target;
           var categoryAxis = chart.yAxes.getIndex(0);
           // debugger;
@@ -187,74 +209,79 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           var targetHeight = chart.pixelHeight + adjustHeight;
 
           // debugger
-          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight/4 + 'px';
 
-          // debugger;
+
+          this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed())
+          this.logger.d(categoryAxis.pixelHeight.toFixed())
+          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
         });
 
-        chart.events.on('inited', (ev) => {
-          this.logger.d('inited');
-        });
+
         resolve(chart);
       });
     });
   }
 
-  private getChartData(): { series: am4charts.LineSeries[], data: any[] } {
-    const chartData = {series: [], data: []};
-    // Use a map for quick lookup
-    const data = new Map<number, any>();
-    // Parse the series while constructing data
-    this.selectedActivities
-      .forEach((activity: ActivityInterface, index) => {
-        activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
-          point.getData().forEach((pointData: DataInterface, key: string) => {
-            if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
-              return;
-            }
-
-            let existingLineSeries: am4charts.LineSeries = chartData.series.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
-
-            if (!existingLineSeries) {
-              existingLineSeries = new am4charts.LineSeries();
-              existingLineSeries.id = pointData.getClassName() + activity.getID();
-              existingLineSeries.name = key + ' (' + activity.creator.name + ')';
-
-              existingLineSeries.dataFields.dateX = 'date';
-              existingLineSeries.dataFields.valueY = pointData.getClassName() + activity.getID();
-              if (key !== DataHeartRate.type) {
-                existingLineSeries.hidden = true;
-              }
-              existingLineSeries.tooltipText = activity.creator.name + ' ' + pointData.getType() + '{valueY} ' + pointData.getDisplayUnit();
-              existingLineSeries.legendSettings.labelText = '{name}';
-              existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
-              existingLineSeries.defaultState.transitionDuration = 0;
-
-              existingLineSeries.strokeWidth = 1;
-              existingLineSeries.fillOpacity = 0.05;
-              // existingLineSeries.nonScalingStroke = false;
-              if (pointData.getType() === DataHeartRate.type) {
-                existingLineSeries.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-              }
-              chartData.series.push(existingLineSeries);
-            }
-
-            let existingData = data.get(point.getDate().getTime());
-            if (!existingData) {
-              existingData = {};
-              data.set(point.getDate().getTime(), existingData);
-            }
-            existingData[pointData.getClassName() + activity.getID()] = pointData.getDisplayValue();
-          });
-        });
-      });
-
-    // Flatten
-    data.forEach(((value, key, map) => {
-      chartData.data.push(Object.assign({date: new Date(key)}, value))
-    }));
-    return chartData;
+  private getSamplingRateInSeconds(numberOfSamples: number): number {
+    return 10;
   }
+
+
+  // private getChartData(): { series: am4charts.LineSeries[], data: any[] } {
+  //   const chartData = {series: [], data: []};
+  //   // Use a map for quick lookup
+  //   const data = new Map<number, any>();
+  //   // Parse the series while constructing data
+  //   this.selectedActivities
+  //     .forEach((activity: ActivityInterface, index) => {
+  //       activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
+  //         point.getData().forEach((pointData: DataInterface, key: string) => {
+  //           if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
+  //             return;
+  //           }
+  //
+  //           let existingLineSeries: am4charts.LineSeries = chartData.series.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
+  //
+  //           if (!existingLineSeries) {
+  //             existingLineSeries = new am4charts.LineSeries();
+  //             existingLineSeries.id = pointData.getClassName() + activity.getID();
+  //             existingLineSeries.name = key + ' (' + activity.creator.name + ')';
+  //
+  //             existingLineSeries.dataFields.dateX = 'date';
+  //             existingLineSeries.dataFields.valueY = pointData.getClassName() + activity.getID();
+  //             if (key !== DataHeartRate.type) {
+  //               existingLineSeries.hidden = true;
+  //             }
+  //             existingLineSeries.tooltipText = activity.creator.name + ' ' + pointData.getType() + '{valueY} ' + pointData.getDisplayUnit();
+  //             existingLineSeries.legendSettings.labelText = '{name}';
+  //             existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
+  //             existingLineSeries.defaultState.transitionDuration = 0;
+  //
+  //             existingLineSeries.strokeWidth = 1;
+  //             existingLineSeries.fillOpacity = 0.05;
+  //             // existingLineSeries.nonScalingStroke = false;
+  //             if (pointData.getType() === DataHeartRate.type) {
+  //               existingLineSeries.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+  //             }
+  //             chartData.series.push(existingLineSeries);
+  //           }
+  //
+  //           let existingData = data.get(point.getDate().getTime());
+  //           if (!existingData) {
+  //             existingData = {};
+  //             data.set(point.getDate().getTime(), existingData);
+  //           }
+  //           existingData[pointData.getClassName() + activity.getID()] = pointData.getDisplayValue();
+  //         });
+  //       });
+  //     });
+  //
+  //   // Flatten
+  //   data.forEach(((value, key, map) => {
+  //     chartData.data.push(Object.assign({date: new Date(key)}, value))
+  //   }));
+  //   return chartData;
+  // }
 
   private destroyChart() {
     try {
@@ -270,8 +297,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
   }
 
+
   ngOnDestroy() {
     this.destroyChart();
+    this.unSubscribeFromAll();
   }
 
   private unSubscribeFromAll() {
