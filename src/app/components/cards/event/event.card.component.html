@@ -56,7 +56,7 @@
       [dynamicHeight]="true"
       [selectedIndex]="selectedTabIndex"
       (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {eventID: event.getID(), tabIndex: $event}})">
-      <mat-tab #matTab label="Map">
+      <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
           <app-map-actions
@@ -68,7 +68,7 @@
           </app-map-actions>
         </ng-template>
         <app-event-card-map-agm
-          [isVisible]="matTab.isActive"
+          [isVisible]="selectedTabIndex === 0"
           [showAutoLaps]="showMapAutoLaps"
           [showManualLaps]="showMapManualLaps"
           [showDataWarnings]="showMapDataWarnings"
@@ -85,7 +85,7 @@
           [event]="event">
         </app-event-card-stats>
       </mat-tab>
-      <mat-tab #matTab label="Chart">
+      <mat-tab label="Chart">
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
           <app-chart-actions
@@ -94,7 +94,7 @@
           </app-chart-actions>
         </ng-template>
         <app-event-card-chart-new
-          [isVisible]="matTab.isActive"
+          [isVisible]="selectedTabIndex === 2"
           [selectedActivities]="selectedActivities"
           [event]="event">
         </app-event-card-chart-new>

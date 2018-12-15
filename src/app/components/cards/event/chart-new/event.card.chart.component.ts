@@ -32,6 +32,15 @@ import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 import {map} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
+import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
+import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
+import {DataCadence} from 'quantified-self-lib/lib/data/data.cadence';
+import {DataPower} from 'quantified-self-lib/lib/data/data.power';
+import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
+import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
+import {isNumberOrString} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {number} from '@amcharts/amcharts4/core';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -67,19 +76,36 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnInit() {
+
+  }
+
+  async ngOnChanges(simpleChanges) {
     // If it does not have a chart create no matter what change happened
     if (!this.chart) {
       this.chart = await this.createChart();
     }
-    this.logger.info(`Sampling rate ${this.getSamplingRateInSeconds(100)}`);
 
+    if (simpleChanges.event || simpleChanges.selectedActivities) {
+      this.bindToNewData();
+    }
+  }
+
+  private bindToNewData() {
+    this.unSubscribeFromAll();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      return this.eventService.getAllStreams(
+      return this.eventService.getStreams(
         this.event.getID(), activity.getID(),
-        // [
-        //   DataHeartRate.type,
-        //   DataAltitude.type,
-        // ],
+        [
+          // DataHeartRate.type,
+          DataAltitude.type,
+          DataAbsolutePressure.type,
+          DataSeaLevelPressure.type,
+          // DataCadence.type,
+          // DataPower.type,
+          // DataGPSAltitude.type,
+          // DataSpeed.type,
+          // DataVerticalSpeed.type,
+        ],
       ).pipe(map((streams) => {
         if (!streams.length) {
           return [];
@@ -101,9 +127,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             // debugger;
 
             // hide all except the first one
-            if (this.chart.series.length > 0) {
-              // series.hide()
-            }
+            // if (this.chart.series.length > 1) {
+            //   series.hide()
+            // }
 
             // series.minDistance = 1;
             // series.strokeWidth = 3;
@@ -114,34 +140,40 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
           // @todo for performance this should be moved to the other pipe
           const samplingRate = this.getSamplingRateInSeconds(stream.data.length);
-          series.data = stream.data.reduce((dataArray, streamData, index) => {
+          this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`)
+          const data  = stream.data.reduce((dataArray: {date: Date, value: number}[], streamData, index) => {
             // Slice the data dirty for now till performance is achieved
-            // @todo fix
-            if (streamData && (index % samplingRate === 0)) {
-              dataArray.push({
-                date: new Date(activity.startDate.getTime() + (index * 1000)),
-                value: streamData,
-              });
-            }
+            dataArray.push({
+              date: new Date(activity.startDate.getTime() + (index * 1000)),
+              value: streamData,
+            });
             return dataArray
-          }, []);
+          }, [])
+            .filter((data) => isNumberOrString(data.value))
+            .filter((data, index) => index % samplingRate === 0);
+
+          this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
+
+          // debugger;
+          series.data = data;
           return series
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
       // debugger;
-      return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.LineSeries[] => accu.concat(item), [])
-    })).subscribe((series) => {
+      return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
+    })).subscribe((series: am4charts.XYSeries[]) => {
       // debugger;
-
+      series.forEach((serrie, index) => {
+        if (index > 4) {
+          serrie.hide()
+        }
+      });
       // Perhaps here pass all data as one from all series to the chart
 
       this.chart.series.setAll(series);
       this.chart.invalidateData();
     });
-  }
-
-  async ngOnChanges(simpleChanges) {
   }
 
   private createChart(): Promise<am4charts.XYChart> {
@@ -185,9 +217,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.logger.d('visibilitychanged');
         });
 
-        chart.events.on('resize', (ev) => {
-          this.logger.d('resize');
-        });
+        // Warning the below breaks zoom (till fixed
+        // chart.events.on('resize', (ev) => {
+        //   this.logger.d('resize');
+        // });
 
         chart.events.on('hidden', (ev) => {
           this.logger.d('hidden');
@@ -207,6 +240,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed());
           this.logger.d(categoryAxis.pixelHeight.toFixed());
           chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
+          // chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
         });
         resolve(chart);
       });
@@ -220,7 +254,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     const numberOfSamplesToHours = numberOfSamples / 3600;
     // If we are in less than 3 hours return 1s sampling rate
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil(numberOfSamplesToHours / hoursToKeep1sSamplingRate) * 3
+      samplingRate = Math.floor(numberOfSamplesToHours / hoursToKeep1sSamplingRate)
     }
     this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
