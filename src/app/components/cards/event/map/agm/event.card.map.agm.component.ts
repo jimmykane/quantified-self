@@ -65,7 +65,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnInit() {
-    this.bindToNewData()
   }
 
   ngAfterViewInit(): void {
@@ -74,14 +73,15 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
   ngOnChanges(simpleChanges) {
     // // If no operational changes return
-    // if (!(simpleChanges.event
-    //   || simpleChanges.selectedActivities
-    //   || simpleChanges.showAutoLaps
-    //   || simpleChanges.showManualLaps
-    //   || simpleChanges.showData
-    //   || simpleChanges.showDataWarnings)) {
-    //   return;
-    // }
+    if ((simpleChanges.event
+      || simpleChanges.selectedActivities)) {
+      this.bindToNewData();
+    }
+
+    this.resizeMapToBounds();
+
+    // if (simpleChanges.isVisible)
+
     // // Get the new data
     // this.mapData = this.cacheNewData();
     // // No need to do anything if the base did not change (Event)
@@ -97,31 +97,32 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   private bindToNewData() {
+    this.mapData = [];
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
-      this.streamsSubscriptions
-        .push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-          .subscribe((streams) => {
-            if (!streams.length) {
-              return;
-            }
-            // Remove nulls
-            const latData = streams[0].data.filter(data => !!data);
-            const longData = streams[1].data.filter(data => !!data);
-            // debugger;
-            this.mapData.push({
-              activity: activity,
-              points: latData.reduce((latLongArray, value, index) => {
-                latLongArray[index] = {
-                  latitude: latData[index],
-                  longitude: longData[index],
-                };
-                return latLongArray
-              }, []),
-            });
-            // debugger;
-            this.changeDetectorRef.detectChanges();
-          }))
+      this.streamsSubscriptions.push(this.eventService.getStreams(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+        .subscribe((streams) => {
+          if (!streams.length) {
+            return;
+          }
+          // Remove nulls
+          const latData = streams[0].data.filter(data => !!data);
+          const longData = streams[1].data.filter(data => !!data);
+          // debugger;
+          this.mapData.push({
+            activity: activity,
+            points: latData.reduce((latLongArray, value, index) => {
+              latLongArray[index] = {
+                latitude: latData[index],
+                longitude: longData[index],
+              };
+              return latLongArray
+            }, []),
+          });
+          // debugger;
+          this.changeDetectorRef.detectChanges();
+          this.resizeMapToBounds();
+        }))
     })
   }
 
@@ -262,7 +263,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   private resizeMapToBounds() {
+    if (!this.agmMap){
+      return;
+    }
     this.agmMap.triggerResize().then(() => {
+      if (!this.agmMap){
+        return;
+      }
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
   }
