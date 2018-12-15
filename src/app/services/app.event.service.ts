@@ -20,6 +20,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {StreamJSONInterface} from 'quantified-self-lib/lib/streams/stream.json.interface';
 import {Log} from 'ng2-logger/browser';
+import * as Raven from 'raven-js';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -126,29 +127,39 @@ export class EventService implements OnDestroy {
   }
 
   public async setEvent(event: EventInterface): Promise<void[]> {
-    const promises: Promise<void>[] = [];
-    event.setID(event.getID() || this.afs.createId());
-    promises.push(this.afs.collection('events').doc(event.getID()).set(event.toJSON()));
-    event.getActivities()
-      .forEach((activity) => {
-        activity.setID(activity.getID() || this.afs.createId());
-        promises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
-        activity.streams.forEach((stream) => {
-          this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
-          promises.push(this.afs
-            .collection('events')
-            .doc(event.getID())
-            .collection('activities')
-            .doc(activity.getID())
-            .collection('streams')
-            .doc(stream.type) // @todo check this how it behaves
-            .set({
-              type: stream.type,
-              data: this.getBlobFromStreamData(stream.data),
-            }))
+    return new Promise<void[]>(async (resolve, reject) => {
+      const streamPromises: Promise<void>[] = [];
+      event.setID(event.getID() || this.afs.createId());
+      event.getActivities()
+        .forEach((activity) => {
+          activity.setID(activity.getID() || this.afs.createId());
+          streamPromises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
+          activity.streams.forEach((stream) => {
+            this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
+            streamPromises.push(this.afs
+              .collection('events')
+              .doc(event.getID())
+              .collection('activities')
+              .doc(activity.getID())
+              .collection('streams')
+              .doc(stream.type) // @todo check this how it behaves
+              .set({
+                type: stream.type,
+                data: this.getBlobFromStreamData(stream.data),
+              }))
+          });
         });
-      });
-    return Promise.all(promises);
+      try {
+        await Promise.all(streamPromises);
+        await this.afs.collection('events').doc(event.getID()).set(event.toJSON());
+        resolve()
+      }catch (e) {
+        Raven.captureException(e);
+        // Try to delete the parent entity and all subdata
+        await this.deleteEvent(event);
+        reject('Something went wrong')
+      }
+    })
   }
 
   public deleteEvent(eventToDelete: EventInterface) {
