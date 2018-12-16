@@ -87,7 +87,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.chart = await this.createChart();
     }
 
-    debugger;
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
       this.bindToNewData();
     }
@@ -96,22 +95,23 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private bindToNewData() {
     this.unSubscribeFromAll();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      let allOrSomeSubscription = this.eventService.getStreams(
-        this.event.getID(), activity.getID(),
-        [
-          // DataHeartRate.type,
-          DataAltitude.type,
-          DataAbsolutePressure.type,
-          DataSeaLevelPressure.type,
-          // DataCadence.type,
-          // DataPower.type,
-          // DataGPSAltitude.type,
-          // DataSpeed.type,
-          // DataVerticalSpeed.type,
-        ],
-      );
-      if (this.showAdvancedStats){
-        allOrSomeSubscription  = this.eventService.getAllStreams(this.event.getID(), activity.getID());
+      let allOrSomeSubscription: Observable<StreamInterface[]>;
+      if (this.showAdvancedStats) {
+        allOrSomeSubscription = this.eventService.getAllStreams(this.event.getID(), activity.getID());
+      } else {
+        allOrSomeSubscription = this.eventService.getStreams(this.event.getID(), activity.getID(),
+          [
+            // DataHeartRate.type,
+            DataAltitude.type,
+            DataAbsolutePressure.type,
+            DataSeaLevelPressure.type,
+            // DataCadence.type,
+            // DataPower.type,
+            // DataGPSAltitude.type,
+            // DataSpeed.type,
+            // DataVerticalSpeed.type,
+          ],
+        );
       }
 
       return allOrSomeSubscription.pipe(map((streams) => {
@@ -120,36 +120,36 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         }
         // debugger;
         return streams.map((stream) => {
-          let series = this.chart.series.values.find((series) => {
-            return `${activity.getID()}${stream.type}` === series.id
-          });
+          // let series = this.chart.series.values.find((series) => {
+          //   return `${activity.getID()}${stream.type}` === series.id
+          // });
 
-          if (!series) {
-            // debugger;
-            series = new am4charts.LineSeries();
-            series.id = `${activity.getID()}${stream.type}`;
-            series.name = stream.type + ` ${activity.creator.name}`;
-            series.dataFields.valueY = "value";
-            series.dataFields.dateX = "date";
-            series.hidden = true;
-            // debugger;
+          // if (!series) {
+          // debugger;
+          const series = new am4charts.LineSeries();
+          series.id = `${activity.getID()}${stream.type}`;
+          series.name = stream.type + ` ${activity.creator.name}`;
+          series.dataFields.valueY = "value";
+          series.dataFields.dateX = "date";
+          series.hidden = true;
+          // debugger;
 
-            // hide all except the first one
-            // if (this.chart.series.length > 1) {
-            //   series.hide()
-            // }
+          // hide all except the first one
+          // if (this.chart.series.length > 1) {
+          //   series.hide()
+          // }
 
-            // series.minDistance = 1;
-            // series.strokeWidth = 3;
-            series.fillOpacity = 0.6;
-            series.interactionsEnabled = false;
-            // debugger;
-          }
+          // series.minDistance = 1;
+          // series.strokeWidth = 3;
+          series.fillOpacity = 0.6;
+          series.interactionsEnabled = false;
+          // debugger;
+          // }
 
           // @todo for performance this should be moved to the other pipe
           const samplingRate = this.getSamplingRateInSeconds(stream.data.length);
           this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`)
-          const data  = stream.data.reduce((dataArray: {date: Date, value: number}[], streamData, index) => {
+          const data = stream.data.reduce((dataArray: { date: Date, value: number }[], streamData, index) => {
             // Slice the data dirty for now till performance is achieved
             dataArray.push({
               date: new Date(activity.startDate.getTime() + (index * 1000)),
@@ -168,7 +168,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
-      // debugger;
+      debugger;
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // debugger;
@@ -178,9 +178,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // }
       });
       // Perhaps here pass all data as one from all series to the chart
-
+      // debugger;
+      // this.chart.series.clear();
       this.chart.series.setAll(series);
-      this.chart.invalidateData();
+      // this.chart.invalidateData();
     });
   }
 
@@ -247,12 +248,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         chart.events.on('datavalidated', (ev) => {
           // this.logger.d('datavalidated');
-          var chart: am4charts.XYChart = ev.target;
-          var categoryAxis = chart.yAxes.getIndex(0);
-          this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed());
-          this.logger.d(categoryAxis.pixelHeight.toFixed());
-          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
-          chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
+          // var chart: am4charts.XYChart = ev.target;
+          // var categoryAxis = chart.yAxes.getIndex(0);
+          // this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed());
+          // this.logger.d(categoryAxis.pixelHeight.toFixed());
+          // chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
+          // chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
         });
         resolve(chart);
       });
@@ -266,7 +267,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     const numberOfSamplesToHours = numberOfSamples / 3600;
     // If we are in less than 3 hours return 1s sampling rate
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours  * 2.5 )/ hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours * 2.5) / hoursToKeep1sSamplingRate)
     }
     this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
@@ -351,6 +352,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private unSubscribeFromAll() {
     if (this.streamsSubscription) {
+      debugger;
       this.streamsSubscription.unsubscribe();
     }
   }
