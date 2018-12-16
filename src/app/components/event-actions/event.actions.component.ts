@@ -67,7 +67,7 @@ export class EventActionsComponent {
   }
 
   deleteEvent(event: EventInterface) {
-    this.eventService.deleteEvent(event);
+    this.eventService.deleteEvent(event.getID());
     this.router.navigate(['/dashboard']);
     this.snackBar.open('Event deleted', null, {
       duration: 5000,

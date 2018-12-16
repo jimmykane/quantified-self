@@ -7,9 +7,14 @@ import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-loc
 import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
-import {combineLatest, merge, Observable, EMPTY, of} from 'rxjs';
-import {AngularFirestore, DocumentChangeAction} from '@angular/fire/firestore';
-import {catchError, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
+import {combineLatest, merge, EMPTY, of, Observable, Observer, from} from 'rxjs';
+import {
+  AngularFirestore,
+  AngularFirestoreCollection,
+  DocumentChangeAction,
+  QueryDocumentSnapshot,
+} from '@angular/fire/firestore';
+import {bufferCount, catchError, concatMap, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
@@ -18,9 +23,9 @@ import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.inte
 import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity.json.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
-import {StreamJSONInterface} from 'quantified-self-lib/lib/streams/stream.json.interface';
 import {Log} from 'ng2-logger/browser';
 import * as Raven from 'raven-js';
+import {fromPromise} from 'rxjs/internal-compatibility';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -153,18 +158,75 @@ export class EventService implements OnDestroy {
         await Promise.all(streamPromises);
         await this.afs.collection('events').doc(event.getID()).set(event.toJSON());
         resolve()
-      }catch (e) {
+      } catch (e) {
         Raven.captureException(e);
         // Try to delete the parent entity and all subdata
-        await this.deleteEvent(event);
+        await this.deleteEvent(event.getID());
         reject('Something went wrong')
       }
     })
   }
 
-  public deleteEvent(eventToDelete: EventInterface) {
-    this.afs.collection('events').doc(eventToDelete.getID()).collection('activities').snapshotChanges();
-    // this.afs.collection('events').doc(eventToDelete.getID()).delete();
+  public async deleteEvent(eventID: string): Promise<boolean> {
+    const activityDeletePromises: Promise<boolean>[] = [];
+    const queryDocumentSnapshots = await this.afs
+      .collection('events')
+      .doc(eventID).collection('activities').ref.get();
+    queryDocumentSnapshots.docs.forEach((queryDocumentSnapshot) => {
+      activityDeletePromises.push(this.deleteActivity(eventID, queryDocumentSnapshot.id))
+    });
+    await Promise.all(activityDeletePromises);
+    await this.afs
+      .collection('events')
+      .doc(eventID).delete();
+    this.logger.info(`Deleted event ${eventID}`);
+    return true;
+  }
+
+  public async deleteActivity(eventID: string, activityID: string): Promise<boolean> {
+    // @todo add try catch etc
+    await this.deleteAllStreams(eventID, activityID);
+    await this.afs
+      .collection('events')
+      .doc(eventID)
+      .collection('activities')
+      .doc(activityID).delete();
+    this.logger.info(`Deleted activity ${activityID} for event ${eventID}`);
+    return true;
+  }
+
+  public async deleteAllStreams(eventID, activityID): Promise<number> {
+    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([
+      this.afs.collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
+    ]);
+    this.logger.info(`Deleted ${numberOfStreamsDeleted} streams for event: ${eventID} and activity ${activityID}`);
+    return numberOfStreamsDeleted
+  }
+
+  // From https://github.com/angular/angularfire2/issues/1400
+  private async deleteAllDocsFromCollections(collections: AngularFirestoreCollection[]) {
+    let totalDeleteCount = 0;
+    const batchSize = 500;
+    return new Promise<number>((resolve, reject) =>
+      from(collections)
+        .pipe(concatMap(collection => fromPromise(collection.ref.get())))
+        .pipe(concatMap(q => from(q.docs)))
+        .pipe(bufferCount(batchSize))
+        .pipe(concatMap((docs) => Observable.create((o: Observer<number>) => {
+          const batch = this.afs.firestore.batch();
+          docs.forEach(doc => batch.delete(doc.ref));
+          batch.commit()
+            .then(() => {
+              o.next(docs.length);
+              o.complete()
+            })
+            .catch(e => o.error(e))
+        })))
+        .subscribe(
+          (batchDeleteCount: number) => totalDeleteCount += batchDeleteCount,
+          e => reject(e),
+          () => resolve(totalDeleteCount),
+        ))
   }
 
   /**
