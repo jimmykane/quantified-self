@@ -98,7 +98,7 @@ export class RavenErrorHandler implements ErrorHandler {
     AngularFireStorageModule,
     AngularFireAuthModule, // imports firebase/auth, only needed for auth features,
     AgmCoreModule.forRoot({
-      apiKey: 'AIzaSyBL8RqAZfVb9peBE6aoJZYdAMKjbmsaBRE',
+      apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
       // apiVersion: '3.31'
     }),
     AmChartsModule,
