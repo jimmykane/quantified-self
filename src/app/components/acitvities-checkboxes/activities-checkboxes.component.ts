@@ -26,11 +26,8 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
 
 
   ngOnChanges(simpleChanges): void {
-    if (simpleChanges.event){
-      this.createCheckboxes();
-      return;
-    }
-    this.updateCheckboxes();
+    this.createCheckboxes();
+    this.updateCheckboxValues();
   }
 
   onCheckboxChange() {
@@ -55,7 +52,7 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
     }, []);
   }
 
-  private updateCheckboxes(){
+  private updateCheckboxValues(){
     this.activitiesCheckboxes.forEach((activityCheckBox) => {
       activityCheckBox.checked = !!this.selectedActivities
         .find(selectedActivity => selectedActivity.getID() === activityCheckBox.activity.getID());
