@@ -77,17 +77,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnInit() {
-
   }
 
   async ngOnChanges(simpleChanges) {
-    // debugger;
-    // If it does not have a chart create no matter what change happened
-    if (!this.chart) {
-      this.chart = await this.createChart();
-    }
-
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
+      this.destroyChart();
+      this.chart = await this.createChart();
       this.bindToNewData();
     }
   }
@@ -154,13 +149,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })).subscribe((series: am4charts.XYSeries[]) => {
       // debugger;
       series.forEach((serrie, index) => {
-        if (index > 4) {
-          serrie.hide()
-        }
+        // if (index > 4) {
+        //   serrie.hide()
+        // }
       });
       // Perhaps here pass all data as one from all series to the chart
       // debugger;
-      // this.chart.series.clear();
       this.chart.series.setAll(series);
       // this.chart.invalidateData();
     });
