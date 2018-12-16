@@ -120,37 +120,22 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         }
         // debugger;
         return streams.map((stream) => {
-          // let series = this.chart.series.values.find((series) => {
-          //   return `${activity.getID()}${stream.type}` === series.id
-          // });
-
-          // if (!series) {
-          // debugger;
           const series = new am4charts.LineSeries();
           series.id = `${activity.getID()}${stream.type}`;
           series.name = stream.type + ` ${activity.creator.name}`;
           series.dataFields.valueY = "value";
           series.dataFields.dateX = "date";
           series.hidden = true;
-          // debugger;
-
-          // hide all except the first one
-          // if (this.chart.series.length > 1) {
-          //   series.hide()
-          // }
 
           // series.minDistance = 1;
           // series.strokeWidth = 3;
           series.fillOpacity = 0.6;
           series.interactionsEnabled = false;
-          // debugger;
-          // }
 
           // @todo for performance this should be moved to the other pipe
           const samplingRate = this.getSamplingRateInSeconds(stream.data.length);
           this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`)
-          const data = stream.data.reduce((dataArray: { date: Date, value: number }[], streamData, index) => {
-            // Slice the data dirty for now till performance is achieved
+          series.data = stream.data.reduce((dataArray: { date: Date, value: number }[], streamData, index) => {
             dataArray.push({
               date: new Date(activity.startDate.getTime() + (index * 1000)),
               value: streamData,
@@ -159,23 +144,19 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           }, [])
             .filter((data) => isNumberOrString(data.value))
             .filter((data, index) => index % samplingRate === 0);
-
-          this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
-
+          this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${series.data.length}`);
           // debugger;
-          series.data = data;
           return series
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
-      debugger;
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // debugger;
       series.forEach((serrie, index) => {
-        // if (index > 4) {
-        //   serrie.hide()
-        // }
+        if (index > 4) {
+          serrie.hide()
+        }
       });
       // Perhaps here pass all data as one from all series to the chart
       // debugger;
@@ -193,6 +174,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // chart.fontSize = '12px';
         // chart.resizable = false;
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+        // dateAxis.skipEmptyPeriods= true;
         dateAxis.title.text = "Time";
         // dateAxis.baseInterval = {
         //   timeUnit: "second",
@@ -352,7 +334,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private unSubscribeFromAll() {
     if (this.streamsSubscription) {
-      debugger;
       this.streamsSubscription.unsubscribe();
     }
   }
