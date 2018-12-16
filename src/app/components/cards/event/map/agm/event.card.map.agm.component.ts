@@ -72,7 +72,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnChanges(simpleChanges) {
-    debugger
+    // debugger
     // // If no operational changes return
     if ((simpleChanges.event
       || simpleChanges.selectedActivities)) {

@@ -57,9 +57,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.getShowData().then(value => this.showData = value);
     this.userSettingsService.showDataWarnings().then(value => this.showMapDataWarnings = value);
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
-    this.userSettingsService.showAdvancedStats().then(value => {
-      debugger;
-      this.showAdvancedStats = value});
+    this.userSettingsService.showAdvancedStats().then(value => this.showAdvancedStats = value);
 
     // @todo test maps , switchmap etc with delete and order firing etc
     this.parametersSubscription = this.route.queryParams.pipe(map((params) => {

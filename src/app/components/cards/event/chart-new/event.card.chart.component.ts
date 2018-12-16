@@ -81,14 +81,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
-    debugger;
+    // debugger;
     // If it does not have a chart create no matter what change happened
     if (!this.chart) {
       this.chart = await this.createChart();
     }
 
+    debugger;
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
-      debugger;
       this.bindToNewData();
     }
   }

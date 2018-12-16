@@ -34,7 +34,6 @@ export class ChartActionsComponent implements OnChanges {
   }
 
   checkBoxChanged(event) {
-    debugger;
     this.useDistanceAxisChange.emit(this.useDistanceAxis);
     this.showAdvancedStatsChange.emit(this.showAdvancedStats);
     this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
@@ -44,6 +43,5 @@ export class ChartActionsComponent implements OnChanges {
   }
 
   ngOnChanges(simpleChanges) {
-    // debugger;
   }
 }
