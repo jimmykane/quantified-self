@@ -217,6 +217,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.fontWeight = 'bold';
 
 
+        // Disable the preloader
+        chart.preloader.disabled = true;
+
+
         chart.events.on('validated', (ev) => {
           this.logger.d('validated');
         });
