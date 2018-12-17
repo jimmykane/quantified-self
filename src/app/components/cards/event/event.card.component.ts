@@ -83,54 +83,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       }
       this.event = event;
       this.selectedActivities = event.getActivities();
-    }))
-    //   .pipe(map((activities) => {
-    //   return activities.reduce((activityStreamPairArray, activity) => {
-    //     activityStreamPairArray.push({
-    //         activity: activity,
-    //         activityStreams: this.eventService.getStreams(this.event.getID(), activity.getID(), ['Latitude', 'Longitude']),
-    //       });
-    //     return activityStreamPairArray
-    //   }, [])
-    // })).pipe(mergeMap((activityStreamPairArray) => {
-    //   return combineLatest(activityStreamPairArray.reduce((flattenedArray, activityStreamPair) => {
-    //     flattenedArray.push(of(activityStreamPair.activity), activityStreamPair.activityStreams);
-    //     return flattenedArray
-    //   }, []))
-    // })).pipe(map((resultsArray) => {
-    //   resultsArray.forEach((arrayElement, index, array) => {
-    //     if (index %2 ===0 ){
-    //       (<ActivityInterface>array[index]).streams.push(<StreamInterface>array[index+1])
-    //     }
-    //   })
-    // }))
-      .subscribe()
-
-    // // Perhaps this should be a combine latest
-
-
-    // // Subscribe to route changes
-    // this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-    //   this.selectedTabIndex = +params['tabIndex'];
-    //
-    //   // If there is an ID change then unsubscribe and resubscribe to the new id
-    //   if (this.eventID !== params['eventID']) {
-    //     debugger;
-    //     this.eventID = params['eventID'];
-    //     if (this.eventSubscription) {
-    //       this.eventSubscription.unsubscribe();
-    //     }
-    //     this.selectedActivities = [];
-    //     // Subscribe to event changes
-    //     this.eventSubscription = this.eventService.getEvent(this.eventID).subscribe((event: EventInterface) => {
-    //       this.event = event;
-    //       event.getActivities().forEach((activity)=> {
-    //         this.eventService.getStreams(event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-    //       });
-    //       this.selectedActivities = this.selectedActivities.length ? this.selectedActivities : this.event.getActivities();
-    //     });
-    //   }
-    // });
+    })).subscribe()
   }
 
   ngOnDestroy(): void {
