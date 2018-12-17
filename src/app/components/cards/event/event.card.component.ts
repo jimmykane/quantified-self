@@ -15,6 +15,7 @@ import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-de
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
 import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
+import {MatSnackBar} from '@angular/material';
 
 
 @Component({
@@ -44,6 +45,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private route: ActivatedRoute,
     private eventService: EventService,
     private userSettingsService: UserSettingsService,
+    private snackBar: MatSnackBar,
     public eventColorService: AppEventColorService) {
   }
 
@@ -61,7 +63,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     // @todo test maps , switchmap etc with delete and order firing etc
     this.parametersSubscription = this.route.queryParams.pipe(map((params) => {
-
       this.selectedTabIndex = +params['tabIndex'];
       return params
     })).pipe(mergeMap((params) => {
@@ -70,10 +71,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       if (this.event && this.event.getID() === params['eventID']) {
         return EMPTY
       }
+      // debugger;
       return this.eventService.getEvent(params['eventID']);
     })).pipe(map((event) => {
-      // debugger;
       if (!event) {
+        this.router.navigate(['/dashboard']);
+        this.snackBar.open('Not found', null, {
+          duration: 5000,
+        });
         return
       }
       this.event = event;

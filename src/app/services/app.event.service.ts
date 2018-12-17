@@ -58,7 +58,8 @@ export class EventService implements OnDestroy {
       activities.forEach((activity) => event.addActivity(activity));
       return event;
     })).pipe(catchError((error) => {
-      return EMPTY;
+      // debugger;
+      return of(void 0); // @todo is this the best we can do?
     }))
   }
 
