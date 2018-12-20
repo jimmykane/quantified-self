@@ -51,6 +51,8 @@ export class EventService implements OnDestroy {
       this.getActivities(eventID),
     ).pipe(catchError((error) => {
       // debugger;
+      this.logger.error(error);
+      Raven.captureException(error);
       return of([])
     })).pipe(map(([event, activities]) => {
       // debugger;
@@ -59,6 +61,8 @@ export class EventService implements OnDestroy {
       return event;
     })).pipe(catchError((error) => {
       // debugger;
+      Raven.captureException(error);
+      this.logger.error(error);
       return of(void 0); // @todo is this the best we can do?
     }))
   }
