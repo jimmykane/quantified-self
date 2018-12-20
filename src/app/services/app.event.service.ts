@@ -144,7 +144,7 @@ export class EventService implements OnDestroy {
         .forEach((activity) => {
           activity.setID(activity.getID() || this.afs.createId());
           streamPromises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
-          activity.streams.forEach((stream) => {
+          activity.getAllStreams().forEach((stream) => {
             this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
             streamPromises.push(this.afs
               .collection('events')
