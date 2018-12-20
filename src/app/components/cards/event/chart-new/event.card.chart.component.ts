@@ -180,6 +180,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.chart.series.setAll(series);
       // const a = this.chart;
       // debugger;
+      // @todo replace with https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
       this.chart.svgContainer.htmlElement.style.height = ((this.chart.series.length / 4) * 60) + 680 + 'px';
       // this.chart.invalidate();
     });
@@ -249,11 +250,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         chart.events.on('datavalidated', (ev) => {
           this.logger.d('datavalidated');
-          // var categoryAxis = chart.yAxes.getIndex(0);
-          // this.logger.d(chart.svgContainer.htmlElement.offsetHeight.toFixed());
-          // this.logger.d(categoryAxis.pixelHeight.toFixed());
-          // chart.svgContainer.htmlElement.style.height = chart.svgContainer.htmlElement.offsetHeight + categoryAxis.pixelHeight + 'px';
-          // chart.svgContainer.htmlElement.style.height = (chart.svgContainer.htmlElement.offsetHeight || 4600 ) + categoryAxis.pixelHeight + 'px';
         });
         resolve(chart);
       });
