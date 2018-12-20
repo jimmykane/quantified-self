@@ -50,8 +50,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.data.sort = this.sort;
     this.data.sort.sort(<MatSortable>{
         id: 'Date',
-        start: 'desc'
-      }
+        start: 'desc',
+      },
     );
   }
 
@@ -59,10 +59,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     const data = this.events.reduce((eventArray, event) => {
       eventArray.push({
         Checkbox: event,
-        Date: this.datePipe.transform(event.startDate, 'd MMM yy HH:mm'),
+        Date: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
         Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-        Distance: event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
-        Duration: event.getDuration().getDisplayValue(),
+        Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
+        Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
         // Location: this.getLocationString(event.getFirstActivity().geoLocationInfo),
         Device:
           this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
@@ -79,8 +79,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.data.sort = this.sort;
       this.data.sort.sort(<MatSortable>{
           id: 'Date',
-          start: 'desc'
-        }
+          start: 'desc',
+        },
       );
     }
   }
@@ -139,7 +139,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.actionButtonService.removeActionButton('mergeEvents');
     this.actionButtonService.removeActionButton('deleteEvents');
 
-     if (this.selection.selected.length > 1) {
+    if (this.selection.selected.length > 1) {
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         () => {
@@ -152,8 +152,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             this.router.navigate(['/eventDetails'], {
               queryParams: {
                 eventID: mergedEvent.getID(),
-                tabIndex: 0
-              }
+                tabIndex: 0,
+              },
             }).then(() => {
               this.snackBar.open('Events merged', null, {
                 duration: 5000,
@@ -161,7 +161,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             });
           })
         },
-        'material'
+        'material',
       ));
     }
 
@@ -178,7 +178,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             duration: 5000,
           });
         },
-        'material'
+        'material',
       ));
     }
   }

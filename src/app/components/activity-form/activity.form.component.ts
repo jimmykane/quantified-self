@@ -97,7 +97,7 @@ export class ActivityFormComponent implements OnInit {
     // Should trim distance
     EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
     // Regenerate stats
-    EventUtilities.generateStats(this.event);
+    EventUtilities.generateActivityStats(this.event);
     debugger;
     try {
       await this.eventService.setEvent(this.event);

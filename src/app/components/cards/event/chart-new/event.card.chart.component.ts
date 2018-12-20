@@ -41,6 +41,7 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {isNumberOrString} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {number} from '@amcharts/amcharts4/core';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -106,8 +107,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       } else {
         allOrSomeSubscription = this.eventService.getStreams(this.event.getID(), activity.getID(),
           [
-            // DataHeartRate.type,
+            DataHeartRate.type,
             DataAltitude.type,
+            DataDistance.type,
             DataAbsolutePressure.type,
             DataSeaLevelPressure.type,
             DataCadence.type,
