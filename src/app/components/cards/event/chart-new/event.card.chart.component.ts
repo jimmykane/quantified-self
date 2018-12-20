@@ -81,22 +81,34 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
-    if (!this.selectedActivities.length){
+    // debugger
+    if (!this.isVisible && !simpleChanges.event && !simpleChanges.selectedActivities && !simpleChanges.showAdvancedStats) {
+      return;
+    }
+    if (!this.isVisible && (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats)) {
       this.destroyChart();
       return;
     }
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
 
-      this.unSubscribeFromAll();
-      await this.destroyChart();
-      this.chart = await this.createChart();
-
-      if (!this.selectedActivities.length) {
-        return;
+    if (!simpleChanges.event && !simpleChanges.selectedActivities && !simpleChanges.showAdvancedStats) {
+      if (simpleChanges.isVisible && !this.chart) {
+        this.unSubscribeFromAll();
+        this.chart = await this.createChart();
+        this.bindToNewData();
       }
-      this.bindToNewData();
+      return
     }
-    // @todo perhaps we want in the end to bind to the parent entity change that will happen inside all components istead of binding to each one
+
+    // Visible and change
+    if (!this.selectedActivities.length) {
+      this.destroyChart();
+      return;
+    }
+
+    this.unSubscribeFromAll();
+    await this.destroyChart();
+    this.chart = await this.createChart();
+    this.bindToNewData();
   }
 
   private bindToNewData() {
@@ -323,6 +335,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.zone.runOutsideAngular(() => {
         if (this.chart) {
           this.chart.dispose();
+          delete this.chart
         }
       });
     } catch (e) {
