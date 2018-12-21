@@ -9,7 +9,6 @@ import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
-import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
 import {
   MatButtonModule,
@@ -147,7 +146,6 @@ export class RavenErrorHandler implements ErrorHandler {
     EventCardStatsComponent,
     EventActionsComponent,
     EventCardLapsComponent,
-    EventCardChartComponent,
     EventCardToolsComponent,
     AboutComponent,
     UploadInfoComponent,

@@ -2,7 +2,7 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input} from '@ang
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
+// import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
 import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
@@ -41,16 +41,16 @@ export class EventActionsComponent {
   }
 
   downloadEventAsTCX(event: EventInterface) {
-    EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
-      FileService.downloadFile(
-        blob,
-        event.name,
-        EventExporterTCX.fileExtension,
-      );
-      this.snackBar.open('File served', null, {
-        duration: 5000,
-      });
-    });
+    // EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
+    //   FileService.downloadFile(
+    //     blob,
+    //     event.name,
+    //     EventExporterTCX.fileExtension,
+    //   );
+    //   this.snackBar.open('File served', null, {
+    //     duration: 5000,
+    //   });
+    // });
   }
 
   downloadEventAsJSON(event: EventInterface) {

@@ -42,6 +42,7 @@ import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-spee
 import {isNumberOrString} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {number} from '@amcharts/amcharts4/core';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -128,6 +129,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             DataPower.type,
             DataGPSAltitude.type,
             DataSpeed.type,
+            DataPace.type,
             DataVerticalSpeed.type,
           ],
         );
@@ -176,7 +178,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Find the ones that no longer exist and remove
-      // this.chart.series.clear();
       this.chart.series.setAll(series);
       // const a = this.chart;
       // debugger;

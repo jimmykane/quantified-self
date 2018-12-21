@@ -235,7 +235,7 @@ export class EventService implements OnDestroy {
   }
 
   /**
-   * Add geolocation and weather info to an event
+   * Add Geo info and weather info to an event
    * @param {EventInterface} event
    * @return {Promise<EventInterface>}
    * @todo Write tests!
@@ -244,15 +244,16 @@ export class EventService implements OnDestroy {
     return new Promise(((resolve, reject) => {
       // Find the activities with positional data
       const activitiesWithPosition = event.getActivities().filter((activity) => {
-        return event.getPointsWithPosition(void 0, void 0, [activity]).length
+        return activity.hasPositionData();
       });
+
       // Create their promises
       const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
         activityPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          <DataPositionInterface>event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(),
+          activity.getPositionData()[0],
         ));
         activityPromises.push(this.weatherService.getWeather(
-          <DataPositionInterface>event.getPointsWithPosition(void 0, void 0, [activity])[0].getPosition(), activity.startDate,
+          activity.getPositionData()[0], activity.startDate,
         ));
         return activityPromises;
       }, []);

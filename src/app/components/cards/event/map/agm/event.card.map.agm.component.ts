@@ -129,66 +129,66 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
     })
   }
 
-  private cacheNewData(): MapData[] {
-    const t0 = performance.now();
-    const mapData = [];
-    this.selectedActivities.forEach((activity) => {
-      let activityPoints: PointInterface[];
-      if (this.showData) {
-        activityPoints = activity.getPointsInterpolated();
-      } else {
-        activityPoints = activity.getPoints()
-      }
-      activityPoints = activityPoints.filter((point) => point.getPosition());
-      let lowNumberOfSatellitesPoints: PointInterface[] = [];
-      if (this.showDataWarnings) {
-        lowNumberOfSatellitesPoints = activityPoints.filter((point) => {
-          const numberOfSatellitesData = point.getDataByType(DataNumberOfSatellites.type);
-          if (!numberOfSatellitesData) {
-            return false
-          }
-          return numberOfSatellitesData.getValue() < 7;
-        });
-      }
-      // If the activity has no points skip
-      if (!activityPoints.length) {
-        return;
-      }
-      // Check for laps with position
-      const lapsWithPosition = activity.getLaps()
-        .filter((lap) => {
-          if (this.showAutoLaps && (lap.type === LapTypes.AutoLap || lap.type === LapTypes.Distance)) {
-            return true;
-          }
-          if (this.showManualLaps && lap.type === LapTypes.Manual) {
-            return true;
-          }
-          return false;
-        })
-        .reduce((lapsArray, lap) => {
-          const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
-          if (lapPoints.length) {
-            lapsArray.push({
-              lap: lap,
-              lapPoints: lapPoints,
-              lapEndPoint: lapPoints[lapPoints.length - 1],
-            })
-          }
-          return lapsArray;
-        }, []);
-      // Create the object
-      mapData.push({
-        activity: activity,
-        points: activityPoints,
-        lowNumberOfSatellitesPoints: lowNumberOfSatellitesPoints,
-        activityStartPoint: activityPoints[0],
-        lapsWithPosition: lapsWithPosition,
-      });
-    });
-    const t1 = performance.now();
-    this.logger.d(`Parsed data after ${t1 - t0}ms`);
-    return mapData;
-  }
+  // private cacheNewData(): MapData[] {
+  //   const t0 = performance.now();
+  //   const mapData = [];
+  //   this.selectedActivities.forEach((activity) => {
+  //     let activityPoints: PointInterface[];
+  //     if (this.showData) {
+  //       activityPoints = activity.getPointsInterpolated();
+  //     } else {
+  //       activityPoints = activity.getPoints()
+  //     }
+  //     activityPoints = activityPoints.filter((point) => point.getPosition());
+  //     let lowNumberOfSatellitesPoints: PointInterface[] = [];
+  //     if (this.showDataWarnings) {
+  //       lowNumberOfSatellitesPoints = activityPoints.filter((point) => {
+  //         const numberOfSatellitesData = point.getDataByType(DataNumberOfSatellites.type);
+  //         if (!numberOfSatellitesData) {
+  //           return false
+  //         }
+  //         return numberOfSatellitesData.getValue() < 7;
+  //       });
+  //     }
+  //     // If the activity has no points skip
+  //     if (!activityPoints.length) {
+  //       return;
+  //     }
+  //     // Check for laps with position
+  //     const lapsWithPosition = activity.getLaps()
+  //       .filter((lap) => {
+  //         if (this.showAutoLaps && (lap.type === LapTypes.AutoLap || lap.type === LapTypes.Distance)) {
+  //           return true;
+  //         }
+  //         if (this.showManualLaps && lap.type === LapTypes.Manual) {
+  //           return true;
+  //         }
+  //         return false;
+  //       })
+  //       .reduce((lapsArray, lap) => {
+  //         const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
+  //         if (lapPoints.length) {
+  //           lapsArray.push({
+  //             lap: lap,
+  //             lapPoints: lapPoints,
+  //             lapEndPoint: lapPoints[lapPoints.length - 1],
+  //           })
+  //         }
+  //         return lapsArray;
+  //       }, []);
+  //     // Create the object
+  //     mapData.push({
+  //       activity: activity,
+  //       points: activityPoints,
+  //       lowNumberOfSatellitesPoints: lowNumberOfSatellitesPoints,
+  //       activityStartPoint: activityPoints[0],
+  //       lapsWithPosition: lapsWithPosition,
+  //     });
+  //   });
+  //   const t1 = performance.now();
+  //   this.logger.d(`Parsed data after ${t1 - t0}ms`);
+  //   return mapData;
+  // }
 
   getBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.points), []);
@@ -234,13 +234,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   lineClick(event: PolyMouseEvent, points: PointInterface[]) {
-    const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
-      latitudeDegrees: event.latLng.lat(),
-      longitudeDegrees: event.latLng.lng(),
-    }, points);
-    if (nearestPoint) {
-      this.clickedPoint = nearestPoint;
-    }
+    // const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
+    //   latitudeDegrees: event.latLng.lat(),
+    //   longitudeDegrees: event.latLng.lng(),
+    // }, points);
+    // if (nearestPoint) {
+    //   this.clickedPoint = nearestPoint;
+    // }
   }
 
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
