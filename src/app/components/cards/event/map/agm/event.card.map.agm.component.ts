@@ -6,22 +6,17 @@ import {
   HostListener,
   Input,
   OnChanges, OnDestroy,
-  OnInit, SimpleChange,
+  OnInit,
   ViewChild,
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
 import {AppEventColorService} from '../../../../../services/color/app.event.color.service';
-import {GoogleMapsAPIWrapper} from '@agm/core/services/google-maps-api-wrapper';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
-import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {ControlPosition, MapTypeControlOptions, MapTypeId} from '@agm/core/services/google-maps-types';
-import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
-import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
 import {Log} from 'ng2-logger/browser';
-import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {EventService} from '../../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
