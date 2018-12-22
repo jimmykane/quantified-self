@@ -28,24 +28,6 @@
       <span class="mat-body-2">{{ event.getPause().getDisplayValue() }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <span *ngIf="event.getFirstActivity().geoLocationInfo">
-        <mat-icon>place</mat-icon>
-        <span class="mat-body-2" *ngIf="event.getFirstActivity().geoLocationInfo.city">{{ event.getFirstActivity().geoLocationInfo.city }}, </span>
-        <span *ngIf="event.getFirstActivity().geoLocationInfo.province">{{ event.getFirstActivity().geoLocationInfo.province }}, </span>
-        <span *ngIf="event.getFirstActivity().geoLocationInfo.country">{{ event.getFirstActivity().geoLocationInfo.country }}</span>
-      </span>
-    </mat-card-subtitle>
-    <!-- The below should come from the activity or event stats -->
-    <!--<mat-card-subtitle *ngIf="event.getFirstActivity() && event.getFirstActivity().weather-->
-    <!--&& event.getFirstActivity().weather.getAverageTemperatureInCelsius() ">-->
-      <!--<mat-icon>terrain</mat-icon>-->
-      <!--<span-->
-        <!--class="mat-body-2">{{ event.getFirstActivity().weather.getAverageTemperatureInCelsius().toFixed(0) }}c</span>-->
-      <!--and-->
-      <!--<span class="mat-body-2">{{event.getFirstActivity().weather.weatherItems[0].conditions }}</span>-->
-      <!--conditions-->
-    <!--</mat-card-subtitle>-->
-    <mat-card-subtitle>
       <app-activities-checkboxes [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
     </mat-card-subtitle>

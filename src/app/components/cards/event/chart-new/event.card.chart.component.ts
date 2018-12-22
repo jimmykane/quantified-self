@@ -70,6 +70,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private logger = Log.create('EventCardChartComponent');
   private chartData: any[] = [];
 
+
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
               private eventService: EventService,
@@ -178,19 +179,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
-      // When all complete
-
-
-
-      // debugger
+      // Format
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
-      // Find the ones that no longer exist and remove
-      // this.chart.series.setAll(series);
-      // const a = this.chart;
-      // debugger;
+      // series.reduce((obj: any, serries) => {
+        // serries.dummyData.forEach((data) => {
+        //   if (obj[data.date])
+        // })
+      // });
+      // When all complete
       // @todo replace with https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
-      this.chart.svgContainer.htmlElement.style.height = ((this.chart.series.length / 4) * 60) + 680 + 'px';
+      // this.chart.svgContainer.htmlElement.style.height = ((this.chart.series.length / 4) * 60) + 680 + 'px';
       // this.chart.invalidate();
     });
   }

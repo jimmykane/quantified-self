@@ -17,7 +17,6 @@ import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
 
 
 @Component({
@@ -63,7 +62,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
         Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
         Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
-        // Location: this.getLocationString(event.getFirstActivity().geoLocationInfo),
         Device:
           this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
         Actions:
@@ -200,18 +198,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       }
       return uniqueArray;
     }, []).join(', ');
-  }
-
-  private getLocationString(geoLocationInfo: GeoLocationInfo) {
-    let string = '';
-    if (!geoLocationInfo) {
-      return string;
-    }
-    if (geoLocationInfo.city) {
-      string += geoLocationInfo.city + ', '
-    }
-    string += geoLocationInfo.country;
-    return string;
   }
 
   ngOnDestroy() {

@@ -69,12 +69,6 @@ export class UploadComponent {
           return;
         }
         try {
-          await this.eventService.addGeoLocationAndWeatherInfo(newEvent);
-        } catch (e) {
-          console.error(e);
-          Raven.captureException(e);
-        }
-        try {
           await this.eventService.setEvent(newEvent);
           metaData.status = UPLOAD_STATUS.PROCESSED;
         }catch (e) {

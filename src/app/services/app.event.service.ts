@@ -1,11 +1,6 @@
 import {Injectable, OnDestroy} from '@angular/core';
 import {EventLocalStorageService} from './storage/app.event.local.storage.service';
-import {GeoLocationInfoService} from './geo-location/app.geo-location-info.service';
-import {WeatherUndergroundWeatherService} from './weather/app.weather-underground.weather.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {GeoLocationInfo} from 'quantified-self-lib/lib/geo-location-info/geo-location-info';
-import {Weather} from 'quantified-self-lib/lib/weather/app.weather';
-import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import {combineLatest, merge, EMPTY, of, Observable, Observer, from} from 'rxjs';
 import {
@@ -34,9 +29,7 @@ export class EventService implements OnDestroy {
 
   constructor(private eventLocalStorageService: EventLocalStorageService,
               private storage: AngularFireStorage,
-              private weatherService: WeatherUndergroundWeatherService,
-              private afs: AngularFirestore,
-              private geoLocationInfoService: GeoLocationInfoService) {
+              private afs: AngularFirestore) {
   }
 
   public getEvent(eventID: string): Observable<EventInterface> {
@@ -232,55 +225,6 @@ export class EventService implements OnDestroy {
           e => reject(e),
           () => resolve(totalDeleteCount),
         ))
-  }
-
-  /**
-   * Add Geo info and weather info to an event
-   * @param {EventInterface} event
-   * @return {Promise<EventInterface>}
-   * @todo Write tests!
-   */
-  public addGeoLocationAndWeatherInfo(event: EventInterface): Promise<EventInterface> {
-    return new Promise(((resolve, reject) => {
-      // Find the activities with positional data
-      const activitiesWithPosition = event.getActivities().filter((activity) => {
-        return activity.hasPositionData();
-      });
-
-      // Create their promises
-      const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
-        const startPosition = activity.getPositionData().find((position) => position !== null)
-
-        activityPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          startPosition,
-        ));
-        activityPromises.push(this.weatherService.getWeather(
-          startPosition, activity.startDate,
-        ));
-        return activityPromises;
-      }, []);
-
-      // Wait for all
-      Promise.all(activitiesPromises.map(p => p.catch(e => e))).then(results => {
-        if (!results || !results.length) {
-          resolve(event);
-        }
-        // For each activity get 2 data from the results
-        let i = 0;
-        activitiesWithPosition.forEach((activity, index) => {
-          if (results[index + i] instanceof GeoLocationInfo) {
-            activity.geoLocationInfo = <GeoLocationInfo> results[index + i];
-          }
-          if (results[index + i + 1] instanceof Weather) {
-            activity.weather = <Weather> results[index + i + 1];
-          }
-          i += 2;
-        });
-        resolve(event);
-      }).catch((e) => {
-        reject(event);
-      });
-    }));
   }
 
   private getBlobFromStreamData(streamData: number[]): firestore.Blob {

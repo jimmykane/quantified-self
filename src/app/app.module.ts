@@ -35,13 +35,11 @@ import {
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
-import {WeatherUndergroundWeatherService} from './services/weather/app.weather-underground.weather.service';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
 import {EventTableComponent} from './components/event-table/event.table.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
-import {GeoLocationInfoService} from './services/geo-location/app.geo-location-info.service';
 import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
@@ -171,8 +169,6 @@ export class RavenErrorHandler implements ErrorHandler {
     UserSettingsService,
     EventService,
     ActionButtonService,
-    WeatherUndergroundWeatherService,
-    GeoLocationInfoService,
     AppEventColorService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
