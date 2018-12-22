@@ -31,7 +31,7 @@ export class EventCardStatsComponent implements OnChanges {
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
-        statsMap.set(stat.getClassName(), stat);
+        statsMap.set(stat.getType(), stat);
       });
       return statsMap;
     }, new Map<string, DataInterface>());
@@ -40,7 +40,7 @@ export class EventCardStatsComponent implements OnChanges {
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
         this.selectedActivities.reduce((rowObj, activity, index) => {
-          const activityStat = activity.getStat(stat.getClassName());
+          const activityStat = activity.getStat(stat.getType());
           if (!activityStat) {
             return rowObj;
           }
@@ -58,8 +58,8 @@ export class EventCardStatsComponent implements OnChanges {
     // @todo support more than 2 activities for diff
     if (this.selectedActivities.length === 2) {
       Array.from(stats.values()).forEach((stat: DataInterface, index) => {
-        const firstActivityStat = this.selectedActivities[0].getStat(stat.getClassName());
-        const secondActivityStat = this.selectedActivities[1].getStat(stat.getClassName());
+        const firstActivityStat = this.selectedActivities[0].getStat(stat.getType());
+        const secondActivityStat = this.selectedActivities[1].getStat(stat.getType());
         if (!firstActivityStat || !secondActivityStat) {
           return;
         }
@@ -70,7 +70,7 @@ export class EventCardStatsComponent implements OnChanges {
         }
         // Create an obj
         data[index]['Difference'] = {};
-        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstance(stat.getClassName(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstance(stat.getClassName(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
+        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
         data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
         // Correct the NaN with both 0's
         if (firstActivityStatValue === 0 && secondActivityStatValue === 0){

@@ -34,14 +34,14 @@ export class EventCardLapsComponent implements OnChanges {
       if (lap.getDistance()) {
         lapObj[DataDistance.type] = lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit();
       }
-      if (lap.getStat(DataAscent.className)) {
-        lapObj[DataAscent.type] = lap.getStat(DataAscent.className).getDisplayValue() + ' ' + lap.getStat(DataAscent.className).getDisplayUnit();
+      if (lap.getStat(DataAscent.type)) {
+        lapObj[DataAscent.type] = lap.getStat(DataAscent.type).getDisplayValue() + ' ' + lap.getStat(DataAscent.type).getDisplayUnit();
       }
-      if (lap.getStat(DataDescent.className)) {
-        lapObj[DataDescent.type] = lap.getStat(DataDescent.className).getDisplayValue() + ' ' + lap.getStat(DataDescent.className).getDisplayUnit();
+      if (lap.getStat(DataDescent.type)) {
+        lapObj[DataDescent.type] = lap.getStat(DataDescent.type).getDisplayValue() + ' ' + lap.getStat(DataDescent.type).getDisplayUnit();
       }
-      if (lap.getStat(DataHeartRateAvg.className)) {
-        lapObj[DataHeartRateAvg.type] = lap.getStat(DataHeartRateAvg.className).getDisplayValue() + ' ' + lap.getStat(DataHeartRateAvg.className).getDisplayUnit();
+      if (lap.getStat(DataHeartRateAvg.type)) {
+        lapObj[DataHeartRateAvg.type] = lap.getStat(DataHeartRateAvg.type).getDisplayValue() + ' ' + lap.getStat(DataHeartRateAvg.type).getDisplayUnit();
       }
       lapDataArray.push(lapObj);
       return lapDataArray;
