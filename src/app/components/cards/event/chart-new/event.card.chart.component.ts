@@ -146,10 +146,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
           if (!series) {
             series = new am4charts.LineSeries();
-            // return ;
             series.id = `${activity.getID()}${stream.type}`;
             series.name = stream.type + ` ${activity.creator.name}`;
             series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+            series.defaultState.transitionDuration = 0;
             series.dataFields.valueY = "value";
             series.dataFields.dateX = "date";
             series.hidden = true;
@@ -158,6 +158,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             // series.strokeWidth = 3;
             series.fillOpacity = 0.6;
             series.interactionsEnabled = false;
+            this.chart.series.push(series);
 
           }
           // @todo for performance this should be moved to the other pipe
@@ -185,7 +186,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Find the ones that no longer exist and remove
-      this.chart.series.setAll(series);
+      // this.chart.series.setAll(series);
       // const a = this.chart;
       // debugger;
       // @todo replace with https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
@@ -270,9 +271,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Each sample is 1s so x number is x seconds
     const hoursToKeep1sSamplingRate = 1; // 1 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
-    // If we are in less than 3 hours return 1s sampling rate
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours * 3.5) / hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours * 7) / hoursToKeep1sSamplingRate)
     }
     this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
