@@ -249,11 +249,13 @@ export class EventService implements OnDestroy {
 
       // Create their promises
       const activitiesPromises = activitiesWithPosition.reduce((activityPromises, activity) => {
+        const startPosition = activity.getPositionData().find((position) => position !== null)
+
         activityPromises.push(this.geoLocationInfoService.getGeoLocationInfo(
-          activity.getPositionData()[0],
+          startPosition,
         ));
         activityPromises.push(this.weatherService.getWeather(
-          activity.getPositionData()[0], activity.startDate,
+          startPosition, activity.startDate,
         ));
         return activityPromises;
       }, []);
