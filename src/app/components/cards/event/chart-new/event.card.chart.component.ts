@@ -121,11 +121,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       if (this.showAdvancedStats) {
         allOrSomeSubscription = this.eventService.getAllStreams(this.event.getID(), activity.getID());
       } else {
-        allOrSomeSubscription = this.eventService.getStreams(this.event.getID(), activity.getID(),
+        allOrSomeSubscription = this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(),
           [
             DataHeartRate.type,
             DataAltitude.type,
-            DataDistance.type,
+            // DataDistance.type,
             DataAbsolutePressure.type,
             DataSeaLevelPressure.type,
             DataCadence.type,

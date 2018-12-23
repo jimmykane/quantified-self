@@ -122,7 +122,7 @@ export class EventService implements OnDestroy {
       }))
   }
 
-  public getStreams(eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
+  public getStreamsByTypes(eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
     return combineLatest.apply(this, types.map((type) => {
       return this.afs
         .collection('events')
