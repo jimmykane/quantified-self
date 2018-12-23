@@ -78,6 +78,24 @@ export class EventService implements OnDestroy {
     }))
   }
 
+  getEventActivitiesAndStreams(eventID) {
+    return this.getEventAndActivities(eventID).pipe(mergeMap((event) => {
+      // Get all the streams for all activities and subscribe to them with latest emition for all streams
+      return combineLatest(
+        event.getActivities().map((activity) => {
+          return this.getAllStreams(event.getID(), activity.getID()).pipe(map((streams) => {
+            // This time we dont want to just get the streams but we want to attach them to the parent obj
+            activity.clearStreams();
+            activity.addStreams(streams);
+            // Return what we actually want to return not the streams
+            return event;
+          }));
+        }));
+    })).pipe(map(([event]) => {
+      return event;
+    }))
+  }
+
   public getActivities(eventID: string): Observable<ActivityInterface[]> {
     return this.afs.collection("events").doc(eventID).collection('activities').snapshotChanges().pipe(
       map(activitySnapshots => {
