@@ -72,7 +72,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return EMPTY
       }
       // debugger;
-      return this.eventService.getEventAndActivities(params['eventID']);
+      return this.eventService.getEventActivitiesAndStreams(params['eventID']);
     })).pipe(map((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']);

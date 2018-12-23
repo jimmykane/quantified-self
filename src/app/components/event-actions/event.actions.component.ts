@@ -54,7 +54,7 @@ export class EventActionsComponent {
   }
 
   downloadEventAsJSON(event: EventInterface) {
-    EventUtilities.getEventAsJSONBloB(event).then((blob: Blob) => {
+    this.eventService.getEventAsJSONBloB(event.getID()).then((blob: Blob) => {
       FileService.downloadFile(
         blob,
         event.name,

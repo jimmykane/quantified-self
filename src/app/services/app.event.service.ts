@@ -9,7 +9,7 @@ import {
   DocumentChangeAction,
   QueryDocumentSnapshot,
 } from '@angular/fire/firestore';
-import {bufferCount, catchError, concatMap, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
+import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
@@ -21,6 +21,7 @@ import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface'
 import {Log} from 'ng2-logger/browser';
 import * as Raven from 'raven-js';
 import {fromPromise} from 'rxjs/internal-compatibility';
+import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -79,7 +80,7 @@ export class EventService implements OnDestroy {
   }
 
   getEventActivitiesAndStreams(eventID) {
-    return this.getEventAndActivities(eventID).pipe(mergeMap((event) => {
+    return this.getEventAndActivities(eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(
         event.getActivities().map((activity) => {
@@ -92,6 +93,7 @@ export class EventService implements OnDestroy {
           }));
         }));
     })).pipe(map(([event]) => {
+      // debugger;
       return event;
     }))
   }
@@ -133,6 +135,7 @@ export class EventService implements OnDestroy {
           return this.processStreamSnapshots(streamSnapshots)[0] // Get the first element of the return
         }))                                                      // since the return with equality on the query should only fetch one afaik in my model
     })).pipe(map((streams: StreamInterface[]) => {
+      // debugger;
       return streams.filter((stream) => !!stream)
     }))
   }
@@ -217,6 +220,14 @@ export class EventService implements OnDestroy {
     ]);
     this.logger.info(`Deleted ${numberOfStreamsDeleted} streams for event: ${eventID} and activity ${activityID}`);
     return numberOfStreamsDeleted
+  }
+
+  public async getEventAsJSONBloB(eventID: string): Promise<Blob> {
+    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(eventID).pipe(first()).toPromise());
+    return (new Blob(
+      [jsonString],
+      {type: EventExporterJSON.fileType},
+    ));
   }
 
   // From https://github.com/angular/angularfire2/issues/1400
