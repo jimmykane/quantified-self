@@ -32,7 +32,7 @@ export class EventService implements OnDestroy {
               private afs: AngularFirestore) {
   }
 
-  public getEvent(eventID: string): Observable<EventInterface> {
+  public getEventAndActivities(eventID: string): Observable<EventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     return combineLatest(
@@ -73,7 +73,7 @@ export class EventService implements OnDestroy {
         return of([]);
       }
       return combineLatest(eventIDS.map((eventID) => {
-        return this.getEvent(eventID);
+        return this.getEventAndActivities(eventID);
       }))
     }))
   }
