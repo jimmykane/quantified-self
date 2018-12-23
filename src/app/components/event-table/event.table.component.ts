@@ -17,6 +17,7 @@ import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {first} from 'rxjs/operators';
 
 
 @Component({
@@ -24,7 +25,7 @@ import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.uti
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
   providers: [DatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
@@ -142,19 +143,27 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'compare_arrows',
         () => {
           this.actionButtonService.removeActionButton('mergeEvents');
-          EventUtilities.mergeEvents(this.selection.selected.map(selected => selected.Checkbox)).then((mergedEvent: EventInterface) => {
-            this.actionButtonService.removeActionButton('mergeEvents');
-            this.eventService.setEvent(mergedEvent);
-            this.eventSelectionMap.clear();
-            this.selection.clear();
-            this.router.navigate(['/eventDetails'], {
-              queryParams: {
-                eventID: mergedEvent.getID(),
-                tabIndex: 0,
-              },
-            }).then(() => {
-              this.snackBar.open('Events merged', null, {
-                duration: 5000,
+          // First fetch them complete
+          const promises: Promise<EventInterface>[] = [];
+          this.selection.selected.forEach((selected) => {
+            promises.push(this.eventService.getEventActivitiesAndStreams(selected.Checkbox.getID()).pipe(first()).toPromise());
+          });
+          Promise.all(promises).then((events) => {
+            const mergedEvent = EventUtilities.mergeEvents(events);
+            this.eventService.setEvent(mergedEvent).then(() => {
+              this.actionButtonService.removeActionButton('mergeEvents');
+              this.eventService.setEvent(mergedEvent);
+              this.eventSelectionMap.clear();
+              this.selection.clear();
+              this.router.navigate(['/eventDetails'], {
+                queryParams: {
+                  eventID: mergedEvent.getID(),
+                  tabIndex: 0,
+                },
+              }).then(() => {
+                this.snackBar.open('Events merged', null, {
+                  duration: 5000,
+                });
               });
             });
           })
