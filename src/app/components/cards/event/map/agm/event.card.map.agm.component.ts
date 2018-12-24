@@ -41,7 +41,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   private streamsSubscriptions: Subscription[] = [];
-  public mapData: MapData[] = [];
+  public activitiesMapData: MapData[] = [];
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
   public clickedPoint: PointInterface;
@@ -78,8 +78,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
     // if (simpleChanges.isVisible)
 
-    // // Get the new data
-    // this.mapData = this.cacheNewData();
+    // // Get the new activityMapData
+    // this.activitiesMapData = this.cacheNewData();
     // // No need to do anything if the base did not change (Event)
     // if (!simpleChanges.event) {
     //   return;
@@ -93,25 +93,25 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   private bindToNewData() {
-    this.mapData = [];
+    this.activitiesMapData = [];
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
       this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .subscribe((streams) => {
           // In case we are in the middle of a deletion of one of the lat/long streams or no streams
           if (!streams.length || streams.length !== 2) {
-            this.mapData = [];
+            this.activitiesMapData = [];
             this.changeDetectorRef.detectChanges();
             return;
           }
 
           // Remove nulls
-          const latData = streams[0].data.filter(data => !!data);
-          const longData = streams[1].data.filter(data => !!data);
+          const latData = streams[0].getNumericData();
+          const longData = streams[1].getNumericData();
           // debugger;
-          this.mapData.push({
+          this.activitiesMapData.push({
             activity: activity,
-            points: latData.reduce((latLongArray, value, index) => {
+            positions: latData.reduce((latLongArray, value, index) => {
               latLongArray[index] = {
                 latitude: latData[index],
                 longitude: longData[index],
@@ -128,7 +128,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
   // private cacheNewData(): MapData[] {
   //   const t0 = performance.now();
-  //   const mapData = [];
+  //   const activitiesMapData = [];
   //   this.selectedActivities.forEach((activity) => {
   //     let activityPoints: PointInterface[];
   //     if (this.showData) {
@@ -147,7 +147,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   //         return numberOfSatellitesData.getValue() < 7;
   //       });
   //     }
-  //     // If the activity has no points skip
+  //     // If the activity has no positions skip
   //     if (!activityPoints.length) {
   //       return;
   //     }
@@ -174,21 +174,21 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   //         return lapsArray;
   //       }, []);
   //     // Create the object
-  //     mapData.push({
+  //     activitiesMapData.push({
   //       activity: activity,
-  //       points: activityPoints,
+  //       positions: activityPoints,
   //       lowNumberOfSatellitesPoints: lowNumberOfSatellitesPoints,
   //       activityStartPoint: activityPoints[0],
   //       lapsWithPosition: lapsWithPosition,
   //     });
   //   });
   //   const t1 = performance.now();
-  //   this.logger.d(`Parsed data after ${t1 - t0}ms`);
-  //   return mapData;
+  //   this.logger.d(`Parsed activityMapData after ${t1 - t0}ms`);
+  //   return activitiesMapData;
   // }
 
   getBounds(): LatLngBoundsLiteral {
-    const pointsWithPosition = this.mapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.points), []);
+    const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
     if (!pointsWithPosition.length) {
       return <LatLngBoundsLiteral>{
         east: 0,
@@ -234,7 +234,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
     // const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
     //   latitudeDegrees: event.latLng.lat(),
     //   longitudeDegrees: event.latLng.lng(),
-    // }, points);
+    // }, positions);
     // if (nearestPoint) {
     //   this.clickedPoint = nearestPoint;
     // }
@@ -278,7 +278,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 export interface MapData {
   activity: ActivityInterface,
-  points: { latitude: number, longitude: number }[], // @todo points here can cointain any datatype
+  positions: PointInterface[],
   // lowNumberOfSatellitesPoints: PointInterface[],
   // activityStartPoint: PointInterface,
   // lapsWithPosition: {
