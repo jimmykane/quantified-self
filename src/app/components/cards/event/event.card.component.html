@@ -76,12 +76,12 @@
             align="end">
           </app-chart-actions>
         </ng-template>
-        <app-event-card-chart-new
+        <app-event-card-chart
           [showAdvancedStats]="showAdvancedStats"
           [isVisible]="selectedTabIndex === 2"
           [selectedActivities]="selectedActivities"
           [event]="event">
-        </app-event-card-chart-new>
+        </app-event-card-chart>
       </mat-tab>
       <mat-tab label="Laps" *ngIf="hasLaps(event)">
         <ng-template matTabLabel>

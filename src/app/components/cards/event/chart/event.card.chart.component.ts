@@ -52,7 +52,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 // am4core.useTheme(am4themes_kelly);
 
 @Component({
-  selector: 'app-event-card-chart-new',
+  selector: 'app-event-card-chart',
   templateUrl: './event.card.chart.component.html',
   styleUrls: ['./event.card.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -150,15 +150,20 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             series.id = `${activity.getID()}${stream.type}`;
             series.name = stream.type + ` ${activity.creator.name}`;
             series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+            series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
+            series.legendSettings.itemValueText = "[bold]{valueY}[/bold]";
             series.defaultState.transitionDuration = 0;
             series.dataFields.valueY = "value";
             series.dataFields.dateX = "date";
-            series.hidden = true;
+            // series.hidden = true;
 
+            if (this.chart.series.length > 1) {
+              series.hide();
+            }
             // series.minDistance = 1;
             // series.strokeWidth = 3;
             series.fillOpacity = 0.6;
-            series.interactionsEnabled = false;
+            // series.interactionsEnabled = false;
             this.chart.series.push(series);
 
           }
@@ -191,6 +196,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // @todo replace with https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
       // this.chart.svgContainer.htmlElement.style.height = ((this.chart.series.length / 4) * 60) + 680 + 'px';
       // this.chart.invalidate();
+      this.logger.d('sad')
     });
   }
 
