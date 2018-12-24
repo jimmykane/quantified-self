@@ -55,7 +55,6 @@ import {HttpClientModule} from '@angular/common/http';
 import {EventFormComponent} from './components/event-form/event.form.component';
 import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
-import {AmChartsModule} from '@amcharts/amcharts3-angular';
 import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
 import {EventCardChartNewComponent} from './components/cards/event/chart/event.card.chart.component';
 import {UploadErrorComponent} from './components/upload-error/upload-error.component';
@@ -93,12 +92,11 @@ export class RavenErrorHandler implements ErrorHandler {
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
     AngularFireStorageModule,
-    AngularFireAuthModule, // imports firebase/auth, only needed for auth features,
+    AngularFireAuthModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
       // apiVersion: '3.31'
     }),
-    AmChartsModule,
     ReactiveFormsModule,
     MatExpansionModule,
     MatButtonModule,
