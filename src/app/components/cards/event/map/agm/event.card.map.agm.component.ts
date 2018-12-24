@@ -100,7 +100,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
         .subscribe((streams) => {
           // In case we are in the middle of a deletion of one of the lat/long streams or no streams
           if (!streams.length || streams.length !== 2) {
-            this.activitiesMapData = [];
+            this.activitiesMapData.splice(this.activitiesMapData.findIndex((activityMapData) => { return activityMapData.activity.getID() === activity.getID()}), 1);
             this.changeDetectorRef.detectChanges();
             return;
           }
