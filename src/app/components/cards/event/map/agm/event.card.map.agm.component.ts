@@ -104,8 +104,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
             this.changeDetectorRef.detectChanges();
             return;
           }
-
-          // Remove nulls
+          // Start building map data
           const latData = streams[0].getNumericData();
           const longData = streams[1].getNumericData();
           // debugger;
