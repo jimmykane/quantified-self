@@ -68,7 +68,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
-  private chartData: any[] = [];
+  private chartSeries: am4charts.XYSeries[] = [];
 
   private simpleStats = [
     DataHeartRate.type,
@@ -100,7 +100,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngAfterViewInit() {
-    // this.chart = await this.createChart();
+    this.chart = await this.createChart();
   }
 
   async ngOnInit() {
@@ -157,6 +157,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
             series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
             series.legendSettings.itemValueText = "[bold]{valueY}[/bold]";
+            series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
             series.defaultState.transitionDuration = 0;
             series.dataFields.valueY = "value";
             series.dataFields.dateX = "date";
