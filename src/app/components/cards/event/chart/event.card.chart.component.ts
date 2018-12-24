@@ -115,12 +115,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private unsubscribeAndBindToNewData() {
+    this.chart.series.clear();
     this.unSubscribeFromAll();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(),
         this.showAdvancedStats ? this.advancedStats : this.simpleStats,
       );
-
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
           return [];
@@ -173,6 +173,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
+      this.chart.series.each((chartSeries) => {
+
+      });
       // When we have all the series remove the ones that are not here
       // @todo https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
     });
