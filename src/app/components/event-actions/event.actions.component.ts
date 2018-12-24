@@ -40,18 +40,18 @@ export class EventActionsComponent {
     });
   }
 
-  downloadEventAsTCX(event: EventInterface) {
-    // EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
-    //   FileService.downloadFile(
-    //     blob,
-    //     event.name,
-    //     EventExporterTCX.fileExtension,
-    //   );
-    //   this.snackBar.open('File served', null, {
-    //     duration: 5000,
-    //   });
-    // });
-  }
+  // downloadEventAsTCX(event: EventInterface) {
+  //   // EventUtilities.getEventAsTCXBloB(event).then((blob: Blob) => {
+  //   //   FileService.downloadFile(
+  //   //     blob,
+  //   //     event.name,
+  //   //     EventExporterTCX.fileExtension,
+  //   //   );
+  //   //   this.snackBar.open('File served', null, {
+  //   //     duration: 5000,
+  //   //   });
+  //   // });
+  // }
 
   downloadEventAsJSON(event: EventInterface) {
     this.eventService.getEventAsJSONBloB(event.getID()).then((blob: Blob) => {
