@@ -68,7 +68,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
-  private chartSeries: am4charts.XYSeries[] = [];
 
   private simpleStats = [
     DataHeartRate.type,
@@ -100,44 +99,23 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngAfterViewInit() {
-    this.chart = await this.createChart();
+    // this.chart = await this.createChart();
   }
 
   async ngOnInit() {
   }
 
   async ngOnChanges(simpleChanges) {
-    // debugger
-    if (!this.isVisible && !simpleChanges.event && !simpleChanges.selectedActivities && !simpleChanges.showAdvancedStats) {
-      return;
+    if (!this.chart) {
+      this.chart = await this.createChart();
     }
-    if (!this.isVisible && (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats)) {
-      this.destroyChart();
-      return;
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats){
+      this.unsubscribeAndBindToNewData();
     }
-
-    if (!simpleChanges.event && !simpleChanges.selectedActivities && !simpleChanges.showAdvancedStats) {
-      if (simpleChanges.isVisible && !this.chart) {
-        this.unSubscribeFromAll();
-        this.chart = await this.createChart();
-        this.bindToNewData();
-      }
-      return
-    }
-
-    // Visible and change
-    if (!this.selectedActivities.length) {
-      this.destroyChart();
-      return;
-    }
-
-    this.unSubscribeFromAll();
-    await this.destroyChart();
-    this.chart = await this.createChart();
-    this.bindToNewData();
   }
 
-  private bindToNewData() {
+  private unsubscribeAndBindToNewData() {
+    this.unSubscribeFromAll();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(),
         this.showAdvancedStats ? this.advancedStats : this.simpleStats,
@@ -155,20 +133,22 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             series.id = `${activity.getID()}${stream.type}`;
             series.name = stream.type + ` ${activity.creator.name}`;
             series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-            series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
-            series.legendSettings.itemValueText = "[bold]{valueY}[/bold]";
-            series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-            series.defaultState.transitionDuration = 0;
+            // series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
+            // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+            // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+           // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+            series.fillOpacity = 0.6;
+            // series.defaultState.transitionDuration = 0;
             series.dataFields.valueY = "value";
             series.dataFields.dateX = "date";
             // series.hidden = true;
 
             if (this.chart.series.length > 1) {
-              series.hide();
+              // series.hide();
             }
             // series.minDistance = 1;
             // series.strokeWidth = 3;
-            series.fillOpacity = 0.6;
+
             // series.interactionsEnabled = false;
             this.chart.series.push(series);
 
@@ -193,16 +173,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
-      // series.reduce((obj: any, serries) => {
-      // serries.dummyData.forEach((data) => {
-      //   if (obj[data.date])
-      // })
-      // });
-      // When all complete
-      // @todo replace with https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
-      // this.chart.svgContainer.htmlElement.style.height = ((this.chart.series.length / 4) * 60) + 680 + 'px';
-      // this.chart.invalidate();
-      this.logger.d('sad')
+      // When we have all the series remove the ones that are not here
+      // @todo https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
     });
   }
 
