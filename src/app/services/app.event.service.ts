@@ -152,15 +152,15 @@ export class EventService implements OnDestroy {
 
   public async setEvent(event: EventInterface): Promise<void[]> {
     return new Promise<void[]>(async (resolve, reject) => {
-      const streamPromises: Promise<void>[] = [];
+      const writePromises: Promise<void>[] = [];
       event.setID(event.getID() || this.afs.createId());
       event.getActivities()
         .forEach((activity) => {
           activity.setID(activity.getID() || this.afs.createId());
-          streamPromises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
+          writePromises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
           activity.getAllStreams().forEach((stream) => {
-            this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(stream.data), {to: 'string'}))))}`);
-            streamPromises.push(this.afs
+            this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
+            writePromises.push(this.afs
               .collection('events')
               .doc(event.getID())
               .collection('activities')
@@ -174,7 +174,7 @@ export class EventService implements OnDestroy {
           });
         });
       try {
-        await Promise.all(streamPromises);
+        await Promise.all(writePromises);
         await this.afs.collection('events').doc(event.getID()).set(event.toJSON());
         resolve()
       } catch (e) {
