@@ -70,6 +70,28 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private logger = Log.create('EventCardChartComponent');
   private chartData: any[] = [];
 
+  private simpleStats = [
+    DataHeartRate.type,
+    DataAltitude.type,
+    // DataDistance.type,
+    // DataAbsolutePressure.type,
+    // DataSeaLevelPressure.type,
+    DataCadence.type,
+    DataPower.type,
+    // DataGPSAltitude.type,
+    // DataSpeed.type,
+    DataPace.type,
+    // DataVerticalSpeed.type,
+  ];
+
+  private advancedStats = this.simpleStats.concat([
+    DataDistance.type,
+    DataAbsolutePressure.type,
+    DataSeaLevelPressure.type,
+    DataGPSAltitude.type,
+    DataSpeed.type,
+    DataVerticalSpeed.type,
+  ]);
 
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
@@ -117,26 +139,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private bindToNewData() {
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      let allOrSomeSubscription: Observable<StreamInterface[]>;
-      if (this.showAdvancedStats) {
-        allOrSomeSubscription = this.eventService.getAllStreams(this.event.getID(), activity.getID());
-      } else {
-        allOrSomeSubscription = this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(),
-          [
-            DataHeartRate.type,
-            DataAltitude.type,
-            // DataDistance.type,
-            DataAbsolutePressure.type,
-            DataSeaLevelPressure.type,
-            DataCadence.type,
-            DataPower.type,
-            DataGPSAltitude.type,
-            DataSpeed.type,
-            DataPace.type,
-            DataVerticalSpeed.type,
-          ],
-        );
-      }
+      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(),
+        this.showAdvancedStats ? this.advancedStats : this.simpleStats,
+      );
 
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
@@ -188,9 +193,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // series.reduce((obj: any, serries) => {
-        // serries.dummyData.forEach((data) => {
-        //   if (obj[data.date])
-        // })
+      // serries.dummyData.forEach((data) => {
+      //   if (obj[data.date])
+      // })
       // });
       // When all complete
       // @todo replace with https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
