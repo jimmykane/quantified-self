@@ -39,7 +39,7 @@ import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
-import {isNumberOrString} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {isNumber, isNumber, isNumberOrString} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {number} from '@amcharts/amcharts4/core';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
@@ -156,14 +156,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           // @todo for performance this should be moved to the other pipe
           const samplingRate = this.getStreamSamplingRateInSeconds(stream);
           this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-          series.data = stream.data.reduce((dataArray: { date: Date, value: number }[], streamData, index) => {
+          series.data = stream.data.reduce((dataArray: { date: Date, value: number|string|boolean }[], streamData, index) => {
+            if (!isNumber(streamData)){
+              return dataArray
+            }
             dataArray.push({
               date: new Date(activity.startDate.getTime() + (index * 1000)),
-              value: streamData,
+              value: DynamicDataLoader.getDataInstanceFromDataType(stream.type, streamData).getDisplayValue(),
             });
             return dataArray
           }, [])
-            .filter((data) => isNumberOrString(data.value))
+            // .filter((data) => isNumberOrString(data.value))
             .filter((data, index) => index % samplingRate === 0);
           this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${series.data.length}`);
           return series
@@ -173,9 +176,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
-      this.chart.series.each((chartSeries) => {
-
-      });
+      // @todo here it should perhaps remove the ones not available instread of doing a clear at start 
+      // this.chart.series.each((chartSeries) => {
+      //
+      // });
       // When we have all the series remove the ones that are not here
       // @todo https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
     });
