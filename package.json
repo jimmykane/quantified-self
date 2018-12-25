@@ -18,7 +18,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
-    "@amcharts/amcharts4": "^4.0.11",
+    "@amcharts/amcharts4": "^4.0.12",
     "@angular/animations": "7.1.4",
     "@angular/cdk": "^7.2.0",
     "@angular/common": "7.1.4",
@@ -41,7 +41,7 @@
     "font-awesome": "^4.7.0",
     "hammerjs": "^2.0.8",
     "material-design-icons": "^3.0.1",
-    "ng2-logger": "2.0.44",
+    "ng2-logger": "2.0.45",
     "quantified-self-lib": "^2.2.3",
     "raven-js": "^3.27.0",
     "roboto-fontface": "^0.10.0",
@@ -63,7 +63,7 @@
     "karma-coverage-istanbul-reporter": "^2.0.4",
     "karma-jasmine": "~2.0.1",
     "karma-jasmine-html-reporter": "^1.4.0",
-    "protractor": "~5.4.1",
+    "protractor": "~5.4.2",
     "ts-node": "~7.0.1",
     "tslint": "~5.12.0",
     "typescript": "3.1.6"
