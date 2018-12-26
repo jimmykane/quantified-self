@@ -44,6 +44,59 @@ import {number} from '@amcharts/amcharts4/core';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
+import {DataSatellite5BestSNR} from 'quantified-self-lib/lib/data/data.satellite-5-best-snr';
+import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
+import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
+import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
+import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
+import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
+import {DataVerticalSpeedMin} from 'quantified-self-lib/lib/data/data.vertical-speed-min';
+import {DataVerticalSpeedMax} from 'quantified-self-lib/lib/data/data.vertical-speed-max';
+import {DataVerticalSpeedAvg} from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
+import {DataTemperatureMin} from 'quantified-self-lib/lib/data/data.temperature-min';
+import {DataTemperatureMax} from 'quantified-self-lib/lib/data/data.temperature-max';
+import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
+import {DataSpeedMin} from 'quantified-self-lib/lib/data/data.speed-min';
+import {DataSpeedMax} from 'quantified-self-lib/lib/data/data.speed-max';
+import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
+import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
+import {DataPowerMin} from 'quantified-self-lib/lib/data/data.power-min';
+import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
+import {DataPause} from 'quantified-self-lib/lib/data/data.pause';
+import {DataHeartRateMin} from 'quantified-self-lib/lib/data/data.heart-rate-min';
+import {DataHeartRateMax} from 'quantified-self-lib/lib/data/data.heart-rate-max';
+import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
+import {DataFeeling} from 'quantified-self-lib/lib/data/data.feeling';
+import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
+import {DataDescentTime} from 'quantified-self-lib/lib/data/data.descent-time';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
+import {DataCadenceMin} from 'quantified-self-lib/lib/data/data.cadence-min';
+import {DataCadenceMax} from 'quantified-self-lib/lib/data/data.cadence-max';
+import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
+import {DataAscentTime} from 'quantified-self-lib/lib/data/data.ascent-time';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
+import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
+import {DataAltitudeAvg} from 'quantified-self-lib/lib/data/data.altitude-avg';
+import {DataFusedLocation} from 'quantified-self-lib/lib/data/data.fused-location';
+import {DataFusedAltitude} from 'quantified-self-lib/lib/data/data.fused-altitude';
+import {DataPaceMin} from 'quantified-self-lib/lib/data/data.pace-min';
+import {DataPaceMax} from 'quantified-self-lib/lib/data/data.pace-max';
+import {DataPaceAvg} from 'quantified-self-lib/lib/data/data.pace-avg';
+import {DataNumberOfSamples} from 'quantified-self-lib/lib/data/data-number-of.samples';
+import {DataBatteryCharge} from 'quantified-self-lib/lib/data/data.battery-charge';
+import {DataBatteryCurrent} from 'quantified-self-lib/lib/data/data.battery-current';
+import {DataBatteryVoltage} from 'quantified-self-lib/lib/data/data.battery-voltage';
+import {DataBatteryConsumption} from 'quantified-self-lib/lib/data/data.battery-consumption';
+import {DataBatteryLifeEstimation} from 'quantified-self-lib/lib/data/data.battery-life-estimation';
+import {DataFormPower} from 'quantified-self-lib/lib/data/data.form-power';
+import {DataLegStiffness} from 'quantified-self-lib/lib/data/data.leg-stiffness';
+import {DataVerticalOscillation} from 'quantified-self-lib/lib/data/data.vertical-oscillation';
+import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -72,24 +125,37 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private simpleStats = [
     DataHeartRate.type,
     DataAltitude.type,
-    // DataDistance.type,
-    // DataAbsolutePressure.type,
-    // DataSeaLevelPressure.type,
     DataCadence.type,
     DataPower.type,
-    // DataGPSAltitude.type,
-    // DataSpeed.type,
     DataPace.type,
-    // DataVerticalSpeed.type,
+    DataSpeed.type,
+    DataVO2Max.type,
   ];
 
   private advancedStats = this.simpleStats.concat([
-    DataDistance.type,
-    DataAbsolutePressure.type,
+    DataTemperature.type,
     DataSeaLevelPressure.type,
+    DataSatellite5BestSNR.type,
+    DataNumberOfSatellites.type,
+    DataLongitudeDegrees.type,
+    DataLatitudeDegrees.type,
+    DataEVPE.type,
+    DataEHPE.type,
+    DataDistance.type,
     DataGPSAltitude.type,
-    DataSpeed.type,
-    DataVerticalSpeed.type,
+    DataAbsolutePressure.type,
+    DataPeakTrainingEffect.type,
+    DataEPOC.type,
+    DataEnergy.type,
+    DataNumberOfSamples.type,
+    DataBatteryCharge.type,
+    DataBatteryCurrent.type,
+    DataBatteryVoltage.type,
+    DataBatteryConsumption.type,
+    DataFormPower.type,
+    DataLegStiffness.type,
+    DataVerticalOscillation.type,
+    DataTotalTrainingEffect.type,
   ]);
 
   constructor(private  changeDetector: ChangeDetectorRef,
@@ -99,7 +165,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngAfterViewInit() {
-    // this.chart = await this.createChart();
   }
 
   async ngOnInit() {
@@ -135,46 +200,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return streams.map((stream) => {
           let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
           if (!series) {
-            series = new am4charts.LineSeries();
-            series.id = `${activity.getID()}${stream.type}`;
-            series.name = stream.type + ` ${activity.creator.name}`;
-            series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-            // series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
-            // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-            // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-            // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-            series.fillOpacity = 0.6;
-            // series.defaultState.transitionDuration = 0;
-            series.dataFields.valueY = "value";
-            series.dataFields.dateX = "date";
-            // series.hidden = true;
-
-            if (this.chart.series.length > 1) {
-              // series.hide();
-            }
-            // series.minDistance = 1;
-            // series.strokeWidth = 3;
-
-            // series.interactionsEnabled = false;
-            this.chart.series.push(series);
-
+            series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
           }
-          // @todo for performance this should be moved to the other pipe
-          const samplingRate = this.getStreamSamplingRateInSeconds(stream);
-          this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-          series.data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
-            if (!isNumber(streamData)) {
-              return dataArray
-            }
-            dataArray.push({
-              date: new Date(activity.startDate.getTime() + (index * 1000)),
-              value: DynamicDataLoader.getDataInstanceFromDataType(stream.type, streamData).getDisplayValue(), // Display value can be string this needs to be corrected
-            });
-            return dataArray
-          }, [])
-          // .filter((data) => isNumberOrString(data.value))
-            .filter((data, index) => index % samplingRate === 0);
-          this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${series.data.length}`);
+          series.data = this.convertSreamDataToSeriesData(activity, stream);
           return series
         });
       }))
@@ -212,6 +240,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // };
         const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
+        // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
+
         chart.legend = new am4charts.Legend();
         chart.cursor = new am4charts.XYCursor();
         chart.cursor.fullWidthLineX = true;
@@ -242,11 +272,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.logger.d('visibilitychanged');
         });
 
-        // Warning the below breaks zoom (till fixed
-        // chart.events.on('resize', (ev) => {
-        //   this.logger.d('resize');
-        // });
-
         chart.events.on('hidden', (ev) => {
           this.logger.d('hidden');
         });
@@ -264,6 +289,63 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         resolve(chart);
       });
     });
+  }
+
+  private createSeriesFromStream(activity: ActivityInterface, stream: StreamInterface): am4charts.LineSeries {
+    const series = new am4charts.LineSeries();
+    series.id = `${activity.getID()}${stream.type}`;
+    series.name = stream.type + ` ${activity.creator.name}`;
+    // series.adapter.add("tooltipText", function (text, target, key) {
+    //   debugger;
+    //   return ">>> " + text + " <<<";
+    // });
+    series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).getDisapl}`;
+    // series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
+    // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+    // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+    // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+    series.fillOpacity = 0.6;
+    series.defaultState.transitionDuration = 0;
+    series.dataFields.valueY = "value";
+    series.dataFields.dateX = "date";
+    // series.hidden = true;
+
+
+    // if (stream.type === DataPace.type) {
+    //   let yAxis = new am4charts.DurationAxis();
+    //   yAxis.baseUnit = "second";
+    //   yAxis.title.text = "Duration";
+    //   series.yAxis = yAxis;
+    //   this.chart.yAxes.push(yAxis)
+    // }
+
+    // series.minDistance = 1;
+    // series.strokeWidth = 3;
+
+    // series.interactionsEnabled = false;
+    if (this.chart.series.length > 4) {
+      // series.hide();
+    }
+
+    return series;
+  }
+
+  private convertSreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
+    const samplingRate = this.getStreamSamplingRateInSeconds(stream);
+    this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
+    const data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
+      if (!isNumber(streamData)) {
+        return dataArray
+      }
+      dataArray.push({
+        date: new Date(activity.startDate.getTime() + (index * 1000)),
+        value: streamData, // Display value can be string this needs to be corrected
+      });
+      return dataArray
+    }, [])
+      .filter((data, index) => (index % samplingRate) === 0);
+    this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
+    return data;
   }
 
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
