@@ -4,3 +4,6 @@ button{
   margin-top: 1vh;
   margin-bottom: 1vh;
 }
+mat-toolbar{
+  height: 100vh;
+}

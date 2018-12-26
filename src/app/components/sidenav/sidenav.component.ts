@@ -29,20 +29,6 @@ export class SideNavComponent implements OnInit {
     this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
       this.parametersEventID = params['eventID'];
       this.parametersTabIndex = params['tabIndex'];
-      this.findSelectedEvent();
-    });
-
-    // Fetch the events from the service
-    // this.eventsSubscription = this.eventService.getEvents().subscribe((events: List<EventInterface>) => {
-    //   this.events = events;
-    //   this.findSelectedEvent();
-    // });
-  }
-
-  private findSelectedEvent() {
-    this.selectedEvent = this.events.find((event: EventInterface) => {
-      return event.getID() === this.parametersEventID;
     });
   }
-
 }

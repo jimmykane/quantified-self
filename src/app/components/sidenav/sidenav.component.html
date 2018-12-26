@@ -1,15 +1,13 @@
 <mat-toolbar>
-  <h4>Event List</h4>
+   <mat-toolbar-row>
+    <span>Home</span>
+  </mat-toolbar-row>
+
+  <mat-toolbar-row>
+    <span>Logout</span>
+    <span class="example-spacer"></span>
+    <mat-icon class="example-icon">verified_user</mat-icon>
+  </mat-toolbar-row>
+
 </mat-toolbar>
-<div >
-  <button mat-button
-     *ngFor="let event of events; let i = index;"
-     [class.background-color-gray]="selectedEvent && event.getID() === selectedEvent.getID()"
-     [routerLink]="['/eventDetails']"
-     [class.active]="selectedEvent && event.getID() === selectedEvent.getID()"
-     [queryParams]="{ eventID: event.getID(), tabIndex: parametersTabIndex }">
-    <mat-icon>more_horiz</mat-icon>
-    {{ event.name.slice(0,30) }}
-  </button>
-</div>
 
