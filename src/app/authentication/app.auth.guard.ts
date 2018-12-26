@@ -3,23 +3,29 @@ import {CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router} from '
 import {Observable} from 'rxjs';
 import {AppAuthService} from './app.auth.service';
 import {map, take, tap} from 'rxjs/operators';
+import {Log} from 'ng2-logger/browser';
+import {MatSnackBar} from '@angular/material';
 
 @Injectable()
 export class AppAuthGuard implements CanActivate {
-  constructor(private authenticationService: AppAuthService, private router: Router) {
+  private logger = Log.create('AppAuthGuard');
+
+  constructor(private authenticationService: AppAuthService, private router: Router, private snackBar: MatSnackBar) {
   }
 
   canActivate(
     next: ActivatedRouteSnapshot,
     state: RouterStateSnapshot): Observable<boolean> | Promise<boolean> | boolean {
-    debugger;
     if (this.authenticationService.authenticated()) {
       return true;
     }
 
     return this.authenticationService.user.pipe(take(1)).pipe(map(user => !!user)).pipe(tap(loggedIn => {
       if (!loggedIn) {
-        console.log("access denied");
+        this.logger.warn(`Access denied`);
+        this.snackBar.open('Access denied', null, {
+          duration: 5000,
+        });
         this.router.navigate(['/login']);
       }
     }))

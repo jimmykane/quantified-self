@@ -68,6 +68,7 @@ import {AngularFireAuthModule} from '@angular/fire/auth';
 import {AngularFireStorageModule} from '@angular/fire/storage';
 import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
+import {LoginComponent} from './components/login/login.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -145,6 +146,7 @@ export class RavenErrorHandler implements ErrorHandler {
     EventCardLapsComponent,
     EventCardToolsComponent,
     AboutComponent,
+    LoginComponent,
     UploadInfoComponent,
     ActivityHeaderComponent,
     EventFormComponent,

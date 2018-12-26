@@ -1,7 +1,7 @@
 import {Injectable} from '@angular/core';
 import {Router} from '@angular/router';
 
-import {auth, User} from 'firebase/app';
+import {auth} from 'firebase/app';
 
 import {Observable, of} from 'rxjs';
 import {switchMap, startWith, tap, filter} from 'rxjs/operators';
@@ -9,11 +9,17 @@ import {MatSnackBar} from '@angular/material';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 
-
+// @todo fix and expand properly coupled to event
+interface AppUser {
+  uid: string;
+  email?: string | null;
+  photoURL?: string;
+  displayName?: string;
+}
 
 @Injectable()
 export class AppAuthService {
-  user: Observable<User | null>;
+  user: Observable<AppUser | null>;
   private authState = false;
 
   constructor(
@@ -26,7 +32,7 @@ export class AppAuthService {
       switchMap(user => {
         if (user) {
           this.authState = true;
-          return this.afs.doc<User>(`users/${user.uid}`).valueChanges();
+          return this.afs.doc<AppUser>(`users/${user.uid}`).valueChanges();
         } else {
           this.authState = false;
           return of(null);
@@ -142,17 +148,15 @@ export class AppAuthService {
   }
 
   // Sets user data to firestore after succesful login
-  private updateUserData(user: User) {
-    const userRef: AngularFirestoreDocument<User> = this.afs.doc(
+  private updateUserData(user: AppUser) {
+    const userRef: AngularFirestoreDocument<AppUser> = this.afs.doc(
       `users/${user.uid}`,
     );
-
-    // const data: User = {
-    //   uid: user.uid,
-    //   email: user.email || null,
-    //   displayName: user.displayName || 'nameless user',
-    //   photoURL: user.photoURL || 'https://goo.gl/Fz9nrQ',
-    // };
-    return userRef.set(user);
+    return userRef.set({
+      uid: user.uid,
+      email: user.email || null,
+      displayName: user.displayName || 'nameless user', // @todo change those
+      photoURL: user.photoURL || 'https://goo.gl/Fz9nrQ'
+    });
   }
 }

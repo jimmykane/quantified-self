@@ -1,0 +1,12 @@
+<mat-card>
+
+  <mat-grid-list cols="1" rowHeight="6:2">
+    <mat-grid-tile>
+      <button mat-stroked-button color="primary" (click)="authService.anonymousLogin()">Anonymous</button>
+    </mat-grid-tile>
+    <mat-grid-tile>
+      <button mat-stroked-button color="primary" (click)="authService.googleLogin()">Google</button>
+    </mat-grid-tile>
+  </mat-grid-list>
+
+</mat-card>
