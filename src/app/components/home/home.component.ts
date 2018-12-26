@@ -5,10 +5,10 @@ const { version: appVersion } = require('../../../../package.json');
 
 
 @Component({
-  selector: 'app-about',
-  templateUrl: './about.component.html',
-  styleUrls: ['./about.component.css'],
+  selector: 'app-home',
+  templateUrl: './home.component.html',
+  styleUrls: ['./home.component.css'],
 })
-export class AboutComponent {
+export class HomeComponent {
   public appVersion = appVersion;
 }

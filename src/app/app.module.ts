@@ -6,7 +6,7 @@ import {UploadComponent} from './components/upload/upload.component';
 import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
-import {AboutComponent} from './components/about/about.component';
+import {HomeComponent} from './components/home/home.component';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
@@ -145,7 +145,7 @@ export class RavenErrorHandler implements ErrorHandler {
     EventActionsComponent,
     EventCardLapsComponent,
     EventCardToolsComponent,
-    AboutComponent,
+    HomeComponent,
     LoginComponent,
     UploadInfoComponent,
     ActivityHeaderComponent,

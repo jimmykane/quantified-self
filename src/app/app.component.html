@@ -4,33 +4,10 @@
     <app-sidenav></app-sidenav>
   </mat-sidenav>
 
-  <!--<div *ngIf="afAuth.user | async as user; else showLogin">-->
-      <!--<h1>Hello {{ user.displayName }}!</h1>-->
-      <!--<button (click)="logout()">Logout</button>-->
-    <!--</div>-->
-    <!--<ng-template #showLogin>-->
-      <!--<p>Please login.</p>-->
-      <!--<button (click)="login()">Login with Google</button>-->
-    <!--</ng-template>-->
   <nav mat-tab-nav-bar>
-
-    <a matTabLink (click)="sidenav.toggle()"><mat-icon>menu</mat-icon></a>
-
-    <a matTabLink
-       routerLink="/dashboard"
-       routerLinkActive #dashboard="routerLinkActive"
-       [active]="dashboard.isActive">Dashboard</a>
-
-    <a matTabLink
-       routerLink="/about"
-       routerLinkActive #about="routerLinkActive"
-       [active]="about.isActive">About</a>
-
-    <a matTabLink
-              routerLink="/dashboard"
-
-       (click)="reset()">Reset</a>
-
+    <a matTabLink (click)="sidenav.toggle()">
+      <mat-icon>menu</mat-icon>
+    </a>
   </nav>
 
   <router-outlet></router-outlet>

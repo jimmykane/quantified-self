@@ -6,7 +6,6 @@ import {ActionButtonService} from './services/action-buttons/app.action-button.s
 import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatSidenav, MatSnackBar} from '@angular/material';
 import {Subscription} from 'rxjs';
-import {AngularFireAuth} from '@angular/fire/auth';
 
 @Component({
   selector: 'app-root',
@@ -20,10 +19,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public actionButtons: ActionButton[] = [];
   private actionButtonsSubscription: Subscription;
 
-  constructor(private afAuth: AngularFireAuth,
-              private changeDetectorRef: ChangeDetectorRef,
-              private actionButtonService: ActionButtonService,
-              private snackBar: MatSnackBar,) {
+  constructor(
+    private changeDetectorRef: ChangeDetectorRef,
+    private actionButtonService: ActionButtonService,
+    private snackBar: MatSnackBar) {
     this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
       this.actionButtons = Array.from(actionButtons.values());
     });
@@ -37,21 +36,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   ngAfterViewInit() {
 
-  }
-
-  reset() {
-    localStorage.clear();
-    this.afAuth.auth.signOut();
-    window.location.reload();
-  }
-
-
-  login() {
-    this.afAuth.auth.signInAnonymously();
-  }
-
-  logout() {
-    this.afAuth.auth.signOut();
   }
 
   /**

@@ -1,9 +1,13 @@
-button{
-  width: 100%;
-  text-align: left;
-  margin-top: 1vh;
-  margin-bottom: 1vh;
-}
 mat-toolbar{
   height: 100vh;
+}
+
+mat-icon{
+  vertical-align: middle;
+}
+.active{
+  font-weight: bold;
+}
+mat-toolbar-row{
+  font-size: 1em;
 }

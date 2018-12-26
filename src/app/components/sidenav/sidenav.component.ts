@@ -3,6 +3,7 @@ import {EventService} from '../../services/app.event.service';
 import {ActivatedRoute, Params} from '@angular/router';
 import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {AppAuthService} from '../../authentication/app.auth.service';
 
 
 @Component({
@@ -15,20 +16,10 @@ export class SideNavComponent implements OnInit {
   public events: EventInterface[] = [];
   public selectedEvent: EventInterface;
 
-  private parametersEventID: string;
-  private parametersTabIndex: string;
-  private parametersSubscription: Subscription;
-  private eventsSubscription: Subscription;
-
-  constructor(private eventService: EventService, private route: ActivatedRoute) {
+  constructor(public authService: AppAuthService, private eventService: EventService, private route: ActivatedRoute) {
 
   }
 
   ngOnInit() {
-    // Subscribe to route changes
-    this.parametersSubscription = this.route.queryParams.subscribe((params: Params) => {
-      this.parametersEventID = params['eventID'];
-      this.parametersTabIndex = params['tabIndex'];
-    });
   }
 }
