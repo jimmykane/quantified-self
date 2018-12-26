@@ -4,10 +4,11 @@ import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {AboutComponent} from './components/about/about.component';
 import {UploadComponent} from './components/upload/upload.component';
 import {EventCardComponent} from './components/cards/event/event.card.component';
+import {AppAuthGuard} from './authentication/app.auth.guard';
 
 const routes: Routes = [
-  { path: '', redirectTo: '/dashboard', pathMatch: 'full' },
-  { path: 'dashboard',  component: DashboardComponent },
+  { path: '', redirectTo: '/about', pathMatch: 'full' },
+  { path: 'dashboard',  component: DashboardComponent, canActivate: [AppAuthGuard] },
   { path: 'eventDetails',  component: EventCardComponent },
   { path: 'about', component: AboutComponent },
 ];
