@@ -40,7 +40,6 @@ import {CdkTableModule} from '@angular/cdk/table';
 import {EventTableComponent} from './components/event-table/event.table.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
-import {EventLocalStorageService} from './services/storage/app.event.local.storage.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
@@ -161,7 +160,6 @@ export class RavenErrorHandler implements ErrorHandler {
     UploadErrorComponent,
   ],
   providers: [
-    EventLocalStorageService,
     MapSettingsLocalStorageService,
     ChartSettingsLocalStorageService,
     UserSettingsService,

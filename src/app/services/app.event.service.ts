@@ -1,5 +1,4 @@
 import {Injectable, OnDestroy} from '@angular/core';
-import {EventLocalStorageService} from './storage/app.event.local.storage.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import {combineLatest, merge, EMPTY, of, Observable, Observer, from} from 'rxjs';
@@ -28,9 +27,9 @@ export class EventService implements OnDestroy {
 
   protected logger = Log.create('EventService');
 
-  constructor(private eventLocalStorageService: EventLocalStorageService,
-              private storage: AngularFireStorage,
-              private afs: AngularFirestore) {
+  constructor(
+    private storage: AngularFireStorage,
+    private afs: AngularFirestore) {
   }
 
   public getEventAndActivities(eventID: string): Observable<EventInterface> {
