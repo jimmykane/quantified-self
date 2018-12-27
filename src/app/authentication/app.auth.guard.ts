@@ -26,7 +26,7 @@ export class AppAuthGuard implements CanActivate {
         this.snackBar.open('Access denied', null, {
           duration: 5000,
         });
-        this.router.navigate(['/login']);
+        this.router.navigate(['/home']);
       }
     }))
 
