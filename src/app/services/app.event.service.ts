@@ -8,7 +8,7 @@ import {
   DocumentChangeAction,
   QueryDocumentSnapshot,
 } from '@angular/fire/firestore';
-import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switchMap} from 'rxjs/operators';
+import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switchMap, take} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
@@ -222,7 +222,7 @@ export class EventService implements OnDestroy {
   }
 
   public async getEventAsJSONBloB(eventID: string): Promise<Blob> {
-    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(eventID).pipe(first()).toPromise());
+    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(eventID).pipe(take(1)).toPromise());
     return (new Blob(
       [jsonString],
       {type: EventExporterJSON.fileType},
