@@ -6,6 +6,8 @@ import {ActionButtonService} from './services/action-buttons/app.action-button.s
 import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatSidenav, MatSnackBar} from '@angular/material';
 import {Subscription} from 'rxjs';
+import {NavigationEnd, Router, RoutesRecognized} from '@angular/router';
+import {filter, map} from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
@@ -17,9 +19,12 @@ import {Subscription} from 'rxjs';
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
   @ViewChild('sidenav') sideNav: MatSidenav;
   public actionButtons: ActionButton[] = [];
+  public title;
   private actionButtonsSubscription: Subscription;
+  private routerEventSubscription: Subscription;
 
   constructor(
+    public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     private actionButtonService: ActionButtonService,
     private snackBar: MatSnackBar) {
@@ -32,6 +37,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   ngOnInit() {
+    this.routerEventSubscription = this.router.events
+      .pipe(filter(event => event instanceof RoutesRecognized))
+      .pipe(map((event: RoutesRecognized) => {
+        return event.state.root.firstChild.data['title'];
+      })).subscribe(title => {
+        this.title = title;
+      });
   }
 
   ngAfterViewInit() {
@@ -46,6 +58,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   ngOnDestroy(): void {
+    this.routerEventSubscription.unsubscribe();
     this.actionButtonsSubscription.unsubscribe();
   }
 }

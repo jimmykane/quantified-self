@@ -8,11 +8,12 @@ import {AppAuthGuard} from './authentication/app.auth.guard';
 import {LoginComponent} from './components/login/login.component';
 
 const routes: Routes = [
-  {path: '', component: HomeComponent},
-  {path: 'login', component: LoginComponent},
-  {path: 'dashboard', component: DashboardComponent, canActivate: [AppAuthGuard]},
-  {path: 'eventDetails', component: EventCardComponent},
-  {path: '**', component: HomeComponent},
+  {path: 'home', component: HomeComponent, data: {title: 'Home'}},
+  // {path: '', redirectTo: 'home', pathMatch: 'full'},
+  {path: 'login', component: LoginComponent, data: {title: 'Login'}},
+  {path: 'dashboard', component: DashboardComponent, data: {title: 'Dashboard'}, canActivate: [AppAuthGuard]},
+  {path: 'eventDetails', component: EventCardComponent, data: {title: 'Details'}},
+  {path: '**', redirectTo: 'home', pathMatch: 'full'},
 ];
 
 @NgModule({
