@@ -1,12 +1,15 @@
 <mat-sidenav-container class="mat-typography">
 
-  <mat-sidenav #sidenav mode="over">
+  <mat-sidenav #sidenav mode="slide">
     <app-sidenav></app-sidenav>
   </mat-sidenav>
 
   <nav mat-tab-nav-bar>
     <a matTabLink (click)="sidenav.toggle()">
       <mat-icon>menu</mat-icon>
+    </a>
+    <a matTabLink>
+      QS
     </a>
     <a matTabLink>
       {{ title }}
