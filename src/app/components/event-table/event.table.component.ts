@@ -18,6 +18,7 @@ import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {first, take} from 'rxjs/operators';
+import {AppUser} from '../../authentication/app.auth.service';
 
 
 @Component({
@@ -30,6 +31,7 @@ import {first, take} from 'rxjs/operators';
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() events: EventInterface[];
+  @Input() user: AppUser;
   @ViewChild(MatSort) sort: MatSort;
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
@@ -146,24 +148,22 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
-            promises.push(this.eventService.getEventActivitiesAndStreams(selected.Checkbox.getID()).pipe(take(1)).toPromise());
+            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.Checkbox.getID()).pipe(take(1)).toPromise());
           });
           Promise.all(promises).then((events) => {
             const mergedEvent = EventUtilities.mergeEvents(events);
-            this.eventService.setEvent(mergedEvent).then(() => {
+            this.eventService.setEventForUser(this.user, mergedEvent).then(() => {
               this.actionButtonService.removeActionButton('mergeEvents');
-              this.eventService.setEvent(mergedEvent);
               this.eventSelectionMap.clear();
               this.selection.clear();
+              this.snackBar.open('Events merged', null, {
+                  duration: 5000,
+                });
               this.router.navigate(['/eventDetails'], {
                 queryParams: {
                   eventID: mergedEvent.getID(),
                   tabIndex: 0,
                 },
-              }).then(() => {
-                this.snackBar.open('Events merged', null, {
-                  duration: 5000,
-                });
               });
             });
           })
@@ -178,7 +178,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         () => {
           this.actionButtonService.removeActionButton('deleteEvents');
           this.actionButtonService.removeActionButton('mergeEvents');
-          this.selection.selected.map(selected => selected.Checkbox).forEach((event) => this.eventService.deleteEvent(event.getID));
+          this.selection.selected.map(selected => selected.Checkbox).forEach((event) => this.eventService.deleteEventForUser(this.user, event.getID));
           this.eventSelectionMap.clear();
           this.selection.clear();
           this.snackBar.open('Events deleted', null, {

@@ -21,6 +21,8 @@ import {Log} from 'ng2-logger/browser';
 import * as Raven from 'raven-js';
 import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
+import {AppUser} from '../authentication/app.auth.service';
+import App = firebase.app.App;
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -32,16 +34,19 @@ export class EventService implements OnDestroy {
     private afs: AngularFirestore) {
   }
 
-  public getEventAndActivities(eventID: string): Observable<EventInterface> {
+  public getEventAndActivities(user: AppUser, eventID: string): Observable<EventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     return combineLatest(
-      this.afs.collection("events").doc(eventID).snapshotChanges().pipe(
+      this.afs
+        .collection('users')
+        .doc(user.uid)
+        .collection("events").doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
           // debugger;
           return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID);
         })),
-      this.getActivities(eventID),
+      this.getActivities(user, eventID),
     ).pipe(catchError((error) => {
       // debugger;
       this.logger.error(error);
@@ -60,30 +65,34 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getEvents(): Observable<EventInterface[]> {
-    return this.afs.collection("events").snapshotChanges().pipe(map((eventSnapshots) => {
-      return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
-        eventIDS.push(eventSnapshot.payload.doc.id);
-        return eventIDS;
-      }, []);
-    })).pipe(switchMap((eventIDS) => {
-      // Should check if there are event ids else not return
-      // debugger;
-      if (!eventIDS.length) {
-        return of([]);
-      }
-      return combineLatest(eventIDS.map((eventID) => {
-        return this.getEventAndActivities(eventID);
+  public getEventsForUser(user: AppUser): Observable<EventInterface[]> {
+    return this.afs.collection('users')
+      .doc(user.uid)
+      .collection("events")
+      .snapshotChanges()
+      .pipe(map((eventSnapshots) => {
+        return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
+          eventIDS.push(eventSnapshot.payload.doc.id);
+          return eventIDS;
+        }, []);
+      })).pipe(switchMap((eventIDS) => {
+        // Should check if there are event ids else not return
+        // debugger;
+        if (!eventIDS.length) {
+          return of([]);
+        }
+        return combineLatest(eventIDS.map((eventID) => {
+          return this.getEventAndActivities(user, eventID);
+        }))
       }))
-    }))
   }
 
-  getEventActivitiesAndStreams(eventID) {
-    return this.getEventAndActivities(eventID).pipe(switchMap((event) => { // Not sure about switch or merge
+  getEventActivitiesAndStreams(user: AppUser, eventID) {
+    return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(
         event.getActivities().map((activity) => {
-          return this.getAllStreams(event.getID(), activity.getID()).pipe(map((streams) => {
+          return this.getAllStreams(user, event.getID(), activity.getID()).pipe(map((streams) => {
             // This time we dont want to just get the streams but we want to attach them to the parent obj
             activity.clearStreams();
             activity.addStreams(streams);
@@ -97,8 +106,11 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getActivities(eventID: string): Observable<ActivityInterface[]> {
-    return this.afs.collection("events").doc(eventID).collection('activities').snapshotChanges().pipe(
+  public getActivities(user: AppUser, eventID: string): Observable<ActivityInterface[]> {
+    return this.afs
+      .collection('users')
+      .doc(user.uid)
+      .collection("events").doc(eventID).collection('activities').snapshotChanges().pipe(
       map(activitySnapshots => {
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
           activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
@@ -108,8 +120,10 @@ export class EventService implements OnDestroy {
     )
   }
 
-  public getAllStreams(eventID: string, activityID: string): Observable<StreamInterface[]> {
+  public getAllStreams(user: AppUser, eventID: string, activityID: string): Observable<StreamInterface[]> {
     return this.afs
+      .collection('users')
+      .doc(user.uid)
       .collection('events')
       .doc(eventID)
       .collection('activities')
@@ -121,9 +135,11 @@ export class EventService implements OnDestroy {
       }))
   }
 
-  public getStreamsByTypes(eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
+  public getStreamsByTypes(user: AppUser, eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
     return combineLatest.apply(this, types.map((type) => {
       return this.afs
+        .collection('users')
+        .doc(user.uid)
         .collection('events')
         .doc(eventID)
         .collection('activities')
@@ -149,17 +165,28 @@ export class EventService implements OnDestroy {
     }, [])
   }
 
-  public async setEvent(event: EventInterface): Promise<void[]> {
+  public async setEventForUser(user: AppUser, event: EventInterface): Promise<void[]> {
     return new Promise<void[]>(async (resolve, reject) => {
       const writePromises: Promise<void>[] = [];
       event.setID(event.getID() || this.afs.createId());
       event.getActivities()
         .forEach((activity) => {
           activity.setID(activity.getID() || this.afs.createId());
-          writePromises.push(this.afs.collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON()));
+
+          writePromises.push(
+            this.afs.collection('users')
+              .doc(user.uid)
+              .collection('events')
+              .doc(event.getID())
+              .collection('activities')
+              .doc(activity.getID())
+              .set(activity.toJSON()));
+
           activity.getAllStreams().forEach((stream) => {
             this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
             writePromises.push(this.afs
+              .collection('users')
+              .doc(user.uid)
               .collection('events')
               .doc(event.getID())
               .collection('activities')
@@ -174,37 +201,43 @@ export class EventService implements OnDestroy {
         });
       try {
         await Promise.all(writePromises);
-        await this.afs.collection('events').doc(event.getID()).set(event.toJSON());
+        await this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
         resolve()
       } catch (e) {
         Raven.captureException(e);
         // Try to delete the parent entity and all subdata
-        await this.deleteEvent(event.getID());
-        reject('Something went wrong')
+        await this.deleteEventForUser(user, event.getID());
+        reject()
       }
     })
   }
 
-  public async deleteEvent(eventID: string): Promise<boolean> {
+  public async deleteEventForUser(user: AppUser, eventID: string): Promise<boolean> {
     const activityDeletePromises: Promise<boolean>[] = [];
     const queryDocumentSnapshots = await this.afs
+      .collection('users')
+      .doc(user.uid)
       .collection('events')
       .doc(eventID).collection('activities').ref.get();
     queryDocumentSnapshots.docs.forEach((queryDocumentSnapshot) => {
-      activityDeletePromises.push(this.deleteActivity(eventID, queryDocumentSnapshot.id))
+      activityDeletePromises.push(this.deleteActivityForUser(user, eventID, queryDocumentSnapshot.id))
     });
     await Promise.all(activityDeletePromises);
     await this.afs
+      .collection('users')
+      .doc(user.uid)
       .collection('events')
       .doc(eventID).delete();
     this.logger.info(`Deleted event ${eventID}`);
     return true;
   }
 
-  public async deleteActivity(eventID: string, activityID: string): Promise<boolean> {
+  public async deleteActivityForUser(user: AppUser, eventID: string, activityID: string): Promise<boolean> {
     // @todo add try catch etc
-    await this.deleteAllStreams(eventID, activityID);
+    await this.deleteAllStreams(user, eventID, activityID);
     await this.afs
+      .collection('users')
+      .doc(user.uid)
       .collection('events')
       .doc(eventID)
       .collection('activities')
@@ -213,16 +246,16 @@ export class EventService implements OnDestroy {
     return true;
   }
 
-  public async deleteAllStreams(eventID, activityID): Promise<number> {
+  public async deleteAllStreams(user: AppUser, eventID, activityID): Promise<number> {
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([
-      this.afs.collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
+      this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
     ]);
     this.logger.info(`Deleted ${numberOfStreamsDeleted} streams for event: ${eventID} and activity ${activityID}`);
     return numberOfStreamsDeleted
   }
 
-  public async getEventAsJSONBloB(eventID: string): Promise<Blob> {
-    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(eventID).pipe(take(1)).toPromise());
+  public async getEventAsJSONBloB(user: AppUser, eventID: string): Promise<Blob> {
+    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(user, eventID).pipe(take(1)).toPromise());
     return (new Blob(
       [jsonString],
       {type: EventExporterJSON.fileType},

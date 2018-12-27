@@ -1,10 +1,11 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
+import {AppUser} from '../../authentication/app.auth.service';
 
 @Component({
   selector: 'app-activity-actions',
@@ -12,8 +13,9 @@ import {ActivityFormComponent} from '../activity-form/activity.form.component';
   styleUrls: ['./activity.actions.component.css'],
   providers: [],
 })
-export class ActivityActionsComponent {
+export class ActivityActionsComponent implements OnInit{
   @Input() event: EventInterface;
+  @Input() user: AppUser;
   @Input() activity: ActivityInterface;
 
   constructor(
@@ -22,6 +24,12 @@ export class ActivityActionsComponent {
     private router: Router,
     private snackBar: MatSnackBar,
     public dialog: MatDialog) {
+  }
+
+  ngOnInit(): void {
+    if (!this.user || !this.event){
+      throw 'Component needs events and user';
+    }
   }
 
   editActivity() {
@@ -39,7 +47,7 @@ export class ActivityActionsComponent {
   }
 
   deleteActivity() {
-    this.eventService.deleteActivity(this.event.getID(), this.activity.getID()).then(() => {
+    this.eventService.deleteActivityForUser(this.user, this.event.getID(), this.activity.getID()).then(() => {
       this.snackBar.open('Activity deleted', null, {
         duration: 5000,
       });

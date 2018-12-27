@@ -8,8 +8,13 @@
     <a matTabLink (click)="sidenav.toggle()">
       <mat-icon>menu</mat-icon>
     </a>
-    <a matTabLink>
+    <a matTabLink
+      routerLinkActive="active"
+      routerLink="/dashboard">
       QS
+    </a>
+     <a matTabLink>
+      ->
     </a>
     <a matTabLink>
       {{ title }}

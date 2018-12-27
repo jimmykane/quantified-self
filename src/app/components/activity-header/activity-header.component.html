@@ -23,5 +23,5 @@
       {{ activity.getDistance().getDisplayUnit() }}
     </span>
   </span>
-  <app-activity-actions *ngIf="showActions" [event]="event" [activity]="activity"></app-activity-actions>
+  <app-activity-actions  *ngIf="user && showActions" [user]="user" [event]="event" [activity]="activity"></app-activity-actions>
 </section>

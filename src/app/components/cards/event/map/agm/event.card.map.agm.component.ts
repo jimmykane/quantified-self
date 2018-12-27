@@ -21,6 +21,7 @@ import {EventService} from '../../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
+import {AppUser} from '../../../../../authentication/app.auth.service';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -32,6 +33,7 @@ import {Subscription} from 'rxjs';
 export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
+  @Input() user: AppUser;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
   @Input() showAutoLaps: boolean;
@@ -60,6 +62,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnInit() {
+    if (!this.user || !this.event){
+      throw 'Component needs events and user';
+    }
   }
 
   ngAfterViewInit(): void {
@@ -96,7 +101,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
-      this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+      this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .subscribe((streams) => {
           // In case we are in the middle of a deletion of one of the lat/long streams or no streams
           if (!streams.length || streams.length !== 2) {

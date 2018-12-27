@@ -4,6 +4,7 @@ import {EventService} from '../../services/app.event.service';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
+import {AppUser} from '../../authentication/app.auth.service';
 
 
 @Component({
@@ -19,6 +20,7 @@ import * as Raven from 'raven-js';
 export class EventFormComponent implements OnInit {
 
   public event: EventInterface;
+  public user: AppUser;
   public originalValues: {
     name: string;
   };
@@ -33,6 +35,10 @@ export class EventFormComponent implements OnInit {
     private formBuilder: FormBuilder
   ) {
     this.event = data.event;
+    this.user = data.user; // Perhaps move to service?
+    if (!this.user || !this.event){
+      throw  'Component needs event and user'
+    }
     this.originalValues = {name: this.event.name};
   }
 
@@ -57,7 +63,7 @@ export class EventFormComponent implements OnInit {
       return;
     }
     try {
-      await this.eventService.setEvent(this.event);
+      await this.eventService.setEventForUser(this.user, this.event);
       this.snackBar.open('Event saved', null, {
         duration: 5000,
       });

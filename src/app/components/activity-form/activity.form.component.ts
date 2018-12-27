@@ -16,6 +16,7 @@ import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {activityDistanceValidator} from './activity.form.distance.validator';
+import {AppUser} from '../../authentication/app.auth.service';
 
 
 @Component({
@@ -32,6 +33,7 @@ export class ActivityFormComponent implements OnInit {
 
   public activity: ActivityInterface;
   public event: EventInterface;
+  public user: AppUser;
   public originalValues: {
     activityStartDate: Date;
     activityEndDate: Date;
@@ -48,6 +50,7 @@ export class ActivityFormComponent implements OnInit {
   ) {
     this.activity = data.activity;
     this.event = data.event;
+    this.user = data.user;
     this.originalValues = {
       activityStartDate: this.activity.startDate,
       activityEndDate: this.activity.endDate,
@@ -55,6 +58,9 @@ export class ActivityFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    if (!this.user || !this.event){
+      throw 'Component needs event and user'
+    }
     this.activityFormGroup = new FormGroup({
         activity: new FormControl(this.activity),
         startDate: new FormControl(this.activity.startDate, [
@@ -98,14 +104,13 @@ export class ActivityFormComponent implements OnInit {
     // EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
     // Regenerate stats
     EventUtilities.generateActivityStats(this.event);
-    debugger;
     try {
-      await this.eventService.setEvent(this.event);
+      await this.eventService.setEventForUser(this.user, this.event);
       this.snackBar.open('Activity saved', null, {
         duration: 5000,
       });
     } catch (e) {
-      debugger;
+      // debugger;
       this.snackBar.open('Could not save activity', null, {
         duration: 5000,
       });

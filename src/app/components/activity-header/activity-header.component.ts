@@ -2,6 +2,7 @@ import {Component, Input} from '@angular/core';
 import {AppEventColorService} from '../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {AppUser} from '../../authentication/app.auth.service';
 
 @Component({
   selector: 'app-activity-header',
@@ -12,6 +13,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 export class ActivityHeaderComponent {
   @Input() activity: ActivityInterface;
   @Input() event: EventInterface;
+  @Input() user: AppUser;
   @Input() showType = true;
   @Input() showIcon = false;
   @Input() showDistance = false;

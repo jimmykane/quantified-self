@@ -1,4 +1,4 @@
-import {Component} from '@angular/core';
+import {Component, Input, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {MatDialog, MatSnackBar} from '@angular/material';
@@ -9,6 +9,7 @@ import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importer
 import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
+import {AppUser} from '../../authentication/app.auth.service';
 
 @Component({
   selector: 'app-upload',
@@ -16,7 +17,9 @@ import {UploadErrorComponent} from '../upload-error/upload-error.component';
   styleUrls: ['./upload.component.css'],
 })
 
-export class UploadComponent {
+export class UploadComponent implements OnInit{
+
+  @Input() user: AppUser;
 
   // Whether an upload is currently active
   isUploadActive = false;
@@ -29,6 +32,11 @@ export class UploadComponent {
     private router: Router) {
   }
 
+  ngOnInit(): void {
+     if (!this.user){
+      throw "This component can only be used with a user"
+    }
+  }
   /**
    * Process each uploaded activity
    * @param file
@@ -69,9 +77,10 @@ export class UploadComponent {
           return;
         }
         try {
-          await this.eventService.setEvent(newEvent);
+          await this.eventService.setEventForUser(this.user, newEvent);
           metaData.status = UPLOAD_STATUS.PROCESSED;
         }catch (e) {
+          // debugger;
           console.error(e);
           Raven.captureException(e);
           metaData.status = UPLOAD_STATUS.ERROR;

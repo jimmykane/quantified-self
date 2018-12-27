@@ -16,6 +16,7 @@ import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-
 import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material';
+import {AppUser} from '../../../authentication/app.auth.service';
 
 
 @Component({
@@ -26,6 +27,7 @@ import {MatSnackBar} from '@angular/material';
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
+  public userFromParams: AppUser;
   public selectedTabIndex;
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
@@ -50,7 +52,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges() {
-    debugger;
+    // debugger;
   }
 
   async ngOnInit() {
@@ -62,17 +64,25 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.showAdvancedStats().then(value => this.showAdvancedStats = value);
 
     // @todo test maps , switchmap etc with delete and order firing etc
-    this.parametersSubscription = this.route.queryParams.pipe(map((params) => {
+    this.parametersSubscription = this.route.queryParams.pipe(mergeMap((params) => {
       this.selectedTabIndex = +params['tabIndex'];
-      return params
-    })).pipe(mergeMap((params) => {
-      // debugger;
-      // If the current event is the same then return empty
+      if (!params['userID'] || !params['eventID']){
+        this.router.navigate(['/dashboard']);
+        this.snackBar.open('Incorrect url', null, {
+          duration: 5000,
+        });
+        return
+      }
+
+      this.userFromParams = {uid: params['userID']};
+      // / debugger;
+      // If the current event is the same then return empty !important0
       if (this.event && this.event.getID() === params['eventID']) {
         return EMPTY
       }
       // debugger;
-      return this.eventService.getEventActivitiesAndStreams(params['eventID']);
+      // Create a phony user and try to get the event
+      return this.eventService.getEventAndActivities(this.userFromParams, params['eventID']);
     })).pipe(map((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']);

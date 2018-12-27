@@ -1,6 +1,6 @@
 <mat-card *ngIf="event">
   <mat-card-header>
-    <app-event-actions [event]="event" align="end"></app-event-actions>
+    <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
     <mat-card-subtitle>
       <app-activity-icon
         [activity]="event.getFirstActivity()"
@@ -37,7 +37,7 @@
     <mat-tab-group
       [dynamicHeight]="true"
       [selectedIndex]="selectedTabIndex"
-      (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {eventID: event.getID(), tabIndex: $event}})">
+      (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {userID: userFromParams.uid ,eventID: event.getID(), tabIndex: $event}})">
       <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
@@ -56,6 +56,7 @@
           [showDataWarnings]="showMapDataWarnings"
           [showData]="showData"
           [selectedActivities]="selectedActivities"
+          [user]="userFromParams"
           [event]="event"></app-event-card-map-agm>
       </mat-tab>
       <mat-tab label="Stats">
@@ -80,6 +81,7 @@
           [showAdvancedStats]="showAdvancedStats"
           [isVisible]="selectedTabIndex === 2"
           [selectedActivities]="selectedActivities"
+          [user]="userFromParams"
           [event]="event">
         </app-event-card-chart>
       </mat-tab>

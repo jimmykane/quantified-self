@@ -29,7 +29,7 @@
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
         <span *ngIf="column === 'Actions'">
-          <app-event-actions [event]="row[column]"></app-event-actions>
+          <app-event-actions *ngIf="user" [user]="user" [event]="row[column]"></app-event-actions>
         </span>
         <span *ngIf="column === 'Name'" matTooltip="{{ row[column] }}">
           {{ row[column] | slice:0:10 }}
@@ -41,6 +41,6 @@
     </ng-container>
     <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
     <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/eventDetails']"
-             [queryParams]="{ eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
+             [queryParams]="{ userID: user.uid, eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
   </mat-table>
 </mat-card>

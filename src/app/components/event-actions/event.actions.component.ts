@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
@@ -8,6 +8,7 @@ import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
+import {AppUser} from '../../authentication/app.auth.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -17,8 +18,9 @@ import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporte
   changeDetection: ChangeDetectionStrategy.OnPush,
 
 })
-export class EventActionsComponent {
+export class EventActionsComponent implements OnInit{
   @Input() event: EventInterface;
+  @Input() user: AppUser;
 
   constructor(
     private eventService: EventService,
@@ -26,6 +28,12 @@ export class EventActionsComponent {
     private router: Router,
     private snackBar: MatSnackBar,
     public dialog: MatDialog) {
+  }
+
+  ngOnInit(): void {
+    if (!this.user){
+      throw "User is required"
+    }
   }
 
   editEvent(event: EventInterface) {
@@ -53,11 +61,11 @@ export class EventActionsComponent {
   //   // });
   // }
 
-  downloadEventAsJSON(event: EventInterface) {
-    this.eventService.getEventAsJSONBloB(event.getID()).then((blob: Blob) => {
+  downloadEventAsJSON() {
+    this.eventService.getEventAsJSONBloB(this.user, this.event.getID()).then((blob: Blob) => {
       FileService.downloadFile(
         blob,
-        event.name,
+        this.event.name,
         EventExporterJSON.fileExtension,
       );
       this.snackBar.open('File served', null, {
@@ -66,8 +74,8 @@ export class EventActionsComponent {
     });
   }
 
-  deleteEvent(event: EventInterface) {
-    this.eventService.deleteEvent(event.getID());
+  deleteEvent() {
+    this.eventService.deleteEventForUser(this.user, this.event.getID());
     this.router.navigate(['/dashboard']);
     this.snackBar.open('Event deleted', null, {
       duration: 5000,

@@ -17,8 +17,6 @@ import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 import * as am4core from '@amcharts/amcharts4/core';
@@ -49,54 +47,20 @@ import {DataSatellite5BestSNR} from 'quantified-self-lib/lib/data/data.satellite
 import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
-import {DataVerticalSpeedMin} from 'quantified-self-lib/lib/data/data.vertical-speed-min';
-import {DataVerticalSpeedMax} from 'quantified-self-lib/lib/data/data.vertical-speed-max';
-import {DataVerticalSpeedAvg} from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
-import {DataTemperatureMin} from 'quantified-self-lib/lib/data/data.temperature-min';
-import {DataTemperatureMax} from 'quantified-self-lib/lib/data/data.temperature-max';
-import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
-import {DataSpeedMin} from 'quantified-self-lib/lib/data/data.speed-min';
-import {DataSpeedMax} from 'quantified-self-lib/lib/data/data.speed-max';
-import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
-import {DataPowerMin} from 'quantified-self-lib/lib/data/data.power-min';
-import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
-import {DataPause} from 'quantified-self-lib/lib/data/data.pause';
-import {DataHeartRateMin} from 'quantified-self-lib/lib/data/data.heart-rate-min';
-import {DataHeartRateMax} from 'quantified-self-lib/lib/data/data.heart-rate-max';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
-import {DataFeeling} from 'quantified-self-lib/lib/data/data.feeling';
 import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataDescentTime} from 'quantified-self-lib/lib/data/data.descent-time';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {DataCadenceMin} from 'quantified-self-lib/lib/data/data.cadence-min';
-import {DataCadenceMax} from 'quantified-self-lib/lib/data/data.cadence-max';
-import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
-import {DataAscentTime} from 'quantified-self-lib/lib/data/data.ascent-time';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
-import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
-import {DataAltitudeAvg} from 'quantified-self-lib/lib/data/data.altitude-avg';
-import {DataFusedLocation} from 'quantified-self-lib/lib/data/data.fused-location';
-import {DataFusedAltitude} from 'quantified-self-lib/lib/data/data.fused-altitude';
-import {DataPaceMin} from 'quantified-self-lib/lib/data/data.pace-min';
-import {DataPaceMax} from 'quantified-self-lib/lib/data/data.pace-max';
-import {DataPaceAvg} from 'quantified-self-lib/lib/data/data.pace-avg';
 import {DataNumberOfSamples} from 'quantified-self-lib/lib/data/data-number-of.samples';
 import {DataBatteryCharge} from 'quantified-self-lib/lib/data/data.battery-charge';
 import {DataBatteryCurrent} from 'quantified-self-lib/lib/data/data.battery-current';
 import {DataBatteryVoltage} from 'quantified-self-lib/lib/data/data.battery-voltage';
 import {DataBatteryConsumption} from 'quantified-self-lib/lib/data/data.battery-consumption';
-import {DataBatteryLifeEstimation} from 'quantified-self-lib/lib/data/data.battery-life-estimation';
 import {DataFormPower} from 'quantified-self-lib/lib/data/data.form-power';
 import {DataLegStiffness} from 'quantified-self-lib/lib/data/data.leg-stiffness';
 import {DataVerticalOscillation} from 'quantified-self-lib/lib/data/data.vertical-oscillation';
 import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
+import {AppUser} from '../../../../authentication/app.auth.service';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -114,6 +78,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   @ViewChild('chartDiv') chartDiv: ElementRef;
   @Input() event: EventInterface;
+  @Input() user: AppUser;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAdvancedStats: boolean;
@@ -168,6 +133,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnInit() {
+    if (!this.user || !this.event){
+      throw 'Component needs events and users';
+    }
   }
 
   async ngOnChanges(simpleChanges) {
@@ -189,7 +157,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private unsubscribeAndBindToNewData() {
     this.unSubscribeFromAll();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.event.getID(), activity.getID(),
+      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
         this.showAdvancedStats ? this.advancedStats : this.simpleStats,
       );
       return allOrSomeSubscription.pipe(map((streams) => {
@@ -256,7 +224,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.opacity = 0.9;
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
-        // watermark.zIndex = 100;
+        watermark.zIndex = 100;
         watermark.fontWeight = 'bold';
 
 
@@ -299,12 +267,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     //   debugger;
     //   return ">>> " + text + " <<<";
     // });
-    series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).getDisapl}`;
+    series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     // series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-    series.fillOpacity = 0.6;
+    series.fillOpacity = 0.2;
     series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
     series.dataFields.dateX = "date";
