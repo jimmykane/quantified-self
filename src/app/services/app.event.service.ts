@@ -212,6 +212,11 @@ export class EventService implements OnDestroy {
     })
   }
 
+  public async updateEventProperties(user: AppUser, eventID:string, propertiesToUpdate: any){
+    // @todo check if properties are allowed on object via it's JSON export interface keys
+    return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).update(propertiesToUpdate);
+  }
+
   public async deleteEventForUser(user: AppUser, eventID: string): Promise<boolean> {
     const activityDeletePromises: Promise<boolean>[] = [];
     const queryDocumentSnapshots = await this.afs

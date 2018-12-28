@@ -7,16 +7,16 @@ service cloud.firestore {
       allow read, update, delete: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
         match /events/{eventID} {
-          allow read: if resource.data.visibility == 'public';
+          allow read: if resource.data.privacy == 'public';
           allow read, write, create, update, delete: if request.auth.uid == userID;
           function eventData() {
             return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
           }
           match /activities/{activityID} {
-            allow read: if eventData().visibility == 'public'
+            allow read: if eventData().privacy == 'public'
             allow read, write, create, update, delete: if request.auth.uid == userID;
             match /streams/{streamID} {
-              allow read: if eventData().visibility == 'public'
+              allow read: if eventData().privacy == 'public'
               allow read, write, create, update, delete: if request.auth.uid == userID;
             }
           }

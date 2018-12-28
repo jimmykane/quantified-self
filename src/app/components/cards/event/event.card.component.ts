@@ -1,23 +1,17 @@
-import {
-  Component,
-  OnChanges,
-  OnDestroy,
-  OnInit,
-} from '@angular/core';
-import {combineLatest, EMPTY, Observable, of, Subscription} from 'rxjs';
-import {ActivatedRoute, Params, Router} from '@angular/router';
+import {Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {EMPTY, Subscription} from 'rxjs';
+import {ActivatedRoute, Router} from '@angular/router';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
-import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
-import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
-import {map, mergeMap, switchMap} from 'rxjs/operators';
+import {map, mergeMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material';
 import {AppAuthService, AppUser} from '../../../authentication/app.auth.service';
 import {Log} from 'ng2-logger/browser';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 
 @Component({
@@ -78,7 +72,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // @todo test maps , switchmap etc with delete and order firing etc
     this.parametersSubscription = this.route.queryParams.pipe(mergeMap((params) => {
       this.selectedTabIndex = +params['tabIndex'];
-      if (!params['userID'] || !params['eventID']){
+      if (!params['userID'] || !params['eventID']) {
         this.router.navigate(['/dashboard']);
         this.snackBar.open('Incorrect url', null, {
           duration: 5000,
@@ -108,7 +102,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     })).subscribe()
   }
 
-  isParamUserCurrentUser(){
+  async toggleEventPrivacy() {
+    if (!this.isAllowedToEdit()) {
+      return false
+    }
+    await this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: this.event.privacy === Privacy.private ? Privacy.public : Privacy.private})
+  }
+
+  isAllowedToEdit() {
     return !!(this.userFromParams && this.user && (this.userFromParams.uid === this.user.uid));
   }
 
