@@ -10,6 +10,10 @@ mat-card-header mat-icon {
   width: 18px;
 }
 
+::ng-deep .mat-card-header-text{
+  width: 100%;
+}
+
 .title {
   display: flex;
   align-content: center;
