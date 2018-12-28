@@ -38,7 +38,7 @@ export class EventActionsComponent implements OnInit {
 
   async share() {
     if (this.event.privacy !== Privacy.public) {
-      await this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: Privacy.public});
+      this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: Privacy.public});
     }
     const toCopy = String(`${window.location.protocol}//${window.location.host}/event?shareID=${btoa(`userID=${this.user.uid}&eventID=${this.event.getID()}`)}`);
     this.copyToClipboard(toCopy);
