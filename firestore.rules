@@ -1,0 +1,27 @@
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Make sure the uid of the requesting user matches name of the user
+    // document. The wildcard expression {userId} makes the userId variable
+    // available in rules.
+    match /users/{userID} {
+      allow read, update, delete: if request.auth.uid == userID;
+      allow create: if request.auth.uid != null;
+        match /events/{eventID} {
+          allow read: if resource.data.visibility == 'public';
+          allow read, write, create, update, delete: if request.auth.uid == userID;
+          function eventData() {
+            return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
+          }
+          match /activities/{activityID} {
+            allow read: if eventData().visibility == 'public'
+            allow read, write, create, update, delete: if request.auth.uid == userID;
+            match /streams/{streamID} {
+              allow read: if eventData().visibility == 'public'
+              allow read, write, create, update, delete: if request.auth.uid == userID;
+            }
+          }
+        }
+
+    }
+  }
+}
