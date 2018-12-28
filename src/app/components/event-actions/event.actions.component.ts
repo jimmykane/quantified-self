@@ -1,7 +1,6 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 // import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
 import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
@@ -9,6 +8,7 @@ import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {AppUser} from '../../authentication/app.auth.service';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 @Component({
   selector: 'app-event-actions',
@@ -18,7 +18,7 @@ import {AppUser} from '../../authentication/app.auth.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 
 })
-export class EventActionsComponent implements OnInit{
+export class EventActionsComponent implements OnInit {
   @Input() event: EventInterface;
   @Input() user: AppUser;
 
@@ -31,12 +31,23 @@ export class EventActionsComponent implements OnInit{
   }
 
   ngOnInit(): void {
-    if (!this.user){
+    if (!this.user) {
       throw "User is required"
     }
   }
 
-  editEvent() {
+  async share() {
+    if (this.event.privacy !== Privacy.public) {
+      await this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: Privacy.public});
+    }
+    const toCopy = String(`${window.location.protocol}//${window.location.host}/event?shareID=${btoa(`userID=${this.user.uid}&eventID=${this.event.getID()}`)}`);
+    this.copyToClipboard(toCopy);
+    this.snackBar.open('Share Url Copied to clipboard', 'copied!', {
+      duration: 10000,
+    });
+  }
+
+  edit() {
     const dialogRef = this.dialog.open(EventFormComponent, {
       width: '75vh',
       disableClose: true,
@@ -44,7 +55,6 @@ export class EventActionsComponent implements OnInit{
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      console.log('The dialog was closed');
     });
   }
 
@@ -61,7 +71,7 @@ export class EventActionsComponent implements OnInit{
   //   // });
   // }
 
-  downloadEventAsJSON() {
+  download() {
     this.eventService.getEventAsJSONBloB(this.user, this.event.getID()).then((blob: Blob) => {
       FileService.downloadFile(
         blob,
@@ -74,11 +84,20 @@ export class EventActionsComponent implements OnInit{
     });
   }
 
-  deleteEvent() {
+  delete() {
     this.eventService.deleteEventForUser(this.user, this.event.getID());
     this.router.navigate(['/dashboard']);
     this.snackBar.open('Event deleted', null, {
       duration: 5000,
     });
+  }
+
+  private copyToClipboard(text: string) {
+    const el = document.createElement('textarea');
+    el.value = text;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
   }
 }
