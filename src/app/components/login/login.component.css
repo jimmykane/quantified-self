@@ -1,3 +1,6 @@
 mat-card{
-  height: 100vh;
+  min-height: 100vh;
+}
+mat-grid-list{
+  height: 100%;
 }
