@@ -16,7 +16,8 @@ import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-
 import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material';
-import {AppUser} from '../../../authentication/app.auth.service';
+import {AppAuthService, AppUser} from '../../../authentication/app.auth.service';
+import {Log} from 'ng2-logger/browser';
 
 
 @Component({
@@ -28,6 +29,7 @@ import {AppUser} from '../../../authentication/app.auth.service';
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public userFromParams: AppUser;
+  public user: AppUser;
   public selectedTabIndex;
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
@@ -40,11 +42,15 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   public useDistanceAxis: boolean;
 
+  private userSubscription: Subscription;
   private parametersSubscription: Subscription;
+
+  private logger = Log.create('EventCardComponent');
 
   constructor(
     public router: Router,
     private route: ActivatedRoute,
+    private authService: AppAuthService,
     private eventService: EventService,
     private userSettingsService: UserSettingsService,
     private snackBar: MatSnackBar,
@@ -62,6 +68,12 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.showDataWarnings().then(value => this.showMapDataWarnings = value);
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
     this.userSettingsService.showAdvancedStats().then(value => this.showAdvancedStats = value);
+
+
+    // Subscribe to authService and set the current user if possible
+    this.userSubscription = this.authService.user.subscribe((user) => {
+      this.user = user;
+    });
 
     // @todo test maps , switchmap etc with delete and order firing etc
     this.parametersSubscription = this.route.queryParams.pipe(mergeMap((params) => {
@@ -96,7 +108,12 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     })).subscribe()
   }
 
+  isParamUserCurrentUser(){
+    return !!(this.userFromParams && this.user && (this.userFromParams.uid === this.user.uid));
+  }
+
   ngOnDestroy(): void {
+    this.userSubscription.unsubscribe();
     this.parametersSubscription.unsubscribe();
   }
 

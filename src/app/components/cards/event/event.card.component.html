@@ -1,6 +1,6 @@
 <mat-card *ngIf="event">
   <mat-card-header>
-    <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
+    <app-event-actions *ngIf="isParamUserCurrentUser()" [user]="user" [event]="event" align="end"></app-event-actions>
     <mat-card-subtitle>
       <app-activity-icon
         [activity]="event.getFirstActivity()"
@@ -28,7 +28,7 @@
       <span class="mat-body-2">{{ event.getPause().getDisplayValue() }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <app-activities-checkboxes [event]="event" [(selectedActivities)]="selectedActivities">
+      <app-activities-checkboxes [showActions]="isParamUserCurrentUser()" [user]="user" [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
     </mat-card-subtitle>
   </mat-card-header>

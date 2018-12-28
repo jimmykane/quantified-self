@@ -2,6 +2,7 @@ import {Component, EventEmitter, Input, OnChanges, OnInit, Output} from '@angula
 import {AppEventColorService} from '../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {AppUser} from '../../authentication/app.auth.service';
 
 @Component({
   selector: 'app-activities-checkboxes',
@@ -13,6 +14,8 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
+  @Input() showActions: boolean;
+  @Input() user: AppUser;
   @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
   activitiesCheckboxes: { activity: ActivityInterface, checked: boolean, intermediate: boolean, disabled: boolean }[] = [];
 

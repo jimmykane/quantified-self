@@ -9,6 +9,7 @@
       [disabled]="activityCheckbox.disabled"
       (change)="onCheckboxChange()">
       <app-activity-header
+        [user]="user"
         [event]="event"
         [activity]="activityCheckbox.activity"
         [showType]="true"
