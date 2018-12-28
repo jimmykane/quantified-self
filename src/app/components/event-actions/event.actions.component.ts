@@ -40,10 +40,19 @@ export class EventActionsComponent implements OnInit {
     if (this.event.privacy !== Privacy.public) {
       this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: Privacy.public});
     }
-    const toCopy = String(`${window.location.protocol}//${window.location.host}/event?shareID=${btoa(`userID=${this.user.uid}&eventID=${this.event.getID()}`)}`);
+    const shareID = btoa(`userID=${this.user.uid}&eventID=${this.event.getID()}`);
+    const toCopy = String(`${window.location.protocol}//${window.location.host}/event?shareID=${shareID}`);
     this.copyToClipboard(toCopy);
-    this.snackBar.open('Share Url Copied to clipboard', 'copied!', {
+    this.snackBar.open('Privacy is changed to public and link copied to your keyboard', 'go to share link', {
       duration: 10000,
+    }).onAction().toPromise().then(() => {
+      debugger;
+      this.router.navigate(['/event'], {
+        queryParams: {
+          shareID: shareID,
+          tabIndex: 0,
+        },
+      });
     });
   }
 
