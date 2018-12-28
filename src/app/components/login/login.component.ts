@@ -19,9 +19,6 @@ export class LoginComponent {
   constructor(
     public authService: AppAuthService, private router: Router,
     private snackBar: MatSnackBar) {
-    this.authService.signOut().then(() => {
-
-    });
   }
 
   anonymousLogin(){

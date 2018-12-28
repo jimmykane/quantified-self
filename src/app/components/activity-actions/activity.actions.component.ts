@@ -32,7 +32,7 @@ export class ActivityActionsComponent implements OnInit{
     }
   }
 
-  editActivity() {
+  editActivity()  {
     const dialogRef = this.dialog.open(ActivityFormComponent, {
       width: '75vh',
       data: {
@@ -42,7 +42,7 @@ export class ActivityActionsComponent implements OnInit{
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      console.log('The dialog was closed');
+
     });
   }
 

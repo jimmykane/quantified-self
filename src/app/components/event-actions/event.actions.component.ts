@@ -36,11 +36,11 @@ export class EventActionsComponent implements OnInit{
     }
   }
 
-  editEvent(event: EventInterface) {
+  editEvent() {
     const dialogRef = this.dialog.open(EventFormComponent, {
       width: '75vh',
       disableClose: true,
-      data: {event: event},
+      data: {event: this.event},
     });
 
     dialogRef.afterClosed().subscribe(result => {

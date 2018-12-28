@@ -143,30 +143,28 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     if (this.selection.selected.length > 1) {
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
-        () => {
-          this.actionButtonService.removeActionButton('mergeEvents');
+        async () => {
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
             promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.Checkbox.getID()).pipe(take(1)).toPromise());
           });
-          Promise.all(promises).then((events) => {
-            const mergedEvent = EventUtilities.mergeEvents(events);
-            this.eventService.setEventForUser(this.user, mergedEvent).then(() => {
-              this.actionButtonService.removeActionButton('mergeEvents');
-              this.eventSelectionMap.clear();
-              this.selection.clear();
-              this.snackBar.open('Events merged', null, {
-                  duration: 5000,
-                });
-              this.router.navigate(['/eventDetails'], {
-                queryParams: {
-                  eventID: mergedEvent.getID(),
-                  tabIndex: 0,
-                },
-              });
-            });
-          })
+          const events = await Promise.all(promises);
+          const mergedEvent = EventUtilities.mergeEvents(events);
+          const eventID = await this.eventService.setEventForUser(this.user, mergedEvent);
+          // debugger;
+          this.actionButtonService.removeActionButton('mergeEvents');
+          this.eventSelectionMap.clear();
+          this.selection.clear();
+          // await this.router.navigate(['/eventDetails'], {
+          //   queryParams: {
+          //     eventID: eventID,
+          //     tabIndex: 0,
+          //   },
+          // });
+          this.snackBar.open('Events merged', null, {
+            duration: 5000,
+          });
         },
         'material',
       ));

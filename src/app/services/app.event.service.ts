@@ -111,13 +111,13 @@ export class EventService implements OnDestroy {
       .collection('users')
       .doc(user.uid)
       .collection("events").doc(eventID).collection('activities').snapshotChanges().pipe(
-      map(activitySnapshots => {
-        return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
-          activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
-          return activitiesArray;
-        }, []);
-      }),
-    )
+        map(activitySnapshots => {
+          return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
+            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
+            return activitiesArray;
+          }, []);
+        }),
+      )
   }
 
   public getAllStreams(user: AppUser, eventID: string, activityID: string): Observable<StreamInterface[]> {
@@ -165,54 +165,52 @@ export class EventService implements OnDestroy {
     }, [])
   }
 
-  public async setEventForUser(user: AppUser, event: EventInterface): Promise<void[]> {
-    return new Promise<void[]>(async (resolve, reject) => {
-      const writePromises: Promise<void>[] = [];
-      event.setID(event.getID() || this.afs.createId());
-      event.getActivities()
-        .forEach((activity) => {
-          activity.setID(activity.getID() || this.afs.createId());
+  public async setEventForUser(user: AppUser, event: EventInterface) {
+    const writePromises: Promise<void>[] = [];
+    event.setID(event.getID() || this.afs.createId());
+    event.getActivities()
+      .forEach((activity) => {
+        activity.setID(activity.getID() || this.afs.createId());
 
-          writePromises.push(
-            this.afs.collection('users')
-              .doc(user.uid)
-              .collection('events')
-              .doc(event.getID())
-              .collection('activities')
-              .doc(activity.getID())
-              .set(activity.toJSON()));
+        writePromises.push(
+          this.afs.collection('users')
+            .doc(user.uid)
+            .collection('events')
+            .doc(event.getID())
+            .collection('activities')
+            .doc(activity.getID())
+            .set(activity.toJSON()));
 
-          activity.getAllStreams().forEach((stream) => {
-            this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
-            writePromises.push(this.afs
-              .collection('users')
-              .doc(user.uid)
-              .collection('events')
-              .doc(event.getID())
-              .collection('activities')
-              .doc(activity.getID())
-              .collection('streams')
-              .doc(stream.type) // @todo check this how it behaves
-              .set({
-                type: stream.type,
-                data: this.getBlobFromStreamData(stream.data),
-              }))
-          });
+        activity.getAllStreams().forEach((stream) => {
+          this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
+          writePromises.push(this.afs
+            .collection('users')
+            .doc(user.uid)
+            .collection('events')
+            .doc(event.getID())
+            .collection('activities')
+            .doc(activity.getID())
+            .collection('streams')
+            .doc(stream.type) // @todo check this how it behaves
+            .set({
+              type: stream.type,
+              data: this.getBlobFromStreamData(stream.data),
+            }))
         });
-      try {
-        await Promise.all(writePromises);
-        await this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
-        resolve()
-      } catch (e) {
-        Raven.captureException(e);
-        // Try to delete the parent entity and all subdata
-        await this.deleteEventForUser(user, event.getID());
-        reject()
-      }
-    })
+      });
+    try {
+      await Promise.all(writePromises);
+      await this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
+      return event.getID();
+    } catch (e) {
+      Raven.captureException(e);
+      // Try to delete the parent entity and all subdata
+      await this.deleteEventForUser(user, event.getID());
+      return null;
+    }
   }
 
-  public async updateEventProperties(user: AppUser, eventID:string, propertiesToUpdate: any){
+  public async updateEventProperties(user: AppUser, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
     return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).update(propertiesToUpdate);
   }
