@@ -38,7 +38,7 @@
     <mat-tab-group
       [dynamicHeight]="true"
       [selectedIndex]="selectedTabIndex"
-      (selectedIndexChange)="router.navigate(['/eventDetails'], {queryParams: {userID: userFromParams.uid ,eventID: event.getID(), tabIndex: $event}})">
+      (selectedIndexChange)="router.navigate(['/event'], {queryParams: {userID: userFromParams.uid ,eventID: event.getID(), tabIndex: $event}})">
       <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>

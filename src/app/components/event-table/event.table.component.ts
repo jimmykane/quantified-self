@@ -156,7 +156,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.actionButtonService.removeActionButton('mergeEvents');
           this.eventSelectionMap.clear();
           this.selection.clear();
-          // await this.router.navigate(['/eventDetails'], {
+          // await this.router.navigate(['/event'], {
           //   queryParams: {
           //     eventID: eventID,
           //     tabIndex: 0,

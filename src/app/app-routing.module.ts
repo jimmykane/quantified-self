@@ -12,7 +12,7 @@ const routes: Routes = [
   // {path: '', redirectTo: 'home', pathMatch: 'full'},
   {path: 'login', component: LoginComponent, data: {title: 'Login'}},
   {path: 'dashboard', component: DashboardComponent, data: {title: 'Dashboard'}, canActivate: [AppAuthGuard]},
-  {path: 'eventDetails', component: EventCardComponent, data: {title: 'Details'}},
+  {path: 'event', component: EventCardComponent, data: {title: 'Details'}},
   {path: '**', redirectTo: 'home', pathMatch: 'full'},
 ];
 

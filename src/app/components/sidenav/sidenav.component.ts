@@ -15,10 +15,8 @@ import {MatSnackBar} from '@angular/material';
 export class SideNavComponent implements OnInit {
 
   public events: EventInterface[] = [];
-  public selectedEvent: EventInterface;
 
   constructor(public authService: AppAuthService, private snackBar: MatSnackBar, private router: Router , private eventService: EventService,  private route: ActivatedRoute) {
-
   }
 
   ngOnInit() {

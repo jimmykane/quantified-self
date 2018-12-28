@@ -71,8 +71,23 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     // @todo test maps , switchmap etc with delete and order firing etc
     this.parametersSubscription = this.route.queryParams.pipe(mergeMap((params) => {
-      this.selectedTabIndex = +params['tabIndex'];
-      if (!params['userID'] || !params['eventID']) {
+      // First check if it's base 64
+      let eventID: string;
+      let userID: string;
+      let tabIndex: number;
+      try {
+        // @todo move to service and user LZ
+        const urlParams = new URLSearchParams(atob(params['shareID']));
+        eventID = urlParams.get('eventID');
+        userID = urlParams.get('userID');
+        tabIndex = +urlParams.get('tabIndex');
+      } catch (e) {
+        userID = params['userID'];
+        eventID = params['eventID'];
+        this.selectedTabIndex = +params['tabIndex']; // we dont care about the tab index , default it to 0
+        debugger;
+      }
+      if (!userID || !eventID) {
         this.router.navigate(['/dashboard']);
         this.snackBar.open('Incorrect url', null, {
           duration: 5000,
@@ -80,15 +95,15 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return
       }
 
-      this.userFromParams = {uid: params['userID']};
+      this.userFromParams = {uid: userID};
       // / debugger;
-      // If the current event is the same then return empty !important0
-      if (this.event && this.event.getID() === params['eventID']) {
+      // If the current event is the same then return empty !important
+      if (this.event && this.event.getID() === eventID) {
         return EMPTY
       }
       // debugger;
       // Create a phony user and try to get the event
-      return this.eventService.getEventAndActivities(this.userFromParams, params['eventID']);
+      return this.eventService.getEventAndActivities(this.userFromParams, eventID);
     })).pipe(map((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']);
