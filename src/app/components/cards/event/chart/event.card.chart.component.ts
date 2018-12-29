@@ -143,13 +143,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (!this.chart) {
       this.chart = await this.createChart();
     }
-    // WARNING DO NOT ALLOW READS IF NOT VISIBLE!
+
+    // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
+    
     // 2. If not visible and no data is bound do nothing
     if(!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)){
       return;
     }
 
-    // Beyond here component is visible and data is not bound
+    // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
