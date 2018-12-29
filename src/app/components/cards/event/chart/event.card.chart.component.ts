@@ -3,12 +3,12 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  ElementRef,
   Input,
+  NgZone,
   OnChanges,
   OnDestroy,
   OnInit,
-  NgZone,
-  ElementRef,
   ViewChild,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
@@ -21,11 +21,7 @@ import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-de
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-
-import am4themes_animated from '@amcharts/amcharts4/themes/animated';
-import am4themes_material from '@amcharts/amcharts4/themes/material';
-import am4themes_kelly from '@amcharts/amcharts4/themes/kelly';
-import {combineLatest, EMPTY, Observable, Subscription} from 'rxjs';
+import {combineLatest, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 import {map} from 'rxjs/operators';
@@ -36,9 +32,7 @@ import {DataCadence} from 'quantified-self-lib/lib/data/data.cadence';
 import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
-import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
-import {isNumber, isNumberOrString} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {number} from '@amcharts/amcharts4/core';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
@@ -77,6 +71,7 @@ import {AppUser} from '../../../../authentication/app.auth.service';
 export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('chartDiv') chartDiv: ElementRef;
+  @ViewChild('legendDiv') legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: AppUser;
   @Input() selectedActivities: ActivityInterface[] = [];
@@ -239,17 +234,25 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Add watermark
         const watermark = new am4core.Label();
-        watermark.text = "Quantified Self (https://quantified-self.io)";
+        watermark.text = "quantified-self.io";
         chart.plotContainer.children.push(watermark);
         watermark.align = "right";
         watermark.valign = "bottom";
-        watermark.fontSize = 20;
-        watermark.opacity = 0.9;
+        watermark.fontSize = 18;
+        watermark.opacity = 0.6;
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
         watermark.zIndex = 100;
-        watermark.fontWeight = 'bold';
+        // watermark.fontWeight = 'bold';
 
+
+        // Legend
+        chart.legend = new am4charts.Legend();
+        var legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+        legendContainer.width = am4core.percent(100);
+        legendContainer.height = am4core.percent(100);
+        chart.legend.parent = legendContainer;
+        // chart.legend.padding(10, 10, 10 , 10);
 
         // Disable the preloader
         chart.preloader.disabled = true;
@@ -257,6 +260,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         chart.events.on('validated', (ev) => {
           this.logger.d('validated');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
+        chart.events.on('maxsizechanged', (ev) => {
+          this.logger.d('maxsizechanged');
+          this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
 
         chart.events.on('visibilitychanged', (ev) => {
@@ -276,6 +285,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         chart.events.on('datavalidated', (ev) => {
           this.logger.d('datavalidated');
+                    this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+
         });
         resolve(chart);
       });
