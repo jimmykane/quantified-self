@@ -144,11 +144,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.chart = await this.createChart();
     }
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE!
-    // 2. If not visible do not do anything!
-    if(!this.isVisible){
+    // 2. If not visible and no data is bound do nothing
+    if(!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)){
       return;
     }
-    // Beyond here component is visible
+
+    // Beyond here component is visible and data is not bound
+
     // 3. If something changed then do the needed
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
       if (!this.event || !this.selectedActivities.length) {
@@ -159,10 +161,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.chart.series.clear();
       this.unsubscribeAndBindToNewData();
     }
-    // 4. If nothing has changed but we do not have a subscription that means that the chart has never been utilized
-    // so do so
+
+    // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed){
       this.unsubscribeAndBindToNewData();
+    }
+
+    // 5 Invalidate if becoming visible
+    if (simpleChanges.isVisible){
+      this.chart.invalidate();
     }
   }
 
