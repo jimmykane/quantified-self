@@ -139,10 +139,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
+    // 1. If there is no chart create
     if (!this.chart) {
       this.chart = await this.createChart();
     }
-    // If something changed
+    // WARNING DO NOT ALLOW READS IF NOT VISIBLE!
+    // 2. If not visible do not do anything!
+    if(!this.isVisible){
+      return;
+    }
+    // Beyond here component is visible
+    // 3. If something changed then do the needed
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
       if (!this.event || !this.selectedActivities.length) {
         this.unSubscribeFromAll();
@@ -150,6 +157,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return;
       }
       this.chart.series.clear();
+      this.unsubscribeAndBindToNewData();
+    }
+    // 4. If nothing has changed but we do not have a subscription that means that the chart has never been utilized
+    // so do so
+    if (!this.streamsSubscription || this.streamsSubscription.closed){
       this.unsubscribeAndBindToNewData();
     }
   }
@@ -400,7 +412,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       Raven.captureException(e);
     }
   }
-
 
   ngOnDestroy() {
     this.destroyChart();
