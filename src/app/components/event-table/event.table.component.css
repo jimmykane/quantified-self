@@ -6,8 +6,9 @@ mat-cell, .mat-header-cell {
   font-size: 12px;
 }
 
-.mat-column-Checkbox, .mat-column-Actions{
+.mat-column-Checkbox, .mat-column-Actions, .mat-column-Privacy{
   max-width: 32px;
+  padding: 0;
 }
 
 .mat-column-Checkbox {
