@@ -131,6 +131,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'font_download';
       case 'Activities':
         return 'filter_none';
+      case 'Privacy':
+        return 'visibility';
       default:
         return null;
     }
@@ -202,7 +204,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       if (uniqueObject[key] === 1) {
         uniqueArray.push(key);
       } else {
-        uniqueArray.push(uniqueObject[key] + ' x ' + key);
+        uniqueArray.push(uniqueObject[key] + 'x ' + key);
       }
       return uniqueArray;
     }, []).join(', ');
