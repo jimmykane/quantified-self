@@ -133,7 +133,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnInit() {
-    if (!this.user || !this.event){
+    if (!this.user || !this.event) {
       throw 'Component needs events and users';
     }
   }
@@ -145,9 +145,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
 
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
-    
+
     // 2. If not visible and no data is bound do nothing
-    if(!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)){
+    if (!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)) {
       return;
     }
 
@@ -165,12 +165,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
-    if (!this.streamsSubscription || this.streamsSubscription.closed){
+    if (!this.streamsSubscription || this.streamsSubscription.closed) {
       this.unsubscribeAndBindToNewData();
     }
 
     // 5 Invalidate if becoming visible
-    if (simpleChanges.isVisible){
+    if (simpleChanges.isVisible) {
       this.chart.invalidate();
     }
   }
@@ -199,6 +199,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
+      this.chart.invalidate(); // @todo peghaps this is not needed
+
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
       // The below is buggy
       // this.chart.series.values.forEach((chartSeries) => {
