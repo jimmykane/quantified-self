@@ -1,8 +1,8 @@
 import {Component, Input} from '@angular/core';
-import {AppEventColorService} from '../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {AppUser} from '../../authentication/app.auth.service';
+import {EventColorService} from '../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-activity-header',
@@ -22,6 +22,6 @@ export class ActivityHeaderComponent {
   @Input() showSerialNumber: boolean;
   @Input() showActions: boolean;
 
-  constructor(public eventColorService: AppEventColorService) {
+  constructor(public eventColorService: EventColorService) {
   }
 }

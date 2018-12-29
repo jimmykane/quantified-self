@@ -12,7 +12,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
-import {AppEventColorService} from '../../../../services/color/app.event.color.service';
+import {EventColorService} from '../../../../services/color/app.event.color.service';
 import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -126,7 +126,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
               private eventService: EventService,
-              private eventColorService: AppEventColorService) {
+              private eventColorService: EventColorService) {
   }
 
   async ngAfterViewInit() {

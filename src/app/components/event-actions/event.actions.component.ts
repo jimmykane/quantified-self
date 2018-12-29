@@ -9,6 +9,8 @@ import {MatDialog, MatSnackBar} from '@angular/material';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {AppUser} from '../../authentication/app.auth.service';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {ClipboardService} from '../../services/app.clipboard.service';
+import {SharingService} from '../../services/app.sharing.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -27,7 +29,10 @@ export class EventActionsComponent implements OnInit {
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
-    public dialog: MatDialog) {
+    private clipboardService: ClipboardService,
+    private sharingService: SharingService,
+    private fileService: FileService,
+    private dialog: MatDialog) {
   }
 
   ngOnInit(): void {
@@ -40,19 +45,11 @@ export class EventActionsComponent implements OnInit {
     if (this.event.privacy !== Privacy.public) {
       this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: Privacy.public});
     }
-    const shareID = btoa(`userID=${this.user.uid}&eventID=${this.event.getID()}`);
-    const toCopy = String(`${window.location.protocol}//${window.location.host}/event?shareID=${shareID}`);
-    this.copyToClipboard(toCopy);
+    this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
     this.snackBar.open('Privacy is changed to public and link copied to your keyboard', 'go to share link', {
       duration: 10000,
     }).onAction().toPromise().then(() => {
-      debugger;
-      this.router.navigate(['/event'], {
-        queryParams: {
-          shareID: shareID,
-          tabIndex: 0,
-        },
-      });
+
     });
   }
 
@@ -80,33 +77,23 @@ export class EventActionsComponent implements OnInit {
   //   // });
   // }
 
-  download() {
-    this.eventService.getEventAsJSONBloB(this.user, this.event.getID()).then((blob: Blob) => {
-      FileService.downloadFile(
-        blob,
-        this.event.name,
-        EventExporterJSON.fileExtension,
-      );
-      this.snackBar.open('File served', null, {
-        duration: 5000,
-      });
-    });
-  }
-
-  delete() {
-    this.eventService.deleteEventForUser(this.user, this.event.getID());
-    this.router.navigate(['/dashboard']);
-    this.snackBar.open('Event deleted', null, {
+  async download() {
+    const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event.getID());
+    this.fileService.downloadFile(
+      blob,
+      this.event.name,
+      EventExporterJSON.fileExtension,
+    );
+    this.snackBar.open('File served', null, {
       duration: 5000,
     });
   }
 
-  private copyToClipboard(text: string) {
-    const el = document.createElement('textarea');
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
+  async delete() {
+    await this.eventService.deleteEventForUser(this.user, this.event.getID());
+    await this.router.navigate(['/dashboard']);
+    this.snackBar.open('Event deleted', null, {
+      duration: 5000,
+    });
   }
 }

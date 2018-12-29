@@ -10,7 +10,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
-import {AppEventColorService} from '../../../../../services/color/app.event.color.service';
+import {EventColorService} from '../../../../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
@@ -57,7 +57,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private eventService: EventService,
-    public eventColorService: AppEventColorService) {
+    public eventColorService: EventColorService) {
   }
 
 

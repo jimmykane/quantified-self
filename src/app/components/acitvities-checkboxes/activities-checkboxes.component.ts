@@ -1,8 +1,8 @@
 import {Component, EventEmitter, Input, OnChanges, OnInit, Output} from '@angular/core';
-import {AppEventColorService} from '../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {AppUser} from '../../authentication/app.auth.service';
+import {EventColorService} from '../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-activities-checkboxes',
@@ -19,7 +19,7 @@ export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
   @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
   activitiesCheckboxes: { activity: ActivityInterface, checked: boolean, intermediate: boolean, disabled: boolean }[] = [];
 
-  constructor(public eventColorService: AppEventColorService) {
+  constructor(public eventColorService: EventColorService) {
 
   }
 

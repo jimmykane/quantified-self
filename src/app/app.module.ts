@@ -44,7 +44,7 @@ import {EventCardStatsComponent} from './components/cards/event/stats/event.card
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
-import {AppEventColorService} from './services/color/app.event.color.service';
+import {EventColorService} from './services/color/app.event.color.service';
 import {UploadInfoComponent} from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
 import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
@@ -70,6 +70,9 @@ import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
 import {LoginComponent} from './components/login/login.component';
 import {PrivacyIconComponent} from './components/privacy-icon/privacy-icon.component';
+import {ClipboardService} from './services/app.clipboard.service';
+import {SharingService} from './services/app.sharing.service';
+import {FileService} from './services/app.file.service';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -173,7 +176,10 @@ export class RavenErrorHandler implements ErrorHandler {
     UserSettingsService,
     EventService,
     ActionButtonService,
-    AppEventColorService,
+    EventColorService,
+    ClipboardService,
+    SharingService,
+    FileService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
   ],

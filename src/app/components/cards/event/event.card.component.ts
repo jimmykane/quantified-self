@@ -1,7 +1,7 @@
 import {Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {EMPTY, Subscription} from 'rxjs';
 import {ActivatedRoute, ParamMap, Router} from '@angular/router';
-import {AppEventColorService} from '../../../services/color/app.event.color.service';
+import {EventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -49,7 +49,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private eventService: EventService,
     private userSettingsService: UserSettingsService,
     private snackBar: MatSnackBar,
-    public eventColorService: AppEventColorService) {
+    public eventColorService: EventColorService) {
   }
 
   ngOnChanges() {

@@ -4,7 +4,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 @Injectable()
-export class AppEventColorService {
+export class EventColorService {
 
   public getColorByNumber(number: number): string {
     // Return fixed random
