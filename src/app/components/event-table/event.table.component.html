@@ -40,7 +40,6 @@
       </mat-cell>
     </ng-container>
     <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/event']"
-             [queryParams]="{ userID: user.uid, eventID: row['Actions'].getID(), tabIndex: 0 }"></mat-row>
+    <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/user', user.uid, 'event', row['Actions'].getID()]"></mat-row>
   </mat-table>
 </mat-card>

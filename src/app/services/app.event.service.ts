@@ -43,7 +43,6 @@ export class EventService implements OnDestroy {
         .doc(user.uid)
         .collection("events").doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
-          // debugger;
           return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID);
         })),
       this.getActivities(user, eventID),

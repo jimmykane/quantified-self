@@ -1,12 +1,12 @@
 import {Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {EMPTY, Subscription} from 'rxjs';
-import {ActivatedRoute, Router} from '@angular/router';
+import {ActivatedRoute, ParamMap, Router} from '@angular/router';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
-import {map, mergeMap} from 'rxjs/operators';
+import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material';
 import {AppAuthService, AppUser} from '../../../authentication/app.auth.service';
@@ -24,7 +24,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public userFromParams: AppUser;
   public user: AppUser;
-  public selectedTabIndex;
+  public tabIndex;
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
@@ -38,6 +38,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
+  private eventSubscription: Subscription;
 
   private logger = Log.create('EventCardComponent');
 
@@ -56,6 +57,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
+    // Get the settings
     this.userSettingsService.getShowAutoLaps().then(value => this.showMapAutoLaps = value);
     this.userSettingsService.getShowManualLaps().then(value => this.showMapManualLaps = value);
     this.userSettingsService.getShowData().then(value => this.showData = value);
@@ -63,57 +65,35 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
     this.userSettingsService.showAdvancedStats().then(value => this.showAdvancedStats = value);
 
+    // Get the path params
+    const userID = this.route.snapshot.paramMap.get('userID');
+    const eventID = this.route.snapshot.paramMap.get('eventID');
+
+    // Set a "user from params"
+    this.userFromParams = {uid: userID};
+
+    this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
+      this.tabIndex = +queryParams.get('tabIndex');
+    }));
 
     // Subscribe to authService and set the current user if possible
     this.userSubscription = this.authService.user.subscribe((user) => {
       this.user = user;
     });
 
-    // @todo test maps , switchmap etc with delete and order firing etc
-    this.parametersSubscription = this.route.queryParams.pipe(mergeMap((params) => {
-      // First check if it's base 64
-      let eventID: string;
-      let userID: string;
-      let tabIndex: number;
-      try {
-        // @todo move to service and user LZ
-        const urlParams = new URLSearchParams(atob(params['shareID']));
-        eventID = urlParams.get('eventID');
-        userID = urlParams.get('userID');
-        tabIndex = +urlParams.get('tabIndex');
-      } catch (e) {
-        userID = params['userID'];
-        eventID = params['eventID'];
-        this.selectedTabIndex = +params['tabIndex']; // we dont care about the tab index , default it to 0
-      }
-      if (!userID || !eventID) {
-        this.router.navigate(['/dashboard']);
-        this.snackBar.open('Incorrect url', null, {
-          duration: 5000,
-        });
-        return
-      }
-
-      this.userFromParams = {uid: userID};
-      // / debugger;
-      // If the current event is the same then return empty !important
-      if (this.event && this.event.getID() === eventID) {
-        return EMPTY
-      }
-      // debugger;
-      // Create a phony user and try to get the event
-      return this.eventService.getEventAndActivities(this.userFromParams, eventID);
-    })).pipe(map((event) => {
+    // Subscribe to the actual subject our event
+    this.eventSubscription = this.eventService.getEventAndActivities(this.userFromParams, eventID).subscribe((event) => {
       if (!event) {
-        this.router.navigate(['/dashboard']);
-        this.snackBar.open('Not found', null, {
-          duration: 5000,
+        this.router.navigate(['/dashboard']).then(() => {
+          this.snackBar.open('Not found', null, {
+            duration: 5000,
+          });
         });
         return
       }
       this.event = event;
       this.selectedActivities = event.getActivities();
-    })).subscribe()
+    });
   }
 
   async toggleEventPrivacy() {
@@ -130,6 +110,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   ngOnDestroy(): void {
     this.userSubscription.unsubscribe();
     this.parametersSubscription.unsubscribe();
+    this.eventSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {
