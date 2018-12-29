@@ -97,8 +97,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     DataSeaLevelPressure.type,
     DataSatellite5BestSNR.type,
     DataNumberOfSatellites.type,
-    DataLongitudeDegrees.type,
-    DataLatitudeDegrees.type,
     DataEVPE.type,
     DataEHPE.type,
     DataDistance.type,
@@ -322,7 +320,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // }
 
     // series.minDistance = 1;
-    // series.strokeWidth = 3;
+    series.strokeWidth = 0.6;
 
     // series.interactionsEnabled = false;
     if (this.chart.series.length > 4) {
