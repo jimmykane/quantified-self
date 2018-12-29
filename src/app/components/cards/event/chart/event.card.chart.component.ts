@@ -169,7 +169,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.unsubscribeAndBindToNewData();
     }
 
-    // 5 Invalidate if becoming visible
+    // 5 Invalidate if becoming visible @todo perhaps move higher?
     if (simpleChanges.isVisible) {
       this.chart.invalidate();
     }
