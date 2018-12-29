@@ -85,7 +85,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         userID = params['userID'];
         eventID = params['eventID'];
         this.selectedTabIndex = +params['tabIndex']; // we dont care about the tab index , default it to 0
-        debugger;
       }
       if (!userID || !eventID) {
         this.router.navigate(['/dashboard']);
