@@ -184,7 +184,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           if (!series) {
             series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
           }
-          series.data = this.convertSreamDataToSeriesData(activity, stream);
+          series.dummyData = this.convertSreamDataToSeriesData(activity, stream);
           return series
         });
       }))
@@ -192,6 +192,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
+      series.forEach((series) => {
+        series.data = series.dummyData;
+      });
       // this.chart.invalidate(); // @todo peghaps this is not needed
       //
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
