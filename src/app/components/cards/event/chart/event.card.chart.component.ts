@@ -3,7 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  ElementRef,
+  ElementRef, HostListener,
   Input,
   NgZone,
   OnChanges,
@@ -195,6 +195,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       series.forEach((series) => {
         series.data = series.dummyData;
       });
+      this.chart.validateData();
       // this.chart.invalidate(); // @todo peghaps this is not needed
       //
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
@@ -265,7 +266,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // Attach events
         chart.events.on('validated', (ev) => {
           this.logger.d('validated');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+          this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
 
         chart.events.on('maxsizechanged', (ev) => {
