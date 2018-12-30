@@ -211,10 +211,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private createChart(): Promise<am4charts.XYChart> {
     return new Promise((resolve, reject) => {
       this.zone.runOutsideAngular(() => {
+        // Create a chart
         const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
         chart.pixelPerfect = false;
         // chart.fontSize = '12px';
         // chart.resizable = false;
+
+        // Create a date axis
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
         // dateAxis.skipEmptyPeriods= true;
         dateAxis.title.text = "Time";
@@ -222,13 +225,22 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         //   timeUnit: "second",
         //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
         // };
-        const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
 
+        // Create a value axis
+        const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
         // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
 
+        // Create a Legend
         chart.legend = new am4charts.Legend();
+        var legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+        legendContainer.width = am4core.percent(100);
+        legendContainer.height = am4core.percent(100);
+        chart.legend.parent = legendContainer;
+
+        // Create a cursor
         chart.cursor = new am4charts.XYCursor();
         chart.cursor.fullWidthLineX = true;
+        chart.cursor.fullWidthLineY = true;
 
         // Add watermark
         const watermark = new am4core.Label();
@@ -244,18 +256,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // watermark.fontWeight = 'bold';
 
 
-        // Legend
-        chart.legend = new am4charts.Legend();
-        var legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-        legendContainer.width = am4core.percent(100);
-        legendContainer.height = am4core.percent(100);
-        chart.legend.parent = legendContainer;
-        // chart.legend.padding(10, 10, 10 , 10);
-
         // Disable the preloader
         chart.preloader.disabled = true;
 
 
+        // Attach events
         chart.events.on('validated', (ev) => {
           this.logger.d('validated');
           // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
@@ -283,7 +288,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         chart.events.on('datavalidated', (ev) => {
           this.logger.d('datavalidated');
-                    this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+          this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
 
         });
         resolve(chart);
