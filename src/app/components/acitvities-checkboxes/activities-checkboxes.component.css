@@ -1,5 +1,6 @@
 mat-icon {
   vertical-align: middle;
+  display: inline;
 }
 
 section {
@@ -10,12 +11,6 @@ section {
   justify-content: start;
   align-items: start;
   flex-wrap: wrap;
-}
-
-mat-icon {
-  font-size: 20px;
-  height: 20px;
-  width: 20px;
 }
 
 .mat-checkbox-label {

@@ -87,7 +87,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     DataAltitude.type,
     DataCadence.type,
     DataPower.type,
-    DataPace.type,
+    // DataPace.type,
     DataSpeed.type,
     DataVO2Max.type,
   ];

@@ -29,9 +29,9 @@ mat-cell, .mat-header-cell {
 
 mat-icon {
   vertical-align: middle;
-  font-size: 22px;
-  height: 22px;
-  width: 22px;
+  /*font-size: 22px;*/
+  /*height: 22px;*/
+  /*width: 22px;*/
 }
 
 .mat-header-row, .mat-row{
