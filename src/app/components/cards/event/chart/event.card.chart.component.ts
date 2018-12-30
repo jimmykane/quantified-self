@@ -162,10 +162,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.unsubscribeAndBindToNewData();
     }
 
-    // 5 Invalidate if becoming visible @todo perhaps move higher?
-    if (simpleChanges.isVisible) {
-      this.chart.invalidate();
-    }
+    // // 5 Invalidate if becoming visible @todo perhaps move higher?
+    // if (simpleChanges.isVisible) {
+    //   this.chart.deepInvalidate();
+    // }
   }
 
   private unsubscribeAndBindToNewData() {
@@ -192,8 +192,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
-      this.chart.invalidate(); // @todo peghaps this is not needed
-
+      // this.chart.invalidate(); // @todo peghaps this is not needed
+      //
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
       // The below is buggy
       // this.chart.series.values.forEach((chartSeries) => {
@@ -204,7 +204,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       //     this.logger.d(`remove ${chartSeries.id} with index ${this.chart.series.indexOf(chartSeries)}`);
       //   }
       // });
-      // @todo https://www.amcharts.com/docs/v4/tutorials/chart-legend-in-an-external-container/
     });
   }
 
@@ -289,7 +288,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.events.on('datavalidated', (ev) => {
           this.logger.d('datavalidated');
           this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-
         });
         resolve(chart);
       });
