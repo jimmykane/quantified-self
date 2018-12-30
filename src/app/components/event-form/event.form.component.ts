@@ -5,6 +5,7 @@ import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validat
 import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {AppUser} from '../../authentication/app.auth.service';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 
 @Component({
@@ -19,6 +20,7 @@ import {AppUser} from '../../authentication/app.auth.service';
 
 export class EventFormComponent implements OnInit {
 
+  public privacy = Privacy;
   public event: EventInterface;
   public user: AppUser;
   public originalValues: {
@@ -32,11 +34,11 @@ export class EventFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: EventService,
     private snackBar: MatSnackBar,
-    private formBuilder: FormBuilder
+    private formBuilder: FormBuilder,
   ) {
     this.event = data.event;
     this.user = data.user; // Perhaps move to service?
-    if (!this.user || !this.event){
+    if (!this.user || !this.event) {
       throw  'Component needs event and user'
     }
     this.originalValues = {name: this.event.name};
@@ -45,6 +47,10 @@ export class EventFormComponent implements OnInit {
   ngOnInit(): void {
     this.eventFormGroup = new FormGroup({
       name: new FormControl(this.event.name, [
+        Validators.required,
+        // Validators.minLength(4),
+      ]),
+      privacy: new FormControl(this.event.privacy, [
         Validators.required,
         // Validators.minLength(4),
       ]),
@@ -63,7 +69,10 @@ export class EventFormComponent implements OnInit {
       return;
     }
     try {
-      await this.eventService.setEventForUser(this.user, this.event);
+      await this.eventService.updateEventProperties(this.user, this.event.getID(), {
+        name: this.eventFormGroup.get('name').value,
+        privacy: this.eventFormGroup.get('privacy').value,
+      });
       this.snackBar.open('Event saved', null, {
         duration: 5000,
       });

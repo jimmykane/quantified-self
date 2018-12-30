@@ -57,7 +57,10 @@ export class EventActionsComponent implements OnInit {
     const dialogRef = this.dialog.open(EventFormComponent, {
       width: '75vh',
       disableClose: true,
-      data: {event: this.event},
+      data: {
+        event: this.event,
+        user: this.user
+      },
     });
 
     dialogRef.afterClosed().subscribe(result => {

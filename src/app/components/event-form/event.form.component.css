@@ -1,7 +1,12 @@
-form{
+form {
   width: 100%;
   padding: 1%;
 }
-mat-form-field{
+
+mat-form-field {
   width: 100%;
+}
+
+.radio-container {
+  padding-bottom: 1.25em;
 }
