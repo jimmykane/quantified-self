@@ -193,9 +193,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       series.forEach((series) => {
-        series.data = series.dummyData;
+        Object.assign(series.data, series.dummyData); // Copy
       });
       this.chart.validateData();
+      // this.chart.svgContainer.autoResize = false
       // this.chart.invalidate(); // @todo peghaps this is not needed
       //
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
@@ -242,8 +243,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Create a cursor
         chart.cursor = new am4charts.XYCursor();
-        chart.cursor.fullWidthLineX = true;
-        chart.cursor.fullWidthLineY = true;
+        // chart.cursor.fullWidthLineX = true;
+        // chart.cursor.fullWidthLineY = true;
+        chart.cursor.behavior = 'zoomXY';
 
         // Add watermark
         const watermark = new am4core.Label();
@@ -258,6 +260,20 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.zIndex = 100;
         // watermark.fontWeight = 'bold';
 
+
+        // Add exporting options
+        chart.exporting.menu = new am4core.ExportMenu();
+        chart.exporting.menu.align = 'right';
+        chart.exporting.menu.verticalAlign = 'bottom';
+        chart.exporting.useWebFonts = false;
+        chart.exporting.menu.items = [{
+          label: "...",
+          menu: [
+            {"type": "png", "label": "PNG"},
+            {"type": "json", "label": "JSON"},
+            {"label": "Print", "type": "print"},
+          ],
+        }];
 
         // Disable the preloader
         chart.preloader.disabled = true;
