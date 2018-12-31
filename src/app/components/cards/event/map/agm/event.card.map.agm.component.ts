@@ -21,7 +21,7 @@ import {EventService} from '../../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
-import {AppUser} from '../../../../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -33,7 +33,7 @@ import {AppUser} from '../../../../../authentication/app.auth.service';
 export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
-  @Input() user: AppUser;
+  @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
   @Input() showAutoLaps: boolean;

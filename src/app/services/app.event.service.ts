@@ -21,8 +21,7 @@ import {Log} from 'ng2-logger/browser';
 import * as Raven from 'raven-js';
 import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
-import {AppUser} from '../authentication/app.auth.service';
-import App = firebase.app.App;
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -34,7 +33,7 @@ export class EventService implements OnDestroy {
     private afs: AngularFirestore) {
   }
 
-  public getEventAndActivities(user: AppUser, eventID: string): Observable<EventInterface> {
+  public getEventAndActivities(user: User, eventID: string): Observable<EventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     return combineLatest(
@@ -64,7 +63,7 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getAllEventsForUser(user: AppUser): Observable<EventInterface[]> {
+  public getAllEventsForUser(user: User): Observable<EventInterface[]> {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection("events")
@@ -86,7 +85,7 @@ export class EventService implements OnDestroy {
       }))
   }
 
-  getEventActivitiesAndStreams(user: AppUser, eventID) {
+  getEventActivitiesAndStreams(user: User, eventID) {
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(
@@ -105,7 +104,7 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getActivities(user: AppUser, eventID: string): Observable<ActivityInterface[]> {
+  public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
     return this.afs
       .collection('users')
       .doc(user.uid)
@@ -119,7 +118,7 @@ export class EventService implements OnDestroy {
       )
   }
 
-  public getAllStreams(user: AppUser, eventID: string, activityID: string): Observable<StreamInterface[]> {
+  public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
     return this.afs
       .collection('users')
       .doc(user.uid)
@@ -134,7 +133,7 @@ export class EventService implements OnDestroy {
       }))
   }
 
-  public getStreamsByTypes(user: AppUser, eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
+  public getStreamsByTypes(user: User, eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
     return combineLatest.apply(this, types.map((type) => {
       return this.afs
         .collection('users')
@@ -164,7 +163,7 @@ export class EventService implements OnDestroy {
     }, [])
   }
 
-  public async setEventForUser(user: AppUser, event: EventInterface) {
+  public async setEventForUser(user: User, event: EventInterface) {
     const writePromises: Promise<void>[] = [];
     event.setID(event.getID() || this.afs.createId());
     event.getActivities()
@@ -209,12 +208,12 @@ export class EventService implements OnDestroy {
     }
   }
 
-  public async updateEventProperties(user: AppUser, eventID: string, propertiesToUpdate: any) {
+  public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
     return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).update(propertiesToUpdate);
   }
 
-  public async deleteEventForUser(user: AppUser, eventID: string): Promise<boolean> {
+  public async deleteEventForUser(user: User, eventID: string): Promise<boolean> {
     const activityDeletePromises: Promise<boolean>[] = [];
     const queryDocumentSnapshots = await this.afs
       .collection('users')
@@ -234,7 +233,7 @@ export class EventService implements OnDestroy {
     return true;
   }
 
-  public async deleteActivityForUser(user: AppUser, eventID: string, activityID: string): Promise<boolean> {
+  public async deleteActivityForUser(user: User, eventID: string, activityID: string): Promise<boolean> {
     // @todo add try catch etc
     await this.deleteAllStreams(user, eventID, activityID);
     await this.afs
@@ -248,7 +247,7 @@ export class EventService implements OnDestroy {
     return true;
   }
 
-  public async deleteAllStreams(user: AppUser, eventID, activityID): Promise<number> {
+  public async deleteAllStreams(user: User, eventID, activityID): Promise<number> {
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([
       this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
     ]);
@@ -256,7 +255,7 @@ export class EventService implements OnDestroy {
     return numberOfStreamsDeleted
   }
 
-  public async getEventAsJSONBloB(user: AppUser, eventID: string): Promise<Blob> {
+  public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
     const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(user, eventID).pipe(take(1)).toPromise());
     return (new Blob(
       [jsonString],

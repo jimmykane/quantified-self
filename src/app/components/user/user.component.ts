@@ -1,7 +1,8 @@
 import {Component, Inject, OnInit} from '@angular/core';
-import {AppAuthService, AppUser} from '../../authentication/app.auth.service';
 import {ActivatedRoute, Router} from '@angular/router';
 import {UserAbstractComponent} from '../user.abstract.component';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
   selector: 'app-user',
@@ -10,8 +11,8 @@ import {UserAbstractComponent} from '../user.abstract.component';
 })
 export class UserComponent extends UserAbstractComponent {
 
-  public userFromParams: AppUser;
-  public user: AppUser;
+  public userFromParams: User;
+  public user: User;
 
   constructor(private route: ActivatedRoute){
     super();
@@ -20,8 +21,9 @@ export class UserComponent extends UserAbstractComponent {
   ngOnInit(): void {
     const userID = this.route.snapshot.paramMap.get('userID');
     if (userID) {
-      this.userFromParams = {uid: userID};
+      this.userFromParams = {privacy: Privacy.private, uid: userID};
     }
+
   }
 
   isOwner() {

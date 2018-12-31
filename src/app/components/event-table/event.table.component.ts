@@ -18,7 +18,7 @@ import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {first, take} from 'rxjs/operators';
-import {AppUser} from '../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 
 @Component({
@@ -31,7 +31,7 @@ import {AppUser} from '../../authentication/app.auth.service';
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() events: EventInterface[];
-  @Input() user: AppUser;
+  @Input() user: User;
   @ViewChild(MatSort) sort: MatSort;
   data: MatTableDataSource<Object>;
   columns: Array<Object>;

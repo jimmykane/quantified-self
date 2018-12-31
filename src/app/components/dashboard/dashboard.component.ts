@@ -5,10 +5,11 @@ import {
 import {EventService} from '../../services/app.event.service';
 import {combineLatest, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {AppAuthService, AppUser} from '../../authentication/app.auth.service';
 import {switchMap} from 'rxjs/operators';
 import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material';
+import {AppAuthService} from '../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
   selector: 'app-dashboard',
@@ -17,7 +18,7 @@ import {MatSnackBar} from '@angular/material';
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
-  user: AppUser;
+  user: User;
   events: EventInterface[];
   eventsSubscription: Subscription;
 

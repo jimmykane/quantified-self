@@ -7,10 +7,10 @@ import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
-import {AppUser} from '../../authentication/app.auth.service';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {ClipboardService} from '../../services/app.clipboard.service';
 import {SharingService} from '../../services/app.sharing.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
   selector: 'app-event-actions',
@@ -22,7 +22,7 @@ import {SharingService} from '../../services/app.sharing.service';
 })
 export class EventActionsComponent implements OnInit {
   @Input() event: EventInterface;
-  @Input() user: AppUser;
+  @Input() user: User;
 
   constructor(
     private eventService: EventService,

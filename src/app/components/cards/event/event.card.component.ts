@@ -9,9 +9,10 @@ import {UserSettingsService} from '../../../services/app.user.settings.service';
 import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material';
-import {AppAuthService, AppUser} from '../../../authentication/app.auth.service';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {AppAuthService} from '../../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 
 @Component({
@@ -22,8 +23,8 @@ import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
-  public userFromParams: AppUser;
-  public user: AppUser;
+  public userFromParams: User;
+  public user: User;
   public tabIndex;
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
@@ -70,7 +71,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     const eventID = this.route.snapshot.paramMap.get('eventID');
 
     // Set a "user from params"
-    this.userFromParams = {uid: userID};
+    this.userFromParams = {privacy: Privacy.private, uid: userID};
 
     this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
       this.tabIndex = +queryParams.get('tabIndex');

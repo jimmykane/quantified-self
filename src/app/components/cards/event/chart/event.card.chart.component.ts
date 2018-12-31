@@ -54,7 +54,7 @@ import {DataFormPower} from 'quantified-self-lib/lib/data/data.form-power';
 import {DataLegStiffness} from 'quantified-self-lib/lib/data/data.leg-stiffness';
 import {DataVerticalOscillation} from 'quantified-self-lib/lib/data/data.vertical-oscillation';
 import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
-import {AppUser} from '../../../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 
 // am4core.useTheme(am4themes_animated);
@@ -73,7 +73,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @ViewChild('chartDiv') chartDiv: ElementRef;
   @ViewChild('legendDiv') legendDiv: ElementRef;
   @Input() event: EventInterface;
-  @Input() user: AppUser;
+  @Input() user: User;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAdvancedStats: boolean;

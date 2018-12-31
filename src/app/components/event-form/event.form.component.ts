@@ -4,8 +4,8 @@ import {EventService} from '../../services/app.event.service';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
-import {AppUser} from '../../authentication/app.auth.service';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 
 @Component({
@@ -22,7 +22,7 @@ export class EventFormComponent implements OnInit {
 
   public privacy = Privacy;
   public event: EventInterface;
-  public user: AppUser;
+  public user: User;
   public originalValues: {
     name: string;
   };

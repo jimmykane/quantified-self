@@ -5,7 +5,7 @@ import {EventService} from '../../services/app.event.service';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
-import {AppUser} from '../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
   selector: 'app-activity-actions',
@@ -15,7 +15,7 @@ import {AppUser} from '../../authentication/app.auth.service';
 })
 export class ActivityActionsComponent implements OnInit{
   @Input() event: EventInterface;
-  @Input() user: AppUser;
+  @Input() user: User;
   @Input() activity: ActivityInterface;
 
   constructor(

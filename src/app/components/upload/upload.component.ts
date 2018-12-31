@@ -9,7 +9,7 @@ import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importer
 import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
-import {AppUser} from '../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
   selector: 'app-upload',
@@ -19,7 +19,7 @@ import {AppUser} from '../../authentication/app.auth.service';
 
 export class UploadComponent implements OnInit{
 
-  @Input() user: AppUser;
+  @Input() user: User;
 
   // Whether an upload is currently active
   isUploadActive = false;

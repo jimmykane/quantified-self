@@ -1,24 +1,18 @@
 import {Injectable, OnDestroy} from '@angular/core';
 
-import {auth, User} from 'firebase/app';
+import {auth} from 'firebase/app';
+import {User as FireBaseUser} from 'firebase/app';
 
 import {Observable, of, Subscription} from 'rxjs';
 import {switchMap} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
-
-// @todo fix and expand properly coupled to event
-export interface AppUser {
-  uid: string;
-  email?: string | null;
-  photoURL?: string;
-  displayName?: string;
-}
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Injectable()
 export class AppAuthService implements OnDestroy{
-  user: Observable<AppUser | null>;
+  user: Observable<User | null>;
   private authState = false;
   userSubscription: Subscription;
 
@@ -31,7 +25,7 @@ export class AppAuthService implements OnDestroy{
       switchMap(user => {
         if (user) {
           this.authState = true;
-          return this.afs.doc<AppUser>(`users/${user.uid}`).valueChanges();
+          return this.afs.doc<User>(`users/${user.uid}`).valueChanges();
         } else {
           this.authState = false;
           return of(null);
@@ -135,18 +129,13 @@ export class AppAuthService implements OnDestroy{
   }
 
   // Sets user data to firestore after succesful login
-  private async updateUserData(user: AppUser) {
-    const userRef: AngularFirestoreDocument<AppUser> = this.afs.doc(
+  private async updateUserData(user: User | FireBaseUser) {
+    const userRef: AngularFirestoreDocument<User> = this.afs.doc(
       `users/${user.uid}`,
     );
-    user = {
-      uid: user.uid,
-      email: user.email || null,
-      displayName: user.displayName || 'nameless user', // @todo change those
-      photoURL: user.photoURL || 'https://goo.gl/Fz9nrQ',
-    };
+    user = new User(user.uid, user.email, user.displayName, user.photoURL);
     await userRef.set(user);
-    return user;
+    return Promise.resolve(user);
   }
 
   ngOnDestroy(): void {

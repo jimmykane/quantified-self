@@ -16,7 +16,7 @@ import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {activityDistanceValidator} from './activity.form.distance.validator';
-import {AppUser} from '../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 
 @Component({
@@ -33,7 +33,7 @@ export class ActivityFormComponent implements OnInit {
 
   public activity: ActivityInterface;
   public event: EventInterface;
-  public user: AppUser;
+  public user: User;
   public originalValues: {
     activityStartDate: Date;
     activityEndDate: Date;
