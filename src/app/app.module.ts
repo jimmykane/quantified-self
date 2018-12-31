@@ -79,6 +79,8 @@ import {PrivacyIconComponent} from './components/privacy-icon/privacy-icon.compo
 import {ClipboardService} from './services/app.clipboard.service';
 import {SharingService} from './services/app.sharing.service';
 import {FileService} from './services/app.file.service';
+import {UserComponent} from './components/user/user.component';
+import {UserAbstractComponent} from './components/user.abstract.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -169,6 +171,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UploadErrorComponent,
     ActivityMetadataComponent,
     ChartActionsComponent,
+    UserComponent,
   ],
   entryComponents: [
     EventFormComponent,

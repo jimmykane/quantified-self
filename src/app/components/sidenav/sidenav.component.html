@@ -16,8 +16,16 @@
     *ngIf="authService.authenticated()"
     routerLinkActive="active"
     routerLink="/dashboard">
-    <mat-icon class="example-icon">reorder</mat-icon>
+    <mat-icon class="example-icon">dashboard</mat-icon>
     <span>Dashboard</span>
+  </mat-list-item>
+
+  <mat-list-item
+    *ngIf="authService.authenticated()"
+    routerLinkActive="active"
+    [routerLink]="['/user/' + (authService.user | async)?.uid]">
+    <mat-icon class="example-icon">account_circle</mat-icon>
+    <span>My Profile</span>
   </mat-list-item>
 
   <mat-list-item
