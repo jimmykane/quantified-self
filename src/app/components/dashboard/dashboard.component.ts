@@ -30,7 +30,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
       this.user = user;
-      return this.eventService.getEventsForUser(user);
+      return this.eventService.getAllEventsForUser(user);
     })).subscribe((eventsArray) => {
       this.events = eventsArray;
     });

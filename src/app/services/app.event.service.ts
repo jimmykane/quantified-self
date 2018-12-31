@@ -64,7 +64,7 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getEventsForUser(user: AppUser): Observable<EventInterface[]> {
+  public getAllEventsForUser(user: AppUser): Observable<EventInterface[]> {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection("events")
