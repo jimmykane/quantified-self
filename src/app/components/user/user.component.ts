@@ -23,7 +23,7 @@ export class UserComponent implements OnInit, OnDestroy{
   ngOnInit(): void {
     const userID = this.route.snapshot.paramMap.get('userID');
     if (userID) {
-      this.userFromParams = {privacy: Privacy.private, uid: userID};
+      this.userFromParams = new User(userID);
     }
 
     this.userSubscription = this.authService.user.subscribe((user) => {

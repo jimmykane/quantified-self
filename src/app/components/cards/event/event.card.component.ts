@@ -71,7 +71,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     const eventID = this.route.snapshot.paramMap.get('eventID');
 
     // Set a "user from params"
-    this.userFromParams = {privacy: Privacy.private, uid: userID};
+    this.userFromParams = new User(userID);
 
     this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
       this.tabIndex = +queryParams.get('tabIndex');

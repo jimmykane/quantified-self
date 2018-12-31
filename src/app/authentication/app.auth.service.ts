@@ -134,7 +134,7 @@ export class AppAuthService implements OnDestroy{
       `users/${user.uid}`,
     );
     user = new User(user.uid, user.email, user.displayName, user.photoURL);
-    await userRef.set(user);
+    await userRef.set(user.toJSON());
     return Promise.resolve(user);
   }
 
