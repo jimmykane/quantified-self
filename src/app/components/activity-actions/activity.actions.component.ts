@@ -49,7 +49,7 @@ export class ActivityActionsComponent implements OnInit{
   deleteActivity() {
     this.eventService.deleteActivityForUser(this.user, this.event.getID(), this.activity.getID()).then(() => {
       this.snackBar.open('Activity deleted', null, {
-        duration: 5000,
+        duration: 2000,
       });
     });
   }

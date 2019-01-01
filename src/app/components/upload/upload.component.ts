@@ -116,7 +116,7 @@ export class UploadComponent implements OnInit{
     await Promise.all(processPromises);
     this.isUploadActive = false;
     this.snackBar.open('Processed ' + processPromises.length + ' files', null, {
-      duration: 5000,
+      duration: 2000,
     });
 
 

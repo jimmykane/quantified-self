@@ -107,12 +107,12 @@ export class ActivityFormComponent implements OnInit {
     try {
       await this.eventService.setEventForUser(this.user, this.event);
       this.snackBar.open('Activity saved', null, {
-        duration: 5000,
+        duration: 2000,
       });
     } catch (e) {
       // debugger;
       this.snackBar.open('Could not save activity', null, {
-        duration: 5000,
+        duration: 2000,
       });
       Raven.captureException(e);
     } finally {

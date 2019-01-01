@@ -26,7 +26,7 @@ export class LoginComponent {
     this.authService.anonymousLogin().then((user: User) => {
       this.router.navigate(['/dashboard']);
       this.snackBar.open(`Welcome  ${user.displayName}`, null, {
-        duration: 5000,
+        duration: 2000,
       });
     })
   }
@@ -36,7 +36,7 @@ export class LoginComponent {
     this.authService.googleLogin().then((user: User) => {
       this.router.navigate(['/dashboard']);
       this.snackBar.open(`Welcome  ${user.displayName}`, null, {
-        duration: 5000,
+        duration: 2000,
       });
     })
   }

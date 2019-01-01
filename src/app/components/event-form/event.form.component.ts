@@ -74,11 +74,11 @@ export class EventFormComponent implements OnInit {
         privacy: this.eventFormGroup.get('privacy').value,
       });
       this.snackBar.open('Event saved', null, {
-        duration: 5000,
+        duration: 2000,
       });
     } catch (e) {
       this.snackBar.open('Could not save event', null, {
-        duration: 5000,
+        duration: 2000,
       });
       Raven.captureException(e);
     } finally {

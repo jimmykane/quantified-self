@@ -47,7 +47,7 @@ export class EventActionsComponent implements OnInit {
     }
     this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
     this.snackBar.open('Privacy is changed to public and link copied to your keyboard', 'go to share link', {
-      duration: 10000,
+      duration: 20000,
     }).onAction().toPromise().then(() => {
 
     });
@@ -75,7 +75,7 @@ export class EventActionsComponent implements OnInit {
   //   //     EventExporterTCX.fileExtension,
   //   //   );
   //   //   this.snackBar.open('File served', null, {
-  //   //     duration: 5000,
+  //   //     duration: 2000,
   //   //   });
   //   // });
   // }
@@ -88,7 +88,7 @@ export class EventActionsComponent implements OnInit {
       EventExporterJSON.fileExtension,
     );
     this.snackBar.open('File served', null, {
-      duration: 5000,
+      duration: 2000,
     });
   }
 
@@ -96,7 +96,7 @@ export class EventActionsComponent implements OnInit {
     await this.eventService.deleteEventForUser(this.user, this.event.getID());
     await this.router.navigate(['/dashboard']);
     this.snackBar.open('Event deleted', null, {
-      duration: 5000,
+      duration: 2000,
     });
   }
 }

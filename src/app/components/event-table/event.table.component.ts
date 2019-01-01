@@ -166,7 +166,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           //   },
           // });
           this.snackBar.open('Events merged', null, {
-            duration: 5000,
+            duration: 2000,
           });
         },
         'material',
@@ -185,7 +185,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.eventSelectionMap.clear();
           this.selection.clear();
           this.snackBar.open('Events deleted', null, {
-            duration: 5000,
+            duration: 2000,
           });
         },
         'material',

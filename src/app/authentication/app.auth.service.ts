@@ -100,7 +100,7 @@ export class AppAuthService implements OnDestroy {
       .signInWithEmailAndPassword(email, password)
       .then(credential => {
         this.snackBar.open(`Welcome back`, null, {
-          duration: 5000,
+          duration: 2000,
         });
         return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
       })
@@ -113,7 +113,7 @@ export class AppAuthService implements OnDestroy {
     return fbAuth
       .sendPasswordResetEmail(email)
       .then(() => this.snackBar.open(`Password update email sent`, null, {
-        duration: 5000,
+        duration: 2000,
       }))
       .catch(error => this.handleError(error));
   }
@@ -126,7 +126,7 @@ export class AppAuthService implements OnDestroy {
   private handleError(error: Error) {
     console.error(error);
     this.snackBar.open(`Could not login due to error ${error.message}`, null, {
-      duration: 5000,
+      duration: 2000,
     });
   }
   

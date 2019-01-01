@@ -87,7 +87,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       if (!event) {
         this.router.navigate(['/dashboard']).then(() => {
           this.snackBar.open('Not found', null, {
-            duration: 5000,
+            duration: 2000,
           });
         });
         return
