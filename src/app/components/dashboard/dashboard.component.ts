@@ -3,7 +3,7 @@ import {
   OnInit,
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
-import {combineLatest, Subscription} from 'rxjs';
+import {combineLatest, of, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {switchMap} from 'rxjs/operators';
 import {Router} from '@angular/router';
@@ -22,22 +22,23 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   events: EventInterface[];
   eventsSubscription: Subscription;
 
-  constructor(private router: Router,private authService: AppAuthService, private eventService: EventService, private snackBar: MatSnackBar,) {
+  constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private snackBar: MatSnackBar) {
+
+  }
+
+  ngOnInit() {
     this.eventsSubscription = this.authService.user.pipe(switchMap((user) => {
-      if (!user){
+      if (!user) {
         this.router.navigate(['home']).then(() => {
           this.snackBar.open('Logged out')
         });
-        return;
+        return of(null);
       }
       this.user = user;
       return this.eventService.getAllEventsForUser(user);
     })).subscribe((eventsArray) => {
       this.events = eventsArray;
     });
-  }
-
-  ngOnInit() {
   }
 
   ngOnChanges() {
