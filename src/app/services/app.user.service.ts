@@ -1,12 +1,12 @@
 import {Injectable, OnDestroy} from '@angular/core';
-import {Log} from 'ng2-logger';
-import {AngularFirestore} from '@angular/fire/firestore';
+import {Log} from 'ng2-logger/browser';
+import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {Observable} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 
 
 @Injectable()
-export class EventService implements OnDestroy {
+export class UserService implements OnDestroy {
 
   protected logger = Log.create('UserService');
 
@@ -14,11 +14,19 @@ export class EventService implements OnDestroy {
     private afs: AngularFirestore) {
   }
 
-  public getUser(userID: string): Observable<User> {
+  public getUserByID(userID: string): Observable<User> {
     return this.afs
       .collection('users')
       .doc<User>(userID)
       .valueChanges();
+  }
+
+  public async createOrUpdateUser(user: User){
+    const userRef: AngularFirestoreDocument = this.afs.doc(
+      `users/${user.uid}`,
+    );
+    await userRef.set(user.toJSON());
+    return Promise.resolve(user);
   }
 
   ngOnDestroy() {

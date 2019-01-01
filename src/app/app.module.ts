@@ -81,6 +81,7 @@ import {SharingService} from './services/app.sharing.service';
 import {FileService} from './services/app.file.service';
 import {UserComponent} from './components/user/user.component';
 import {UserAbstractComponent} from './components/user.abstract.component';
+import {UserService} from './services/app.user.service';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -190,6 +191,7 @@ export class RavenErrorHandler implements ErrorHandler {
     ClipboardService,
     SharingService,
     FileService,
+    UserService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
   ],

@@ -9,6 +9,7 @@ import {MatSnackBar} from '@angular/material';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {UserService} from '../services/app.user.service';
 
 @Injectable()
 export class AppAuthService implements OnDestroy {
@@ -19,6 +20,7 @@ export class AppAuthService implements OnDestroy {
   constructor(
     private afAuth: AngularFireAuth,
     private afs: AngularFirestore,
+    private userService: UserService,
     private snackBar: MatSnackBar,
   ) {
     this.user = this.afAuth.authState.pipe(
@@ -62,7 +64,7 @@ export class AppAuthService implements OnDestroy {
   private async oAuthLogin(provider: any) {
     try {
       const credential = await this.afAuth.auth.signInWithPopup(provider);
-      return this.updateUserData(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -74,7 +76,7 @@ export class AppAuthService implements OnDestroy {
   async anonymousLogin() {
     try {
       const credential = await this.afAuth.auth.signInAnonymously();
-      return this.updateUserData(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -86,7 +88,7 @@ export class AppAuthService implements OnDestroy {
   async emailSignUp(email: string, password: string) {
     try {
       const credential = await this.afAuth.auth.createUserWithEmailAndPassword(email, password);
-      return this.updateUserData(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -100,7 +102,7 @@ export class AppAuthService implements OnDestroy {
         this.snackBar.open(`Welcome back`, null, {
           duration: 5000,
         });
-        return this.updateUserData(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+        return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
       })
       .catch(error => this.handleError(error));
   }
@@ -127,16 +129,7 @@ export class AppAuthService implements OnDestroy {
       duration: 5000,
     });
   }
-
-  // Sets user data to firestore after succesful login
-  private async updateUserData(user: User) {
-    const userRef: AngularFirestoreDocument = this.afs.doc(
-      `users/${user.uid}`,
-    );
-    await userRef.set(user.toJSON());
-    return Promise.resolve(user);
-  }
-
+  
   ngOnDestroy(): void {
     this.userSubscription.unsubscribe();
   }
