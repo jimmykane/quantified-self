@@ -1,3 +1,7 @@
 mat-card{
-  height: 100vh;
+  min-height: 90vh;
+}
+
+.avatar{
+  background-size: cover;
 }

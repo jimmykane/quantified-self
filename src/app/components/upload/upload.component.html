@@ -8,14 +8,6 @@
     <span class="mat-small">GPX, TCX, FIT and JSON files or drag and drop</span></button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>
-  <a mat-stroked-button color="accent" href="//paypal.me/DKanellopoulos" target="_blank">
-    <span>Donate via PayPal</span><br/>
-    <span class="mat-small">Show 🤓 me 🧐 some 😍 love</span>
-  </a>
-  <a mat-stroked-button href="mailto:jimmykane9@gmail.com" target="_blank">
-    <span>email for debug</span><br/>
-    <span class="mat-small">Issues uploading?</span>
-  </a>
   <app-upload-info *ngIf="isUploadActive" [activitiesMetaData]="activitiesMetaData" ></app-upload-info>
 </mat-card>
 

@@ -8,7 +8,7 @@
     *ngIf="!authService.authenticated()"
     routerLinkActive="active"
     routerLink="/home">
-    <mat-icon class="example-icon">home</mat-icon>
+    <mat-icon>home</mat-icon>
     <span>Home</span>
   </mat-list-item>
 
@@ -16,7 +16,7 @@
     *ngIf="authService.authenticated()"
     routerLinkActive="active"
     routerLink="/dashboard">
-    <mat-icon class="example-icon">dashboard</mat-icon>
+    <mat-icon>dashboard</mat-icon>
     <span>Dashboard</span>
   </mat-list-item>
 
@@ -24,7 +24,7 @@
     *ngIf="authService.authenticated()"
     routerLinkActive="active"
     [routerLink]="['/user/' + (authService.user | async)?.uid]">
-    <mat-icon class="example-icon">account_circle</mat-icon>
+    <mat-icon>account_circle</mat-icon>
     <span>My Profile</span>
   </mat-list-item>
 
@@ -36,10 +36,21 @@
     <span class="example-spacer"></span>
   </mat-list-item>
 
+  <mat-list-item onclick="window.open('mailto:jimmykane9@gmail.com')">
+    <mat-icon>email</mat-icon>
+    <span>Contact</span>
+    <span class="example-spacer"></span>
+  </mat-list-item>
+
+  <mat-list-item onclick="window.open('//paypal.me/DKanellopoulos')">
+    <mat-icon>monetization_on</mat-icon>
+    <span>Donate via PayPal</span>
+    <span class="example-spacer"></span>
+  </mat-list-item>
 
   <mat-list-item (click)="logout()"
-    *ngIf="authService.authenticated()">
-    <mat-icon class="example-icon">power_settings_new</mat-icon>
+                 *ngIf="authService.authenticated()">
+    <mat-icon>power_settings_new</mat-icon>
     <span>Logout</span>
     <span class="example-spacer"></span>
   </mat-list-item>
