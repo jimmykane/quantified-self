@@ -62,7 +62,7 @@ export class UserActionsComponent implements OnInit {
       },
     });
 
-    dialogRef.afterClosed().subscribe(result => {
-    });
+    // dialogRef.afterClosed().subscribe(result => {
+    // });
   }
 }

@@ -64,7 +64,7 @@ export class AppAuthService implements OnDestroy {
   private async oAuthLogin(provider: any) {
     try {
       const credential = await this.afAuth.auth.signInWithPopup(provider);
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -76,7 +76,7 @@ export class AppAuthService implements OnDestroy {
   async anonymousLogin() {
     try {
       const credential = await this.afAuth.auth.signInAnonymously();
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -88,7 +88,7 @@ export class AppAuthService implements OnDestroy {
   async emailSignUp(email: string, password: string) {
     try {
       const credential = await this.afAuth.auth.createUserWithEmailAndPassword(email, password);
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -102,7 +102,7 @@ export class AppAuthService implements OnDestroy {
         this.snackBar.open(`Welcome back`, null, {
           duration: 2000,
         });
-        return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.email, credential.user.displayName, credential.user.photoURL));
+        return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
       })
       .catch(error => this.handleError(error));
   }

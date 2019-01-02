@@ -21,7 +21,7 @@
 
 
   <mat-form-field>
-    <input matInput placeholder="Name" formControlName="description">
+    <input matInput placeholder="Your bio, description or anything you want to share..." formControlName="description">
     <!--<mat-hint></mat-hint>-->
     <mat-error *ngIf="hasError('description')">
       Description must not be empty
@@ -29,16 +29,19 @@
   </mat-form-field>
 
   <div>
-    <button *ngIf="!consentToDelete" mat-flat-button color="warn" (click)="consentToDelete = true">
-      DELETE MY ACCOUNT
-    </button>
-    <button *ngIf="consentToDelete" mat-flat-button color="warn" (click)="deleteUser()">I am sure, Yes delete it
-    </button>
-  </div>
-
-  <div>
     <button mat-button (click)="close()">Cancel</button>
 
     <button mat-button (click)="onSubmit()">Save</button>
   </div>
+
+
+  <div class="account-delete">
+    <button class="full" *ngIf="!consentToDelete" mat-flat-button color="warn" (click)="consentToDelete = true">
+      DELETE MY ACCOUNT
+    </button>
+    <button class="full" *ngIf="consentToDelete" mat-flat-button color="warn" (click)="deleteUser()">I am sure, Yes
+      delete it
+    </button>
+  </div>
+
 </form>

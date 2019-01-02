@@ -41,9 +41,9 @@ export class ActivityActionsComponent implements OnInit{
       },
     });
 
-    dialogRef.afterClosed().subscribe(result => {
-
-    });
+    // dialogRef.afterClosed().subscribe(result => {
+    //
+    // });
   }
 
   deleteActivity() {

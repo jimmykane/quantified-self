@@ -128,9 +128,9 @@ export class UploadComponent implements OnInit{
         disableClose: true,
         data: {activitiesMetaData: this.activitiesMetaData},
       });
-      dialogRef.afterClosed().subscribe(result => {
-        console.log('The dialog was closed');
-      });
+      // dialogRef.afterClosed().subscribe(result => {
+      //   console.log('The dialog was closed');
+      // });
     }
 
     // Remove all;

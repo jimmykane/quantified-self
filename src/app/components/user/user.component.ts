@@ -6,8 +6,9 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {of, Subscription} from 'rxjs';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
-import {MatSnackBar} from '@angular/material';
+import {MatDialog, MatDialogRef, MatSnackBar} from '@angular/material';
 import {catchError, map, switchMap} from 'rxjs/operators';
+import {UserFormComponent} from '../user-form/user.form.component';
 
 @Component({
   selector: 'app-user',
@@ -20,7 +21,7 @@ export class UserComponent implements OnInit, OnDestroy {
   public targetUser: User;
   private userSubscription: Subscription;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar) {
+  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
   }
 
   ngOnInit(): void {
@@ -53,6 +54,19 @@ export class UserComponent implements OnInit, OnDestroy {
       }
       this.targetUser = targetUser;
     })
+  }
+
+  edit() {
+    const dialogRef = this.dialog.open(UserFormComponent, {
+      width: '75vw',
+      disableClose: true,
+      data: {
+        user: this.currentUser,
+      },
+    });
+
+    // dialogRef.afterClosed().subscribe(result => {
+    // });
   }
 
   isOwner() {
