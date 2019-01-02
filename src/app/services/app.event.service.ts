@@ -204,7 +204,7 @@ export class EventService implements OnDestroy {
       Raven.captureException(e);
       debugger;
       // Try to delete the parent entity and all subdata
-      return await this.deleteEventForUser(user, event.getID());
+      return await this.deleteAllEventData(user, event.getID());
     }
   }
 
@@ -213,7 +213,7 @@ export class EventService implements OnDestroy {
     return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).update(propertiesToUpdate);
   }
 
-  public async deleteEventForUser(user: User, eventID: string): Promise<boolean> {
+  public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
     const activityDeletePromises: Promise<boolean>[] = [];
     const queryDocumentSnapshots = await this.afs
       .collection('users')
@@ -221,7 +221,7 @@ export class EventService implements OnDestroy {
       .collection('events')
       .doc(eventID).collection('activities').ref.get();
     queryDocumentSnapshots.docs.forEach((queryDocumentSnapshot) => {
-      activityDeletePromises.push(this.deleteActivityForUser(user, eventID, queryDocumentSnapshot.id))
+      activityDeletePromises.push(this.deleteAllActivityData(user, eventID, queryDocumentSnapshot.id))
     });
     await Promise.all(activityDeletePromises);
     await this.afs
@@ -233,7 +233,7 @@ export class EventService implements OnDestroy {
     return true;
   }
 
-  public async deleteActivityForUser(user: User, eventID: string, activityID: string): Promise<boolean> {
+  public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
     // @todo add try catch etc
     await this.deleteAllStreams(user, eventID, activityID);
     await this.afs

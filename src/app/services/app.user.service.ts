@@ -4,6 +4,8 @@ import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestor
 import {Observable} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {EventService} from './app.event.service';
+import {take} from 'rxjs/operators';
 
 
 @Injectable()
@@ -12,7 +14,9 @@ export class UserService implements OnDestroy {
   protected logger = Log.create('UserService');
 
   constructor(
-    private afs: AngularFirestore) {
+    private afs: AngularFirestore,
+    private eventService: EventService,
+  ) {
   }
 
   public getUserByID(userID: string): Observable<User> {
@@ -36,6 +40,16 @@ export class UserService implements OnDestroy {
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
     return this.updateUserProperties(user, {privacy: privacy});
+  }
+
+  public async deleteAllUserData(user: User) {
+    const events = await this.eventService.getAllEventsForUser(user).pipe(take(1)).toPromise();
+    const promises = [];
+    events.forEach((event) => {
+      promises.push(this.eventService.deleteAllEventData(user, event.getID()));
+    });
+    await Promise.all(promises);
+    return this.afs.collection('users').doc(user.uid).delete();
   }
 
   ngOnDestroy() {

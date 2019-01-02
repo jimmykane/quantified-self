@@ -93,7 +93,7 @@ export class EventActionsComponent implements OnInit {
   }
 
   async delete() {
-    await this.eventService.deleteEventForUser(this.user, this.event.getID());
+    await this.eventService.deleteAllEventData(this.user, this.event.getID());
     await this.router.navigate(['/dashboard']);
     this.snackBar.open('Event deleted', null, {
       duration: 2000,

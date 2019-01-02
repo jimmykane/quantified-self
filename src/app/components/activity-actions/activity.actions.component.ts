@@ -47,7 +47,7 @@ export class ActivityActionsComponent implements OnInit{
   }
 
   deleteActivity() {
-    this.eventService.deleteActivityForUser(this.user, this.event.getID(), this.activity.getID()).then(() => {
+    this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID()).then(() => {
       this.snackBar.open('Activity deleted', null, {
         duration: 2000,
       });
