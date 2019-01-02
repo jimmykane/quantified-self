@@ -346,8 +346,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series.strokeWidth = 0.6;
 
     // series.interactionsEnabled = false;
-    if (this.chart.series.length > 4) {
-      // series.hide();
+    // debugger;
+    if (this.chart.series.length >= this.selectedActivities.length * 2) {
+      series.hidden = true;
     }
 
     return series;
