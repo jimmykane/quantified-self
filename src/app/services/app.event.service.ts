@@ -22,6 +22,7 @@ import * as Raven from 'raven-js';
 import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -260,6 +261,10 @@ export class EventService implements OnDestroy {
       [jsonString],
       {type: EventExporterJSON.fileType},
     ));
+  }
+
+  public async setEventPrivacy(user: User, eventID: string, privacy: Privacy){
+    return this.updateEventProperties(user, eventID, {privacy: privacy});
   }
 
   // From https://github.com/angular/angularfire2/issues/1400

@@ -98,10 +98,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async toggleEventPrivacy() {
-    if (!this.isOwner()) {
-      return false
-    }
-    await this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: this.event.privacy === Privacy.private ? Privacy.public : Privacy.private})
+    return this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy === Privacy.private ? Privacy.public : Privacy.private);
   }
 
   isOwner() {
