@@ -14,7 +14,7 @@ const routes: Routes = [
   {path: 'dashboard', component: DashboardComponent, data: {title: 'Dashboard'}, canActivate: [AppAuthGuard]},
   {path: 'user/:userID/event/:eventID', component: EventCardComponent, data: {title: 'Details'}},
   {path: 'user/:userID', component: UserComponent, data: {title: 'User'}},
-  {path: '**', redirectTo: 'dashboard', pathMatch: 'full'},
+  {path: '**', redirectTo: 'home', pathMatch: 'full' },
 ];
 
 @NgModule({
