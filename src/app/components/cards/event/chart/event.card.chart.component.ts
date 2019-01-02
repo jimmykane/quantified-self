@@ -99,7 +99,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     DataNumberOfSatellites.type,
     DataEVPE.type,
     DataEHPE.type,
-    DataDistance.type,
+    // DataDistance.type, @todo take out till on click on axis uses current clicked series
     DataGPSAltitude.type,
     DataAbsolutePressure.type,
     DataPeakTrainingEffect.type,
