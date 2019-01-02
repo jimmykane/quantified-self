@@ -34,7 +34,7 @@ export class ActivityActionsComponent implements OnInit{
 
   editActivity()  {
     const dialogRef = this.dialog.open(ActivityFormComponent, {
-      width: '75vh',
+      width: '75vw',
       data: {
         event: this.event,
         activity: this.activity,

@@ -43,7 +43,7 @@ export class EventActionsComponent implements OnInit {
 
   async share() {
     if (this.event.privacy !== Privacy.public) {
-      this.eventService.updateEventProperties(this.user, this.event.getID(), {privacy: Privacy.public});
+      await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.public);
     }
     this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
     this.snackBar.open('Privacy is changed to public and link copied to your keyboard', 'go to share link', {
@@ -55,7 +55,7 @@ export class EventActionsComponent implements OnInit {
 
   edit() {
     const dialogRef = this.dialog.open(EventFormComponent, {
-      width: '75vh',
+      width: '75vw',
       disableClose: true,
       data: {
         event: this.event,

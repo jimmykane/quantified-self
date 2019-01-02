@@ -3,10 +3,11 @@ import {ActivatedRoute, Router} from '@angular/router';
 import {UserAbstractComponent} from '../user.abstract.component';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {Subscription} from 'rxjs';
+import {of, Subscription} from 'rxjs';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
 import {MatSnackBar} from '@angular/material';
+import {catchError, map, switchMap} from 'rxjs/operators';
 
 @Component({
   selector: 'app-user',
@@ -15,8 +16,8 @@ import {MatSnackBar} from '@angular/material';
 })
 export class UserComponent implements OnInit, OnDestroy {
 
-  public userFromParams: User;
-  public user: User;
+  public currentUser: User;
+  public targetUser: User;
   private userSubscription: Subscription;
 
   constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar) {
@@ -25,25 +26,37 @@ export class UserComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const userID = this.route.snapshot.paramMap.get('userID');
     if (userID) {
-      this.userFromParams = new User(userID);
+      this.targetUser = new User(userID);
     }
 
-    this.userSubscription = this.authService.user.subscribe((user) => {
-      this.user = user;
-    });
-  }
-
-  public async deleteUser() {
-    await this.userService.deleteAllUserData(this.user);
-    await this.authService.signOut();
-    await this.router.navigate(['home']);
-    this.snackBar.open('Account deleted! You are now logged out.', null, {
-      duration: 10000,
-    });
+    this.userSubscription = this.authService.user.pipe(map((user) => {
+      // First get our current user
+      this.currentUser = user;
+      return this.currentUser;
+    })).pipe(switchMap((currentUser) => {
+      // 1. If the current user is the targetOne return the current user and noop
+      if (this.isOwner()) {
+        return of(this.currentUser);
+      }
+      // 2. Else try to get the target user
+      return this.userService.getUserByID(this.targetUser.uid);
+    })).pipe(catchError((error) => {
+      return of(null);
+    })).subscribe((targetUser) => {
+      if (!targetUser) {
+        this.router.navigate(['home']).then(() => {
+          this.snackBar.open('Not found...', null, {
+            duration: 10000,
+          });
+        });
+        return
+      }
+      this.targetUser = targetUser;
+    })
   }
 
   isOwner() {
-    return !!(this.userFromParams && this.user && (this.userFromParams.uid === this.user.uid));
+    return !!(this.currentUser && this.targetUser && (this.currentUser.uid === this.targetUser.uid));
   }
 
   ngOnDestroy(): void {

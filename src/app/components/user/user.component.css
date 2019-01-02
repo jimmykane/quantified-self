@@ -5,3 +5,7 @@ mat-card{
 .avatar{
   background-size: cover;
 }
+
+mat-icon{
+  vertical-align: middle;
+}

@@ -1,0 +1,13 @@
+<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
+  <mat-icon>more_vert</mat-icon>
+</button>
+<mat-menu #menu="matMenu">
+   <button mat-menu-item (click)="share()">
+    <mat-icon>share</mat-icon>
+    <span>Share</span>
+  </button>
+  <button mat-menu-item (click)="edit()">
+    <mat-icon>edit</mat-icon>
+    <span>Edit</span>
+  </button>
+</mat-menu>

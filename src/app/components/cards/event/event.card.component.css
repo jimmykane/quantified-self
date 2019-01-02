@@ -9,7 +9,7 @@ mat-card-header mat-icon {
 
 ::ng-deep .mat-card-header-text{
   width: 100%;
-  margin: 0;
+  /*margin: 0;*/
 }
 
 .title {
