@@ -24,6 +24,7 @@ import {Router} from '@angular/router';
 export class UserFormComponent implements OnInit {
 
   public privacy = Privacy;
+  public consentToDelete: boolean;
   public user: User;
   public originalValues: {
     displayName: string;
