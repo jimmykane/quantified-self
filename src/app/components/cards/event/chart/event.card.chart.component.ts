@@ -267,10 +267,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.exporting.menu.verticalAlign = 'bottom';
         chart.exporting.useWebFonts = false;
         chart.exporting.menu.items = [{
-          label: "...",
+          label: "...️",
           menu: [
             {"type": "png", "label": "PNG"},
-            {"type": "json", "label": "JSON"},
+            // {"type": "json", "label": "JSON"},
             {"label": "Print", "type": "print"},
           ],
         }];
@@ -347,7 +347,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // series.interactionsEnabled = false;
     // debugger;
-    if (this.chart.series.length >= this.selectedActivities.length * 2) {
+    if ([DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
       series.hidden = true;
     }
 
@@ -462,7 +462,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.unSubscribeFromAll();
   }
 
-  private unsubscribeAndClearChart(){
+  private unsubscribeAndClearChart() {
     this.unSubscribeFromAll();
     this.chart.series.clear();
     this.chart.colors.reset();
