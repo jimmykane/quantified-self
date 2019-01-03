@@ -149,17 +149,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // 3. If something changed then do the needed
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
       if (!this.event || !this.selectedActivities.length) {
-        this.unSubscribeFromAll();
-        this.chart.series.clear();
+        this.unsubscribeAndClearChart();
         return;
       }
-      this.chart.series.clear();
-      this.unsubscribeAndBindToNewData();
+      this.unsubscribeAndClearChart();
+      this.subscribeToNewData();
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      this.unsubscribeAndBindToNewData();
+      this.subscribeToNewData();
     }
 
     // // 5 Invalidate if becoming visible @todo perhaps move higher?
@@ -168,8 +167,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // }
   }
 
-  private unsubscribeAndBindToNewData() {
-    this.unSubscribeFromAll();
+  private subscribeToNewData() {
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
         this.showAdvancedStats ? this.advancedStats : this.simpleStats,
@@ -463,6 +461,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.destroyChart();
     this.unSubscribeFromAll();
   }
+
+  private unsubscribeAndClearChart(){
+    this.unSubscribeFromAll();
+    this.chart.series.clear();
+    this.chart.colors.reset();
+  }
+
 
   private unSubscribeFromAll() {
     if (this.streamsSubscription) {
