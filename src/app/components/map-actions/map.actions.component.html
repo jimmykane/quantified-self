@@ -22,24 +22,4 @@
       </span>
     </mat-slide-toggle>
   </section>
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="checkBoxChanged($event)"
-      [(ngModel)]="showDataWarnings">
-      <span matTooltip="!SUUNTO Only! When enabled the map will show little 'targets' were satellite count was low (<7). The watch registers these 'events' periodically">
-        Data Warnings
-      </span>
-    </mat-slide-toggle>
-  </section>
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="checkBoxChanged($event)"
-      [(ngModel)]="showData">
-      <span matTooltip="!WARNING! This is CPU intense atm. When this is enabled clicking on the map will popup an info window with the current position stats for example heart rate, speed, pace, altitude and so on">
-        Stats on Click
-      </span>
-    </mat-slide-toggle>
-  </section>
 </mat-menu>
