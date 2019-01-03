@@ -133,7 +133,9 @@ export class ActivityFormComponent implements OnInit {
     });
   }
 
-  close() {
+  close(event) {
+    event.stopPropagation(); event.preventDefault();
+
     this.restoreOriginalValues();
     this.dialogRef.close();
   }

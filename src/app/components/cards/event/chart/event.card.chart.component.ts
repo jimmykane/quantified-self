@@ -195,6 +195,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // series.invalidate();
       });
       this.chart.validateData(); // this helps with the legend area
+      this.chart.deepInvalidate();
       // this.chart.svgContainer.autoResize = false
       // this.chart.invalidate(); // @todo peghaps this is not needed
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
@@ -337,11 +338,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     }
 
-    series.strokeWidth = 0.6;
+    series.strokeWidth = 0.7;
 
     // series.minDistance = 1;
 
-    series.fillOpacity = 0.2;
+    series.fillOpacity = 0.4;
     series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
 

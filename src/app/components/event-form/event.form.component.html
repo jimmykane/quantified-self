@@ -19,9 +19,12 @@
     </mat-radio-group>
   </div>
 
-  <mat-divider></mat-divider>
 
-  <button mat-button (click)="close()">Cancel</button>
+  <div>
+    <button mat-stroked-button (click)="close($event)">Cancel</button>
+  </div>
+  <div>
+    <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
+  </div>
 
-  <button mat-button (click)="onSubmit()">Save</button>
 </form>

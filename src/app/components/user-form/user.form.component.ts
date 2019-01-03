@@ -116,6 +116,8 @@ export class UserFormComponent implements OnInit {
   }
 
   close() {
+    event.stopPropagation();
+    event.preventDefault();
     this.dialogRef.close();
   }
 }

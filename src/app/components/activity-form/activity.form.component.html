@@ -51,5 +51,5 @@
 </form>
 
 
-<button mat-button (click)="close()">Cancel</button>
+<button mat-stroked-button (click)="close($event)">Cancel</button>
 <button mat-button (click)="onSubmit()" *ngIf="!hasError()">Save</button>

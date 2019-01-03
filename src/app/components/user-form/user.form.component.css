@@ -14,8 +14,9 @@ mat-form-field {
 .mat-radio-button{
   margin-right: 1%;
 }
-.full{
+button{
   width: 100%;
+  margin-bottom: 0.5em;
 }
 
 .account-delete{
