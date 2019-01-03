@@ -245,7 +245,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.cursor = new am4charts.XYCursor();
         // chart.cursor.fullWidthLineX = true;
         // chart.cursor.fullWidthLineY = true;
-        chart.cursor.behavior = 'zoomXY';
+        chart.cursor.behavior = 'zoomY';
 
         // Add watermark
         const watermark = new am4core.Label();

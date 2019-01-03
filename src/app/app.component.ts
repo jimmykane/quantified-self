@@ -8,6 +8,7 @@ import {MatSidenav, MatSnackBar} from '@angular/material';
 import {Subscription} from 'rxjs';
 import {NavigationEnd, Router, RoutesRecognized} from '@angular/router';
 import {filter, map} from 'rxjs/operators';
+import {AppAuthService} from './authentication/app.auth.service';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +25,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private routerEventSubscription: Subscription;
 
   constructor(
+    public authService: AppAuthService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     private actionButtonService: ActionButtonService,
