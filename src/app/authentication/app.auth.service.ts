@@ -95,16 +95,14 @@ export class AppAuthService implements OnDestroy {
     }
   }
 
-  emailLogin(email: string, password: string) {
-    return this.afAuth.auth
-      .signInWithEmailAndPassword(email, password)
-      .then(credential => {
-        this.snackBar.open(`Welcome back`, null, {
-          duration: 2000,
-        });
-        return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
-      })
-      .catch(error => this.handleError(error));
+  async emailLogin(email: string, password: string) {
+    try {
+      const credential = this.afAuth.auth.signInWithEmailAndPassword(email, password);
+      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+    }catch (e) {
+      this.handleError(e);
+      throw e;
+    }
   }
 
   // Sends email allowing user to reset password
@@ -129,7 +127,7 @@ export class AppAuthService implements OnDestroy {
       duration: 2000,
     });
   }
-  
+
   ngOnDestroy(): void {
     this.userSubscription.unsubscribe();
   }
