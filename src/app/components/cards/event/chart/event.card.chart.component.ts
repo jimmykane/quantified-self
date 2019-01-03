@@ -194,21 +194,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         series.data = series.dummyData;
         // series.invalidate();
       });
-      this.chart.validateData();
-
+      this.chart.validateData(); // this helps with the legend area
       // this.chart.svgContainer.autoResize = false
       // this.chart.invalidate(); // @todo peghaps this is not needed
-      //
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
-      // The below is buggy
-      // this.chart.series.values.forEach((chartSeries) => {
-      //   if (series.map((serrie) => serrie.id).indexOf(chartSeries.id) === -1) {
-      //     this.chart.series.removeIndex(
-      //       this.chart.series.indexOf(chartSeries),
-      //     ).dispose();
-      //     this.logger.d(`remove ${chartSeries.id} with index ${this.chart.series.indexOf(chartSeries)}`);
-      //   }
-      // });
     });
   }
 
@@ -240,6 +229,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.width = am4core.percent(100);
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
+        // chart.legend.itemContainers.template.events.on("hit", function (ev) {
+        //   console.log("Clicked on",<am4charts.LineSeries>ev.target.dataItem.dataContext);
+        //   const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
+        //   chart.yAxes.clear();
+        //   const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+        //   // valueAxis.file
+        //   valueAxis.min = series.minX;
+        //   valueAxis.max = series.maxX;
+        //   chart.yAxes.push(valueAxis);
+        //   chart.invalidateData();
+        // });
 
         // Create a cursor
         chart.cursor = new am4charts.XYCursor();
@@ -325,14 +325,27 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     // series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-    // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-    // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+
+
+    // Search and add colors
+
+    const found = this.chart.series.values.find((series) => {
+      return series.stroke.toString() === am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString();
+    });
+    if (!found) {
+      series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+      series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+    }
+
+    series.strokeWidth = 0.6;
+
+    // series.minDistance = 1;
+
     series.fillOpacity = 0.2;
     series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
-    series.dataFields.dateX = "date";
-    // series.hidden = true;
 
+    series.dataFields.dateX = "date";
 
     // if (stream.type === DataPace.type) {
     //   let yAxis = new am4charts.DurationAxis();
@@ -342,12 +355,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     //   this.chart.yAxes.push(yAxis)
     // }
 
-    // series.minDistance = 1;
-    series.strokeWidth = 0.6;
-
     // series.interactionsEnabled = false;
     // debugger;
-    if ([DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
+
+    if (this.selectedActivities.length == 1 && [DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
+      series.hidden = true;
+    }
+    if (this.selectedActivities.length != 1 && [DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
     }
 
@@ -379,7 +393,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     const hoursToKeep1sSamplingRate = 1; // 1 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours * 7) / hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours * 3) / hoursToKeep1sSamplingRate)
     }
     this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
