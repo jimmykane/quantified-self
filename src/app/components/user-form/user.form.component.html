@@ -1,4 +1,4 @@
-<form [formGroup]="userFormGroup">
+<form [formGroup]="userFormGroup" (submit)="onSubmit()">
   <mat-form-field>
     <input matInput placeholder="Name" formControlName="displayName">
     <!--<mat-hint></mat-hint>-->
