@@ -54,7 +54,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
    * See https://github.com/angular/angular/issues/14748
    */
   ngAfterViewChecked() {
-    // this.changeDetectorRef.detectChanges();
+    this.changeDetectorRef.detectChanges();
   }
 
   ngOnDestroy(): void {
