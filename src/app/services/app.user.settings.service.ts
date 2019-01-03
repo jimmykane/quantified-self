@@ -32,26 +32,6 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-  public async getShowData(): Promise<boolean> {
-    let defaultValue = 'false';
-    try {
-      defaultValue = await this.mapSettingsLocalStorageService.getItem('showData');
-    } catch (e) {
-      this.mapSettingsLocalStorageService.setItem('showData', defaultValue);
-    }
-    return defaultValue === 'true';
-  }
-
-  public async showDataWarnings(): Promise<boolean> {
-    let defaultValue = 'false';
-    try {
-      defaultValue = await this.mapSettingsLocalStorageService.getItem('showDataWarnings');
-    } catch (e) {
-      this.mapSettingsLocalStorageService.setItem('showDataWarnings', defaultValue);
-    }
-    return defaultValue === 'true';
-  }
-
   public async useDistanceAxis(): Promise<boolean> {
     let defaultValue = 'false';
     try {
@@ -78,14 +58,6 @@ export class UserSettingsService {
 
   public setShowManualLaps(value: boolean) {
     this.mapSettingsLocalStorageService.setItem('showManualLaps', String(value));
-  }
-
-  public setShowData(value: boolean) {
-    this.mapSettingsLocalStorageService.setItem('showData', String(value));
-  }
-
-  public setShowDataWarnings(value: boolean) {
-    this.mapSettingsLocalStorageService.setItem('showDataWarnings', String(value));
   }
 
   public setUseDistanceAxis(value: boolean) {

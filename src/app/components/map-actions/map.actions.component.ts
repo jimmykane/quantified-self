@@ -26,13 +26,9 @@ export class MapActionsComponent implements OnChanges {
 
   @Input() showAutoLaps: boolean;
   @Input() showManualLaps: boolean;
-  @Input() showData: boolean;
-  @Input() showDataWarnings: boolean;
 
   @Output() showAutoLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showManualLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
-  @Output() showDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
-  @Output() showDataWarningsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
 
   constructor(
@@ -48,12 +44,8 @@ export class MapActionsComponent implements OnChanges {
     // debugger;
     this.showAutoLapsChange.emit(this.showAutoLaps);
     this.showManualLapsChange.emit(this.showManualLaps);
-    this.showDataChange.emit(this.showData);
-    this.showDataWarningsChange.emit(this.showDataWarnings);
     this.mapSettingsService.setShowAutoLaps(this.showAutoLaps);
     this.mapSettingsService.setShowManualLaps(this.showManualLaps);
-    this.mapSettingsService.setShowData(this.showData);
-    this.mapSettingsService.setShowDataWarnings(this.showDataWarnings);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
   }

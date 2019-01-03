@@ -31,8 +31,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   public showMapAutoLaps: boolean;
   public showMapManualLaps: boolean;
-  public showMapDataWarnings: boolean;
-  public showData: boolean;
   public showAdvancedStats: boolean;
 
   public useDistanceAxis: boolean;
@@ -61,8 +59,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Get the settings
     this.userSettingsService.getShowAutoLaps().then(value => this.showMapAutoLaps = value);
     this.userSettingsService.getShowManualLaps().then(value => this.showMapManualLaps = value);
-    this.userSettingsService.getShowData().then(value => this.showData = value);
-    this.userSettingsService.showDataWarnings().then(value => this.showMapDataWarnings = value);
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
     this.userSettingsService.showAdvancedStats().then(value => this.showAdvancedStats = value);
 

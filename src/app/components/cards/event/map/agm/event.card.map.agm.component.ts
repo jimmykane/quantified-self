@@ -38,8 +38,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   @Input() isVisible: boolean;
   @Input() showAutoLaps: boolean;
   @Input() showManualLaps: boolean;
-  @Input() showData: boolean;
-  @Input() showDataWarnings: boolean;
 
 
   private streamsSubscriptions: Subscription[] = [];
