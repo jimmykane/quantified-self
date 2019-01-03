@@ -204,7 +204,8 @@ export class EventService implements OnDestroy {
       Raven.captureException(e);
       debugger;
       // Try to delete the parent entity and all subdata
-      return await this.deleteAllEventData(user, event.getID());
+      await this.deleteAllEventData(user, event.getID());
+      throw 'Could not parse event';
     }
   }
 

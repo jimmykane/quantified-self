@@ -38,10 +38,4 @@ export class UploadErrorComponent implements OnInit {
   close() {
     this.dialogRef.close();
   }
-
-  // @todo move this to service
-  reset() {
-    localStorage.clear();
-    window.location.reload();
-  }
 }

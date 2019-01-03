@@ -193,9 +193,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       series.forEach((series) => {
-        Object.assign(series.data, series.dummyData); // Copy
+        series.data = series.dummyData;
+        // series.invalidate();
       });
       this.chart.validateData();
+
       // this.chart.svgContainer.autoResize = false
       // this.chart.invalidate(); // @todo peghaps this is not needed
       //
