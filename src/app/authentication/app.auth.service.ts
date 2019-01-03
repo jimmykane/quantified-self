@@ -4,7 +4,7 @@ import {auth} from 'firebase/app';
 import {User as FireBaseUser} from 'firebase/app';
 
 import {Observable, of, Subscription} from 'rxjs';
-import {switchMap} from 'rxjs/operators';
+import {switchMap, take} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
@@ -64,7 +64,7 @@ export class AppAuthService implements OnDestroy {
   private async oAuthLogin(provider: any) {
     try {
       const credential = await this.afAuth.auth.signInWithPopup(provider);
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -76,7 +76,7 @@ export class AppAuthService implements OnDestroy {
   async anonymousLogin() {
     try {
       const credential = await this.afAuth.auth.signInAnonymously();
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -88,7 +88,7 @@ export class AppAuthService implements OnDestroy {
   async emailSignUp(email: string, password: string) {
     try {
       const credential = await this.afAuth.auth.createUserWithEmailAndPassword(email, password);
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -97,9 +97,9 @@ export class AppAuthService implements OnDestroy {
 
   async emailLogin(email: string, password: string) {
     try {
-      const credential = this.afAuth.auth.signInWithEmailAndPassword(email, password);
-      return this.userService.createOrUpdateUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
-    }catch (e) {
+      const credential = await this.afAuth.auth.signInWithEmailAndPassword(email, password);
+      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+    } catch (e) {
       this.handleError(e);
       throw e;
     }
@@ -118,6 +118,15 @@ export class AppAuthService implements OnDestroy {
 
   signOut(): Promise<void> {
     return this.afAuth.auth.signOut();
+  }
+
+  private async getOrInsertUser(user: User) {
+    // Check if we have a user
+    const databaseUser = await this.userService.getUserByID(user.uid).pipe(take(1)).toPromise();
+    if (!databaseUser) {
+      return this.userService.createOrUpdateUser(new User(user.uid, user.displayName, user.photoURL));
+    }
+    return Promise.resolve(databaseUser);
   }
 
   // If error, console log and notify user
