@@ -1,13 +1,7 @@
 <form [formGroup]="userFormGroup" (submit)="onSubmit()">
   <div>
     <mat-checkbox formControlName="acceptPrivacyPolicy">
-      Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's
-      standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a
-      type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting,
-      remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing
-      Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions
-      of
-      Lorem Ipsum.
+      <b>You accept that: </b> Your data are stored and held encrypted by Google (Google Cloud).<br/>You choose what to make public and what private with us providing all defaults to be private.
     </mat-checkbox>
     <mat-error *ngIf="hasError('acceptPrivacyPolicy')">
       You must accept the privacy policy
@@ -16,13 +10,7 @@
 
   <div>
     <mat-checkbox formControlName="acceptDataPolicy">
-      Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's
-      standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a
-      type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting,
-      remaining essentially unchanged. It was popularised in the 1960s with the release of Letraset sheets containing
-      Lorem Ipsum passages, and more recently with desktop publishing software like Aldus PageMaker including versions
-      of
-      Lorem Ipsum.
+     <b>You accept that: </b> While we will employ best endeavours we don't promise to keep your files accessible at any time, it's best advised to keep your own private copies.
     </mat-checkbox>
     <mat-error *ngIf="hasError('acceptDataPolicy')">
       You must accept the data policy
