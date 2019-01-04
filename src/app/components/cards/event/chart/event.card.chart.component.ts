@@ -195,7 +195,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // series.invalidate();
       });
       this.chart.validateData(); // this helps with the legend area
-      this.chart.deepInvalidate();
+      // this.chart.deepInvalidate();
       // this.chart.svgContainer.autoResize = false
       // this.chart.invalidate(); // @todo peghaps this is not needed
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
@@ -324,7 +324,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     //   return ">>> " + text + " <<<";
     // });
     series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-    // series.legendSettings.labelText = "[bold {stroke}]{name}[/]";
+    series.legendSettings.labelText = `${stream.type} [bold ${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
+
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
 
