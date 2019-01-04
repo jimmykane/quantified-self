@@ -30,12 +30,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private changeDetectorRef: ChangeDetectorRef,
     private actionButtonService: ActionButtonService,
     private snackBar: MatSnackBar) {
-    this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
-      this.actionButtons = Array.from(actionButtons.values());
-    });
-    this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
-      this.sideNav.toggle();
-    }, 'material'));
+
   }
 
   ngOnInit() {
@@ -46,6 +41,12 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       })).subscribe(title => {
         this.title = title;
       });
+    this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
+      this.actionButtons = Array.from(actionButtons.values());
+    });
+    this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
+      this.sideNav.toggle();
+    }, 'material'));
   }
 
   ngAfterViewInit() {
