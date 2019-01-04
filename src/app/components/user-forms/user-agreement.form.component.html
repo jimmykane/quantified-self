@@ -1,24 +1,28 @@
+<span class="mat-headline">Hi there {{ user.displayName || 'Mr. Anonymous'  }},</span>
+<span class="mat-subheader">Let's agree an a few things before we proceed with you uploading data according to GDPR.</span>
 <form [formGroup]="userFormGroup" (submit)="onSubmit()">
-  <div>
-    <mat-checkbox formControlName="acceptPrivacyPolicy">
-      <b>You accept that: </b> Your data are stored and held encrypted by Google (Google Cloud).<br/>You choose what to make public and what private with us providing all defaults to be private.
-    </mat-checkbox>
-    <mat-error *ngIf="hasError('acceptPrivacyPolicy')">
-      You must accept the privacy policy
-    </mat-error>
-  </div>
+  <mat-checkbox formControlName="acceptPrivacyPolicy">
+    <mat-card>
+      <b>You accept that: </b> Your data are stored and held encrypted by Google (Google Cloud).<br/>
+      You choose what part of your data to make public or private (profile, individual data).
+      We provide all default privacy settings to private, only seen by you and you can choose what to make public.
+      <mat-error *ngIf="hasError('acceptPrivacyPolicy')">
+        <p>You must accept the privacy policy</p>
+      </mat-error>
+    </mat-card>
+  </mat-checkbox>
 
-  <div>
-    <mat-checkbox formControlName="acceptDataPolicy">
-     <b>You accept that: </b> While we will employ best endeavours we don't promise to keep your files accessible at any time, it's best advised to keep your own private copies.
-    </mat-checkbox>
-    <mat-error *ngIf="hasError('acceptDataPolicy')">
-      You must accept the data policy
-    </mat-error>
-  </div>
-
+  <mat-checkbox formControlName="acceptDataPolicy">
+    <mat-card>
+      <b>You accept that: </b> While we will employ best endeavours we don't promise to keep your files accessible at
+      any time, it's best advised to keep your own private copies.
+      <mat-error *ngIf="hasError('acceptDataPolicy')">
+        <p>You must accept the data policy</p>
+      </mat-error>
+    </mat-card>
+  </mat-checkbox>
   <button mat-stroked-button (click)="close()">Cancel</button>
-
-  <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit()">Create My Account</button>
+  <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit()">Create My Account
+  </button>
 
 </form>

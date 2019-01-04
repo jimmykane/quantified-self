@@ -15,3 +15,11 @@ button{
   width: 100%;
   margin-bottom: 0.5em;
 }
+
+/*mat-checkbox{*/
+  /*margin-bottom: 0.5em;*/
+/*}*/
+
+mat-card{
+  margin-bottom: 0.5em;
+}
