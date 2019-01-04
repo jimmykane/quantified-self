@@ -27,6 +27,9 @@ export class UserService implements OnDestroy {
   }
 
   public async createOrUpdateUser(user: User) {
+    if (!user.acceptedPrivacyPolicy || !user.acceptedDataPolicy){
+      throw "User has not accepted privacy or data policy";
+    }
     const userRef: AngularFirestoreDocument = this.afs.doc(
       `users/${user.uid}`,
     );

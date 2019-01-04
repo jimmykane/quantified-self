@@ -80,10 +80,10 @@ import {ClipboardService} from './services/app.clipboard.service';
 import {SharingService} from './services/app.sharing.service';
 import {FileService} from './services/app.file.service';
 import {UserComponent} from './components/user/user.component';
-import {UserAbstractComponent} from './components/user.abstract.component';
 import {UserService} from './services/app.user.service';
 import {UserActionsComponent} from './components/user-actions/user.actions.component';
 import {UserFormComponent} from './components/user-forms/user.form.component';
+import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -177,10 +177,12 @@ export class RavenErrorHandler implements ErrorHandler {
     UserComponent,
     UserActionsComponent,
     UserFormComponent,
+    UserAgreementFormComponent,
   ],
   entryComponents: [
     EventFormComponent,
     UserFormComponent,
+    UserAgreementFormComponent,
     ActivityFormComponent,
     UploadErrorComponent,
   ],

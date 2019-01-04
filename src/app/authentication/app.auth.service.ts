@@ -4,7 +4,7 @@ import {auth} from 'firebase/app';
 import {User as FireBaseUser} from 'firebase/app';
 
 import {Observable, of, Subscription} from 'rxjs';
-import {switchMap, take} from 'rxjs/operators';
+import {map, switchMap, take} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
@@ -26,8 +26,14 @@ export class AppAuthService implements OnDestroy {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
         if (user) {
-          this.authState = true;
-          return this.afs.doc<User>(`users/${user.uid}`).valueChanges();
+          return this.afs.doc<User>(`users/${user.uid}`).valueChanges().pipe(map((dbUser: User) => {
+            if (dbUser) {
+              this.authState = true;
+            }else {
+              this.authState = false;
+            }
+            return dbUser;
+          }));
         } else {
           this.authState = false;
           return of(null);
@@ -41,30 +47,29 @@ export class AppAuthService implements OnDestroy {
     return this.authState;
   }
 
-  async googleLogin() {
+  async googleLogin(): Promise<auth.UserCredential> {
     const provider = new auth.GoogleAuthProvider();
     return this.oAuthLogin(provider);
   }
 
-  async githubLogin() {
+  async githubLogin(): Promise<auth.UserCredential> {
     const provider = new auth.GithubAuthProvider();
     return this.oAuthLogin(provider);
   }
 
-  async facebookLogin() {
+  async facebookLogin(): Promise<auth.UserCredential> {
     const provider = new auth.FacebookAuthProvider();
     return this.oAuthLogin(provider);
   }
 
-  async twitterLogin() {
+  async twitterLogin(): Promise<auth.UserCredential> {
     const provider = new auth.TwitterAuthProvider();
     return this.oAuthLogin(provider);
   }
 
   private async oAuthLogin(provider: any) {
     try {
-      const credential = await this.afAuth.auth.signInWithPopup(provider);
-      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.afAuth.auth.signInWithPopup(provider);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -75,8 +80,7 @@ export class AppAuthService implements OnDestroy {
 
   async anonymousLogin() {
     try {
-      const credential = await this.afAuth.auth.signInAnonymously();
-      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.afAuth.auth.signInAnonymously();
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -87,8 +91,7 @@ export class AppAuthService implements OnDestroy {
 
   async emailSignUp(email: string, password: string) {
     try {
-      const credential = await this.afAuth.auth.createUserWithEmailAndPassword(email, password);
-      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.afAuth.auth.createUserWithEmailAndPassword(email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -97,8 +100,7 @@ export class AppAuthService implements OnDestroy {
 
   async emailLogin(email: string, password: string) {
     try {
-      const credential = await this.afAuth.auth.signInWithEmailAndPassword(email, password);
-      return this.getOrInsertUser(new User(credential.user.uid, credential.user.displayName, credential.user.photoURL));
+      return this.afAuth.auth.signInWithEmailAndPassword(email, password);
     } catch (e) {
       this.handleError(e);
       throw e;

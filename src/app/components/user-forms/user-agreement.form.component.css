@@ -1,0 +1,17 @@
+form {
+  width: 100%;
+  padding: 1%;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+/deep/ .mat-checkbox-layout {
+  white-space: normal !important;
+}
+
+button{
+  width: 100%;
+  margin-bottom: 0.5em;
+}
