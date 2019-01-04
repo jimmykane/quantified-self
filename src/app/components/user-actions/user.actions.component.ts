@@ -12,7 +12,7 @@ import {ClipboardService} from '../../services/app.clipboard.service';
 import {SharingService} from '../../services/app.sharing.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
-import {UserFormComponent} from '../user-form/user.form.component';
+import {UserFormComponent} from '../user-forms/user.form.component';
 
 @Component({
   selector: 'app-user-actions',

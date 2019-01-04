@@ -8,7 +8,7 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
 import {MatDialog, MatDialogRef, MatSnackBar} from '@angular/material';
 import {catchError, map, switchMap} from 'rxjs/operators';
-import {UserFormComponent} from '../user-form/user.form.component';
+import {UserFormComponent} from '../user-forms/user.form.component';
 
 @Component({
   selector: 'app-user',
