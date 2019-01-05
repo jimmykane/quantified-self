@@ -20,14 +20,14 @@ import {User} from 'quantified-self-lib/lib/users/user';
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   user: User;
   events: EventInterface[];
-  eventsSubscription: Subscription;
+  userSubscription: Subscription;
 
   constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private snackBar: MatSnackBar) {
 
   }
 
   ngOnInit() {
-    this.eventsSubscription = this.authService.user.pipe(switchMap((user) => {
+    this.userSubscription = this.authService.user.subscribe((user) => {
       if (!user) {
         this.router.navigate(['home']).then(() => {
           this.snackBar.open('Logged out')
@@ -35,9 +35,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return of(null);
       }
       this.user = user;
-      return this.eventService.getAllEventsForUser(user);
-    })).subscribe((eventsArray) => {
-      this.events = eventsArray;
     });
   }
 
@@ -45,6 +42,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
-    this.eventsSubscription.unsubscribe();
+    this.userSubscription.unsubscribe();
   }
 }

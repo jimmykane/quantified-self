@@ -40,7 +40,6 @@ export class UserFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private formBuilder: FormBuilder,
   ) {
     this.user = data.user; // Perhaps move to service?
     if (!this.user) {
@@ -62,8 +61,6 @@ export class UserFormComponent implements OnInit {
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      // 'alterEgo': new FormControl(this.hero.alterEgo),
-      // 'power': new FormControl(this.hero.power, Validators.required)
     });
   }
 

@@ -64,10 +64,12 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getAllEventsForUser(user: User): Observable<EventInterface[]> {
+  public getEventsForUser(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10): Observable<EventInterface[]> {
     return this.afs.collection('users')
       .doc(user.uid)
-      .collection("events")
+      .collection("events", ((ref) => {
+        return ref.orderBy(orderBy, asc ? 'asc' : 'desc').limit(limit);
+      }))
       .snapshotChanges()
       .pipe(map((eventSnapshots) => {
         return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
@@ -264,7 +266,7 @@ export class EventService implements OnDestroy {
     ));
   }
 
-  public async setEventPrivacy(user: User, eventID: string, privacy: Privacy){
+  public async setEventPrivacy(user: User, eventID: string, privacy: Privacy) {
     return this.updateEventProperties(user, eventID, {privacy: privacy});
   }
 

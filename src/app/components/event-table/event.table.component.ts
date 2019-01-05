@@ -26,13 +26,13 @@ import {User} from 'quantified-self-lib/lib/users/user';
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
   providers: [DatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @Input() events: EventInterface[];
   @Input() user: User;
   @ViewChild(MatSort) sort: MatSort;
+  events: EventInterface[];
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
   selection = new SelectionModel(true, []);
@@ -46,45 +46,42 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnInit() {
+    this.eventService.getEventsForUser(this.user).subscribe((events) => {
+      this.events = events;
+      const data = this.events.reduce((eventArray, event) => {
+        eventArray.push({
+          Checkbox: event,
+          Privacy: event.privacy,
+          Date: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
+          Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
+          Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
+          Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
+          Device:
+            this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
+          Actions:
+          event,
+        })
+        ;
+        return eventArray;
+      }, []);
+      this.columns = Object.keys(data[0]);
+      this.data = new MatTableDataSource(data);
+      // @todo combine this with after view init
+      if (this.sort) {
+        this.data.sort = this.sort;
+        this.data.sort.sort(<MatSortable>{
+            id: 'Date',
+            start: 'desc',
+          },
+        );
+      }
+    })
   }
 
   ngAfterViewInit() {
-    this.data.sort = this.sort;
-    this.data.sort.sort(<MatSortable>{
-        id: 'Date',
-        start: 'desc',
-      },
-    );
   }
 
   ngOnChanges(): void {
-    const data = this.events.reduce((eventArray, event) => {
-      eventArray.push({
-        Checkbox: event,
-        Privacy: event.privacy,
-        Date: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
-        Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-        Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
-        Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
-        Device:
-          this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
-        Actions:
-        event,
-      })
-      ;
-      return eventArray;
-    }, []);
-    this.columns = Object.keys(data[0]);
-    this.data = new MatTableDataSource(data);
-    // @todo combine this with after view init
-    if (this.sort) {
-      this.data.sort = this.sort;
-      this.data.sort.sort(<MatSortable>{
-          id: 'Date',
-          start: 'desc',
-        },
-      );
-    }
   }
 
   checkBoxClick(row) {
