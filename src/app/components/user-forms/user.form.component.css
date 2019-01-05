@@ -5,10 +5,11 @@ form {
 
 mat-form-field {
   width: 100%;
+  margin-bottom: 0.5em;
 }
 
 .radio-container {
-  padding-bottom: 1.25em;
+  margin-bottom: 0.5em;
 }
 
 .mat-radio-button{
@@ -17,4 +18,8 @@ mat-form-field {
 button{
   width: 100%;
   margin-bottom: 0.5em;
+}
+
+/deep/ .mat-checkbox-layout {
+  white-space: normal !important;
 }

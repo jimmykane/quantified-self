@@ -72,6 +72,7 @@ export class UserFormComponent implements OnInit {
   }
 
   async onSubmit() {
+    // @todo fix this as delete enters here
     if (!this.userFormGroup.valid) {
       this.validateAllFormFields(this.userFormGroup);
       return;
@@ -107,11 +108,12 @@ export class UserFormComponent implements OnInit {
   }
 
   public async deleteUser() {
-    await this.userService.deleteAllUserData(this.user);
+    event.preventDefault();
     await this.router.navigate(['home']);
+    await this.userService.deleteAllUserData(this.user);
     await this.authService.signOut();
     this.snackBar.open('Account deleted! You are now logged out.', null, {
-      duration: 10000,
+      duration: 5000,
     });
     this.dialogRef.close();
   }
