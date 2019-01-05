@@ -1,30 +1,33 @@
-<form [formGroup]="eventFormGroup" (submit)="onSubmit()">
-  <mat-form-field>
-    <input matInput placeholder="Name" formControlName="name">
-    <!--<mat-hint></mat-hint>-->
-    <mat-error *ngIf="hasError('name')">
-      Name must not be empty
-    </mat-error>
-  </mat-form-field>
+<mat-dialog-content>
 
-  <div class="radio-container">
-    <label>Privacy: </label>
-    <mat-radio-group formControlName="privacy">
-      <mat-radio-button [value]="privacy.public">
-        Public
-      </mat-radio-button>
-      <mat-radio-button [value]="privacy.private">
-        Private
-      </mat-radio-button>
-    </mat-radio-group>
-  </div>
+  <form [formGroup]="eventFormGroup" (submit)="onSubmit()">
+    <mat-form-field>
+      <input matInput placeholder="Name" formControlName="name">
+      <!--<mat-hint></mat-hint>-->
+      <mat-error *ngIf="hasError('name')">
+        Name must not be empty
+      </mat-error>
+    </mat-form-field>
+
+    <div class="radio-container">
+      <label>Privacy: </label>
+      <mat-radio-group formControlName="privacy">
+        <mat-radio-button [value]="privacy.public">
+          Public
+        </mat-radio-button>
+        <mat-radio-button [value]="privacy.private">
+          Private
+        </mat-radio-button>
+      </mat-radio-group>
+    </div>
 
 
-  <div>
-    <button mat-stroked-button (click)="close($event)">Cancel</button>
-  </div>
-  <div>
-    <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
-  </div>
+    <div>
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
+    </div>
+    <div>
+      <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
+    </div>
 
-</form>
+  </form>
+</mat-dialog-content>

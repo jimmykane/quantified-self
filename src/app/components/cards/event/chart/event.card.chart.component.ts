@@ -324,7 +324,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     //   return ">>> " + text + " <<<";
     // });
     series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-    series.legendSettings.labelText = `${stream.type} [bold ${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
+    series.legendSettings.labelText = `${stream.type} [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
 
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 

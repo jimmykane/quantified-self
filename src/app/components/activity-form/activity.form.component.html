@@ -1,55 +1,58 @@
-<form [formGroup]="activityFormGroup" (submit)="onSubmit()">
-  <h3>Edit Activity</h3>
-  <!-- Start Date -->
-  <!--<mat-form-field>-->
-  <!--<input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate"-->
-  <!--[(ngModel)]="activity.startDate">-->
-  <!--<mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>-->
-  <!--<mat-datepicker #startDate></mat-datepicker>-->
-  <!--<mat-hint>The start date of the activity</mat-hint>-->
-  <!--<mat-error *ngIf="hasError('startDate')">-->
-  <!--invalid date-->
-  <!--</mat-error>-->
-  <!--</mat-form-field>-->
+<mat-dialog-content>
 
-  <!-- End Date -->
-  <!--<mat-form-field>-->
-  <!--<input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate"-->
-  <!--[(ngModel)]="activity.endDate">-->
-  <!--<mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>-->
-  <!--<mat-datepicker #endDate></mat-datepicker>-->
-  <!--<mat-hint>The end date of the activity</mat-hint>-->
-  <!--<mat-error *ngIf="hasError('startDate')">-->
-  <!--invalid date-->
-  <!--</mat-error>-->
-  <!--</mat-form-field>-->
+  <form [formGroup]="activityFormGroup" (submit)="onSubmit()">
+    <h3>Edit Activity</h3>
+    <!-- Start Date -->
+    <!--<mat-form-field>-->
+    <!--<input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate"-->
+    <!--[(ngModel)]="activity.startDate">-->
+    <!--<mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>-->
+    <!--<mat-datepicker #startDate></mat-datepicker>-->
+    <!--<mat-hint>The start date of the activity</mat-hint>-->
+    <!--<mat-error *ngIf="hasError('startDate')">-->
+    <!--invalid date-->
+    <!--</mat-error>-->
+    <!--</mat-form-field>-->
 
-  <!-- Start Distance -->
-  <mat-form-field>
-    <input matInput placeholder="Starting distance" type="number" min="0" formControlName="startDistance">
-    <span matSuffix="">m &nbsp;</span>
-    <mat-hint>The starting distance of the activity</mat-hint>
-    <mat-error *ngIf="hasError('startDistance')">
-      invalid distance
-    </mat-error>
-  </mat-form-field>
+    <!-- End Date -->
+    <!--<mat-form-field>-->
+    <!--<input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate"-->
+    <!--[(ngModel)]="activity.endDate">-->
+    <!--<mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>-->
+    <!--<mat-datepicker #endDate></mat-datepicker>-->
+    <!--<mat-hint>The end date of the activity</mat-hint>-->
+    <!--<mat-error *ngIf="hasError('startDate')">-->
+    <!--invalid date-->
+    <!--</mat-error>-->
+    <!--</mat-form-field>-->
 
-  <!-- End Distance -->
-  <mat-form-field>
-    <input matInput placeholder="End distance" type="number" min="0" formControlName="endDistance">
-    <span matSuffix="">m &nbsp;</span>
-    <mat-hint>The ending distance of the activity</mat-hint>
-    <mat-error *ngIf="hasError('endDistance')">
-      invalid distance
-    </mat-error>
-  </mat-form-field>
+    <!-- Start Distance -->
+    <mat-form-field>
+      <input matInput placeholder="Starting distance" type="number" min="0" formControlName="startDistance">
+      <span matSuffix="">m &nbsp;</span>
+      <mat-hint>The starting distance of the activity</mat-hint>
+      <mat-error *ngIf="hasError('startDistance')">
+        invalid distance
+      </mat-error>
+    </mat-form-field>
 
-  <mat-error *ngIf="hasError()">Please check the input values something went wrong</mat-error>
+    <!-- End Distance -->
+    <mat-form-field>
+      <input matInput placeholder="End distance" type="number" min="0" formControlName="endDistance">
+      <span matSuffix="">m &nbsp;</span>
+      <mat-hint>The ending distance of the activity</mat-hint>
+      <mat-error *ngIf="hasError('endDistance')">
+        invalid distance
+      </mat-error>
+    </mat-form-field>
 
-  <mat-hint>Changing any of the above will recreate all statistics</mat-hint>
+    <mat-error *ngIf="hasError()">Please check the input values something went wrong</mat-error>
 
-</form>
+    <mat-hint>Changing any of the above will recreate all statistics</mat-hint>
+
+  </form>
 
 
-<button mat-stroked-button (click)="close($event)">Cancel</button>
-<button mat-button (click)="onSubmit()" *ngIf="!hasError()">Save</button>
+  <button mat-stroked-button (click)="close($event)">Cancel</button>
+  <button mat-button (click)="onSubmit()" *ngIf="!hasError()">Save</button>
+</mat-dialog-content>
