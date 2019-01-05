@@ -31,12 +31,17 @@
       </mat-error>
     </mat-form-field>
 
-    <button mat-stroked-button (click)="close()">Cancel</button>
+    <mat-checkbox (change)="$event.checked ? showDelete = true : showDelete = false">
+      I want to delete my account and all data
+    </mat-checkbox>
 
-    <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
+    <div *ngIf="!showDelete">
+      <button mat-stroked-button (click)="close()">Cancel</button>
 
+      <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
+    </div>
 
-    <div class="account-delete">
+    <div class="account-delete" *ngIf="showDelete">
       <button class="full" *ngIf="!consentToDelete" mat-flat-button color="warn" (click)="consentToDelete = true">
         DELETE MY ACCOUNT
       </button>
