@@ -149,10 +149,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         // Todo fix this with the rest of the resultsLErgth thing
         if (!this.resultsLength){
           this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
+          return;
         }
-        if (this.data.data.length !== this.eventsPerPage){
-          // debugger;
-          this.resultsLength -= this.eventsPerPage + (this.eventsPerPage - this.data.data.length);
+        if (this.data.data.length < this.eventsPerPage){
+          this.resultsLength = (this.paginator.pageIndex + 1) * this.eventsPerPage +  this.data.data.length
         }
       });
   }
