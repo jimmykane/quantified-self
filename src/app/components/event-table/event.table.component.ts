@@ -103,8 +103,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               Privacy: event.privacy,
               startDate: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
               Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-              'stats.Distance': event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
-              Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
+              'stats.Distance': event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
+              'stats.Duration': event.getDuration().getDisplayValue(),
               Device:
                 this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
               Actions:
@@ -180,7 +180,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     switch (columnName) {
       case 'stats.Distance':
         return 'trending_flat';
-      case 'Duration':
+      case 'stats.Duration':
         return 'timer';
       case 'startDate':
         return 'date_range';
@@ -200,7 +200,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['startDate'].indexOf(columnName) !== -1;
+    return ['startDate', 'stats.Distance', 'stats.Duration'].indexOf(columnName) !== -1;
   }
 
   private updateActionButtonService() {
