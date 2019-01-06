@@ -1,6 +1,9 @@
 <mat-dialog-content>
-
   <form [formGroup]="userFormGroup" (submit)="onSubmit()">
+
+    <span class="mat-headline">Hi there {{ user.displayName }},</span>
+    <span class="mat-subheader">Let's edit your profile!</span>
+
     <mat-form-field>
       <input matInput placeholder="Name" formControlName="displayName">
       <mat-hint>Quite apparent, the name you would like to use</mat-hint>
@@ -8,19 +11,6 @@
         Name must not be empty
       </mat-error>
     </mat-form-field>
-
-    <div class="radio-container">
-      <label>Privacy: </label>
-      <mat-radio-group formControlName="privacy">
-        <mat-radio-button [value]="privacy.public">
-          Public
-        </mat-radio-button>
-        <mat-radio-button [value]="privacy.private">
-          Private
-        </mat-radio-button>
-      </mat-radio-group>
-    </div>
-
 
     <mat-form-field>
       <input matInput placeholder="Your bio, description or anything you want to share..."
@@ -31,9 +21,23 @@
       </mat-error>
     </mat-form-field>
 
-    <mat-checkbox (change)="$event.checked ? showDelete = true : showDelete = false">
-      I want to delete my account and all data
-    </mat-checkbox>
+    <div class="radio-container">
+      <mat-radio-group formControlName="privacy">
+        <mat-radio-button [value]="privacy.public">
+          Public Profile
+        </mat-radio-button>
+        <mat-radio-button [value]="privacy.private">
+          Private Profile
+        </mat-radio-button>
+      </mat-radio-group>
+      <mat-hint></mat-hint>
+    </div>
+
+    <div class="checkbox">
+      <mat-checkbox (change)="$event.checked ? showDelete = true : showDelete = false">
+        I want to delete my account
+      </mat-checkbox>
+    </div>
 
     <div *ngIf="!showDelete">
       <button mat-stroked-button (click)="close()">Cancel</button>

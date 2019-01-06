@@ -5,21 +5,26 @@ form {
 
 mat-form-field {
   width: 100%;
-  margin-bottom: 0.5em;
 }
 
 .radio-container {
-  margin-bottom: 0.5em;
+  margin-bottom: 1em;
 }
 
 .mat-radio-button{
-  margin-right: 1%;
+  margin-top: 1em;
+  margin-right: 1em;
 }
+
 button{
   width: 100%;
-  margin-bottom: 0.5em;
+  margin-top: 1em;
 }
 
 /deep/ .mat-checkbox-layout {
   white-space: normal !important;
+}
+
+.checkbox{
+  text-align: right;
 }
