@@ -34,7 +34,6 @@ export class EventFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: EventService,
     private snackBar: MatSnackBar,
-    private formBuilder: FormBuilder,
   ) {
     this.event = data.event;
     this.user = data.user; // Perhaps move to service?
@@ -54,8 +53,6 @@ export class EventFormComponent implements OnInit {
         Validators.required,
         // Validators.minLength(4),
       ]),
-      // 'alterEgo': new FormControl(this.hero.alterEgo),
-      // 'power': new FormControl(this.hero.power, Validators.required)
     });
   }
 

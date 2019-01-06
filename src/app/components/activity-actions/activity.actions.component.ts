@@ -38,6 +38,7 @@ export class ActivityActionsComponent implements OnInit{
       data: {
         event: this.event,
         activity: this.activity,
+        user: this.user
       },
     });
 

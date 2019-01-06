@@ -75,8 +75,6 @@ export class ActivityFormComponent implements OnInit {
         endDistance: new FormControl(this.activity.getDistance().getValue(), [
           Validators.required,
         ]),
-        // 'alterEgo': new FormControl(this.hero.alterEgo),
-        // 'power': new FormControl(this.hero.power, Validators.required)
       },
       {validators: activityDistanceValidator});
   }
@@ -117,8 +115,6 @@ export class ActivityFormComponent implements OnInit {
       Raven.captureException(e);
     } finally {
       this.dialogRef.close();
-      // @todo reload the event as it should be done in the card component
-      location.reload();
     }
   }
 
@@ -135,7 +131,6 @@ export class ActivityFormComponent implements OnInit {
 
   close(event) {
     event.stopPropagation(); event.preventDefault();
-
     this.restoreOriginalValues();
     this.dialogRef.close();
   }

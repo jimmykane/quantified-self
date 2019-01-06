@@ -1,7 +1,10 @@
 <mat-dialog-content>
 
   <form [formGroup]="activityFormGroup" (submit)="onSubmit()">
-    <h3>Edit Activity</h3>
+
+    <span class="mat-headline">Editing activity</span>
+    <span class="mat-subheader">internal id {{ activity.getID() }}</span>
+
     <!-- Start Date -->
     <!--<mat-form-field>-->
     <!--<input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate"-->
@@ -54,5 +57,5 @@
 
 
   <button mat-stroked-button (click)="close($event)">Cancel</button>
-  <button mat-button (click)="onSubmit()" *ngIf="!hasError()">Save</button>
+  <button  mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>
 </mat-dialog-content>
