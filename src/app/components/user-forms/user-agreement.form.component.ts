@@ -75,7 +75,7 @@ export class UserAgreementFormComponent implements OnInit {
         duration: 2000,
       });
       await this.router.navigate(['dashboard']);
-      this.snackBar.open(`Thanks for registering ${dbUser.displayName}`, null, {
+      this.snackBar.open(`Thanks for registering ${dbUser.displayName || 'Anonymous'}`, null, {
         duration: 2000,
       });
     } catch (e) {

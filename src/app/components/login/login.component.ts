@@ -44,7 +44,7 @@ export class LoginComponent {
     const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
     if (databaseUser) {
       await this.router.navigate(['/dashboard']);
-      this.snackBar.open(`Welcome back ${databaseUser.displayName}`, null, {
+      this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
         duration: 2000,
       });
       return;

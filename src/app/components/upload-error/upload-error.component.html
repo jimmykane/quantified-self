@@ -1,4 +1,8 @@
-<h1 class="mat-h1">Some activities could not be processed</h1>
-<app-activity-metadata [activitiesMetaData]="activitiesMetaData"></app-activity-metadata>
-<span class="mat-subheader">...you can select to reset the app if needed</span>
-<button mat-button (click)="close()">Ok</button>
+<mat-dialog-content>
+  <h1 class="mat-h1">Some activities could not be processed</h1>
+  <app-activity-metadata [activitiesMetaData]="activitiesMetaData"></app-activity-metadata>
+  <span class="mat-subheader">
+    <b>TIP: </b> You can email us those files and we will take a look to what went wrong
+  </span>
+  <button mat-button (click)="close()">Ok</button>
+</mat-dialog-content>
