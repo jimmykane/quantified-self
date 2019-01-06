@@ -9,6 +9,14 @@
     </div>
   </div>
 
+
+  <div class="example-loading-shade"
+       *ngIf="(!this.events || !this.events.length) && !isLoadingResults">
+    <div class="no-events">
+      No events or activities to show, go upload some
+    </div>
+  </div>
+
   <!-- hide the below for now till proper DB filtering is live -->
   <!--<mat-form-field>-->
   <!--<input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">-->

@@ -67,6 +67,13 @@ mat-card{
 }
 
 
+.no-events {
+  color: #FFFFFF;
+  max-width: 360px;
+  text-align: center;
+}
+
+
 ::ng-deep .mat-paginator-container{
   justify-content: flex-start !important;
 }
