@@ -106,7 +106,7 @@ export class EventService implements OnDestroy {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection("events", ((ref) => {
-        let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+        let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc').limit(limit);
         if (startAfter) {
           // debugger;
           query = query.startAfter(startAfter);
@@ -115,7 +115,7 @@ export class EventService implements OnDestroy {
           // debugger;
           query = query.startAfter(startAfter);
         }
-        return query.limit(limit);
+        return query;
       }))
       .snapshotChanges()
       .pipe(map((eventSnapshots) => {
