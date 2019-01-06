@@ -43,6 +43,13 @@ export class UserComponent implements OnInit, OnDestroy {
     })).pipe(catchError((error) => {
       return of(null);
     })).subscribe((targetUser) => {
+      // Populate placeholders for display name etc
+      if (!targetUser.displayName){
+        targetUser.displayName = 'Anonymous';
+      }
+      if(!targetUser.photoURL){
+        targetUser.photoURL = `https://ui-avatars.com/api/?name=${targetUser.displayName}`
+      }
       if (!targetUser) {
         this.router.navigate(['home']).then(() => {
           this.snackBar.open('Not found...', null, {
