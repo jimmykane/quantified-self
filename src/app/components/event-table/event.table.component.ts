@@ -88,6 +88,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           //   this.sort.active, this.sort.direction, this.paginator.pageIndex);
         }),
         map(events => {
+          // debugger;
           // Flip flag to show that loading has finished.
           this.isLoadingResults = false;
           this.isRateLimitReached = false;
@@ -102,7 +103,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               Privacy: event.privacy,
               startDate: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
               Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-              Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
+              'stats.Distance': event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
               Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
               Device:
                 this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
@@ -132,45 +133,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         }),
         catchError((error) => {
           this.isLoadingResults = false;
-          // Catch if the GitHub API has reached its rate limit. Return empty data.
+          // Catch
           this.isRateLimitReached = true;
           Raven.captureException(error);
           this.logger.error(error);
           return of(new MatTableDataSource([])); // @todo should reject or so
         })
       ).subscribe(data => this.data = data);
-
-
-    // this.eventsSubscription = this.eventService.getEventsForUser(this.user).subscribe((events) => {
-    //   this.events = events;
-    //   const data = this.events.reduce((eventArray, event) => {
-    //     eventArray.push({
-    //       Checkbox: event,
-    //       Privacy: event.privacy,
-    //       Date: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
-    //       Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-    //       Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
-    //       Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
-    //       Device:
-    //         this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
-    //       Actions:
-    //       event,
-    //     })
-    //     ;
-    //     return eventArray;
-    //   }, []);
-    //   this.columns = Object.keys(data[0]);
-    //   this.data = new MatTableDataSource(data);
-    //   // @todo combine this with after view init
-    //   if (this.sort) {
-    //     this.data.sort = this.sort;
-    //     this.data.sort.sort(<MatSortable>{
-    //         id: 'Date',
-    //         start: 'desc',
-    //       },
-    //     );
-    //   }
-    // })
   }
 
   ngAfterViewInit() {
@@ -207,9 +176,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.data.filter = filterValue;
   }
 
-  getColumnIcon(columnName): string {
+  getColumnHeaderIcon(columnName): string {
     switch (columnName) {
-      case 'Distance':
+      case 'stats.Distance':
         return 'trending_flat';
       case 'Duration':
         return 'timer';
@@ -228,6 +197,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       default:
         return null;
     }
+  }
+
+  isColumnHeaderSortable(columnName): boolean {
+    return ['startDate'].indexOf(columnName) !== -1;
   }
 
   private updateActionButtonService() {

@@ -4,13 +4,15 @@
        *ngIf="isLoadingResults || isRateLimitReached">
     <mat-progress-bar *ngIf="isLoadingResults" mode="query"></mat-progress-bar>
     <div class="example-rate-limit-reached" *ngIf="isRateLimitReached">
-      API rate limit has been reached. It will be reset in one minute. Please wait or try donating so I can increase these limits.
+      API rate limit has been reached. It will be reset in one minute. Please wait or try donating so I can increase
+      these limits.
     </div>
   </div>
 
-  <mat-form-field>
-    <input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">
-  </mat-form-field>
+  <!-- hide the below for now till proper DB filtering is live -->
+  <!--<mat-form-field>-->
+  <!--<input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">-->
+  <!--</mat-form-field>-->
   <mat-table [dataSource]="data" matSort>
     <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
       <ng-container *ngIf="isFirst">
@@ -26,11 +28,23 @@
         </mat-header-cell>
       </ng-container>
       <ng-container *ngIf="!isFirst && !isLast">
-        <mat-header-cell *matHeaderCellDef mat-sort-header>
+
+        <ng-container *ngIf="isColumnHeaderSortable(column)">
+          <mat-header-cell *matHeaderCellDef mat-sort-header>
         <span>
-            <mat-icon *ngIf="getColumnIcon(column)">{{ getColumnIcon(column) }}</mat-icon>
+            <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
         </span>
-        </mat-header-cell>
+          </mat-header-cell>
+        </ng-container>
+
+        <ng-container *ngIf="!isColumnHeaderSortable(column)">
+          <mat-header-cell *matHeaderCellDef >
+        <span>
+            <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
+        </span>
+          </mat-header-cell>
+        </ng-container>
+
       </ng-container>
       <mat-cell *matCellDef="let row">
         <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
@@ -52,7 +66,8 @@
       </mat-cell>
     </ng-container>
     <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: columns;" [routerLink]="['/user', user.uid, 'event', row['Actions'].getID()]"></mat-row>
+    <mat-row *matRowDef="let row; columns: columns;"
+             [routerLink]="['/user', user.uid, 'event', row['Actions'].getID()]"></mat-row>
   </mat-table>
   <!--<mat-paginator [pageSize]="eventsPerPage"></mat-paginator>-->
   <mat-paginator [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>
