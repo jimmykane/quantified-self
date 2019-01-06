@@ -12,13 +12,16 @@ import {ActionButtonService} from '../../services/action-buttons/app.action-butt
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/material';
+import {MatPaginator, MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/material';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {first, take} from 'rxjs/operators';
+import {catchError, first, map, startWith, switchMap, take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {merge, of, Subscription} from "rxjs";
+import * as Raven from "raven-js";
+import {Log} from "ng2-logger/browser";
 
 
 @Component({
@@ -32,10 +35,20 @@ import {User} from 'quantified-self-lib/lib/users/user';
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @ViewChild(MatSort) sort: MatSort;
+  @ViewChild(MatPaginator) paginator: MatPaginator;
   events: EventInterface[];
-  data: MatTableDataSource<Object>;
+  data: MatTableDataSource<any>;
   columns: Array<Object>;
   selection = new SelectionModel(true, []);
+  resultsLength = 100;
+  isLoadingResults = true;
+  isRateLimitReached = false;
+  eventsPerPage = 10;
+  private eventsSubscription: Subscription;
+  private sortSubscription: Subscription;
+  private currentPageIndex = 0;
+
+  private logger = Log.create('EventTableComponent');
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
@@ -46,36 +59,118 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnInit() {
-    this.eventService.getEventsForUser(this.user).subscribe((events) => {
-      this.events = events;
-      const data = this.events.reduce((eventArray, event) => {
-        eventArray.push({
-          Checkbox: event,
-          Privacy: event.privacy,
-          Date: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
-          Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-          Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
-          Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
-          Device:
-            this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
-          Actions:
-          event,
+    // If the user changes the sort order, reset back to the first page.
+    this.sortSubscription = this.sort.sortChange.subscribe(() => {
+      this.paginator.pageIndex = 0;
+      this.currentPageIndex = 0;
+    });
+
+    this.eventsSubscription = merge(this.sort.sortChange, this.paginator.page)
+      .pipe(
+        startWith({}),
+        switchMap(() => {
+          this.isLoadingResults = true;
+          if (this.currentPageIndex === this.paginator.pageIndex){
+            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
+          }
+
+          // Going to next page
+          if (this.currentPageIndex < this.paginator.pageIndex){
+            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
+          }
+
+          // Going to previous page
+          if (this.currentPageIndex > this.paginator.pageIndex){
+            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, null, this.events[0]);
+          }
+
+          // return this.exampleDatabase!.getRepoIssues(
+          //   this.sort.active, this.sort.direction, this.paginator.pageIndex);
+        }),
+        map(events => {
+          // Flip flag to show that loading has finished.
+          this.isLoadingResults = false;
+          this.isRateLimitReached = false;
+          // this.resultsLength = data.total_count;
+          this.currentPageIndex = this.paginator.pageIndex;
+
+          this.events = events;
+
+          const data = events.reduce((eventArray, event) => {
+            eventArray.push({
+              Checkbox: event,
+              Privacy: event.privacy,
+              startDate: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
+              Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
+              Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
+              Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
+              Device:
+                this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
+              Actions:
+              event,
+            });
+            return eventArray;
+          }, []);
+
+          // Set the columns
+          if (data.length) {
+            this.columns = Object.keys(data[0]);
+          }
+
+
+          // @todo combine this with after view init
+          // if (this.sort) {
+          //   this.data.sort = this.sort;
+          //   this.data.sort.sort(<MatSortable>{
+          //       id: 'Date',
+          //       start: 'desc',
+          //     },
+          //   );
+          // }
+
+          return  new MatTableDataSource<any>(data);
+        }),
+        catchError((error) => {
+          this.isLoadingResults = false;
+          // Catch if the GitHub API has reached its rate limit. Return empty data.
+          this.isRateLimitReached = true;
+          Raven.captureException(error);
+          this.logger.error(error);
+          return of(new MatTableDataSource([])); // @todo should reject or so
         })
-        ;
-        return eventArray;
-      }, []);
-      this.columns = Object.keys(data[0]);
-      this.data = new MatTableDataSource(data);
-      // @todo combine this with after view init
-      if (this.sort) {
-        this.data.sort = this.sort;
-        this.data.sort.sort(<MatSortable>{
-            id: 'Date',
-            start: 'desc',
-          },
-        );
-      }
-    })
+      ).subscribe(data => this.data = data);
+
+
+    // this.eventsSubscription = this.eventService.getEventsForUser(this.user).subscribe((events) => {
+    //   this.events = events;
+    //   const data = this.events.reduce((eventArray, event) => {
+    //     eventArray.push({
+    //       Checkbox: event,
+    //       Privacy: event.privacy,
+    //       Date: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
+    //       Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
+    //       Distance: event.getDistance() ? event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit() : '-- ',
+    //       Duration: event.getDuration() ? event.getDuration().getDisplayValue() : '--',
+    //       Device:
+    //         this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
+    //       Actions:
+    //       event,
+    //     })
+    //     ;
+    //     return eventArray;
+    //   }, []);
+    //   this.columns = Object.keys(data[0]);
+    //   this.data = new MatTableDataSource(data);
+    //   // @todo combine this with after view init
+    //   if (this.sort) {
+    //     this.data.sort = this.sort;
+    //     this.data.sort.sort(<MatSortable>{
+    //         id: 'Date',
+    //         start: 'desc',
+    //       },
+    //     );
+    //   }
+    // })
   }
 
   ngAfterViewInit() {
@@ -118,7 +213,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'trending_flat';
       case 'Duration':
         return 'timer';
-      case 'Date':
+      case 'startDate':
         return 'date_range';
       case 'Location':
         return 'location_on';
@@ -210,6 +305,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnDestroy() {
+    this.sortSubscription.unsubscribe();
+    this.eventsSubscription.unsubscribe();
     this.actionButtonService.removeActionButton('mergeEvents');
     this.actionButtonService.removeActionButton('deleteEvents');
   }

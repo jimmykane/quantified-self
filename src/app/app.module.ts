@@ -36,7 +36,7 @@ import {
   MatSlideToggleModule,
   MatDatepickerModule,
   MatNativeDateModule,
-  MatRadioModule,
+  MatRadioModule, MatPaginatorModule, MatProgressSpinnerModule,
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -145,6 +145,8 @@ export class RavenErrorHandler implements ErrorHandler {
     MatDatepickerModule,
     MatNativeDateModule,
     MatRadioModule,
+    MatPaginatorModule,
+    MatProgressSpinnerModule,
   ],
   declarations: [
     AppComponent,

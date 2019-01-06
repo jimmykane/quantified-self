@@ -1,11 +1,11 @@
 import {Injectable, OnDestroy} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
-import {combineLatest, merge, EMPTY, of, Observable, Observer, from} from 'rxjs';
+import {combineLatest, merge, EMPTY, of, Observable, Observer, from, zip} from 'rxjs';
 import {
   AngularFirestore,
   AngularFirestoreCollection,
-  DocumentChangeAction,
+  DocumentChangeAction, DocumentSnapshot, DocumentSnapshotExists,
   QueryDocumentSnapshot,
 } from '@angular/fire/firestore';
 import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switchMap, take} from 'rxjs/operators';
@@ -64,11 +64,58 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getEventsForUser(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10): Observable<EventInterface[]> {
+  public getEventsForUser(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+    if (startAfter || endBefore) {
+      return this.getEventsForUserStartingAfterOrEndingBefore(user, orderBy, asc, limit, startAfter, endBefore);
+    }
+    return this.getEventsForUserInternal(user, orderBy, asc, limit);
+  }
+
+  private getEventsForUserStartingAfterOrEndingBefore(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+    const observables: Observable<firestore.DocumentSnapshot>[] = [];
+    if (startAfter){
+      observables.push(this.afs
+        .collection('users')
+        .doc(user.uid)
+        .collection("events")
+        .doc(startAfter.getID()).get()
+        .pipe(take(1)))
+    }
+    if (endBefore){
+      observables.push(this.afs
+        .collection('users')
+        .doc(user.uid)
+        .collection("events")
+        .doc(endBefore.getID()).get()
+        .pipe(take(1)))
+    }
+    return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
+      if (startAfter && endBefore){
+        return this.getEventsForUserInternal(user, orderBy, asc, limit, resultA, resultB);
+      }
+      // If only start after
+      if (startAfter){
+        return this.getEventsForUserInternal(user, orderBy, asc, limit, resultA);
+      }
+      // If only endAt
+      return this.getEventsForUserInternal(user, orderBy, asc, limit, null, resultA);
+    }));
+  }
+
+  private getEventsForUserInternal(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection("events", ((ref) => {
-        return ref.orderBy(orderBy, asc ? 'asc' : 'desc').limit(limit);
+        let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+        if (startAfter) {
+          // debugger;
+          query = query.startAfter(startAfter);
+        }
+        if (startAfter) {
+          // debugger;
+          query = query.startAfter(startAfter);
+        }
+        return query.limit(limit);
       }))
       .snapshotChanges()
       .pipe(map((eventSnapshots) => {
