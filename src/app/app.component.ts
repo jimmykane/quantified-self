@@ -14,7 +14,7 @@ import {AppAuthService} from './authentication/app.auth.service';
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
@@ -57,7 +57,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
    * See https://github.com/angular/angular/issues/14748
    */
   ngAfterViewChecked() {
-    this.changeDetectorRef.detectChanges();
+    // this.changeDetectorRef.detectChanges();
   }
 
   ngOnDestroy(): void {

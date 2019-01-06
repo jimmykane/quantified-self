@@ -70,5 +70,5 @@
              [routerLink]="['/user', user.uid, 'event', row['Actions'].getID()]"></mat-row>
   </mat-table>
   <!--<mat-paginator [pageSize]="eventsPerPage"></mat-paginator>-->
-  <mat-paginator [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>
+  <mat-paginator [hidePageSize]="true" [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>
 </mat-card>

@@ -40,7 +40,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   data: MatTableDataSource<any>;
   columns: Array<Object>;
   selection = new SelectionModel(true, []);
-  resultsLength = 100;
+  resultsLength = 0;
   isLoadingResults = true;
   isRateLimitReached = false;
   eventsPerPage = 10;
@@ -76,11 +76,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
           // Going to next page
           if (this.currentPageIndex < this.paginator.pageIndex){
+            // Increase the results length
+            this.resultsLength += this.eventsPerPage;
             return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           if (this.currentPageIndex > this.paginator.pageIndex){
+            this.resultsLength -= this.eventsPerPage;
             return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, null, this.events[0]);
           }
 
@@ -95,6 +98,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           // this.resultsLength = data.total_count;
           this.currentPageIndex = this.paginator.pageIndex;
 
+          // Set the events
           this.events = events;
 
           const data = events.reduce((eventArray, event) => {
@@ -139,7 +143,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.logger.error(error);
           return of(new MatTableDataSource([])); // @todo should reject or so
         })
-      ).subscribe(data => this.data = data);
+      ).subscribe(data => {
+        this.data = data;
+        // Todo fix this with the rest of the resultsLErgth thing
+        if (!this.resultsLength){
+          this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
+        }
+      });
   }
 
   ngAfterViewInit() {
