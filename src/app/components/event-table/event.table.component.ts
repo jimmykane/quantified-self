@@ -82,6 +82,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           }
 
           // Going to previous page
+          // @todo fix
           if (this.currentPageIndex > this.paginator.pageIndex){
             this.resultsLength -= this.eventsPerPage;
             return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, null, this.events[0]);
@@ -148,6 +149,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         // Todo fix this with the rest of the resultsLErgth thing
         if (!this.resultsLength){
           this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
+        }
+        if (this.data.data.length !== this.eventsPerPage){
+          // debugger;
+          this.resultsLength -= this.eventsPerPage + (this.eventsPerPage - this.data.data.length);
         }
       });
   }
