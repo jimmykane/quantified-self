@@ -56,7 +56,7 @@ export class UserActionsComponent implements OnInit {
   edit() {
     const dialogRef = this.dialog.open(UserFormComponent, {
       width: '75vw',
-      disableClose: true,
+      disableClose: false,
       data: {
         user: this.user
       },

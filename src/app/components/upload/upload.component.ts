@@ -125,7 +125,7 @@ export class UploadComponent implements OnInit{
     if (this.activitiesMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
       const dialogRef = this.dialog.open(UploadErrorComponent, {
         width: '75vw',
-        disableClose: true,
+        disableClose: false,
         data: {activitiesMetaData: this.activitiesMetaData},
       });
       // dialogRef.afterClosed().subscribe(result => {

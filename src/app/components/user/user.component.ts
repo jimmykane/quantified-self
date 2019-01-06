@@ -65,7 +65,7 @@ export class UserComponent implements OnInit, OnDestroy {
   edit() {
     const dialogRef = this.dialog.open(UserFormComponent, {
       width: '75vw',
-      disableClose: true,
+      disableClose: false,
       data: {
         user: this.currentUser,
       },
