@@ -191,7 +191,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   //     });
   //   });
   //   const t1 = performance.now();
-  //   this.logger.d(`Parsed activityMapData after ${t1 - t0}ms`);
+  //   this.logger.info(`Parsed activityMapData after ${t1 - t0}ms`);
   //   return activitiesMapData;
   // }
 

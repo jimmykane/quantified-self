@@ -226,7 +226,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Create a Legend
         chart.legend = new am4charts.Legend();
-        var legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+        const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
         legendContainer.width = am4core.percent(100);
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
@@ -282,32 +282,32 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Attach events
         chart.events.on('validated', (ev) => {
-          this.logger.d('validated');
+          this.logger.info('validated');
           this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
 
         chart.events.on('maxsizechanged', (ev) => {
-          this.logger.d('maxsizechanged');
+          this.logger.info('maxsizechanged');
           this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
 
         chart.events.on('visibilitychanged', (ev) => {
-          this.logger.d('visibilitychanged');
+          this.logger.info('visibilitychanged');
         });
 
         chart.events.on('hidden', (ev) => {
-          this.logger.d('hidden');
+          this.logger.info('hidden');
         });
         chart.events.on('shown', (ev) => {
-          this.logger.d('shown');
+          this.logger.info('shown');
         });
 
         chart.events.on('inited', (ev) => {
-          this.logger.d('inited');
+          this.logger.info('inited');
         });
 
         chart.events.on('datavalidated', (ev) => {
-          this.logger.d('datavalidated');
+          this.logger.info('datavalidated');
           this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
         resolve(chart);
@@ -372,7 +372,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private convertSreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
-    this.logger.d(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
+    this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     const data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
       if (!isNumber(streamData)) {
         return dataArray
@@ -384,7 +384,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return dataArray
     }, [])
       .filter((data, index) => (index % samplingRate) === 0);
-    this.logger.d(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
+    this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
 
@@ -397,7 +397,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
       samplingRate = Math.ceil((numberOfSamplesToHours * 3) / hoursToKeep1sSamplingRate)
     }
-    this.logger.d(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
+    this.logger.info(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
 

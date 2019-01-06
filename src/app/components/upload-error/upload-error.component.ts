@@ -1,6 +1,5 @@
 import {ChangeDetectionStrategy, Component, Inject, Input, OnInit} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material';
-import * as Raven from 'raven-js';
 import {UPLOAD_STATUS} from '../upload/upload.component';
 
 
@@ -9,7 +8,7 @@ import {UPLOAD_STATUS} from '../upload/upload.component';
   templateUrl: './upload-error.component.html',
   styleUrls: ['./upload-error.component.css'],
   providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  // changeDetection: ChangeDetectionStrategy.OnPush,
 
 })
 
