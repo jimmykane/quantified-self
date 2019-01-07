@@ -5,6 +5,7 @@ import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {MatSnackBar} from '@angular/material';
+import {SideNavService} from "../../services/side-nav/side-nav.service";
 
 
 @Component({
@@ -16,7 +17,7 @@ export class SideNavComponent implements OnInit {
 
   public events: EventInterface[] = [];
 
-  constructor(public authService: AppAuthService, private snackBar: MatSnackBar, private router: Router , private eventService: EventService,  private route: ActivatedRoute) {
+  constructor(public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router , private eventService: EventService,  private route: ActivatedRoute) {
   }
 
   ngOnInit() {

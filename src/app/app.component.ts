@@ -9,6 +9,7 @@ import {Subscription} from 'rxjs';
 import {NavigationEnd, Router, RoutesRecognized} from '@angular/router';
 import {filter, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
+import {SideNavService} from "./services/side-nav/side-nav.service";
 
 @Component({
   selector: 'app-root',
@@ -29,11 +30,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     private actionButtonService: ActionButtonService,
+    private sideNavService: SideNavService,
     private snackBar: MatSnackBar) {
 
   }
 
   ngOnInit() {
+    this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events
       .pipe(filter(event => event instanceof RoutesRecognized))
       .pipe(map((event: RoutesRecognized) => {
