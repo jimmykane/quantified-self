@@ -70,21 +70,19 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         startWith({}),
         switchMap(() => {
           this.isLoadingResults = true;
-          if (this.currentPageIndex === this.paginator.pageIndex){
+          if (this.currentPageIndex === this.paginator.pageIndex) {
             return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
           }
 
           // Going to next page
-          if (this.currentPageIndex < this.paginator.pageIndex){
+          if (this.currentPageIndex < this.paginator.pageIndex) {
             // Increase the results length
-            this.resultsLength += this.eventsPerPage;
             return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           // @todo fix
-          if (this.currentPageIndex > this.paginator.pageIndex){
-            this.resultsLength -= this.eventsPerPage;
+          if (this.currentPageIndex > this.paginator.pageIndex) {
             return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, null, this.events[0]);
           }
 
@@ -97,7 +95,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.isLoadingResults = false;
           this.isRateLimitReached = false;
           // this.resultsLength = data.total_count;
-          this.currentPageIndex = this.paginator.pageIndex;
 
           // Set the events
           this.events = events;
@@ -134,7 +131,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           //   );
           // }
 
-          return  new MatTableDataSource<any>(data);
+          return new MatTableDataSource<any>(data);
         }),
         catchError((error) => {
           this.isLoadingResults = false;
@@ -145,15 +142,46 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           return of(new MatTableDataSource([])); // @todo should reject or so
         })
       ).subscribe(data => {
+
+        // Bind to the data
         this.data = data;
-        // Todo fix this with the rest of the resultsLErgth thing
-        if (!this.resultsLength){
+
+
+        if (this.paginator.pageIndex === 0) {
           this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
+          // return;
+        }
+
+        // Stayed on the same page
+        if (this.currentPageIndex == this.paginator.pageIndex) {
           return;
         }
-        if (this.data.data.length < this.eventsPerPage){
-          this.resultsLength = (this.paginator.pageIndex + 1) * this.eventsPerPage +  this.data.data.length
+
+        // Gone to the next page
+        if (this.currentPageIndex < this.paginator.pageIndex) {
+          // Increase the results length
+          // debugger;
+          this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
+          // return
         }
+
+        // Gone to previous page
+        if (this.currentPageIndex > this.paginator.pageIndex) {
+          this.resultsLength = this.eventsPerPage * (this.paginator.pageIndex +2)
+        }
+
+        // Set the current page index
+        this.currentPageIndex = this.paginator.pageIndex;
+
+
+        // Todo fix this with the rest of the resultsLErgth thing
+        // if (!this.resultsLength) {
+        //   this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
+        //   return;
+        // }
+        // if (this.data.data.length < this.eventsPerPage) {
+        //   this.resultsLength = (this.paginator.pageIndex + 1) * this.eventsPerPage + this.data.data.length
+        // }
       });
   }
 
