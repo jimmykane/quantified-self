@@ -1,7 +1,5 @@
 import {Component, Input} from '@angular/core';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import * as Raven from 'raven-js';
-import {UPLOAD_STATUS} from '../upload/upload.component';
+import {UPLOAD_STATUS} from "../upload/upload.status";
 
 @Component({
   selector: 'app-activity-metadata',

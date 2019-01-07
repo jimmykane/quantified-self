@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, Component, Inject, Input, OnInit} from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material';
-import {UPLOAD_STATUS} from '../upload/upload.component';
+import {UPLOAD_STATUS} from "../upload/upload.status";
 
 
 @Component({

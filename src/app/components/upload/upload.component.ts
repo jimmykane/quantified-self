@@ -10,6 +10,7 @@ import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importer
 import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {UPLOAD_STATUS} from "./upload.status";
 
 @Component({
   selector: 'app-upload',
@@ -147,9 +148,3 @@ export class UploadComponent implements OnInit{
     event.target.value = '';
   }
 }
-
-export const UPLOAD_STATUS = {
-  PROCESSED: 1,
-  PROCESSING: 2,
-  ERROR: 3,
-};
