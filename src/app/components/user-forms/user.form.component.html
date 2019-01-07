@@ -44,7 +44,7 @@
 
 
     <div *ngIf="!showDelete">
-      <button mat-stroked-button (click)="close()">Cancel</button>
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
 
       <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
     </div>

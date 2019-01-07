@@ -22,7 +22,7 @@
       <p>You must accept all policies</p>
     </mat-error>
 
-    <button mat-stroked-button (click)="close()">Cancel</button>
+    <button mat-stroked-button (click)="close($event)">Cancel</button>
     <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit()">Create My Account
     </button>
 

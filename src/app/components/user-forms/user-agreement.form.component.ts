@@ -100,7 +100,7 @@ export class UserAgreementFormComponent implements OnInit {
     });
   }
 
-  close() {
+  close(event) {
     event.stopPropagation();
     event.preventDefault();
     this.dialogRef.close();

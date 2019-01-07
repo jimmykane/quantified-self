@@ -68,7 +68,6 @@ export class UserFormComponent implements OnInit {
   }
 
   async onSubmit() {
-    // @todo fix this as delete enters here
     if (!this.userFormGroup.valid) {
       this.validateAllFormFields(this.userFormGroup);
       return;
@@ -123,7 +122,7 @@ export class UserFormComponent implements OnInit {
     }
   }
 
-  close() {
+  close(event) {
     event.stopPropagation();
     event.preventDefault();
     this.dialogRef.close();
