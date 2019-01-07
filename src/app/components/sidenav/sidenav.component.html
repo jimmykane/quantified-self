@@ -1,5 +1,7 @@
 <mat-toolbar>
-  <mat-toolbar-row (click)="sideNav.close();">
+  <mat-toolbar-row
+    routerLink="/home"
+    (click)="sideNav.close();">
     Quantified-self.io
   </mat-toolbar-row>
 </mat-toolbar>
@@ -31,12 +33,12 @@
     <span>My Profile</span>
   </mat-list-item>
   <!---->
-    <!--<mat-list-item-->
-    <!--*ngIf="authService.authenticated() && (authService.user | async)?.uid"-->
-    <!--routerLinkActive="active"-->
-    <!--[routerLink]="['/user/', (authService.user | async)?.uid]">-->
-    <!--<mat-icon>account_circle</mat-icon>-->
-    <!--<span>My Profile</span>-->
+  <!--<mat-list-item-->
+  <!--*ngIf="authService.authenticated() && (authService.user | async)?.uid"-->
+  <!--routerLinkActive="active"-->
+  <!--[routerLink]="['/user/', (authService.user | async)?.uid]">-->
+  <!--<mat-icon>account_circle</mat-icon>-->
+  <!--<span>My Profile</span>-->
   <!--</mat-list-item>-->
 
   <mat-list-item
