@@ -12,7 +12,6 @@ import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switch
 import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
-import {getSize} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.interface';
 import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity.json.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
@@ -23,6 +22,7 @@ import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {getSize} from "quantified-self-lib/lib/events/utilities/helpers";
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -73,7 +73,7 @@ export class EventService implements OnDestroy {
 
   private getEventsForUserStartingAfterOrEndingBefore(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     const observables: Observable<firestore.DocumentSnapshot>[] = [];
-    if (startAfter){
+    if (startAfter) {
       observables.push(this.afs
         .collection('users')
         .doc(user.uid)
@@ -81,7 +81,7 @@ export class EventService implements OnDestroy {
         .doc(startAfter.getID()).get()
         .pipe(take(1)))
     }
-    if (endBefore){
+    if (endBefore) {
       observables.push(this.afs
         .collection('users')
         .doc(user.uid)
@@ -90,11 +90,11 @@ export class EventService implements OnDestroy {
         .pipe(take(1)))
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
-      if (startAfter && endBefore){
+      if (startAfter && endBefore) {
         return this.getEventsForUserInternal(user, orderBy, asc, limit, resultA, resultB);
       }
       // If only start after
-      if (startAfter){
+      if (startAfter) {
         return this.getEventsForUserInternal(user, orderBy, asc, limit, resultA);
       }
       // If only endAt
@@ -106,7 +106,10 @@ export class EventService implements OnDestroy {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection("events", ((ref) => {
-        let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc').limit(limit);
+        let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+        if (limit > 0) {
+          query = query.limit(limit)
+        }
         if (startAfter) {
           // debugger;
           query = query.startAfter(startAfter);

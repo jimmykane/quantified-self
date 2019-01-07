@@ -8,7 +8,7 @@
            [mapTypeControlOptions]="mapTypeControlOptions">
     <ng-container *ngFor="let activityMapData of activitiesMapData">
       <!-- Start Marker -->
-      <agm-marker
+      <agm-marker [agmFitBounds]="true"
         [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"
         [latitude]="activityMapData.positions[0].latitude"
         [longitude]="activityMapData.positions[0].longitude">

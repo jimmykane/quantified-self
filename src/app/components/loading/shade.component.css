@@ -1,0 +1,30 @@
+.loading-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1em;
+}
+
+
+.error {
+  color: #FFFFFF;
+  /*max-width: 360px;*/
+  text-align: center;
+  /*font-weight: bold;*/
+  font-size: 1.5em;
+}
+
+
+.message {
+  color: #FFFFFF;
+  max-width: 360px;
+  text-align: center;
+}
+

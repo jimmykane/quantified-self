@@ -1,5 +1,8 @@
 <mat-dialog-content>
+
   <form [formGroup]="userFormGroup" (submit)="onSubmit()">
+
+    <app-shade [isActive]="isDeleting" [hasError]="errorDeleting" [errorMessage]="errorDeleting"></app-shade>
 
     <span class="mat-headline">Hi there {{ user.displayName }},</span>
     <span class="mat-subheader">Let's edit your profile!</span>
@@ -39,13 +42,14 @@
       </mat-checkbox>
     </div>
 
+
     <div *ngIf="!showDelete">
       <button mat-stroked-button (click)="close()">Cancel</button>
 
       <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
     </div>
 
-    <div class="account-delete" *ngIf="showDelete">
+    <div class="account-delete" *ngIf="showDelete && !isDeleting">
       <button class="full" *ngIf="!consentToDelete" mat-flat-button color="warn" (click)="consentToDelete = true">
         DELETE MY ACCOUNT
       </button>
@@ -53,6 +57,7 @@
         delete it
       </button>
     </div>
+
 
   </form>
 </mat-dialog-content>

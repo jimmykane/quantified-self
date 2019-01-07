@@ -1,21 +1,7 @@
 <mat-card class="mat-elevation-z0">
 
-  <div class="example-loading-shade"
-       *ngIf="isLoadingResults || isRateLimitReached">
-    <mat-progress-bar *ngIf="isLoadingResults" mode="query"></mat-progress-bar>
-    <div class="example-rate-limit-reached" *ngIf="isRateLimitReached">
-      API rate limit has been reached. It will be reset in one minute. Please wait or try donating so I can increase
-      these limits.
-    </div>
-  </div>
-
-
-  <div class="example-loading-shade"
-       *ngIf="(!this.events || !this.events.length) && !isLoadingResults">
-    <div class="no-events">
-      No events or activities to show, go upload some
-    </div>
-  </div>
+  <app-shade [isActive]="isLoadingResults" [hasError]="errorQuerying" [errorMessage]="errorQuerying"></app-shade>
+  <app-shade [isActive]="false" [hasError]="(!this.events || !this.events.length) && !isLoadingResults" [errorMessage]="'No events or activities to show, go upload some'"></app-shade>
 
   <!-- hide the below for now till proper DB filtering is live -->
   <!--<mat-form-field>-->

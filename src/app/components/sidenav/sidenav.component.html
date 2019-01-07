@@ -7,7 +7,7 @@
   <mat-list-item
     *ngIf="!authService.authenticated()"
     routerLinkActive="active"
-    routerLink="/home">
+    routerLink="/home" (click)="">
     <mat-icon>home</mat-icon>
     <span>Home</span>
   </mat-list-item>

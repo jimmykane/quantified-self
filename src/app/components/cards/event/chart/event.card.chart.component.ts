@@ -32,9 +32,6 @@ import {DataCadence} from 'quantified-self-lib/lib/data/data.cadence';
 import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataSatellite5BestSNR} from 'quantified-self-lib/lib/data/data.satellite-5-best-snr';
@@ -55,6 +52,7 @@ import {DataLegStiffness} from 'quantified-self-lib/lib/data/data.leg-stiffness'
 import {DataVerticalOscillation} from 'quantified-self-lib/lib/data/data.vertical-oscillation';
 import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 
 
 // am4core.useTheme(am4themes_animated);

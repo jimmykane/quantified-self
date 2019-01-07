@@ -7,9 +7,6 @@
         <b>You accept that: </b> Your data are stored and held encrypted by Google (Google Cloud).<br/>
         You choose what part of your data to make public or private (profile, individual data).
         We provide all default privacy settings to private, only seen by you and you can choose what to make public.
-        <mat-error *ngIf="hasError('acceptPrivacyPolicy')">
-          <p>You must accept the privacy policy</p>
-        </mat-error>
       </mat-card>
     </mat-checkbox>
 
@@ -17,11 +14,14 @@
       <mat-card>
         <b>You accept that: </b> While we will employ best endeavours we don't promise to keep your files accessible at
         any time, it's best advised to keep your own private copies.
-        <mat-error *ngIf="hasError('acceptDataPolicy')">
-          <p>You must accept the data policy</p>
-        </mat-error>
+
       </mat-card>
     </mat-checkbox>
+
+    <mat-error *ngIf="!this.userFormGroup.valid" class="mat-subheader">
+      <p>You must accept all policies</p>
+    </mat-error>
+
     <button mat-stroked-button (click)="close()">Cancel</button>
     <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit()">Create My Account
     </button>

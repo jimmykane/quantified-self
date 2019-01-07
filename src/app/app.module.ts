@@ -84,6 +84,7 @@ import {UserService} from './services/app.user.service';
 import {UserActionsComponent} from './components/user-actions/user.actions.component';
 import {UserFormComponent} from './components/user-forms/user.form.component';
 import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
+import {ShadeComponent} from "./components/loading/shade.component";
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -181,6 +182,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UserActionsComponent,
     UserFormComponent,
     UserAgreementFormComponent,
+    ShadeComponent,
   ],
   entryComponents: [
     EventFormComponent,

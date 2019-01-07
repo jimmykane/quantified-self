@@ -27,9 +27,8 @@ export class UserFormComponent implements OnInit {
   public showDelete: boolean;
   public consentToDelete: boolean;
   public user: User;
-  public originalValues: {
-    displayName: string;
-  };
+  public isDeleting: boolean;
+  public errorDeleting;
 
   public userFormGroup: FormGroup;
 
@@ -106,13 +105,22 @@ export class UserFormComponent implements OnInit {
 
   public async deleteUser() {
     event.preventDefault();
-    await this.router.navigate(['home']);
-    await this.userService.deleteAllUserData(this.user);
-    await this.authService.signOut();
-    this.snackBar.open('Account deleted! You are now logged out.', null, {
-      duration: 5000,
-    });
-    this.dialogRef.close();
+    this.dialogRef.disableClose = true;
+    this.isDeleting = true;
+    try {
+      await this.userService.deleteAllUserData(this.user);
+      await this.router.navigate(['home']);
+      await this.authService.signOut();
+      this.snackBar.open('Account deleted! You are now logged out.', null, {
+        duration: 5000,
+      });
+      this.dialogRef.close();
+    }catch (e) {
+      Raven.captureException(e);
+      this.errorDeleting = e;
+      this.dialogRef.disableClose = false;
+      this.isDeleting = false;
+    }
   }
 
   close() {

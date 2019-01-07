@@ -39,40 +39,13 @@ mat-icon {
 }
 
 mat-card{
+  /*min-height: 90vh;*/
   margin-bottom: 1vh;
 }
 
 .mat-column-Checkbox{
   padding-left: 0;
 }
-
-
-.example-loading-shade {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 56px;
-  right: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.example-rate-limit-reached {
-  color: #980000;
-  max-width: 360px;
-  text-align: center;
-}
-
-
-.no-events {
-  color: #FFFFFF;
-  max-width: 360px;
-  text-align: center;
-}
-
 
 ::ng-deep .mat-paginator-container{
   justify-content: flex-start !important;
