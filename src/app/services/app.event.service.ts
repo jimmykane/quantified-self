@@ -111,9 +111,9 @@ export class EventService implements OnDestroy {
           // debugger;
           query = query.startAfter(startAfter);
         }
-        if (startAfter) {
+        if (endBefore) {
           // debugger;
-          query = query.startAfter(startAfter);
+          query = query.endBefore(endBefore);
         }
         return query;
       }))
