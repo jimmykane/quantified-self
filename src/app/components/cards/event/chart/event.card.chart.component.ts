@@ -180,7 +180,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           if (!series) {
             series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
           }
-          series.dummyData = this.convertSreamDataToSeriesData(activity, stream);
+          series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
           return series
         });
       }))
@@ -368,7 +368,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     return series;
   }
 
-  private convertSreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
+  private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     const data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
