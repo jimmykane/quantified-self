@@ -9,7 +9,6 @@ import {UPLOAD_STATUS} from '../upload/upload.component';
   styleUrls: ['./upload-error.component.css'],
   providers: [],
   // changeDetection: ChangeDetectionStrategy.OnPush,
-
 })
 
 
