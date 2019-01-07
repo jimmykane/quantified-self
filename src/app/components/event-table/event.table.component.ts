@@ -81,9 +81,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           }
 
           // Going to previous page
-          // @todo fix
           if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, null, this.events[0]);
+            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
           }
 
           // return this.exampleDatabase!.getRepoIssues(
@@ -98,6 +97,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
           // Set the events
           this.events = events;
+
+          // Reverse sort if we are going to prev page see https://stackoverflow.com/questions/54074135/firestore-angularfire-how-to-paginate-to-previous-page/54075453#54075453
+          if (this.currentPageIndex > this.paginator.pageIndex) {
+              this.events.reverse();
+          }
 
           const data = events.reduce((eventArray, event) => {
             eventArray.push({
@@ -167,7 +171,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
         // Gone to previous page
         if (this.currentPageIndex > this.paginator.pageIndex) {
-          this.resultsLength = this.eventsPerPage * (this.paginator.pageIndex +2)
+          this.resultsLength = this.eventsPerPage * (this.paginator.pageIndex + 2)
         }
 
         // Set the current page index
