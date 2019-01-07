@@ -156,9 +156,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           // return;
         }
 
-        // Stayed on the same page
+        // Stayed on the same page but data came in
         if (this.currentPageIndex == this.paginator.pageIndex) {
-          return;
+          this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
         }
 
         // Gone to the next page
@@ -176,16 +176,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
         // Set the current page index
         this.currentPageIndex = this.paginator.pageIndex;
-
-
-        // Todo fix this with the rest of the resultsLErgth thing
-        // if (!this.resultsLength) {
-        //   this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
-        //   return;
-        // }
-        // if (this.data.data.length < this.eventsPerPage) {
-        //   this.resultsLength = (this.paginator.pageIndex + 1) * this.eventsPerPage + this.data.data.length
-        // }
       });
   }
 
