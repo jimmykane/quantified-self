@@ -1,7 +1,7 @@
 <mat-card class="mat-elevation-z0">
 
   <app-shade [isActive]="isLoadingResults" [hasError]="errorQuerying" [errorMessage]="errorQuerying"></app-shade>
-  <app-shade [isActive]="false" [hasError]="(!this.events || !this.events.length) && !isLoadingResults" [errorMessage]="'No events or activities to show, go upload some'"></app-shade>
+  <app-shade [isActive]="false" [hasError]="(!this.events || !this.events.length) && !isLoadingResults" [errorMessage]="'Nothing to show'"></app-shade>
 
   <!-- hide the below for now till proper DB filtering is live -->
   <!--<mat-form-field>-->

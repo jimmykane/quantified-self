@@ -64,14 +64,14 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getEventsForUser(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsForUser(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any } = null, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
-      return this.getEventsForUserStartingAfterOrEndingBefore(user, orderBy, asc, limit, startAfter, endBefore);
+      return this.getEventsForUserStartingAfterOrEndingBefore(user, where, orderBy, asc, limit, startAfter, endBefore);
     }
-    return this.getEventsForUserInternal(user, orderBy, asc, limit);
+    return this.getEventsForUserInternal(user, where, orderBy, asc, limit);
   }
 
-  private getEventsForUserStartingAfterOrEndingBefore(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  private getEventsForUserStartingAfterOrEndingBefore(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any } = null, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     const observables: Observable<firestore.DocumentSnapshot>[] = [];
     if (startAfter) {
       observables.push(this.afs
@@ -91,22 +91,25 @@ export class EventService implements OnDestroy {
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
       if (startAfter && endBefore) {
-        return this.getEventsForUserInternal(user, orderBy, asc, limit, resultA, resultB);
+        return this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA, resultB);
       }
       // If only start after
       if (startAfter) {
-        return this.getEventsForUserInternal(user, orderBy, asc, limit, resultA);
+        return this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA);
       }
       // If only endAt
-      return this.getEventsForUserInternal(user, orderBy, asc, limit, null, resultA);
+      return this.getEventsForUserInternal(user, where, orderBy, asc, limit, null, resultA);
     }));
   }
 
-  private getEventsForUserInternal(user: User, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
+  private getEventsForUserInternal(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any } = null, orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection("events", ((ref) => {
         let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+        if (where){
+          query = query.where(where.fieldPath, where.opStr, where.value);
+        }
         if (limit > 0) {
           query = query.limit(limit)
         }
@@ -358,19 +361,4 @@ export class EventService implements OnDestroy {
   }
 
 }
-
-// // Save the whole event to a json file
-// // Save the points as a json string in storage and link to id etc
-// const filePath = event.getID();
-// const ref = this.storage.ref(filePath);
-// const task = ref.putString(JSON.stringify(event.toJSON()));
-//
-//
-// task.snapshotChanges().pipe(
-//     finalize(() => {
-//       debugger
-//       batch.commit();
-//     })
-//  )
-// .subscribe()
 

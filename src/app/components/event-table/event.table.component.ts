@@ -22,6 +22,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {merge, of, Subscription} from "rxjs";
 import * as Raven from "raven-js";
 import {Log} from "ng2-logger/browser";
+import {Privacy} from "quantified-self-lib/lib/privacy/privacy.class.interface";
 
 
 @Component({
@@ -34,6 +35,8 @@ import {Log} from "ng2-logger/browser";
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
+  @Input() privacyFilter?: Privacy;
+  @Input() eventsPerPage? = 10;
   @ViewChild(MatSort) sort: MatSort;
   @ViewChild(MatPaginator) paginator: MatPaginator;
   events: EventInterface[];
@@ -43,7 +46,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   resultsLength = 0;
   isLoadingResults = true;
   errorQuerying;
-  eventsPerPage = 10;
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
   private currentPageIndex = 0;
@@ -71,18 +73,18 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         switchMap(() => {
           this.isLoadingResults = true;
           if (this.currentPageIndex === this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
+            return this.eventService.getEventsForUser(this.user, this.privacyFilter? {fieldPath: 'privacy', opStr: "==",value: this.privacyFilter}: null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
           }
 
           // Going to next page
           if (this.currentPageIndex < this.paginator.pageIndex) {
             // Increase the results length
-            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
+            return this.eventService.getEventsForUser(this.user, this.privacyFilter?  {fieldPath: 'privacy', opStr: "==",value: this.privacyFilter}: null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
+            return this.eventService.getEventsForUser(this.user, this.privacyFilter?  {fieldPath: 'privacy', opStr: "==",value: this.privacyFilter}: null, this.sort.active,this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
           }
 
           // return this.exampleDatabase!.getRepoIssues(
