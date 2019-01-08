@@ -19,8 +19,21 @@
       <span class="mat-body-2">{{ event.getPause().getDisplayValue() }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <app-activities-checkboxes [showActions]="isOwner()" [user]="user" [event]="event" [(selectedActivities)]="selectedActivities">
+      <app-activities-checkboxes *ngIf="selectedActivities.length > 1" [showActions]="isOwner()" [user]="user" [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
+      <app-activity-header
+        *ngIf="selectedActivities.length === 1"
+        [user]="user"
+        [showIcon]="true"
+        [event]="event"
+        [activity]="selectedActivities[0]"
+        [showType]="true"
+        [showActions]="true"
+        [showDistance]="true"
+        [showSerialNumber]="true"
+        [showSWInfo]="true"
+        [showDuration]="true">
+      </app-activity-header>
     </mat-card-subtitle>
   </mat-card-header>
 

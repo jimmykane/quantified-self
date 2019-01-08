@@ -179,6 +179,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
           if (!series) {
             series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
+            // this.chart.yAxes.push(series.yAxis);
+            // if (this.chart.yAxes.length === 2){
+            //   this.chart.yAxes.removeIndex(0);
+            // }
           }
           series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
           return series
@@ -188,10 +192,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
-      series.forEach((series) => {
-        series.data = series.dummyData;
-        // series.invalidate();
-      });
+      // Map the data
+      series.forEach((series) => series.data = series.dummyData);
+      // Do the Axes
+      // const seriesAxes = series.filter((serrie) => !serrie.hidden).map((serrie) => {
+      //   const yAxis = new am4charts.ValueAxis();
+      //   yAxis.id = serrie.id;
+      //   return yAxis;
+      // });
+      // this.chart.yAxes.setAll(seriesAxes);
       this.chart.validateData(); // this helps with the legend area
       // this.chart.deepInvalidate();
       // this.chart.svgContainer.autoResize = false
@@ -269,7 +278,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           label: "...️",
           menu: [
             {"type": "png", "label": "PNG"},
-            // {"type": "json", "label": "JSON"},
+            {"type": "csv", "label": "CSV"},
             {"label": "Print", "type": "print"},
           ],
         }];
@@ -355,14 +364,23 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     //   this.chart.yAxes.push(yAxis)
     // }
 
+    // let yAxis = new am4charts.ValueAxis();
+    //   yAxis.baseUnit = "second";
+    //   yAxis.title.text = "Duration";
+    //   series.yAxis = yAxis;
+    //   this.chart.yAxes.push(yAxis)
+    // series.yAxis = yAxis;
+
     // series.interactionsEnabled = false;
     // debugger;
 
     if (this.selectedActivities.length == 1 && [DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
       series.hidden = true;
+      series.hide()
     }
     if (this.selectedActivities.length != 1 && [DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
+      series.hide()
     }
 
     return series;
