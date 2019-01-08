@@ -124,17 +124,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             this.columns = Object.keys(data[0]);
           }
 
-
-          // @todo combine this with after view init
-          // if (this.sort) {
-          //   this.data.sort = this.sort;
-          //   this.data.sort.sort(<MatSortable>{
-          //       id: 'Date',
-          //       start: 'desc',
-          //     },
-          //   );
-          // }
-
           return new MatTableDataSource<any>(data);
         }),
         catchError((error) => {
@@ -146,7 +135,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           return of(new MatTableDataSource([])); // @todo should reject or so
         })
       ).subscribe(data => {
-
         // Bind to the data
         this.data = data;
 
@@ -163,8 +151,17 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
         // Gone to the next page
         if (this.currentPageIndex < this.paginator.pageIndex) {
+          // If we just went to next page with empty data go to prev
+          if (!data.data.length){
+            this.paginator.pageIndex = this.currentPageIndex;
+              this.paginator.page.next({
+                pageIndex: this.currentPageIndex,
+                pageSize: this.paginator.pageSize,
+                length: this.paginator.length
+              });
+              return;
+          }
           // Increase the results length
-          // debugger;
           this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
           // return
         }
