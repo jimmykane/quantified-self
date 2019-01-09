@@ -398,7 +398,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
       samplingRate = Math.ceil((numberOfSamplesToHours * 3) / hoursToKeep1sSamplingRate)
     }
-    this.logger.info(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
+    this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
 
