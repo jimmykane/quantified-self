@@ -8,7 +8,7 @@
   <!--<input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">-->
   <!--</mat-form-field>-->
   <mat-table [dataSource]="data" matSort>
-    <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
+    <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize(); first as isFirst; last as isLast" [matColumnDef]="column">
       <ng-container *ngIf="isFirst && hasActions">
         <mat-header-cell *matHeaderCellDef>
           <mat-checkbox
@@ -60,8 +60,8 @@
         </span>
       </mat-cell>
     </ng-container>
-    <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: columns;"
+    <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
+    <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();"
              [routerLink]="['/user', user.uid, 'event', row['id']]"></mat-row>
   </mat-table>
   <mat-paginator [hidePageSize]="true" [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>

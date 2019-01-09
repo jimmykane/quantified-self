@@ -12,7 +12,15 @@ import {ActionButtonService} from '../../services/action-buttons/app.action-butt
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatPaginator, MatSnackBar, MatSort, MatSortable, MatTableDataSource} from '@angular/material';
+import {
+  MatCard,
+  MatPaginator,
+  MatSnackBar,
+  MatSort,
+  MatSortable,
+  MatTable,
+  MatTableDataSource
+} from '@angular/material';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -40,9 +48,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @Input() hasActions?: boolean;
   @ViewChild(MatSort) sort: MatSort;
   @ViewChild(MatPaginator) paginator: MatPaginator;
+  @ViewChild(MatCard) table: MatCard;
   events: EventInterface[];
   data: MatTableDataSource<any>;
-  columns: Array<Object>;
+  columns = [];
   selection = new SelectionModel(true, []);
   resultsLength = 0;
   isLoadingResults = true;
@@ -151,9 +160,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           }, []);
 
           // Set the columns
-          if (data.length) {
-            this.columns = Object.keys(data[0]).filter((key) => !(key === 'id' || key === 'event'));
-          }
+          // if (data.length) {
+          //   this.columns = Object.keys(data[0]).filter((key) => !(key === 'id' || key === 'event'));
+          // }
 
           return new MatTableDataSource<any>(data);
         }),
@@ -338,6 +347,53 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       }
       return uniqueArray;
     }, []).join(', ');
+  }
+
+  @HostListener('window:resize', ['$event'])
+  getColumnsToDisplayDependingOnScreenSize(event?) {
+    let columns = [];
+    // Push the starting one
+    if (this.hasActions) {
+      columns.push('checkbox')
+    }
+
+    // push all the rest
+    columns.push(...[
+      'privacy',
+      'startDate',
+      'activities',
+      'stats.Distance',
+      'stats.Duration',
+      'device',
+    ]);
+
+    // If it's a small screen remove some 
+    if (window.innerWidth < 600) {
+      columns = columns.filter(column => ['activities', 'privacy'].indexOf(column) === -1)
+    }
+
+    // Push the last
+    if (this.hasActions) {
+      columns.push('actions')
+    }
+    return columns
+
+    // dataObject.id = event.getID();
+    // dataObject.privacy = event.privacy;
+    // dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
+    // dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
+    // dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
+    // dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
+    // dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
+    // // dataObject.event = event;
+    // if (this.hasActions) {
+    //   dataObject.actions = event;
+    // }
+    // debugger;
+    // if (window.innerWidth < 600){
+    //   return ['privacy'] /*this.columns.filter(column => column !== 'activities');*/
+    // }
+    // return Object.keys(this.data.data[0]).filter((key) => !(key === 'id' || key === 'event'));
   }
 
   ngOnDestroy() {
