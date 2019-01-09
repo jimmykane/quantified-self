@@ -3,7 +3,7 @@ mat-cell, .mat-header-cell {
 }
 
 .mat-cell{
-  font-size: 12px;
+  font-size: 0.8em ;
 }
 
 .mat-column-checkbox, .mat-column-actions, .mat-column-privacy{

@@ -9,15 +9,14 @@
     </span>
   </span>
   </span><span>&nbsp;-&nbsp;</span>
-  <span class="mat-body-2">{{ activity.type }}</span>
+  <span *ngIf="showType" class="mat-body-2">{{ activity.type }}</span>
   <span *ngIf="showDuration">
-    <span>&nbsp;for</span>
     <span class="mat-body-2">
       {{ activity.getDuration().getDisplayValue() }}
     </span>
   </span>
   <span *ngIf="showDistance">
-    <span>&nbsp; and </span>
+    <span>&nbsp; / </span>
     <span class="mat-body-2">
       {{ activity.getDistance().getDisplayValue() }}
       {{ activity.getDistance().getDisplayUnit() }}

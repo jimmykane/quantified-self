@@ -367,7 +367,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'device',
     ]);
 
-    // If it's a small screen remove some 
+    // If it's a small screen remove some
     if (window.innerWidth < 600) {
       columns = columns.filter(column => ['activities', 'privacy'].indexOf(column) === -1)
     }

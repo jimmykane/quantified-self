@@ -89,6 +89,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   ];
 
   private advancedStats = this.simpleStats.concat([
+    // DataGPSAltitude.type,
     DataTemperature.type,
     DataSeaLevelPressure.type,
     DataSatellite5BestSNR.type,
@@ -249,7 +250,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Add watermark
         const watermark = new am4core.Label();
-        watermark.text = "quantified-self.io";
+        watermark.text = "Quantified-self.io";
         chart.plotContainer.children.push(watermark);
         watermark.align = "right";
         watermark.valign = "bottom";
@@ -268,7 +269,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.exporting.menu.items = [{
           label: "...️",
           menu: [
-            {"type": "png", "label": "PNG"},
+            {"type": "png", "label": "PNG", options: {useRetina: true}},
             {"type": "csv", "label": "CSV"},
             {"label": "Print", "type": "print"},
           ],
