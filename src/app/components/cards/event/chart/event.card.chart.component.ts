@@ -178,11 +178,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return streams.map((stream) => {
           let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
           if (!series) {
+            const axis = this.chart.yAxes.push(new am4charts.ValueAxis());
             series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
-            // this.chart.yAxes.push(series.yAxis);
+            series.yAxis = axis;
+            if (series.isHidden){
+              axis.disabled = true;
+              // axis.hide();
+            }
             // if (this.chart.yAxes.length === 2){
             //   this.chart.yAxes.removeIndex(0);
             // }
+            // series.yAxis = this.chart.yAxes.getIndex(0)
           }
           series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
           return series
@@ -194,6 +200,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
       series.forEach((series) => series.data = series.dummyData);
+      // series.forEach((series) => series.yAxis.hide());
       // Do the Axes
       // const seriesAxes = series.filter((serrie) => !serrie.hidden).map((serrie) => {
       //   const yAxis = new am4charts.ValueAxis();
@@ -228,7 +235,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // };
 
         // Create a value axis
-        const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+        // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
         // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
 
         // Create a Legend
@@ -240,7 +247,28 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.legend.itemContainers.template.events.on("hit", function (ev) {
           console.log("Clicked on",<am4charts.LineSeries>ev.target.dataItem.dataContext);
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-          const axis = series.chart.yAxes.getIndex(0);
+          //
+          //
+          // series.chart.yAxes.values.forEach((yAxis: am4charts.ValueAxis) => {
+          //   yAxis.disabled = true;
+          //   yAxis.hide();
+          // });
+          if (!series.isHidden){
+            series.yAxis.disabled = false;
+            series.yAxis.show();
+            series.yAxis.renderer.grid.template.show();
+          }else{
+            series.yAxis.disabled = true;
+            series.yAxis.hide();
+            series.yAxis.renderer.grid.template.hide();
+
+
+          }
+
+
+          // !series.isHidden ? series.yAxis.show() : series.yAxis.hide();
+          // const axis = series.chart.yAxes.getIndex(0);
+          // series.yAxis.show();
           // debugger;
           // // valueAxis.file
           // axis.min = series.minX;
@@ -373,11 +401,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // series.interactionsEnabled = false;
     // debugger;
 
-    if (this.selectedActivities.length == 1 && [DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
-      series.hidden = true;
-      series.hide()
-    }
-    if (this.selectedActivities.length != 1 && [DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
+    // if (this.selectedActivities.length == 1 && [DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
+    //   series.hidden = true;
+    //   series.hide()
+    // }
+    if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
       series.hide()
     }
@@ -495,6 +523,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private unsubscribeAndClearChart() {
     this.unSubscribeFromAll();
+    this.chart.yAxes.clear();
     this.chart.series.clear();
     this.chart.colors.reset();
   }
