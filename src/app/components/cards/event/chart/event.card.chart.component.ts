@@ -3,7 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  ElementRef, HostListener,
+  ElementRef,
   Input,
   NgZone,
   OnChanges,
@@ -16,8 +16,6 @@ import {EventColorService} from '../../../../services/color/app.event.color.serv
 import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
-import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
@@ -176,18 +174,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         }
         // debugger;
         return streams.map((stream) => {
-          let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
-          if (!series) {
-            const axis = this.chart.yAxes.push(new am4charts.ValueAxis());
-            series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
-            series.yAxis = axis;
-            if (series.isHidden) {
-              axis.disabled = true;
-              // axis.hide();
-            }
-          }
-          series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
-          return series
+          return this.createOrUpdateChartSeries(activity, stream);
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
@@ -248,8 +235,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             series.yAxis.disabled = true;
             series.yAxis.hide();
             series.yAxis.renderer.grid.template.hide();
-
-
           }
 
         });
@@ -273,7 +258,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.zIndex = 100;
         // watermark.fontWeight = 'bold';
 
-
         // Add exporting options
         chart.exporting.menu = new am4core.ExportMenu();
         chart.exporting.menu.align = 'right';
@@ -290,7 +274,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Disable the preloader
         chart.preloader.disabled = true;
-
 
         // Attach events
         chart.events.on('validated', (ev) => {
@@ -327,10 +310,24 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     });
   }
 
-  private createSeriesFromStream(activity: ActivityInterface, stream: StreamInterface): am4charts.LineSeries {
-    const series = new am4charts.LineSeries();
+  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
+    let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
+    // If there is already a series with this id only data update should be done
+    if (series){
+      series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
+      return series
+    }
+
+    // Create an axis for this series first!
+    const axis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+    // Then create a series
+    series = this.chart.series.push(new am4charts.LineSeries());
+    // Set the axis
+    series.yAxis = axis;
+    // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
     series.name = stream.type + ` ${activity.creator.name}`;
+    series.name = stream.type;
     // series.adapter.add("tooltipText", function (text, target, key) {
     //   debugger;
     //   return ">>> " + text + " <<<";
@@ -340,29 +337,24 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
-
-    // Search and add colors
-
+    // Search if there is any other series with the same color we would like to have
     const found = this.chart.series.values.find((series) => {
       return series.stroke.toString() === am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString();
     });
+    // IF there is no other series with the same color then add the activity color
     if (!found) {
       series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
       series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     }
 
     series.strokeWidth = 0.7;
-
     // series.minDistance = 1;
-
     series.fillOpacity = 0.4;
     series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
-
     series.dataFields.dateX = "date";
 
     // series.interactionsEnabled = false;
-    // debugger;
 
     // if (this.selectedActivities.length == 1 && [DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
     //   series.hidden = true;
@@ -370,9 +362,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // }
     if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
-      series.hide()
+      series.hide();
+      axis.disabled = true;
     }
 
+    // Finally set the data and return
+    series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
     return series;
   }
 
