@@ -181,14 +181,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             const axis = this.chart.yAxes.push(new am4charts.ValueAxis());
             series = this.chart.series.push(this.createSeriesFromStream(activity, stream));
             series.yAxis = axis;
-            if (series.isHidden){
+            if (series.isHidden) {
               axis.disabled = true;
               // axis.hide();
             }
-            // if (this.chart.yAxes.length === 2){
-            //   this.chart.yAxes.removeIndex(0);
-            // }
-            // series.yAxis = this.chart.yAxes.getIndex(0)
           }
           series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
           return series
@@ -201,17 +197,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Map the data
       series.forEach((series) => series.data = series.dummyData);
       // series.forEach((series) => series.yAxis.hide());
-      // Do the Axes
-      // const seriesAxes = series.filter((serrie) => !serrie.hidden).map((serrie) => {
-      //   const yAxis = new am4charts.ValueAxis();
-      //   yAxis.id = serrie.id;
-      //   return yAxis;
-      // });
       // this.chart.yAxes.setAll(seriesAxes);
       this.chart.validateData(); // this helps with the legend area
-      // this.chart.deepInvalidate();
-      // this.chart.svgContainer.autoResize = false
-      // this.chart.invalidate(); // @todo peghaps this is not needed
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
     });
   }
@@ -245,7 +232,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
         chart.legend.itemContainers.template.events.on("hit", function (ev) {
-          console.log("Clicked on",<am4charts.LineSeries>ev.target.dataItem.dataContext);
+          console.log("Clicked on", <am4charts.LineSeries>ev.target.dataItem.dataContext);
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
           //
           //
@@ -253,11 +240,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           //   yAxis.disabled = true;
           //   yAxis.hide();
           // });
-          if (!series.isHidden){
+          if (!series.isHidden) {
             series.yAxis.disabled = false;
             series.yAxis.show();
             series.yAxis.renderer.grid.template.show();
-          }else{
+          } else {
             series.yAxis.disabled = true;
             series.yAxis.hide();
             series.yAxis.renderer.grid.template.hide();
@@ -265,15 +252,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
           }
 
-
-          // !series.isHidden ? series.yAxis.show() : series.yAxis.hide();
-          // const axis = series.chart.yAxes.getIndex(0);
-          // series.yAxis.show();
-          // debugger;
-          // // valueAxis.file
-          // axis.min = series.minX;
-          // axis.max = series.maxX;
-          // chart.invalidateData();
         });
 
         // Create a cursor
@@ -383,21 +361,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     series.dataFields.dateX = "date";
 
-    // if (stream.type === DataPace.type) {
-    //   let yAxis = new am4charts.DurationAxis();
-    //   yAxis.baseUnit = "second";
-    //   yAxis.title.text = "Duration";
-    //   series.yAxis = yAxis;
-    //   this.chart.yAxes.push(yAxis)
-    // }
-
-    // let yAxis = new am4charts.ValueAxis();
-    //   yAxis.baseUnit = "second";
-    //   yAxis.title.text = "Duration";
-    //   series.yAxis = yAxis;
-    //   this.chart.yAxes.push(yAxis)
-    // series.yAxis = yAxis;
-
     // series.interactionsEnabled = false;
     // debugger;
 
@@ -443,63 +406,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.logger.info(`${numberOfSamples} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
-
-
-  // private getChartData(): { series: am4charts.LineSeries[], data: any[] } {
-  //   const chartData = {series: [], data: []};
-  //   // Use a map for quick lookup
-  //   const data = new Map<number, any>();
-  //   // Parse the series while constructing data
-  //   this.selectedActivities
-  //     .forEach((activity: ActivityInterface, index) => {
-  //       activity.getPointsInterpolated(void 0, void 0).forEach((point: PointInterface) => {
-  //         point.getData().forEach((pointData: DataInterface, key: string) => {
-  //           if ([DataLatitudeDegrees.type, DataLongitudeDegrees.type].indexOf(key) > -1) {
-  //             return;
-  //           }
-  //
-  //           let existingLineSeries: am4charts.LineSeries = chartData.series.find(lineSeries => lineSeries.id === pointData.getClassName() + activity.getID());
-  //
-  //           if (!existingLineSeries) {
-  //             existingLineSeries = new am4charts.LineSeries();
-  //             existingLineSeries.id = pointData.getClassName() + activity.getID();
-  //             existingLineSeries.name = key + ' (' + activity.creator.name + ')';
-  //
-  //             existingLineSeries.dataFields.dateX = 'date';
-  //             existingLineSeries.dataFields.valueY = pointData.getClassName() + activity.getID();
-  //             if (key !== DataHeartRate.type) {
-  //               existingLineSeries.hidden = true;
-  //             }
-  //             existingLineSeries.tooltipText = activity.creator.name + ' ' + pointData.getType() + '{valueY} ' + pointData.getDisplayUnit();
-  //             existingLineSeries.legendSettings.labelText = '{name}';
-  //             existingLineSeries.legendSettings.itemValueText = '{valueY} ' + pointData.getDisplayUnit();
-  //             existingLineSeries.defaultState.transitionDuration = 0;
-  //
-  //             existingLineSeries.strokeWidth = 1;
-  //             existingLineSeries.fillOpacity = 0.05;
-  //             // existingLineSeries.nonScalingStroke = false;
-  //             if (pointData.getType() === DataHeartRate.type) {
-  //               existingLineSeries.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-  //             }
-  //             chartData.series.push(existingLineSeries);
-  //           }
-  //
-  //           let existingData = data.get(point.getDate().getTime());
-  //           if (!existingData) {
-  //             existingData = {};
-  //             data.set(point.getDate().getTime(), existingData);
-  //           }
-  //           existingData[pointData.getClassName() + activity.getID()] = pointData.getDisplayValue();
-  //         });
-  //       });
-  //     });
-  //
-  //   // Flatten
-  //   data.forEach(((value, key, map) => {
-  //     chartData.data.push(Object.assign({date: new Date(key)}, value))
-  //   }));
-  //   return chartData;
-  // }
 
   private destroyChart() {
     try {
