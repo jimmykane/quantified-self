@@ -237,17 +237,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.width = am4core.percent(100);
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
-        // chart.legend.itemContainers.template.events.on("hit", function (ev) {
-        //   console.log("Clicked on",<am4charts.LineSeries>ev.target.dataItem.dataContext);
-        //   const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-        //   chart.yAxes.clear();
-        //   const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-        //   // valueAxis.file
-        //   valueAxis.min = series.minX;
-        //   valueAxis.max = series.maxX;
-        //   chart.yAxes.push(valueAxis);
-        //   chart.invalidateData();
-        // });
+        chart.legend.itemContainers.template.events.on("hit", function (ev) {
+          console.log("Clicked on",<am4charts.LineSeries>ev.target.dataItem.dataContext);
+          const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
+          const axis = series.chart.yAxes.getIndex(0);
+          // debugger;
+          // // valueAxis.file
+          // axis.min = series.minX;
+          // axis.max = series.maxX;
+          // chart.invalidateData();
+        });
 
         // Create a cursor
         chart.cursor = new am4charts.XYCursor();
