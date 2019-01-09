@@ -9,19 +9,20 @@
   <!--</mat-form-field>-->
   <mat-table [dataSource]="data" matSort>
     <ng-container *ngFor="let column of columns; first as isFirst; last as isLast" [matColumnDef]="column">
-      <ng-container *ngIf="isFirst">
+      <ng-container *ngIf="isFirst && hasActions">
         <mat-header-cell *matHeaderCellDef>
-          <mat-checkbox (change)="$event ? masterToggle() : null"
+          <mat-checkbox
+            (change)="$event ? masterToggle() : null"
                         [checked]="selection.hasValue() && isAllSelected()"
                         [indeterminate]="selection.hasValue() && !isAllSelected()">
           </mat-checkbox>
         </mat-header-cell>
       </ng-container>
-      <ng-container *ngIf="isLast">
+      <ng-container *ngIf="isLast && hasActions">
         <mat-header-cell *matHeaderCellDef>
         </mat-header-cell>
       </ng-container>
-      <ng-container *ngIf="!isFirst && !isLast">
+      <ng-container *ngIf="(!isFirst && !isLast) || !hasActions">
 
         <ng-container *ngIf="isColumnHeaderSortable(column)">
           <mat-header-cell *matHeaderCellDef mat-sort-header>
@@ -41,28 +42,27 @@
 
       </ng-container>
       <mat-cell *matCellDef="let row">
-        <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
+        <mat-checkbox *ngIf="column === 'checkbox'" (click)="$event.stopPropagation()"
                       (change)="$event ? checkBoxClick(row) : null"
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
-        <span *ngIf="column === 'Privacy'">
+        <span *ngIf="column === 'privacy'">
           <app-privacy-icon [privacy]="row[column]"></app-privacy-icon>
         </span>
-        <span *ngIf="column === 'Actions'">
+        <span *ngIf="column === 'actions'">
           <app-event-actions *ngIf="user" [user]="user" [event]="row[column]"></app-event-actions>
         </span>
-        <span *ngIf="column === 'Name'" matTooltip="{{ row[column] }}">
+        <span *ngIf="column === 'name'" matTooltip="{{ row[column] }}">
           {{ row[column] | slice:0:10 }}
         </span>
-        <span *ngIf="column !== 'Checkbox' && column !== 'Actions' && column !== 'Name' && column!=='Privacy'">
+        <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'name' && column!=='privacy'">
           {{ row[column] }}
         </span>
       </mat-cell>
     </ng-container>
     <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
     <mat-row *matRowDef="let row; columns: columns;"
-             [routerLink]="['/user', user.uid, 'event', row['Actions'].getID()]"></mat-row>
+             [routerLink]="['/user', user.uid, 'event', row['id']]"></mat-row>
   </mat-table>
-  <!--<mat-paginator [pageSize]="eventsPerPage"></mat-paginator>-->
   <mat-paginator [hidePageSize]="true" [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>
 </mat-card>

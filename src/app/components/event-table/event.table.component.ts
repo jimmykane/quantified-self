@@ -37,6 +37,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @Input() user: User;
   @Input() privacyFilter?: Privacy;
   @Input() eventsPerPage? = 10;
+  @Input() hasActions?: boolean;
   @ViewChild(MatSort) sort: MatSort;
   @ViewChild(MatPaginator) paginator: MatPaginator;
   events: EventInterface[];
@@ -73,18 +74,30 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         switchMap(() => {
           this.isLoadingResults = true;
           if (this.currentPageIndex === this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.privacyFilter? {fieldPath: 'privacy', opStr: "==",value: this.privacyFilter}: null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
+            return this.eventService.getEventsForUser(this.user, this.privacyFilter ? {
+              fieldPath: 'privacy',
+              opStr: "==",
+              value: this.privacyFilter
+            } : null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
           }
 
           // Going to next page
           if (this.currentPageIndex < this.paginator.pageIndex) {
             // Increase the results length
-            return this.eventService.getEventsForUser(this.user, this.privacyFilter?  {fieldPath: 'privacy', opStr: "==",value: this.privacyFilter}: null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
+            return this.eventService.getEventsForUser(this.user, this.privacyFilter ? {
+              fieldPath: 'privacy',
+              opStr: "==",
+              value: this.privacyFilter
+            } : null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.privacyFilter?  {fieldPath: 'privacy', opStr: "==",value: this.privacyFilter}: null, this.sort.active,this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
+            return this.eventService.getEventsForUser(this.user, this.privacyFilter ? {
+              fieldPath: 'privacy',
+              opStr: "==",
+              value: this.privacyFilter
+            } : null, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
           }
 
           // return this.exampleDatabase!.getRepoIssues(
@@ -102,28 +115,44 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
           // Reverse sort if we are going to prev page see https://stackoverflow.com/questions/54074135/firestore-angularfire-how-to-paginate-to-previous-page/54075453#54075453
           if (this.currentPageIndex > this.paginator.pageIndex) {
-              this.events.reverse();
+            this.events.reverse();
           }
 
           const data = events.reduce((eventArray, event) => {
-            eventArray.push({
-              Checkbox: event,
-              Privacy: event.privacy,
-              startDate: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
-              Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-              'stats.Distance': event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
-              'stats.Duration': event.getDuration().getDisplayValue(),
-              Device:
-                this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
-              Actions:
-              event,
-            });
+            const dataObject: any = {};
+            if (this.hasActions) {
+              dataObject.checkbox = event;
+            }
+            dataObject.id = event.getID();
+            dataObject.privacy = event.privacy;
+            dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
+            dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
+            dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
+            dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
+            dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
+            // dataObject.event = event;
+            if (this.hasActions) {
+              dataObject.actions = event;
+            }
+            // eventArray.push({
+            //   Checkbox: event,
+            //   Privacy: event.privacy,
+            //   startDate: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
+            //   Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
+            //   'stats.Distance': event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
+            //   'stats.Duration': event.getDuration().getDisplayValue(),
+            //   Device:
+            //     this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
+            //   Actions:
+            //   event,
+            // });
+            eventArray.push(dataObject);
             return eventArray;
           }, []);
 
           // Set the columns
           if (data.length) {
-            this.columns = Object.keys(data[0]);
+            this.columns = Object.keys(data[0]).filter((key) => !(key === 'id' || key === 'event'));
           }
 
           return new MatTableDataSource<any>(data);
@@ -154,14 +183,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         // Gone to the next page
         if (this.currentPageIndex < this.paginator.pageIndex) {
           // If we just went to next page with empty data go to prev
-          if (!data.data.length){
+          if (!data.data.length) {
             this.paginator.pageIndex = this.currentPageIndex;
-              this.paginator.page.next({
-                pageIndex: this.currentPageIndex,
-                pageSize: this.paginator.pageSize,
-                length: this.paginator.length
-              });
-              return;
+            this.paginator.page.next({
+              pageIndex: this.currentPageIndex,
+              pageSize: this.paginator.pageSize,
+              length: this.paginator.length
+            });
+            return;
           }
           // Increase the results length
           this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
@@ -220,15 +249,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'timer';
       case 'startDate':
         return 'date_range';
-      case 'Location':
-        return 'location_on';
-      case 'Device':
+      case 'device':
         return 'watch';
-      case 'Name':
+      case 'name':
         return 'font_download';
-      case 'Activities':
+      case 'activities':
         return 'filter_none';
-      case 'Privacy':
+      case 'privacy':
         return 'visibility';
       default:
         return null;
