@@ -221,22 +221,24 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.legend.itemContainers.template.events.on("hit", function (ev) {
           console.log("Clicked on", <am4charts.LineSeries>ev.target.dataItem.dataContext);
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-          //
-          //
-          // series.chart.yAxes.values.forEach((yAxis: am4charts.ValueAxis) => {
-          //   yAxis.disabled = true;
-          //   yAxis.hide();
-          // });
+
           if (!series.isHidden) {
             series.yAxis.disabled = false;
             series.yAxis.show();
             series.yAxis.renderer.grid.template.show();
           } else {
+            // Block hiding do nothing with the axis if there is some other same type visible as they share the same axis
+            // #notSameIDAndNotHiddenAndNoTSameName
+            if (series.chart.series.values
+              .filter(serie => serie.id !== series.id)
+              .filter(serie => !serie.isHidden)
+              .filter(serie => serie.name === series.name).length > 0){
+              return;
+            }
             series.yAxis.disabled = true;
             series.yAxis.hide();
             series.yAxis.renderer.grid.template.hide();
           }
-
         });
 
         // Create a cursor
@@ -318,15 +320,23 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return series
     }
 
+    // Check if we have a series with the same name aka type
+    const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
+    let yAxis;
+    if (!sameTypeSeries ){
+      yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+    }else {
+      yAxis = sameTypeSeries.yAxis;
+    }
+
     // Create an axis for this series first!
-    const axis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
     // Set the axis
-    series.yAxis = axis;
+    series.yAxis = yAxis;
     // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
-    series.name = stream.type + ` ${activity.creator.name}`;
+    // series.name = stream.type + ` ${activity.creator.name}`;
     series.name = stream.type;
     // series.adapter.add("tooltipText", function (text, target, key) {
     //   debugger;
@@ -363,7 +373,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
       series.hide();
-      axis.disabled = true;
+      series.yAxis.disabled = true;
     }
 
     // Finally set the data and return
