@@ -18,7 +18,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
-    "@amcharts/amcharts4": "^4.0.16",
+    "@amcharts/amcharts4": "^4.0.18",
     "@angular/animations": "7.2.0",
     "@angular/cdk": "^7.2.1",
     "@angular/common": "7.2.0",
@@ -36,7 +36,7 @@
     "@types/pako": "^1.0.0",
     "@types/uuid": "^3.4.4",
     "angular2-fontawesome": "^5.2.1",
-    "core-js": "^2.6.1",
+    "core-js": "^2.6.2",
     "firebase": "^5.7.2",
     "font-awesome": "^4.7.0",
     "hammerjs": "^2.0.8",
