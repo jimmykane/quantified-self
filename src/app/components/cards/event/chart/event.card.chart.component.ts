@@ -185,8 +185,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
       series.forEach((series) => series.data = series.dummyData);
-      // series.forEach((series) => series.yAxis.hide());
-      // this.chart.yAxes.setAll(seriesAxes);
       this.chart.validateData(); // this helps with the legend area
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
     });
@@ -220,26 +218,28 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.width = am4core.percent(100);
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
-        chart.legend.itemContainers.template.events.on("hit", function (ev) {
+        chart.legend.itemContainers.template.events.on("hit", (ev) => {
           console.log("Clicked on", <am4charts.LineSeries>ev.target.dataItem.dataContext);
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
 
+          // Getting visible...
           if (!series.isHidden) {
             series.yAxis.disabled = false;
-            series.yAxis.show();
+            series.yAxis.renderer.disabled = false;
             series.yAxis.renderer.grid.template.show();
+
             // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
-          } else {
+          } else { // .. hiding
             // Block hiding and do nothing with the axis if there is some other same type visible as they share the same axis
             // #notSameIDAndNotHiddenAndNoTSameName
             if (series.chart.series.values
               .filter(serie => serie.id !== series.id)
               .filter(serie => !serie.isHidden)
-              .filter(serie => serie.name === series.name).length > 0){
+              .filter(serie => serie.name === series.name).length > 0) {
               return;
             }
             series.yAxis.disabled = true;
-            series.yAxis.hide();
+            series.yAxis.hidden = true;
             series.yAxis.renderer.grid.template.hide();
           }
         });
@@ -318,7 +318,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
     let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
     // If there is already a series with this id only data update should be done
-    if (series){
+    if (series) {
       series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
       return series
     }
@@ -326,9 +326,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
     let yAxis;
-    if (!sameTypeSeries ){
+    if (!sameTypeSeries) {
       yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
-    }else {
+    } else {
       yAxis = sameTypeSeries.yAxis;
     }
 
@@ -369,13 +369,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // series.interactionsEnabled = false;
 
-    // if (this.selectedActivities.length == 1 && [DataHeartRate.type, DataAltitude.type, DataCadence.type, DataPower.type].indexOf(stream.type) === -1) {
-    //   series.hidden = true;
-    //   series.hide()
-    // }
     if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
-      series.hide();
       series.yAxis.disabled = true;
     }
 
@@ -430,9 +425,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
   }
 
-  ngOnDestroy() {
-    this.destroyChart();
-    this.unSubscribeFromAll();
+  private hideSeriesYAxis(series: am4charts.XYSeries) {
+
+  }
+
+  private getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
+    return series.chart.series.values
+      .filter(serie => serie.id !== series.id)
+      .filter(serie => !serie.isHidden)
+      .filter(serie => serie.name === series.name);
   }
 
   private unsubscribeAndClearChart() {
@@ -442,10 +443,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.chart.colors.reset();
   }
 
-
   private unSubscribeFromAll() {
     if (this.streamsSubscription) {
       this.streamsSubscription.unsubscribe();
     }
   }
+
+  ngOnDestroy() {
+    this.destroyChart();
+    this.unSubscribeFromAll();
+  }
+
 }
