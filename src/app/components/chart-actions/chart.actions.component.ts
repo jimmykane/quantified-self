@@ -38,6 +38,7 @@ export class ChartActionsComponent implements OnChanges {
   checkBoxChanged(event) {
     this.useDistanceAxisChange.emit(this.useDistanceAxis);
     this.showAllStatsChange.emit(this.showAllStats);
+    this.showOnlyOneYAxisChange.emit(this.showOnlyOneYAxis);
     this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
     this.userSettingsService.setShowAllStats(this.showAllStats);
     this.userSettingsService.setShowOnlyOneYAxis(this.showOnlyOneYAxis);

@@ -145,7 +145,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllStats) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllStats || simpleChanges.showOnlyOneYAxis) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
