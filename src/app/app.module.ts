@@ -110,7 +110,7 @@ export class RavenErrorHandler implements ErrorHandler {
     HttpClientModule,
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
-    AngularFirestoreModule.enablePersistence({experimentalTabSynchronization: true}),
+    // AngularFirestoreModule.enablePersistence({experimentalTabSynchronization: true}),
     AngularFireStorageModule,
     AngularFireAuthModule,
     AgmCoreModule.forRoot({
