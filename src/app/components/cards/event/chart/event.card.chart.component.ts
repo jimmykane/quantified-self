@@ -73,6 +73,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllStats: boolean;
+  @Input() showOnlyOneYAxis: boolean;
 
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
@@ -227,8 +228,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             series.yAxis.disabled = false;
             series.yAxis.show();
             series.yAxis.renderer.grid.template.show();
+            // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
           } else {
-            // Block hiding do nothing with the axis if there is some other same type visible as they share the same axis
+            // Block hiding and do nothing with the axis if there is some other same type visible as they share the same axis
             // #notSameIDAndNotHiddenAndNoTSameName
             if (series.chart.series.values
               .filter(serie => serie.id !== series.id)

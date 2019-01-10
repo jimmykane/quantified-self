@@ -7,7 +7,7 @@
       [color]="'accent'"
       (change)="checkBoxChanged($event)"
       [(ngModel)]="useDistanceAxis">
-      <span matTooltip="Use Distance for X Axis">
+      <span matTooltip="If you want to use distance instead of time for the X Axis of the chart">
         Use distance Axis
       </span>
     </mat-slide-toggle>
@@ -17,8 +17,18 @@
       [color]="'accent'"
       (change)="checkBoxChanged($event)"
       [(ngModel)]="showAllStats">
-      <span matTooltip="Show more data on the chart">
-        Show advanced data
+      <span matTooltip="Some data are filtered to not clutter the chart by default. Turn this toggle on to show all available data that exist">
+        Show all data
+      </span>
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showOnlyOneYAxis">
+      <span matTooltip="By default the chart will grow it's Y Axes when you toggle a data item on. Toggling this setting to on will prevent that.">
+        Show Only One Y Axis
       </span>
     </mat-slide-toggle>
   </section>

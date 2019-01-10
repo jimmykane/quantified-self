@@ -12,7 +12,7 @@ export class UserSettingsService {
               private chartSettingsLocalStorageService: ChartSettingsLocalStorageService) {
   }
 
-  public async getShowAutoLaps(): Promise<boolean> {
+  public async showAutoLaps(): Promise<boolean> {
     let defaultValue = 'false';
     try {
       defaultValue = await this.mapSettingsLocalStorageService.getItem('showAutoLaps');
@@ -22,7 +22,7 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-  public async getShowManualLaps(): Promise<boolean> {
+  public async showManualLaps(): Promise<boolean> {
     let defaultValue = 'false';
     try {
       defaultValue = await this.mapSettingsLocalStorageService.getItem('showManualLaps');
@@ -42,12 +42,22 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-   public async showAllStats(): Promise<boolean> {
+  public async showAllStats(): Promise<boolean> {
     let defaultValue = 'false';
     try {
       defaultValue = await this.chartSettingsLocalStorageService.getItem('showAllStats');
     } catch (e) {
       this.chartSettingsLocalStorageService.setItem('showAllStats', defaultValue);
+    }
+    return defaultValue === 'true';
+  }
+
+  public async showOnlyOneYAxis(): Promise<boolean> {
+    let defaultValue = 'false';
+    try {
+      defaultValue = await this.chartSettingsLocalStorageService.getItem('showOnlyOneYAxis');
+    } catch (e) {
+      this.chartSettingsLocalStorageService.setItem('showOnlyOneYAxis', defaultValue);
     }
     return defaultValue === 'true';
   }
@@ -63,8 +73,13 @@ export class UserSettingsService {
   public setUseDistanceAxis(value: boolean) {
     this.chartSettingsLocalStorageService.setItem('useDistanceAxis', String(value));
   }
-  public setShowAdvancedStats(value: boolean) {
+
+  public setShowAllStats(value: boolean) {
     this.chartSettingsLocalStorageService.setItem('showAllStats', String(value));
+  }
+
+  public setShowOnlyOneYAxis(value: boolean) {
+    this.chartSettingsLocalStorageService.setItem('showOnlyOneYAxis', String(value));
   }
 }
 

@@ -22,9 +22,11 @@ export class ChartActionsComponent implements OnChanges {
 
   @Input() useDistanceAxis: boolean;
   @Input() showAllStats: boolean;
+  @Input() showOnlyOneYAxis: boolean;
 
   @Output() showAllStatsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() useDistanceAxisChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() showOnlyOneYAxisChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
   constructor(
     private eventService: EventService,
@@ -37,7 +39,8 @@ export class ChartActionsComponent implements OnChanges {
     this.useDistanceAxisChange.emit(this.useDistanceAxis);
     this.showAllStatsChange.emit(this.showAllStats);
     this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
-    this.userSettingsService.setShowAdvancedStats(this.showAllStats);
+    this.userSettingsService.setShowAllStats(this.showAllStats);
+    this.userSettingsService.setShowOnlyOneYAxis(this.showOnlyOneYAxis);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
   }
