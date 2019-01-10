@@ -196,17 +196,19 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // Create a chart
         const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
         chart.pixelPerfect = false;
-        // chart.fontSize = '12px';
+        chart.fontSize = '0.85em';
         // chart.resizable = false;
 
         // Create a date axis
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
         // dateAxis.skipEmptyPeriods= true;
         dateAxis.title.text = "Time";
-        // dateAxis.baseInterval = {
-        //   timeUnit: "second",
+        dateAxis.baseInterval = {
+          timeUnit: "second",
+          count: 1
         //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
-        // };
+        };
+        // dateAxis.skipEmptyPeriods= true;
 
         // Create a value axis
         // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
@@ -214,6 +216,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Create a Legend
         chart.legend = new am4charts.Legend();
+        chart.legend.fontSize = '0.9em';
         const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
         legendContainer.width = am4core.percent(100);
         legendContainer.height = am4core.percent(100);
@@ -360,10 +363,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     }
 
-    series.strokeWidth = 0.7;
+    series.strokeWidth = 0.9;
     // series.minDistance = 1;
-    series.fillOpacity = 0.4;
-    series.defaultState.transitionDuration = 0;
+    series.fillOpacity = 0.5;
+    // series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
     series.dataFields.dateX = "date";
 
