@@ -252,7 +252,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
         // Add watermark
         const watermark = new am4core.Label();
-        watermark.text = "Quantified-self.io";
+        watermark.text = "Quantified-Self.io";
         chart.plotContainer.children.push(watermark);
         watermark.align = "right";
         watermark.valign = "bottom";
