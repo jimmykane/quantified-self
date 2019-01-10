@@ -42,12 +42,12 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-   public async showAdvancedStats(): Promise<boolean> {
+   public async showAllStats(): Promise<boolean> {
     let defaultValue = 'false';
     try {
-      defaultValue = await this.chartSettingsLocalStorageService.getItem('showAdvancedStats');
+      defaultValue = await this.chartSettingsLocalStorageService.getItem('showAllStats');
     } catch (e) {
-      this.chartSettingsLocalStorageService.setItem('showAdvancedStats', defaultValue);
+      this.chartSettingsLocalStorageService.setItem('showAllStats', defaultValue);
     }
     return defaultValue === 'true';
   }
@@ -64,7 +64,7 @@ export class UserSettingsService {
     this.chartSettingsLocalStorageService.setItem('useDistanceAxis', String(value));
   }
   public setShowAdvancedStats(value: boolean) {
-    this.chartSettingsLocalStorageService.setItem('showAdvancedStats', String(value));
+    this.chartSettingsLocalStorageService.setItem('showAllStats', String(value));
   }
 }
 

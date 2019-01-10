@@ -21,9 +21,9 @@ import {UserSettingsService} from '../../services/app.user.settings.service';
 export class ChartActionsComponent implements OnChanges {
 
   @Input() useDistanceAxis: boolean;
-  @Input() showAdvancedStats: boolean;
+  @Input() showAllStats: boolean;
 
-  @Output() showAdvancedStatsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() showAllStatsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() useDistanceAxisChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
   constructor(
@@ -35,9 +35,9 @@ export class ChartActionsComponent implements OnChanges {
 
   checkBoxChanged(event) {
     this.useDistanceAxisChange.emit(this.useDistanceAxis);
-    this.showAdvancedStatsChange.emit(this.showAdvancedStats);
+    this.showAllStatsChange.emit(this.showAllStats);
     this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
-    this.userSettingsService.setShowAdvancedStats(this.showAdvancedStats);
+    this.userSettingsService.setShowAdvancedStats(this.showAllStats);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
   }

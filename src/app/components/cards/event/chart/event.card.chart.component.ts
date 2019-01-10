@@ -72,7 +72,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
-  @Input() showAdvancedStats: boolean;
+  @Input() showAllStats: boolean;
 
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
@@ -144,7 +144,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAdvancedStats) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllStats) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -167,7 +167,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private subscribeToNewData() {
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
-        this.showAdvancedStats ? this.advancedStats : this.simpleStats,
+        this.showAllStats ? this.advancedStats : this.simpleStats,
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
