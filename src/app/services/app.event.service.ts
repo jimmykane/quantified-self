@@ -37,6 +37,7 @@ export class EventService implements OnDestroy {
   public getEventAndActivities(user: User, eventID: string): Observable<EventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
+    this.logger.info(`Getting ${user.uid} and ${eventID}`);
     return combineLatest(
       this.afs
         .collection('users')
@@ -50,9 +51,9 @@ export class EventService implements OnDestroy {
       // debugger;
       this.logger.error(error);
       Raven.captureException(error);
-      return of([])
+      return of([]) // @todo fix this
     })).pipe(map(([event, activities]) => {
-      // debugger;
+      // debugger; // fix it here
       event.clearActivities();
       activities.forEach((activity) => event.addActivity(activity));
       return event;
