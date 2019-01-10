@@ -44,24 +44,26 @@ export class EventService implements OnDestroy {
         .doc(user.uid)
         .collection("events").doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID);
+          return eventSnapshot.payload.exists?  EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
         })),
       this.getActivities(user, eventID),
     ).pipe(catchError((error) => {
       // debugger;
       this.logger.error(error);
       Raven.captureException(error);
-      return of([]) // @todo fix this
-    })).pipe(map(([event, activities]) => {
-      // debugger; // fix it here
+      return of(null) // @todo fix this
+    })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
+      if (!event){
+        return null;
+      }
       event.clearActivities();
-      activities.forEach((activity) => event.addActivity(activity));
+      event.addActivities(activities);
       return event;
     })).pipe(catchError((error) => {
       // debugger;
       Raven.captureException(error);
       this.logger.error(error);
-      return of(void 0); // @todo is this the best we can do?
+      return of(null); // @todo is this the best we can do?
     }))
   }
 
@@ -126,12 +128,12 @@ export class EventService implements OnDestroy {
       }))
       .snapshotChanges()
       .pipe(map((eventSnapshots) => {
+        // debugger;
         return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
           eventIDS.push(eventSnapshot.payload.doc.id);
           return eventIDS;
         }, []);
       })).pipe(switchMap((eventIDS) => {
-        // Should check if there are event ids else not return
         // debugger;
         if (!eventIDS.length) {
           return of([]);
@@ -144,6 +146,9 @@ export class EventService implements OnDestroy {
 
   getEventActivitiesAndStreams(user: User, eventID) {
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
+      if (!event){
+        return of(null);
+      }
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(
         event.getActivities().map((activity) => {
