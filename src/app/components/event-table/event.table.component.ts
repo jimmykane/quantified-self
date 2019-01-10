@@ -128,6 +128,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           }
 
           const data = events.reduce((eventArray, event) => {
+            if (!event){
+              return eventArray;
+            }
             const dataObject: any = {};
             if (this.hasActions) {
               dataObject.checkbox = event;
