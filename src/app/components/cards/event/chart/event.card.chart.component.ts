@@ -203,11 +203,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
         // dateAxis.skipEmptyPeriods= true;
         dateAxis.title.text = "Time";
-        dateAxis.baseInterval = {
-          timeUnit: "second",
-          count: 1
-        //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
-        };
+        // dateAxis.baseInterval = {
+        //   timeUnit: "second",
+        //   count: 1
+        // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
+        // };
         // dateAxis.skipEmptyPeriods= true;
 
         // Create a value axis
