@@ -22,14 +22,14 @@
       </span>
     </mat-slide-toggle>
   </section>
-  <!--<section mat-menu-item>-->
-    <!--<mat-slide-toggle-->
-      <!--[color]="'accent'"-->
-      <!--(change)="checkBoxChanged($event)"-->
-      <!--[(ngModel)]="showOnlyOneYAxis">-->
-      <!--<span matTooltip="By default the chart will grow it's Y Axes when you toggle a data item on. Toggling this setting to on will prevent that.">-->
-        <!--Show Only One Y Axis-->
-      <!--</span>-->
-    <!--</mat-slide-toggle>-->
-  <!--</section>-->
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showOnlyOneYAxis">
+      <span matTooltip="By default the chart will add more Y Axes when you toggle a data item on. Toggling this setting to on will prevent that allowing only one Y axes for all items">
+        Show Only One Y Axis
+      </span>
+    </mat-slide-toggle>
+  </section>
 </mat-menu>

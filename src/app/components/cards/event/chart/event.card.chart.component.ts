@@ -222,9 +222,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
         chart.legend.itemContainers.template.events.on("hit", (ev) => {
-          console.log("Clicked on", <am4charts.LineSeries>ev.target.dataItem.dataContext);
+          if (this.showOnlyOneYAxis){
+            return;
+          }
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-
           // Getting visible...
           if (!series.isHidden) {
             series.yAxis.disabled = false;
@@ -326,16 +327,25 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return series
     }
 
-    // Check if we have a series with the same name aka type
-    const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
     let yAxis: am4charts.Axis;
-    if (!sameTypeSeries) {
-      yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+
+    if (this.showOnlyOneYAxis) {
+      if (!this.chart.yAxes.length) {
+        yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+      } else {
+        yAxis = this.chart.yAxes.getIndex(0);
+      }
     } else {
-      yAxis = sameTypeSeries.yAxis;
+      // Check if we have a series with the same name aka type
+      const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
+      if (!sameTypeSeries) {
+        yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+      } else {
+        // Share
+        yAxis = sameTypeSeries.yAxis;
+      }
     }
 
-    // Create an axis for this series first!
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
     // Set the axis
@@ -379,7 +389,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
       series.hidden = true;
-      series.yAxis.disabled = true;
+      // Disable the rest of the axis
+      if (!this.showOnlyOneYAxis) {
+        series.yAxis.disabled = true;
+      }
     }
 
     // Finally set the data and return
