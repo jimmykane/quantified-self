@@ -202,6 +202,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               pageSize: this.paginator.pageSize,
               length: this.paginator.length
             });
+            this.snackBar.open('No more events to show', null, {
+              duration: 2000,
+            });
             return;
           }
           // Increase the results length
@@ -384,23 +387,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       columns.push('actions')
     }
     return columns
-
-    // dataObject.id = event.getID();
-    // dataObject.privacy = event.privacy;
-    // dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
-    // dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
-    // dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
-    // dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
-    // dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
-    // // dataObject.event = event;
-    // if (this.hasActions) {
-    //   dataObject.actions = event;
-    // }
-    // debugger;
-    // if (window.innerWidth < 600){
-    //   return ['privacy'] /*this.columns.filter(column => column !== 'activities');*/
-    // }
-    // return Object.keys(this.data.data[0]).filter((key) => !(key === 'id' || key === 'event'));
   }
 
   ngOnDestroy() {
