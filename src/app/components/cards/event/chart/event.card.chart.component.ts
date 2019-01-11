@@ -340,6 +340,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series = this.chart.series.push(new am4charts.LineSeries());
     // Set the axis
     series.yAxis = yAxis;
+    // Add the tooltips
+    // yAxis.adapter.add("getTooltipText", function (text, target, key) {
+    //   return `${text} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit} `;
+    // });
+
     // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
     // series.name = stream.type + ` ${activity.creator.name}`;
