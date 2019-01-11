@@ -128,7 +128,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           }
 
           const data = events.reduce((eventArray, event) => {
-            if (!event){
+            if (!event) {
               return eventArray;
             }
             const dataObject: any = {};
@@ -192,8 +192,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         // Stayed on the same page but data came in
         if (this.currentPageIndex == this.paginator.pageIndex) {
           // If we have no data (eg this pages event's were deleted) go to prev page
-          if (!this.data.data.length){
-            this.goToPageNumber(this.currentPageIndex-1);
+          if (!this.data.data.length && this.paginator.pageIndex !== 0) {
+            this.goToPageNumber(this.currentPageIndex - 1);
             return;
           }
           // debugger;
@@ -343,7 +343,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
   }
 
-  private goToPageNumber(number: number){
+  private goToPageNumber(number: number) {
     this.paginator.pageIndex = number;
     this.currentPageIndex = number;
     this.paginator.page.next({
