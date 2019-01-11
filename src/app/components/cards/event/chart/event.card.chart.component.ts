@@ -260,7 +260,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.plotContainer.children.push(watermark);
         watermark.align = "right";
         watermark.valign = "bottom";
-        watermark.fontSize = 18;
+        watermark.fontSize = '2em';
         watermark.opacity = 0.6;
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
