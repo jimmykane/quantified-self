@@ -46,10 +46,8 @@ export class UserActionsComponent implements OnInit {
       await this.userService.setUserPrivacy(this.user, Privacy.public);
     }
     this.clipboardService.copyToClipboard(this.sharingService.getShareURLForUser(this.user.uid));
-    this.snackBar.open('Your user privacy is now changed to public and share url is copied to clipboard', 'go to share link', {
+    this.snackBar.open('Your user privacy is now changed to public and share url is copied to clipboard', null, {
       duration: 20000,
-    }).onAction().toPromise().then(() => {
-
     });
   }
 

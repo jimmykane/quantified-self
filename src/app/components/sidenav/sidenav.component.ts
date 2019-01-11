@@ -17,7 +17,7 @@ export class SideNavComponent implements OnInit {
 
   public events: EventInterface[] = [];
 
-  constructor(public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router , private eventService: EventService,  private route: ActivatedRoute) {
+  constructor(public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router, private eventService: EventService, private route: ActivatedRoute) {
   }
 
   ngOnInit() {
@@ -26,7 +26,9 @@ export class SideNavComponent implements OnInit {
   async logout() {
     await this.authService.signOut();
     this.router.navigate(['/home']).then(() => {
-      this.snackBar.open('Signed out');
+      this.snackBar.open('Signed out', null, {
+        duration: 2000,
+      });
     });
   }
 }

@@ -46,11 +46,9 @@ export class EventActionsComponent implements OnInit {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.public);
     }
     this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
-    this.snackBar.open('Privacy is changed to public and link copied to your keyboard', 'go to share link', {
+    this.snackBar.open('Privacy is changed to public and link copied to your keyboard', null, {
       duration: 20000,
-    }).onAction().toPromise().then(() => {
-
-    });
+    })
   }
 
   edit() {

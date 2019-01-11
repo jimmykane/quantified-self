@@ -53,6 +53,15 @@ export class UserAgreementFormComponent implements OnInit {
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
+      acceptTrackingPolicy: new FormControl(this.user.acceptedTrackingPolicy, [
+        Validators.requiredTrue,
+        // Validators.minLength(4),
+      ]),
+      acceptDiagnosticsPolicy: new FormControl(this.user.acceptedDiagnosticsPolicy, [
+        Validators.requiredTrue,
+        // Validators.minLength(4),
+      ]),
+
       // 'alterEgo': new FormControl(this.hero.alterEgo),
       // 'power': new FormControl(this.hero.power, Validators.required)
     });
@@ -70,6 +79,8 @@ export class UserAgreementFormComponent implements OnInit {
     try {
       this.user.acceptedDataPolicy = true;
       this.user.acceptedPrivacyPolicy = true;
+      this.user.acceptedTrackingPolicy = true;
+      this.user.acceptedDiagnosticsPolicy = true;
       const dbUser = await this.userService.createOrUpdateUser(this.user);
       this.snackBar.open('User updated', null, {
         duration: 2000,

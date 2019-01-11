@@ -18,6 +18,18 @@
       </mat-card>
     </mat-checkbox>
 
+    <mat-checkbox formControlName="acceptTrackingPolicy">
+      <mat-card>
+        <b>You accept that: </b> Your IP will be anonymized and will be used only to determine visits by country.
+      </mat-card>
+    </mat-checkbox>
+
+    <mat-checkbox formControlName="acceptDiagnosticsPolicy">
+      <mat-card>
+        <b>You accept that: </b> Your browser can send anonymized data when errors happen to help improve the quality of the service
+      </mat-card>
+    </mat-checkbox>
+
     <mat-error *ngIf="!this.userFormGroup.valid" class="mat-subheader">
       <p>You must accept all policies</p>
     </mat-error>
