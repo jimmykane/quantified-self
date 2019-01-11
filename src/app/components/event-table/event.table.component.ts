@@ -181,6 +181,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         // Bind to the data
         this.data = data;
 
+        // debugger;
+
 
         if (this.paginator.pageIndex === 0) {
           this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
@@ -189,6 +191,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
         // Stayed on the same page but data came in
         if (this.currentPageIndex == this.paginator.pageIndex) {
+          // If we have no data (eg this pages event's were deleted) go to prev page
+          if (!this.data.data.length){
+            this.goToPageNumber(this.currentPageIndex-1);
+            return;
+          }
+          // debugger;
           this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
         }
 
@@ -196,12 +204,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         if (this.currentPageIndex < this.paginator.pageIndex) {
           // If we just went to next page with empty data go to prev
           if (!data.data.length) {
-            this.paginator.pageIndex = this.currentPageIndex;
-            this.paginator.page.next({
-              pageIndex: this.currentPageIndex,
-              pageSize: this.paginator.pageSize,
-              length: this.paginator.length
-            });
+            this.goToPageNumber(this.currentPageIndex);
             this.snackBar.open('No more events to show', null, {
               duration: 2000,
             });
@@ -338,6 +341,16 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'material',
       ));
     }
+  }
+
+  private goToPageNumber(number: number){
+    this.paginator.pageIndex = number;
+    this.currentPageIndex = number;
+    this.paginator.page.next({
+      pageIndex: number,
+      pageSize: this.paginator.pageSize,
+      length: this.paginator.length
+    });
   }
 
   private getUniqueStringWithMultiplier(arrayOfStrings: string[]) {
