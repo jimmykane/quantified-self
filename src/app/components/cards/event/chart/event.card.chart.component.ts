@@ -328,7 +328,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
-    let yAxis;
+    let yAxis: am4charts.Axis;
     if (!sameTypeSeries) {
       yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
     } else {
