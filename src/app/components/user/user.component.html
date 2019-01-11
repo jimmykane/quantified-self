@@ -23,14 +23,18 @@
           <mat-icon>share</mat-icon>
           Shared
         </ng-template>
-        <app-event-table [user]="targetUser" [privacyFilter]="'public'"></app-event-table>
+        <mat-card>
+          <app-event-table [user]="targetUser" [privacyFilter]="'public'"></app-event-table>
+        </mat-card>
       </mat-tab>
       <mat-tab label="Watches">
         <ng-template matTabLabel>
           <mat-icon>watch</mat-icon>
           Watches
         </ng-template>
-        Coming soon...
+        <mat-card>
+          Coming soon...
+        </mat-card>
       </mat-tab>
     </mat-tab-group>
   </mat-card-content>

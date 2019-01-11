@@ -7,11 +7,7 @@ import {take} from 'rxjs/operators';
 import {UserService} from '../../services/app.user.service';
 import {UserFormComponent} from '../user-forms/user.form.component';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
-
-declare function require(moduleName: string): any;
-
-const {version: appVersion} = require('../../../../package.json');
-
+import * as Raven from "raven-js";
 
 @Component({
   selector: 'app-login',
@@ -19,7 +15,8 @@ const {version: appVersion} = require('../../../../package.json');
   styleUrls: ['./login.component.css'],
 })
 export class LoginComponent {
-  public appVersion = appVersion;
+
+  isLoggingIn: boolean;
 
   constructor(
     public authService: AppAuthService,
@@ -40,17 +37,22 @@ export class LoginComponent {
   }
 
 
-  private async redirectOrShowDataPrivacyDialog(loginServiceUser){
-    const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
-    if (databaseUser) {
-      await this.router.navigate(['/dashboard']);
-      this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
-        duration: 2000,
-      });
-      return;
+  private async redirectOrShowDataPrivacyDialog(loginServiceUser) {
+    this.isLoggingIn = true;
+    try {
+      const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
+      if (databaseUser) {
+        await this.router.navigate(['/dashboard']);
+        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
+          duration: 2000,
+        });
+        return;
+      }
+      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL))
+    } catch (e) {
+      Raven.captureException(e);
+      this.isLoggingIn = false;
     }
-
-    this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL))
   }
 
   private showUserAgreementFormDialog(user: User) {
@@ -63,6 +65,7 @@ export class LoginComponent {
     });
 
     dialogRef.afterClosed().subscribe(result => {
+      this.isLoggingIn = false;
     });
   }
 
