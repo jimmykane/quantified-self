@@ -287,18 +287,22 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         async () => {
+          // Clear all selections
+          this.actionButtonService.removeActionButton('mergeEvents');
+          this.actionButtonService.removeActionButton('deleteEvents');
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
             promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.checkbox.getID()).pipe(take(1)).toPromise());
           });
+          // Now we can clear the selection
+          this.eventSelectionMap.clear();
+          this.selection.clear();
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
           const eventID = await this.eventService.setEventForUser(this.user, mergedEvent);
           // debugger;
-          this.actionButtonService.removeActionButton('mergeEvents');
-          this.eventSelectionMap.clear();
-          this.selection.clear();
+
           // await this.router.navigate(['/event'], {
           //   queryParams: {
           //     eventID: eventID,
