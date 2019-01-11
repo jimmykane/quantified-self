@@ -290,7 +290,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
-            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.Checkbox.getID()).pipe(take(1)).toPromise());
+            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.checkbox.getID()).pipe(take(1)).toPromise());
           });
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
