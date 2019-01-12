@@ -53,10 +53,18 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 
 
+// import am4themes_animated from "@amcharts/amcharts4/themes/animated";
+// import am4themes_material from "@amcharts/amcharts4/themes/material";
+// import am4themes_frozen from "@amcharts/amcharts4/themes/frozen";
+// import am4themes_dataviz from "@amcharts/amcharts4/themes/dataviz";
+// import am4themes_dark from "@amcharts/amcharts4/themes/dark";
+// import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
+// import am4themes_am_dark from "@amcharts/amcharts4/themes/amchartsdark";
+// import am4themes_am from "@amcharts/amcharts4/themes/amcharts";
 // am4core.useTheme(am4themes_animated);
-// am4core.useTheme(am4themes_material);
-
+// am4core.useTheme(am4themes_dataviz);
 // am4core.useTheme(am4themes_kelly);
+// am4core.useTheme(am4themes_am);
 
 @Component({
   selector: 'app-event-card-chart',
