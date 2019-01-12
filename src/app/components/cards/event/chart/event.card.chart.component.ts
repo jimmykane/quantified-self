@@ -378,9 +378,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     }
 
-    series.strokeWidth = 0.9;
+    series.strokeWidth = 1;
     // series.minDistance = 1;
-    series.fillOpacity = 0.5;
+    series.fillOpacity = 0.2;
     // series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
     series.dataFields.dateX = "date";
