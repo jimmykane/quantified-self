@@ -1,6 +1,6 @@
 <mat-card class="mat-elevation-z0">
 
-  <app-shade [isActive]="isLoadingResults" [hasError]="errorQuerying" [errorMessage]="errorQuerying"></app-shade>
+  <app-shade [isActive]="isLoadingResults" [hasError]="errorLoading" [errorMessage]="errorLoading"></app-shade>
   <app-shade [isActive]="false" [hasError]="(!this.events || !this.events.length) && !isLoadingResults" [errorMessage]="'Nothing to show'"></app-shade>
 
   <!-- hide the below for now till proper DB filtering is live -->

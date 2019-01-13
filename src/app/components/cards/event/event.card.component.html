@@ -1,6 +1,6 @@
 <mat-card *ngIf="event">
   <mat-card-header>
-    <app-event-actions *ngIf="isOwner()" [user]="user" [event]="event" align="end"></app-event-actions>
+    <app-event-actions *ngIf="isOwner()" [user]="currentUser" [event]="event" align="end"></app-event-actions>
     <mat-card-subtitle>
       <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
       <span class="mat-body-2"> {{ event.name.slice(0, 70) }}</span>
@@ -19,11 +19,11 @@
       <span class="mat-body-2">{{ event.getPause().getDisplayValue() }}</span>
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="user" [event]="event" [(selectedActivities)]="selectedActivities">
+      <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser" [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
       <app-activity-header
         *ngIf="selectedActivities.length === 1"
-        [user]="user"
+        [user]="currentUser"
         [showIcon]="true"
         [event]="event"
         [activity]="selectedActivities[0]"
@@ -41,7 +41,7 @@
     <mat-tab-group
       [dynamicHeight]="true"
       [selectedIndex]="tabIndex"
-      (selectedIndexChange)="router.navigate(['/user', userFromParams.uid, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">
+      (selectedIndexChange)="router.navigate(['/user', targetUser.uid, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">
       <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
@@ -56,7 +56,7 @@
           [showAutoLaps]="showMapAutoLaps"
           [showManualLaps]="showMapManualLaps"
           [selectedActivities]="selectedActivities"
-          [user]="userFromParams"
+          [user]="targetUser"
           [event]="event"></app-event-card-map-agm>
       </mat-tab>
       <mat-tab label="Stats">
@@ -83,7 +83,8 @@
           [showAllStats]="showAllStats"
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"
-          [user]="userFromParams"
+          [user]="targetUser"
+          [userChartSettings]="(currentUser && currentUser.settings && currentUser.settings.chartSettings) ? currentUser.settings.chartSettings : null"
           [event]="event">
         </app-event-card-chart>
       </mat-tab>

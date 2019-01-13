@@ -27,16 +27,15 @@
           <app-event-table [user]="targetUser" [privacyFilter]="'public'"></app-event-table>
         </mat-card>
       </mat-tab>
-      <mat-tab label="Watches">
+      <mat-tab label="Settings">
         <ng-template matTabLabel>
-          <mat-icon>watch</mat-icon>
-          Watches
+          <mat-icon>settings</mat-icon>
+          settings
         </ng-template>
-        <mat-card>
-          Coming soon...
-        </mat-card>
+        <app-user-settings  *ngIf="isOwner()" [user]="currentUser"></app-user-settings>
       </mat-tab>
     </mat-tab-group>
+
   </mat-card-content>
   <!-- todo Implement this please -->
   <!--<mat-card-actions>-->

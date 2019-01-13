@@ -36,7 +36,7 @@ import {
   MatSlideToggleModule,
   MatDatepickerModule,
   MatNativeDateModule,
-  MatRadioModule, MatPaginatorModule, MatProgressSpinnerModule,
+  MatRadioModule, MatPaginatorModule, MatProgressSpinnerModule, MatSelectModule,
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
@@ -86,6 +86,7 @@ import {UserFormComponent} from './components/user-forms/user.form.component';
 import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
 import {ShadeComponent} from "./components/loading/shade.component";
 import {SideNavService} from "./services/side-nav/side-nav.service";
+import {UserSettingsComponent} from "./components/user-settings/user-settings.component";
 
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
@@ -150,6 +151,7 @@ export class RavenErrorHandler implements ErrorHandler {
     MatRadioModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,
+    MatSelectModule,
   ],
   declarations: [
     AppComponent,
@@ -184,6 +186,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UserFormComponent,
     UserAgreementFormComponent,
     ShadeComponent,
+    UserSettingsComponent,
   ],
   entryComponents: [
     EventFormComponent,

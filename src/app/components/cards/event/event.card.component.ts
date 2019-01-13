@@ -23,8 +23,8 @@ import {User} from 'quantified-self-lib/lib/users/user';
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
-  public userFromParams: User;
-  public user: User;
+  public targetUser: User;
+  public currentUser: User;
   public tabIndex;
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
@@ -68,7 +68,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     const eventID = this.route.snapshot.paramMap.get('eventID');
 
     // Set a "user from params"
-    this.userFromParams = new User(userID);
+    this.targetUser = new User(userID);
 
     this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
       this.tabIndex = +queryParams.get('tabIndex');
@@ -76,11 +76,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     // Subscribe to authService and set the current user if possible
     this.userSubscription = this.authService.user.subscribe((user) => {
-      this.user = user;
+      this.currentUser = user;
     });
 
     // Subscribe to the actual subject our event
-    this.eventSubscription = this.eventService.getEventAndActivities(this.userFromParams, eventID).subscribe((event) => {
+    this.eventSubscription = this.eventService.getEventAndActivities(this.targetUser, eventID).subscribe((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']).then(() => {
           this.snackBar.open('Not found', null, {
@@ -95,11 +95,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async toggleEventPrivacy() {
-    return this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy === Privacy.private ? Privacy.public : Privacy.private);
+    return this.eventService.setEventPrivacy(this.currentUser, this.event.getID(), this.event.privacy === Privacy.private ? Privacy.public : Privacy.private);
   }
 
   isOwner() {
-    return !!(this.userFromParams && this.user && (this.userFromParams.uid === this.user.uid));
+    return !!(this.targetUser && this.currentUser && (this.targetUser.uid === this.currentUser.uid));
   }
 
   ngOnDestroy(): void {

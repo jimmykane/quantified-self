@@ -51,6 +51,7 @@ import {DataVerticalOscillation} from 'quantified-self-lib/lib/data/data.vertica
 import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
+import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
 // import am4themes_animated from "@amcharts/amcharts4/themes/animated";
@@ -78,7 +79,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @ViewChild('legendDiv') legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
+  @Input() userChartSettings: UserChartSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
+  @Input() dataTypesToUse = [];
   @Input() isVisible: boolean;
   @Input() showAllStats: boolean;
   @Input() showOnlyOneYAxis: boolean;
@@ -87,7 +90,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
 
-  private simpleStats = [
+  private basicData = [
     DataHeartRate.type,
     DataAltitude.type,
     DataCadence.type,
@@ -97,7 +100,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     DataVO2Max.type,
   ];
 
-  private advancedStats = this.simpleStats.concat([
+  private allData = this.basicData.concat([
     // DataGPSAltitude.type,
     DataTemperature.type,
     DataSeaLevelPressure.type,
@@ -138,6 +141,20 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
+    // Set the datatypes to show if all is selected
+    if (this.showAllStats){
+      this.dataTypesToUse = this.allData;
+    }
+    // If there is a change in the chart settings and its valid update settings
+    if (simpleChanges.userChartSettings && this.userChartSettings){
+      // Set the datatypes to use
+      this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey)  => {
+        if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true){
+          dataTypesToUse.push(dataTypeSettingsKey);
+        }
+        return dataTypesToUse;
+      }, []);
+    }
     // 1. If there is no chart create
     if (!this.chart) {
       this.chart = await this.createChart();
@@ -153,7 +170,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllStats || simpleChanges.showOnlyOneYAxis) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllStats || simpleChanges.showOnlyOneYAxis || simpleChanges.userChartSettings) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -176,7 +193,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private subscribeToNewData() {
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
-        this.showAllStats ? this.advancedStats : this.simpleStats,
+        this.dataTypesToUse,
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
@@ -230,7 +247,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
         chart.legend.itemContainers.template.events.on("hit", (ev) => {
-          if (this.showOnlyOneYAxis){
+          if (this.showOnlyOneYAxis) {
             return;
           }
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;

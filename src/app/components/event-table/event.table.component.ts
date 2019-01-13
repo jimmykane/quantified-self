@@ -55,7 +55,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   selection = new SelectionModel(true, []);
   resultsLength = 0;
   isLoadingResults = true;
-  errorQuerying;
+  errorLoading;
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
   private currentPageIndex = 0;
@@ -116,7 +116,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           // debugger;
           // Flip flag to show that loading has finished.
           this.isLoadingResults = false;
-          this.errorQuerying = false;
+          this.errorLoading = false;
           // this.resultsLength = data.total_count;
 
           // Set the events
@@ -172,7 +172,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         catchError((error) => {
           this.isLoadingResults = false;
           // Catch
-          this.errorQuerying = error; // @todo maybe reset on ok
+          this.errorLoading = error; // @todo maybe reset on ok
           Raven.captureException(error);
           this.logger.error(error);
           return of(new MatTableDataSource([])); // @todo should reject or so
