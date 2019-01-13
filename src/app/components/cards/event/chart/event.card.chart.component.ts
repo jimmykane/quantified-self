@@ -138,6 +138,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (!this.user || !this.event) {
       throw 'Component needs events and users';
     }
+    this.dataTypesToUse = this.basicData;
   }
 
   async ngOnChanges(simpleChanges) {
@@ -148,6 +149,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // If there is a change in the chart settings and its valid update settings
     if (simpleChanges.userChartSettings && this.userChartSettings){
       // Set the datatypes to use
+      // debugger;
       this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey)  => {
         if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true){
           dataTypesToUse.push(dataTypeSettingsKey);
