@@ -147,7 +147,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.dataTypesToUse = this.allData;
     }
     // If there is a change in the chart settings and its valid update settings
-    if (simpleChanges.userChartSettings && this.userChartSettings){
+    if (this.userChartSettings){
       // Set the datatypes to use
       // debugger;
       this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey)  => {
