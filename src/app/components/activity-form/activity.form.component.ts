@@ -17,6 +17,8 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {activityDistanceValidator} from './activity.form.distance.validator';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {take} from "rxjs/operators";
+import {Log} from "ng2-logger/browser";
 
 
 @Component({
@@ -30,16 +32,15 @@ import {User} from 'quantified-self-lib/lib/users/user';
 
 
 export class ActivityFormComponent implements OnInit {
+  protected logger = Log.create('ActivityFormComponent');
 
   public activity: ActivityInterface;
   public event: EventInterface;
   public user: User;
-  public originalValues: {
-    activityStartDate: Date;
-    activityEndDate: Date;
-  };
 
   public activityFormGroup: FormGroup;
+
+  public isSaving: boolean;
 
   constructor(
     public dialogRef: MatDialogRef<ActivityFormComponent>,
@@ -51,16 +52,14 @@ export class ActivityFormComponent implements OnInit {
     this.activity = data.activity;
     this.event = data.event;
     this.user = data.user;
-    this.originalValues = {
-      activityStartDate: this.activity.startDate,
-      activityEndDate: this.activity.endDate,
-    };
   }
 
-  ngOnInit(): void {
-    if (!this.user || !this.event){
+  async ngOnInit() {
+    if (!this.user || !this.event) {
       throw 'Component needs event and user'
     }
+
+
     this.activityFormGroup = new FormGroup({
         activity: new FormControl(this.activity),
         startDate: new FormControl(this.activity.startDate, [
@@ -77,6 +76,10 @@ export class ActivityFormComponent implements OnInit {
         ]),
       },
       {validators: activityDistanceValidator});
+
+    // To use this component we need the full hydrated object and we might not have it
+    this.activity.clearStreams();
+    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
   }
 
 
@@ -88,32 +91,36 @@ export class ActivityFormComponent implements OnInit {
   }
 
   async onSubmit() {
+    event.preventDefault();
     if (!this.activityFormGroup.valid) {
       this.validateAllFormFields(this.activityFormGroup);
       return;
     }
+    this.isSaving = true;
     if (this.activity.startDate < this.event.startDate) {
       this.event.startDate = this.activity.startDate;
     }
     if (this.activity.endDate > this.event.endDate) {
       this.event.endDate = this.activity.endDate;
     }
-    // Should trim distance
-    // EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
-    // Regenerate stats
-    EventUtilities.generateActivityStats(this.event);
+
     try {
-      await this.eventService.setEventForUser(this.user, this.event);
+      EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
+      EventUtilities.generateActivityStats(this.event);
+      await this.eventService.setEvent(this.user, this.event);
       this.snackBar.open('Activity saved', null, {
         duration: 2000,
       });
     } catch (e) {
       // debugger;
+      Raven.captureException(e);
+      this.logger.error(e);
       this.snackBar.open('Could not save activity', null, {
         duration: 2000,
       });
       Raven.captureException(e);
     } finally {
+      this.isSaving = false;
       this.dialogRef.close();
     }
   }
@@ -130,14 +137,9 @@ export class ActivityFormComponent implements OnInit {
   }
 
   close(event) {
-    event.stopPropagation(); event.preventDefault();
-    this.restoreOriginalValues();
+    event.stopPropagation();
+    event.preventDefault();
     this.dialogRef.close();
-  }
-
-  restoreOriginalValues() {
-    this.activity.startDate = this.originalValues.activityStartDate;
-    this.activity.endDate = this.originalValues.activityEndDate;
   }
 }
 

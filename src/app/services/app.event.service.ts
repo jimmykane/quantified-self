@@ -153,6 +153,7 @@ export class EventService implements OnDestroy {
       return combineLatest(
         event.getActivities().map((activity) => {
           return this.getAllStreams(user, event.getID(), activity.getID()).pipe(map((streams) => {
+            // debugger;
             // This time we dont want to just get the streams but we want to attach them to the parent obj
             activity.clearStreams();
             activity.addStreams(streams);
@@ -189,9 +190,9 @@ export class EventService implements OnDestroy {
       .collection('activities')
       .doc(activityID)
       .collection('streams')
-      .snapshotChanges()
-      .pipe(map((streamSnapshots) => {
-        return this.processStreamSnapshots(streamSnapshots);
+      .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+      .pipe(map((querySnapshot) => {
+        return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
       }))
   }
 
@@ -207,7 +208,7 @@ export class EventService implements OnDestroy {
         .collection('streams', ref => ref.where('type', '==', type))
         .snapshotChanges()
         .pipe(map((streamSnapshots) => { // @todo should be reduce
-          return this.processStreamSnapshots(streamSnapshots)[0] // Get the first element of the return
+          return this.processStreamDocumentSnapshots(streamSnapshots)[0] // Get the first element of the return
         }))                                                      // since the return with equality on the query should only fetch one afaik in my model
     })).pipe(map((streams: StreamInterface[]) => {
       // debugger;
@@ -215,7 +216,7 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  private processStreamSnapshots(streamSnapshots: DocumentChangeAction<firestore.DocumentData>[]): StreamInterface[] {
+  private processStreamDocumentSnapshots(streamSnapshots: DocumentChangeAction<firestore.DocumentData>[]): StreamInterface[] {
     return streamSnapshots.reduce((streamArray, streamSnapshot) => {
       streamArray.push(EventImporterJSON.getStreamFromJSON({
         type: <string>streamSnapshot.payload.doc.data().type,
@@ -225,7 +226,14 @@ export class EventService implements OnDestroy {
     }, [])
   }
 
-  public async setEventForUser(user: User, event: EventInterface) {
+  private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
+      return EventImporterJSON.getStreamFromJSON({
+        type: <string>queryDocumentSnapshot.data().type,
+        data: this.getStreamDataFromBlob(queryDocumentSnapshot.data().data),
+      });
+  }
+
+  public async setEvent(user: User, event: EventInterface) {
     const writePromises: Promise<void>[] = [];
     event.setID(event.getID() || this.afs.createId());
     event.getActivities()

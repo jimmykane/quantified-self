@@ -2,6 +2,8 @@
 
   <form [formGroup]="activityFormGroup" (submit)="onSubmit()">
 
+    <app-shade [isActive]="isSaving"></app-shade>
+
     <span class="mat-headline">Editing activity</span>
     <span class="mat-subheader">internal id {{ activity.getID() }}</span>
 
@@ -53,9 +55,9 @@
 
     <mat-hint>Changing any of the above will recreate all statistics</mat-hint>
 
+    <button mat-stroked-button (click)="close($event)">Cancel</button>
+    <button  mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>
   </form>
 
 
-  <button mat-stroked-button (click)="close($event)">Cancel</button>
-  <button  mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>
 </mat-dialog-content>

@@ -4,7 +4,7 @@
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
   <button mat-stroked-button  color="primary" (click)="inputFile.click()">
-    <span>Select files<span class="mat-small"></span></span><br/>
+    <span>Select or drag files<span class="mat-small"></span></span><br/>
     <span class="mat-small">GPX, TCX, FIT and JSON files or drag and drop</span></button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>

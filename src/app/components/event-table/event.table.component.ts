@@ -306,7 +306,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.selection.clear();
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
-          const eventID = await this.eventService.setEventForUser(this.user, mergedEvent);
+          const eventID = await this.eventService.setEvent(this.user, mergedEvent);
           // debugger;
 
           // await this.router.navigate(['/event'], {

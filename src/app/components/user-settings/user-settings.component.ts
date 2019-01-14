@@ -137,12 +137,12 @@ export class UserSettingsComponent implements OnInit {
   }
 
   async onSubmit() {
-    this.isSaving = true;
     if (!this.userSettingsFormGroup.valid) {
       this.validateAllFormFields(this.userSettingsFormGroup);
       return;
     }
 
+    this.isSaving = true;
     try {
       const userChartSettings = Array.from(this.userSettingsFormGroup.get('dataTypesToUse').value).reduce((userChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
         userChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};

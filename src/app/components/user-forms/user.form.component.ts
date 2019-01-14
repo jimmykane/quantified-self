@@ -68,6 +68,7 @@ export class UserFormComponent implements OnInit {
   }
 
   async onSubmit() {
+    event.preventDefault();
     if (!this.userFormGroup.valid) {
       this.validateAllFormFields(this.userFormGroup);
       return;
