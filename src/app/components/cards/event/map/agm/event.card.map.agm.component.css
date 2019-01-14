@@ -5,3 +5,6 @@ agm-map {
 mat-icon{
   vertical-align: middle;
 }
+mat-card{
+  min-height: 90vh;
+}

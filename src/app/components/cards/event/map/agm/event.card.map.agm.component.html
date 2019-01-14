@@ -1,4 +1,5 @@
 <mat-card>
+  <app-shade [isActive]="activitiesMapData.length === 0"></app-shade>
   <!-- Map -->
   <agm-map *ngIf="activitiesMapData.length > 0"
            [fullscreenControl]="true"
