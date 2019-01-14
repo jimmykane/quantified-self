@@ -62,6 +62,12 @@
     <span class="example-spacer"></span>
   </mat-list-item>
 
+  <mat-list-item onclick="window.open('//github.com/jimmykane/quantified-self/issues')">
+    <mat-icon>bug_report</mat-icon>
+    <span>File a bug</span>
+    <span class="example-spacer"></span>
+  </mat-list-item>
+
   <mat-list-item (click)="logout()"
                  *ngIf="authService.authenticated()">
     <mat-icon>power_settings_new</mat-icon>

@@ -86,6 +86,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() showAllStats: boolean;
   @Input() showOnlyOneYAxis: boolean;
 
+  public isLoading: boolean;
+
   private streamsSubscription: Subscription;
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
@@ -193,6 +195,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private subscribeToNewData() {
+    this.isLoading = true;
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
         this.dataTypesToUse,
@@ -213,6 +216,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Map the data
       series.forEach((series) => series.data = series.dummyData);
       this.chart.validateData(); // this helps with the legend area
+      this.isLoading = false;
+      this.changeDetector.detectChanges();
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
     });
   }
