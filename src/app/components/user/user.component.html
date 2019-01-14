@@ -27,12 +27,12 @@
           <app-event-table [user]="targetUser" [privacyFilter]="'public'"></app-event-table>
         </mat-card>
       </mat-tab>
-      <mat-tab label="Settings">
+      <mat-tab label="Settings"  *ngIf="isOwner()">
         <ng-template matTabLabel>
           <mat-icon>settings</mat-icon>
           Settings
         </ng-template>
-        <app-user-settings  *ngIf="isOwner()" [user]="currentUser"></app-user-settings>
+        <app-user-settings [user]="currentUser"></app-user-settings>
       </mat-tab>
     </mat-tab-group>
 
