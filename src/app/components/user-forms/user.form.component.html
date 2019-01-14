@@ -16,8 +16,8 @@
     </mat-form-field>
 
     <mat-form-field>
-      <input matInput placeholder="Your bio, description or anything you want to share..."
-             formControlName="description">
+      <textarea matInput placeholder="Your bio, description or anything you want to share..."
+                formControlName="description"></textarea>
       <mat-hint>This can be something that if your profile is public other users can see</mat-hint>
       <mat-error *ngIf="hasError('description')">
         Description must not be empty
