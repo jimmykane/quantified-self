@@ -13,7 +13,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
   styleUrls: ['./activity.actions.component.css'],
   providers: [],
 })
-export class ActivityActionsComponent implements OnInit{
+export class ActivityActionsComponent implements OnInit {
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() activity: ActivityInterface;
@@ -27,12 +27,12 @@ export class ActivityActionsComponent implements OnInit{
   }
 
   ngOnInit(): void {
-    if (!this.user || !this.event){
+    if (!this.user || !this.event) {
       throw 'Component needs events and user';
     }
   }
 
-  editActivity()  {
+  editActivity() {
     const dialogRef = this.dialog.open(ActivityFormComponent, {
       width: '75vw',
       data: {
@@ -47,11 +47,10 @@ export class ActivityActionsComponent implements OnInit{
     // });
   }
 
-  deleteActivity() {
-    this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID()).then(() => {
-      this.snackBar.open('Activity deleted', null, {
-        duration: 2000,
-      });
+  async deleteActivity() {
+    await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
+    this.snackBar.open('Activity deleted', null, {
+      duration: 2000,
     });
   }
 }
