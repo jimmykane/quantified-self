@@ -116,7 +116,12 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
           // Start building map data
           const latData = streams[0].getNumericData();
           const longData = streams[1].getNumericData();
-          // debugger;
+
+          // If no numeric data for any reason
+          if (!latData.length || !longData.length){
+            return;
+          }
+
           this.activitiesMapData.push({
             activity: activity,
             positions: latData.reduce((latLongArray, value, index) => {
