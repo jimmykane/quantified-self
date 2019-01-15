@@ -104,7 +104,7 @@ export class ActivityFormComponent implements OnInit {
     if (!field) {
       return !this.activityFormGroup.valid;
     }
-    return !this.activityFormGroup.get(field).valid;
+    return !(this.activityFormGroup.get(field).valid && this.activityFormGroup.get(field).touched);
   }
 
   async onSubmit() {
