@@ -259,9 +259,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
           // Getting visible...
           if (!series.isHidden) {
-            series.yAxis.disabled = false;
-            series.yAxis.renderer.disabled = false;
-            series.yAxis.renderer.grid.template.show();
+           this.showSeriesYAxis(series)
 
             // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
           } else { // .. hiding
@@ -270,9 +268,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
             if (this.getVisibleSeriesWithSameYAxis(series).length > 0) {
               return;
             }
-            series.yAxis.disabled = true;
-            series.yAxis.hidden = true;
-            series.yAxis.renderer.grid.template.hide();
+            this.hideSeriesYAxis(series)
           }
         });
 
@@ -475,7 +471,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private hideSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = true;
+    series.yAxis.hidden = true;
+    series.yAxis.renderer.grid.template.hide();
+  }
 
+  private showSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = false;
+    series.yAxis.renderer.disabled = false;
+    series.yAxis.renderer.grid.template.show();
   }
 
   private getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
