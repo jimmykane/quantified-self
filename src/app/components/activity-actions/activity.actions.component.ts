@@ -6,6 +6,7 @@ import {MatDialog, MatSnackBar} from '@angular/material';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.utilities";
 
 @Component({
   selector: 'app-activity-actions',
@@ -48,7 +49,10 @@ export class ActivityActionsComponent implements OnInit {
   }
 
   async deleteActivity() {
+    this.event.removeActivity(this.activity);
     await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
+    EventUtilities.generateStatsForEvent(this.event);
+    await this.eventService.setEvent(this.user, this.event);
     this.snackBar.open('Activity deleted', null, {
       duration: 2000,
     });

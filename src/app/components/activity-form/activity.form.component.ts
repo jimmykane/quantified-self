@@ -39,8 +39,8 @@ export class ActivityFormComponent implements OnInit {
 
   public activityFormGroup: FormGroup;
 
-  public activityStartDistance:number;
-  public activityEndDistance:number;
+  public activityStartDistance: number;
+  public activityEndDistance: number;
 
 
   public isLoading: boolean;
@@ -124,7 +124,9 @@ export class ActivityFormComponent implements OnInit {
     try {
       debugger;
       EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
-      EventUtilities.generateActivityStats(this.event);
+      this.activity.clearStats();
+      EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
+      EventUtilities.generateStatsForEvent(this.event);
       await this.eventService.setEvent(this.user, this.event);
       this.snackBar.open('Activity saved', null, {
         duration: 2000,

@@ -52,9 +52,10 @@
       </mat-error>
     </mat-form-field>
 
-    <mat-error *ngIf="hasError()">Some inputs are wrong</mat-error>
+    <mat-hint><b>Note</b>: Changing any of the above will recreate all statistics for the selected activity</mat-hint>
 
-    <mat-hint>Changing any of the above will recreate all statistics</mat-hint>
+    <mat-error class="generic-form-error" *ngIf="hasError()">Something does not seem logical above 🤔</mat-error>
+
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
     <button mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>

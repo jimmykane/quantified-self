@@ -24,3 +24,7 @@ button{
   width: 100%;
   margin-top: 1em;
 }
+
+.generic-form-error{
+  margin-top: 1.5em;
+}
