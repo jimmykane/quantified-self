@@ -145,15 +145,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   async ngOnChanges(simpleChanges) {
     // Set the datatypes to show if all is selected
-    if (this.showAllStats){
+    if (this.showAllStats) {
       this.dataTypesToUse = this.allData;
     }
     // If there is a change in the chart settings and its valid update settings
-    if (this.userChartSettings){
+    if (this.userChartSettings) {
       // Set the datatypes to use
       // debugger;
-      this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey)  => {
-        if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true){
+      this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+        if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
           dataTypesToUse.push(dataTypeSettingsKey);
         }
         return dataTypesToUse;
@@ -268,10 +268,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           } else { // .. hiding
             // Block hiding and do nothing with the axis if there is some other same type visible as they share the same axis
             // #notSameIDAndNotHiddenAndNoTSameName
-            if (series.chart.series.values
-              .filter(serie => serie.id !== series.id)
-              .filter(serie => !serie.isHidden)
-              .filter(serie => serie.name === series.name).length > 0) {
+            if (this.getVisibleSeriesWithSameYAxis(series).length > 0) {
               return;
             }
             series.yAxis.disabled = true;
@@ -483,10 +480,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
-    return series.chart.series.values
-      .filter(serie => serie.id !== series.id)
-      .filter(serie => !serie.isHidden)
-      .filter(serie => serie.name === series.name);
+    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
+  }
+
+  private getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
+    return chart.series.values
+      .filter(serie => !serie.isHidden);
   }
 
   private unsubscribeAndClearChart() {
