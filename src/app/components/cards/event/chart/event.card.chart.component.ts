@@ -215,9 +215,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
       series.forEach((series) => series.data = series.dummyData);
-      this.chart.validateData(); // this helps with the legend area
       this.isLoading = false;
-      this.changeDetector.detectChanges();
+      this.changeDetector.detectChanges(); // Needed for loading to become not visible
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
     });
   }
@@ -485,7 +484,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
     return chart.series.values
-      .filter(serie => !serie.isHidden);
+      .filter(series => !series.isHidden);
   }
 
   private unsubscribeAndClearChart() {
