@@ -327,6 +327,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.addActionButton('deleteEvents', new ActionButton(
         'delete',
         async () => {
+          this.isLoadingResults = true;
           this.actionButtonService.removeActionButton('deleteEvents');
           this.actionButtonService.removeActionButton('mergeEvents');
           const deletePromises = [];
@@ -334,6 +335,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           await Promise.all(deletePromises);
           this.eventSelectionMap.clear();
           this.selection.clear();
+          this.isLoadingResults = false;
           this.snackBar.open('Events deleted', null, {
             duration: 2000,
           });
