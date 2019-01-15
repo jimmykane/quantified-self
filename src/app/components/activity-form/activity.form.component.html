@@ -1,8 +1,9 @@
 <mat-dialog-content>
 
-  <form [formGroup]="activityFormGroup" (submit)="onSubmit()">
 
-    <app-shade [isActive]="isSaving"></app-shade>
+  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit()">
+
+    <app-shade [isActive]="isLoading"></app-shade>
 
     <span class="mat-headline">Editing activity</span>
     <span class="mat-subheader">internal id {{ activity.getID() }}</span>
@@ -33,7 +34,7 @@
 
     <!-- Start Distance -->
     <mat-form-field>
-      <input matInput placeholder="Starting distance" type="number" min="0" formControlName="startDistance">
+      <input matInput placeholder="Starting distance" type="number" [min]="activityStartDistance" [max]="activityEndDistance" formControlName="startDistance">
       <span matSuffix="">m &nbsp;</span>
       <mat-hint>The starting distance of the activity</mat-hint>
       <mat-error *ngIf="hasError('startDistance')">
@@ -43,7 +44,7 @@
 
     <!-- End Distance -->
     <mat-form-field>
-      <input matInput placeholder="End distance" type="number" min="0" formControlName="endDistance">
+      <input matInput placeholder="End distance" type="number" [min]="activityStartDistance" [max]="activityEndDistance" formControlName="endDistance">
       <span matSuffix="">m &nbsp;</span>
       <mat-hint>The ending distance of the activity</mat-hint>
       <mat-error *ngIf="hasError('endDistance')">
@@ -51,12 +52,12 @@
       </mat-error>
     </mat-form-field>
 
-    <mat-error *ngIf="hasError()">Please check the input values something went wrong</mat-error>
+    <mat-error *ngIf="hasError()">Some inputs are wrong</mat-error>
 
     <mat-hint>Changing any of the above will recreate all statistics</mat-hint>
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button  mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>
+    <button mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>
   </form>
 
 

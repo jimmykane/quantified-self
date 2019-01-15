@@ -19,6 +19,7 @@ import {activityDistanceValidator} from './activity.form.distance.validator';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {take} from "rxjs/operators";
 import {Log} from "ng2-logger/browser";
+import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
 
 
 @Component({
@@ -26,8 +27,6 @@ import {Log} from "ng2-logger/browser";
   templateUrl: './activity.form.component.html',
   styleUrls: ['./activity.form.component.css'],
   providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-
 })
 
 
@@ -40,7 +39,11 @@ export class ActivityFormComponent implements OnInit {
 
   public activityFormGroup: FormGroup;
 
-  public isSaving: boolean;
+  public activityStartDistance:number;
+  public activityEndDistance:number;
+
+
+  public isLoading: boolean;
 
   constructor(
     public dialogRef: MatDialogRef<ActivityFormComponent>,
@@ -59,7 +62,18 @@ export class ActivityFormComponent implements OnInit {
       throw 'Component needs event and user'
     }
 
+    // Set this to loading
+    this.isLoading = true;
 
+    // To use this component we need the full hydrated object and we might not have it
+    this.activity.clearStreams();
+    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
+
+    // Find the starting distance for this activity
+    this.activityStartDistance = this.activity.getSquashedStreamData(DataDistance.type)[0];
+    this.activityEndDistance = this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1];
+
+    // Now build the controls
     this.activityFormGroup = new FormGroup({
         activity: new FormControl(this.activity),
         startDate: new FormControl(this.activity.startDate, [
@@ -68,18 +82,21 @@ export class ActivityFormComponent implements OnInit {
         endDate: new FormControl(this.activity.endDate, [
           Validators.required,
         ]),
-        startDistance: new FormControl(0, [
+        startDistance: new FormControl(this.activityStartDistance, [
           Validators.required,
+          Validators.min(this.activityStartDistance),
+          Validators.max(this.activityEndDistance),
         ]),
-        endDistance: new FormControl(this.activity.getDistance().getValue(), [
+        endDistance: new FormControl(this.activityEndDistance, [
           Validators.required,
+          Validators.min(this.activityStartDistance),
+          Validators.max(this.activityEndDistance),
         ]),
       },
       {validators: activityDistanceValidator});
 
-    // To use this component we need the full hydrated object and we might not have it
-    this.activity.clearStreams();
-    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
+    // Set this to done loading
+    this.isLoading = false;
   }
 
 
@@ -96,7 +113,7 @@ export class ActivityFormComponent implements OnInit {
       this.validateAllFormFields(this.activityFormGroup);
       return;
     }
-    this.isSaving = true;
+    this.isLoading = true;
     if (this.activity.startDate < this.event.startDate) {
       this.event.startDate = this.activity.startDate;
     }
@@ -105,6 +122,7 @@ export class ActivityFormComponent implements OnInit {
     }
 
     try {
+      debugger;
       EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
       EventUtilities.generateActivityStats(this.event);
       await this.eventService.setEvent(this.user, this.event);
@@ -120,7 +138,7 @@ export class ActivityFormComponent implements OnInit {
       });
       Raven.captureException(e);
     } finally {
-      this.isSaving = false;
+      this.isLoading = false;
       this.dialogRef.close();
     }
   }
