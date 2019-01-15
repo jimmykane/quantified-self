@@ -22,7 +22,7 @@
       <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser" [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
       <app-activity-header
-        *ngIf="selectedActivities.length === 1"
+        *ngIf="event.getActivities().length === 1"
         [user]="currentUser"
         [showIcon]="true"
         [event]="event"
