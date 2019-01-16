@@ -21,12 +21,18 @@ export class EventCardStatsComponent implements OnChanges {
   appColors = AppColors;
 
   ngOnChanges(simpleChanges) {
-    // If no activities selected
+    this.data = new MatTableDataSource<Object>();
+    this.columns = [];
     if (!this.selectedActivities.length) {
-      this.data = new MatTableDataSource<Object>();
-      this.columns = [];
       return;
     }
+
+    // Create the columns
+    this.columns = ['Name'].concat(this.selectedActivities
+      .map(activity => activity.creator.name)
+      .map((key, index) => {
+        return `${key} ${(new Array(index + 1)).join(' ')}`
+      }));
 
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
@@ -44,7 +50,7 @@ export class EventCardStatsComponent implements OnChanges {
           if (!activityStat) {
             return rowObj;
           }
-          rowObj[activity.creator.name +  (new Array(index + 1).join( ' ' ))] =
+          rowObj[`${activity.creator.name} ${(new Array(index + 1)).join(' ')}`] =
             (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
@@ -57,6 +63,7 @@ export class EventCardStatsComponent implements OnChanges {
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
     if (this.selectedActivities.length === 2) {
+      this.columns = this.columns.concat(['Difference']);
       Array.from(stats.values()).forEach((stat: DataInterface, index) => {
         const firstActivityStat = this.selectedActivities[0].getStat(stat.getType());
         const secondActivityStat = this.selectedActivities[1].getStat(stat.getType());
@@ -73,14 +80,15 @@ export class EventCardStatsComponent implements OnChanges {
         data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
         data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
         // Correct the NaN with both 0's
-        if (firstActivityStatValue === 0 && secondActivityStatValue === 0){
+        if (firstActivityStatValue === 0 && secondActivityStatValue === 0) {
           data[index]['Difference']['percent'] = 0
         }
       })
     }
 
-    // Get the columns
-    this.columns = (Object.keys(data[0]));
+
+    // debugger;
+
     // Set the data
     this.data = new MatTableDataSource(data);
   }
