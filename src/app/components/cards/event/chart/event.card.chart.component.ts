@@ -216,6 +216,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Map the data
       series.forEach((series) => series.data = series.dummyData);
       this.isLoading = false;
+      this.logger.info('Loaded');
+      this.chart.invalidateData();
       this.changeDetector.detectChanges(); // Needed for loading to become not visible
       // @todo here it should perhaps remove the ones not available instread of doing a clear at start
     });
@@ -314,9 +316,45 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
 
+        chart.events.on('globalscalechanged', (ev) => {
+          this.logger.info('globalscalechanged');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
+        chart.events.on('dataitemsvalidated', (ev) => {
+          this.logger.info('dataitemsvalidated');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
+
+        chart.events.on('datavalidated', (ev) => {
+          this.logger.info('datavalidated');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
+        chart.events.on('datarangechanged', (ev) => {
+          this.logger.info('datarangechanged');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
+        chart.events.on('ready', (ev) => {
+          this.logger.info('ready');
+        });
+
+
+        chart.events.on('shown', (ev) => {
+          this.logger.info('shown');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
+        chart.events.on('transformed', (ev) => {
+          this.logger.info('transformed');
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        });
+
         chart.events.on('maxsizechanged', (ev) => {
           this.logger.info('maxsizechanged');
-          this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
         });
 
         chart.events.on('visibilitychanged', (ev) => {
@@ -334,10 +372,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.logger.info('inited');
         });
 
-        chart.events.on('datavalidated', (ev) => {
-          this.logger.info('datavalidated');
-          this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
         resolve(chart);
       });
     });
@@ -445,8 +479,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
     const numberOfSamples = stream.getNumericData().length;
     let samplingRate = 1;
-    // Each sample is 1s so x number is x seconds
-    const hoursToKeep1sSamplingRate = 1; // 1 hours
+    const hoursToKeep1sSamplingRateForAllActivities = 1; // 1 hours
+    const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / this.selectedActivities.length; // 1 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
       samplingRate = Math.ceil((numberOfSamplesToHours * 3) / hoursToKeep1sSamplingRate)
