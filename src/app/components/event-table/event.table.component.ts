@@ -293,6 +293,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         async () => {
+          this.isLoadingResults = true;
           // Clear all selections
           this.actionButtonService.removeActionButton('mergeEvents');
           this.actionButtonService.removeActionButton('deleteEvents');
@@ -306,15 +307,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.selection.clear();
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
-          const eventID = await this.eventService.setEvent(this.user, mergedEvent);
+          await this.eventService.setEvent(this.user, mergedEvent);
           // debugger;
+          this.isLoadingResults = false;
 
-          // await this.router.navigate(['/event'], {
-          //   queryParams: {
-          //     eventID: eventID,
-          //     tabIndex: 0,
-          //   },
-          // });
+          await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
           this.snackBar.open('Events merged', null, {
             duration: 2000,
           });
