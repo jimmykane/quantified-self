@@ -214,7 +214,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
-      let data = {};
+      const data = Array(Math.ceil((+this.event.endDate - +this.event.startDate) / 1000)).fill(null).reduce((object, el, i) => {
+        object[Math.ceil(+this.event.startDate + (i*1000) )] = {date: new Date(+this.event.startDate + (i*1000))};
+        return object
+      }, {});
+
       series.forEach((series) => {
         // debugger;
         series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
@@ -225,9 +229,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         })
       });
 
+
+      // debugger;
+
       this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
         return +dataItemA.date - +dataItemB.date;
       });
+
+      this.logger.info(`Data processing is done,  ${this.chart.data.length} items to show`)
 
     });
   }
@@ -247,8 +256,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         dateAxis.title.text = "Time";
         // dateAxis.baseInterval = {
         //   timeUnit: "second",
-        //   count: 1
-        // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
+        //   count: 1,
         // };
         // dateAxis.skipEmptyPeriods= true;
 
@@ -300,7 +308,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.opacity = 0.6;
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
-        watermark.zIndex = 100;
+        // watermark.zIndex = -1;
         // watermark.fontWeight = 'bold';
 
         // Add exporting options
@@ -545,6 +553,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.chart.yAxes.clear();
     this.chart.series.clear();
     this.chart.colors.reset();
+    this.chart.data = [];
   }
 
   private unSubscribeFromAll() {
