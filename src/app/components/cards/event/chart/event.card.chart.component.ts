@@ -54,17 +54,18 @@ import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
-import am4themes_animated from "@amcharts/amcharts4/themes/animated";
-// import am4themes_material from "@amcharts/amcharts4/themes/material";
+// import am4themes_animated from "@amcharts/amcharts4/themes/animated";
+import am4themes_material from "@amcharts/amcharts4/themes/material";
 // import am4themes_frozen from "@amcharts/amcharts4/themes/frozen";
 // import am4themes_dataviz from "@amcharts/amcharts4/themes/dataviz";
 // import am4themes_dark from "@amcharts/amcharts4/themes/dark";
-import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
+// import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
 // import am4themes_am_dark from "@amcharts/amcharts4/themes/amchartsdark";
 // import am4themes_am from "@amcharts/amcharts4/themes/amcharts";
-am4core.useTheme(am4themes_animated);
+am4core.useTheme(am4themes_material);
+// am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_dataviz);
-am4core.useTheme(am4themes_kelly);
+// am4core.useTheme(am4themes_kelly);
 
 // am4core.useTheme(am4themes_am);
 
@@ -476,7 +477,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       }
     }
 
-
     // Attach events
     series.events.on('validated', (ev) => {
       this.logger.info('Series validated');
@@ -520,8 +520,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
     const numberOfSamples = stream.getNumericData().length;
     let samplingRate = 1;
-    const hoursToKeep1sSamplingRateForAllActivities = 1; // 1 hours
-    const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / this.selectedActivities.length;
+    const hoursToKeep1sSamplingRateForAllActivities = 1; // 2 hours
+    const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / (this.selectedActivities.length * 2);
     const numberOfSamplesToHours = numberOfSamples / 3600;
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
       samplingRate = Math.ceil((numberOfSamplesToHours * 2) / hoursToKeep1sSamplingRate)
