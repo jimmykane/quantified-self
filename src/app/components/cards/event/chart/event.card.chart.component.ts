@@ -149,7 +149,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.dataTypesToUse = this.allData;
     }
     // If there is a change in the chart settings and its valid update settings
-    if (this.userChartSettings) {
+    if (this.userChartSettings && !this.showAllStats) {
       // Set the datatypes to use
       // debugger;
       this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
@@ -195,7 +195,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private subscribeToNewData() {
-    this.isLoading = true;
+    this.loading();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
         this.dataTypesToUse,
@@ -214,12 +214,21 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
-      series.forEach((series) => series.data = series.dummyData);
-      this.isLoading = false;
-      this.logger.info('Loaded');
-      this.chart.invalidateData();
-      this.changeDetector.detectChanges(); // Needed for loading to become not visible
-      // @todo here it should perhaps remove the ones not available instread of doing a clear at start
+      let data = {};
+      series.forEach((series) => {
+        // debugger;
+        series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
+          if (!data[dataItem.time]) {
+            data[dataItem.time] = {date: new Date(dataItem.time)}
+          }
+          data[dataItem.time][series.id] = dataItem.value;
+        })
+      });
+
+      this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
+        return +dataItemA.date - +dataItemB.date;
+      });
+
     });
   }
 
@@ -229,7 +238,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // Create a chart
         const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
         chart.pixelPerfect = false;
-        chart.fontSize = '0.85em';
+        // chart.fontSize = '0.85em';
         // chart.resizable = false;
 
         // Create a date axis
@@ -254,6 +263,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         legendContainer.width = am4core.percent(100);
         legendContainer.height = am4core.percent(100);
         chart.legend.parent = legendContainer;
+
         chart.legend.itemContainers.template.events.on("hit", (ev) => {
           if (this.showOnlyOneYAxis) {
             return;
@@ -261,7 +271,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
           // Getting visible...
           if (!series.isHidden) {
-           this.showSeriesYAxis(series)
+            this.showSeriesYAxis(series)
 
             // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
           } else { // .. hiding
@@ -314,6 +324,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.events.on('validated', (ev) => {
           this.logger.info('validated');
           this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+          if (this.chart.data.length) {
+            this.loaded();
+
+          }
         });
 
         chart.events.on('globalscalechanged', (ev) => {
@@ -400,6 +414,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
       } else {
         // Share
+        // debugger;
         yAxis = sameTypeSeries.yAxis;
       }
     }
@@ -436,11 +451,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     }
 
-    series.strokeWidth = 1;
+    // series.strokeWidth = 1;
     // series.minDistance = 1;
     series.fillOpacity = 0.2;
     // series.defaultState.transitionDuration = 0;
-    series.dataFields.valueY = "value";
+    series.dataFields.valueY = series.id;
     series.dataFields.dateX = "date";
 
     // series.interactionsEnabled = false;
@@ -461,12 +476,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-    const data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
+    const data = stream.data.reduce((dataArray: { time: number, value: number | string | boolean }[], streamData, index) => {
       if (!isNumber(streamData)) {
         return dataArray
       }
       dataArray.push({
-        date: new Date(activity.startDate.getTime() + (index * 1000)),
+        time: activity.startDate.getTime() + (index * 1000),
         value: streamData, // Display value can be string this needs to be corrected
       });
       return dataArray
@@ -483,7 +498,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / this.selectedActivities.length; // 1 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours * 3) / hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours * 4) / hoursToKeep1sSamplingRate)
     }
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
@@ -513,7 +528,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private showSeriesYAxis(series: am4charts.XYSeries) {
     series.yAxis.disabled = false;
     series.yAxis.hidden = false;
-    series.yAxis.renderer.grid.template.disabled  =false;
+    series.yAxis.renderer.grid.template.disabled = false;
   }
 
   private getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
@@ -537,6 +552,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.streamsSubscription.unsubscribe();
     }
   }
+
+  private loading() {
+    this.isLoading = true;
+    this.changeDetector.detectChanges();
+  }
+
+  private loaded() {
+    this.isLoading = false;
+    this.changeDetector.detectChanges();
+  }
+
 
   ngOnDestroy() {
     this.destroyChart();
