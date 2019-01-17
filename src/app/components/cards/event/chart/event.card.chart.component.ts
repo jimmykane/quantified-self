@@ -214,7 +214,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
-      // series.forEach((series) => series.data = series.dummyData);
+      series.forEach((series) => series.data = series.dummyData);
       this.isLoading = false;
       this.logger.info('Loaded');
       this.chart.invalidateData();
@@ -381,7 +381,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
     // If there is already a series with this id only data update should be done
     if (series) {
-      series.data = this.convertStreamDataToSeriesData(activity, stream);
+      series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
       return series
     }
 
@@ -445,16 +445,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // series.interactionsEnabled = false;
 
-    // if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
-    //   series.hidden = true;
-    //   // Disable the rest of the axis
-    //   if (!this.showOnlyOneYAxis) {
-    //     this.hideSeriesYAxis(series)
-    //   }
-    // }
+    if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
+      series.hide();
+      // Disable the rest of the axis
+      if (!this.showOnlyOneYAxis) {
+        this.hideSeriesYAxis(series)
+      }
+    }
 
     // Finally set the data and return
-    series.data = this.convertStreamDataToSeriesData(activity, stream);
+    series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
     return series;
   }
 
