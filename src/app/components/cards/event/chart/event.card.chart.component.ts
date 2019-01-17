@@ -54,17 +54,18 @@ import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
-// import am4themes_animated from "@amcharts/amcharts4/themes/animated";
+import am4themes_animated from "@amcharts/amcharts4/themes/animated";
 // import am4themes_material from "@amcharts/amcharts4/themes/material";
 // import am4themes_frozen from "@amcharts/amcharts4/themes/frozen";
 // import am4themes_dataviz from "@amcharts/amcharts4/themes/dataviz";
 // import am4themes_dark from "@amcharts/amcharts4/themes/dark";
-// import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
+import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
 // import am4themes_am_dark from "@amcharts/amcharts4/themes/amchartsdark";
 // import am4themes_am from "@amcharts/amcharts4/themes/amcharts";
-// am4core.useTheme(am4themes_animated);
+am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_dataviz);
-// am4core.useTheme(am4themes_kelly);
+am4core.useTheme(am4themes_kelly);
+
 // am4core.useTheme(am4themes_am);
 
 @Component({
@@ -214,20 +215,25 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.XYSeries[]) => {
       // Map the data
-      let data = {};
-      series.forEach((series) => {
-        // debugger;
-        series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
-          if (!data[dataItem.time]) {
-            data[dataItem.time] = {date: new Date(dataItem.time)}
-          }
-          data[dataItem.time][series.id] = dataItem.value;
-        })
-      });
+      // debugger;
+      // series.forEach((series) => series.data = series.dummyData);
 
-      this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
-        return +dataItemA.date - +dataItemB.date;
-      });
+      // this.chart.deepInvalidate();
+      // let data =
+      // series.reduce((data, series) => {
+      //   // debugger;
+      //   series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
+      //     if (!data[dataItem.time]) {
+      //       data[dataItem.time] = {date: new Date(dataItem.time)}
+      //     }
+      //     data[dataItem.time][series.id] = dataItem.value;
+      //   });
+      //   return data;
+      // }, {});
+
+      // this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
+      //   return +dataItemA.date - +dataItemB.date;
+      // });
 
     });
   }
@@ -288,7 +294,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         chart.cursor = new am4charts.XYCursor();
         // chart.cursor.fullWidthLineX = true;
         // chart.cursor.fullWidthLineY = true;
-        chart.cursor.behavior = 'zoomY';
+        // chart.cursor.behavior = 'zoomY';
 
         // Add watermark
         const watermark = new am4core.Label();
@@ -297,11 +303,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         watermark.align = "right";
         watermark.valign = "bottom";
         watermark.fontSize = '2em';
-        watermark.opacity = 0.6;
+        watermark.opacity = 0.7;
         watermark.marginRight = 10;
         watermark.marginBottom = 5;
         watermark.zIndex = 100;
         // watermark.fontWeight = 'bold';
+
+
+        // Scrollbar
+        chart.scrollbarX = new am4charts.XYChartScrollbar();
 
         // Add exporting options
         chart.exporting.menu = new am4core.ExportMenu();
@@ -323,11 +333,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         // Attach events
         chart.events.on('validated', (ev) => {
           this.logger.info('validated');
-          this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-          if (this.chart.data.length) {
-            this.loaded();
-
-          }
+          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+          // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
+          //   this.loaded();
+          // }
         });
 
         chart.events.on('globalscalechanged', (ev) => {
@@ -395,7 +404,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
     // If there is already a series with this id only data update should be done
     if (series) {
-      series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
+      series.data = this.convertStreamDataToSeriesData(activity, stream);
       return series
     }
 
@@ -451,25 +460,42 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
     }
 
-    // series.strokeWidth = 1;
-    // series.minDistance = 1;
-    series.fillOpacity = 0.2;
+    series.strokeWidth = 1;
+    // series.fillOpacity = 0.1;
     // series.defaultState.transitionDuration = 0;
-    series.dataFields.valueY = series.id;
-    series.dataFields.dateX = "date";
+    series.dataFields.valueY = "value";
+    series.dataFields.dateX = "time";
+    series.interactionsEnabled = false;
 
-    // series.interactionsEnabled = false;
 
     if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
-      series.hide();
+      this.hideSeries(series);
       // Disable the rest of the axis
       if (!this.showOnlyOneYAxis) {
         this.hideSeriesYAxis(series)
       }
     }
 
+
+    // Attach events
+    series.events.on('validated', (ev) => {
+      this.logger.info('Series validated');
+      this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
+        this.loaded();
+      }
+    });
+
+    series.events.on('ready', (ev) => {
+      this.logger.info('Series ready');
+      // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
+      //   this.loaded();
+      // }
+    });
+
     // Finally set the data and return
-    series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
+    series.data = this.convertStreamDataToSeriesData(activity, stream);
     return series;
   }
 
@@ -495,10 +521,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     const numberOfSamples = stream.getNumericData().length;
     let samplingRate = 1;
     const hoursToKeep1sSamplingRateForAllActivities = 1; // 1 hours
-    const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / this.selectedActivities.length; // 1 hours
+    const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / this.selectedActivities.length;
     const numberOfSamplesToHours = numberOfSamples / 3600;
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours * 4) / hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours * 2) / hoursToKeep1sSamplingRate)
     }
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
@@ -540,17 +566,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       .filter(series => !series.isHidden);
   }
 
-  private unsubscribeAndClearChart() {
-    this.unSubscribeFromAll();
-    this.chart.yAxes.clear();
-    this.chart.series.clear();
-    this.chart.colors.reset();
+  private hideSeries(series: am4charts.XYSeries) {
+    // this.chart.scrollbarX.series.clear();
+    series.hidden = true;
+    series.hide();
   }
 
-  private unSubscribeFromAll() {
-    if (this.streamsSubscription) {
-      this.streamsSubscription.unsubscribe();
-    }
+  private showSeries(series: am4charts.XYSeries) {
+    // this.chart.scrollbarX.series.push(series);
+    series.hidden = false;
+    series.show()
   }
 
   private loading() {
@@ -563,6 +588,18 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.changeDetector.detectChanges();
   }
 
+  private unsubscribeAndClearChart() {
+    this.unSubscribeFromAll();
+    this.chart.yAxes.clear();
+    this.chart.series.clear();
+    this.chart.colors.reset();
+  }
+
+  private unSubscribeFromAll() {
+    if (this.streamsSubscription) {
+      this.streamsSubscription.unsubscribe();
+    }
+  }
 
   ngOnDestroy() {
     this.destroyChart();
