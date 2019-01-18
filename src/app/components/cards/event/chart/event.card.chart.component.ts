@@ -271,6 +271,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
       legendContainer.width = am4core.percent(100);
       legendContainer.height = am4core.percent(100);
+      chart.legend.useDefaultMarker = true;
+      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
+      marker.cornerRadius(12, 12, 12, 12);
+      marker.strokeWidth = 2;
+      marker.strokeOpacity = 1;
+      marker.stroke = am4core.color("#ccc");
       chart.legend.parent = legendContainer;
 
       chart.legend.itemContainers.template.events.on("hit", (ev) => {
@@ -407,7 +413,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (!sameTypeSeries) {
       if (stream.type === DataPace.type) {
         yAxis = this.chart.yAxes.push(new am4charts.DurationAxis()); // todo Same type series should be sharing a common axis
-      }else {
+      } else {
         yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
       }
     } else {
@@ -417,6 +423,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
+    this.chart.series.sort((left, right) => {
+      return left.name > right.name ? 1 : 0;
+    });
     // Set the axis
     series.yAxis = yAxis;
     // Add the tooltips
@@ -434,7 +443,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // });
     if (stream.type === DataPace.type) {
       series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-    }else{
+    } else {
       series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
     }
@@ -510,7 +519,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / (this.selectedActivities.length * 2);
     const numberOfSamplesToHours = numberOfSamples / 3600;
     if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours * 2) / hoursToKeep1sSamplingRate)
+      samplingRate = Math.ceil((numberOfSamplesToHours * 4) / hoursToKeep1sSamplingRate)
     }
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
