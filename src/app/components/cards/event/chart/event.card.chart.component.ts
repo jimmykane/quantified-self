@@ -220,21 +220,24 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // series.forEach((series) => series.data = series.dummyData);
 
       // this.chart.deepInvalidate();
-      // let data =
-      // series.reduce((data, series) => {
-      //   // debugger;
-      //   series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
-      //     if (!data[dataItem.time]) {
-      //       data[dataItem.time] = {date: new Date(dataItem.time)}
-      //     }
-      //     data[dataItem.time][series.id] = dataItem.value;
-      //   });
-      //   return data;
-      // }, {});
+      let data = series.reduce((data, series) => {
+        // debugger;
+        series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
+          // debugger;
+          if (!data[dataItem.time]) {
+            data[dataItem.time] = {date: new Date(dataItem.time)}
+          }
+          data[dataItem.time][series.id] = dataItem.value;
+        });
+        return data;
+      }, {});
 
-      // this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
-      //   return +dataItemA.date - +dataItemB.date;
-      // });
+
+      this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
+        return +dataItemA.date - +dataItemB.date;
+      });
+
+      this.logger.info(`Data Injected`)
 
     });
   }
@@ -324,10 +327,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Attach events
       chart.events.on('validated', (ev) => {
         this.logger.info('validated');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
-        //   this.loaded();
-        // }
+        if (this.chart.data.length) {
+          this.loaded();
+        }
       });
 
       chart.events.on('globalscalechanged', (ev) => {
@@ -394,7 +396,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
     // If there is already a series with this id only data update should be done
     if (series) {
-      series.data = this.convertStreamDataToSeriesData(activity, stream);
+      series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
       return series
     }
 
@@ -453,8 +455,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series.strokeWidth = 1;
     series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
-    series.dataFields.valueY = "value";
-    series.dataFields.dateX = "time";
+    series.dataFields.valueY = series.id;
+    series.dataFields.dateX = "date";
     series.interactionsEnabled = false;
 
     if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length >= 4) {
@@ -464,22 +466,22 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Attach events
     series.events.on('validated', (ev) => {
       this.logger.info('Series validated');
-      this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-      if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
-        this.loaded();
-      }
+      // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
+      //   this.loaded();
+      // }
     });
 
     series.events.on('ready', (ev) => {
       this.logger.info('Series ready');
-      // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
       //   this.loaded();
       // }
     });
 
     // Finally set the data and return
-    series.data = this.convertStreamDataToSeriesData(activity, stream);
+    series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
     return series;
   }
 
