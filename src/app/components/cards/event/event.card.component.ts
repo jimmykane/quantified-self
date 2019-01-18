@@ -31,8 +31,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   public showMapAutoLaps: boolean;
   public showMapManualLaps: boolean;
-  public showAllStats: boolean;
-  public showOnlyOneYAxis: boolean;
+  public showAllData: boolean;
   public useDistanceAxis: boolean;
 
   private userSubscription: Subscription;
@@ -60,8 +59,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.showAutoLaps().then(value => this.showMapAutoLaps = value);
     this.userSettingsService.showManualLaps().then(value => this.showMapManualLaps = value);
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
-    this.userSettingsService.showAllStats().then(value => this.showAllStats = value);
-    this.userSettingsService.showOnlyOneYAxis().then(value => this.showOnlyOneYAxis = value);
+    this.userSettingsService.showAllData().then(value => this.showAllData = value);
 
     // Get the path params
     const userID = this.route.snapshot.paramMap.get('userID');

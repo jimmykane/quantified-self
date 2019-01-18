@@ -42,22 +42,12 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-  public async showAllStats(): Promise<boolean> {
+  public async showAllData(): Promise<boolean> {
     let defaultValue = 'false';
     try {
-      defaultValue = await this.chartSettingsLocalStorageService.getItem('showAllStats');
+      defaultValue = await this.chartSettingsLocalStorageService.getItem('showAllData');
     } catch (e) {
-      this.chartSettingsLocalStorageService.setItem('showAllStats', defaultValue);
-    }
-    return defaultValue === 'true';
-  }
-
-  public async showOnlyOneYAxis(): Promise<boolean> {
-    let defaultValue = 'false';
-    try {
-      defaultValue = await this.chartSettingsLocalStorageService.getItem('showOnlyOneYAxis');
-    } catch (e) {
-      this.chartSettingsLocalStorageService.setItem('showOnlyOneYAxis', defaultValue);
+      this.chartSettingsLocalStorageService.setItem('showAllData', defaultValue);
     }
     return defaultValue === 'true';
   }
@@ -74,12 +64,8 @@ export class UserSettingsService {
     this.chartSettingsLocalStorageService.setItem('useDistanceAxis', String(value));
   }
 
-  public setShowAllStats(value: boolean) {
-    this.chartSettingsLocalStorageService.setItem('showAllStats', String(value));
-  }
-
-  public setShowOnlyOneYAxis(value: boolean) {
-    this.chartSettingsLocalStorageService.setItem('showOnlyOneYAxis', String(value));
+  public setShowAllData(value: boolean) {
+    this.chartSettingsLocalStorageService.setItem('showAllData', String(value));
   }
 }
 

@@ -73,14 +73,12 @@
           <mat-icon>show_chart</mat-icon>
           <app-chart-actions
             [(useDistanceAxis)]="useDistanceAxis"
-            [(showAllStats)]="showAllStats"
-            [(showOnlyOneYAxis)]="showOnlyOneYAxis"
+            [(showAllData)]="showAllData"
             align="end">
           </app-chart-actions>
         </ng-template>
         <app-event-card-chart
-          [showOnlyOneYAxis]="showOnlyOneYAxis"
-          [showAllStats]="showAllStats"
+          [showAllData]="showAllData"
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"

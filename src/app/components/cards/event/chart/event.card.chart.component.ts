@@ -85,8 +85,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() dataTypesToUse = [];
   @Input() isVisible: boolean;
-  @Input() showAllStats: boolean;
-  @Input() showOnlyOneYAxis: boolean;
+  @Input() showAllData: boolean;
 
   public isLoading: boolean;
 
@@ -147,11 +146,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   async ngOnChanges(simpleChanges) {
     this.dataTypesToUse = this.basicData;
     // Set the datatypes to show if all is selected
-    if (this.showAllStats) {
+    if (this.showAllData) {
       this.dataTypesToUse = this.allData;
     }
     // If there is a change in the chart settings and its valid update settings
-    if (this.userChartSettings && !this.showAllStats) {
+    if (this.userChartSettings && !this.showAllData) {
       // Set the datatypes to use
       // debugger;
       this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
@@ -176,7 +175,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllStats || simpleChanges.showOnlyOneYAxis || simpleChanges.userChartSettings) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.userChartSettings) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -240,163 +239,160 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private createChart(): am4charts.XYChart {
-      return this.zone.runOutsideAngular(() => {
-        // Create a chart
-        const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
-        chart.pixelPerfect = false;
-        // chart.fontSize = '0.85em';
-        // chart.resizable = false;
+    return this.zone.runOutsideAngular(() => {
+      // Create a chart
+      const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
+      chart.pixelPerfect = false;
+      // chart.fontSize = '0.85em';
+      // chart.resizable = false;
 
-        // Create a date axis
-        const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
-        // dateAxis.skipEmptyPeriods= true;
-        dateAxis.title.text = "Time";
-        // dateAxis.baseInterval = {
-        //   timeUnit: "second",
-        //   count: 1
-        // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
-        // };
-        // dateAxis.skipEmptyPeriods= true;
+      // Create a date axis
+      const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+      // dateAxis.skipEmptyPeriods= true;
+      dateAxis.title.text = "Time";
+      // dateAxis.baseInterval = {
+      //   timeUnit: "second",
+      //   count: 1
+      // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
+      // };
+      // dateAxis.skipEmptyPeriods= true;
 
-        // Create a value axis
-        // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-        // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
+      // Create a value axis
+      // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+      // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
 
-        // Create a Legend
-        chart.legend = new am4charts.Legend();
-        chart.legend.fontSize = '0.9em';
-        const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-        legendContainer.width = am4core.percent(100);
-        legendContainer.height = am4core.percent(100);
-        chart.legend.parent = legendContainer;
+      // Create a Legend
+      chart.legend = new am4charts.Legend();
+      chart.legend.fontSize = '0.9em';
+      const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+      legendContainer.width = am4core.percent(100);
+      legendContainer.height = am4core.percent(100);
+      chart.legend.parent = legendContainer;
 
-        chart.legend.itemContainers.template.events.on("hit", (ev) => {
-          if (this.showOnlyOneYAxis) {
+      chart.legend.itemContainers.template.events.on("hit", (ev) => {
+        const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
+        // Getting visible...
+        if (!series.isHidden) {
+          this.showSeriesYAxis(series)
+
+          // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
+        } else { // .. hiding
+          // Block hiding and do nothing with the axis if there is some other same type visible as they share the same axis
+          // #notSameIDAndNotHiddenAndNoTSameName
+          if (this.getVisibleSeriesWithSameYAxis(series).length > 0) {
             return;
           }
-          const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-          // Getting visible...
-          if (!series.isHidden) {
-            this.showSeriesYAxis(series)
-
-            // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
-          } else { // .. hiding
-            // Block hiding and do nothing with the axis if there is some other same type visible as they share the same axis
-            // #notSameIDAndNotHiddenAndNoTSameName
-            if (this.getVisibleSeriesWithSameYAxis(series).length > 0) {
-              return;
-            }
-            this.hideSeriesYAxis(series)
-          }
-        });
-
-        // Create a cursor
-        chart.cursor = new am4charts.XYCursor();
-        // chart.cursor.fullWidthLineX = true;
-        // chart.cursor.fullWidthLineY = true;
-        // chart.cursor.behavior = 'zoomY';
-
-        // Add watermark
-        const watermark = new am4core.Label();
-        watermark.text = "Quantified-Self.io";
-        chart.plotContainer.children.push(watermark);
-        watermark.align = "right";
-        watermark.valign = "bottom";
-        watermark.fontSize = '2em';
-        watermark.opacity = 0.7;
-        watermark.marginRight = 10;
-        watermark.marginBottom = 5;
-        watermark.zIndex = 100;
-        // watermark.fontWeight = 'bold';
-
-
-        // Scrollbar
-        // chart.scrollbarX = new am4charts.XYChartScrollbar();
-
-        // Add exporting options
-        chart.exporting.menu = new am4core.ExportMenu();
-        chart.exporting.menu.align = 'right';
-        chart.exporting.menu.verticalAlign = 'bottom';
-        chart.exporting.useWebFonts = false;
-        chart.exporting.menu.items = [{
-          label: "...️",
-          menu: [
-            {"type": "png", "label": "PNG", options: {useRetina: true}},
-            {"type": "csv", "label": "CSV"},
-            {"label": "Print", "type": "print"},
-          ],
-        }];
-
-        // Disable the preloader
-        chart.preloader.disabled = true;
-
-        // Attach events
-        chart.events.on('validated', (ev) => {
-          this.logger.info('validated');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-          // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
-          //   this.loaded();
-          // }
-        });
-
-        chart.events.on('globalscalechanged', (ev) => {
-          this.logger.info('globalscalechanged');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-        chart.events.on('dataitemsvalidated', (ev) => {
-          this.logger.info('dataitemsvalidated');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-
-        chart.events.on('datavalidated', (ev) => {
-          this.logger.info('datavalidated');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-        chart.events.on('datarangechanged', (ev) => {
-          this.logger.info('datarangechanged');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-        chart.events.on('ready', (ev) => {
-          this.logger.info('ready');
-        });
-
-
-        chart.events.on('shown', (ev) => {
-          this.logger.info('shown');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-        chart.events.on('transformed', (ev) => {
-          this.logger.info('transformed');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-        chart.events.on('maxsizechanged', (ev) => {
-          this.logger.info('maxsizechanged');
-          // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-        });
-
-        chart.events.on('visibilitychanged', (ev) => {
-          this.logger.info('visibilitychanged');
-        });
-
-        chart.events.on('hidden', (ev) => {
-          this.logger.info('hidden');
-        });
-        chart.events.on('shown', (ev) => {
-          this.logger.info('shown');
-        });
-
-        chart.events.on('inited', (ev) => {
-          this.logger.info('inited');
-        });
-
-        return chart;
+          this.hideSeriesYAxis(series)
+        }
       });
+
+      // Create a cursor
+      chart.cursor = new am4charts.XYCursor();
+      // chart.cursor.fullWidthLineX = true;
+      // chart.cursor.fullWidthLineY = true;
+      // chart.cursor.behavior = 'zoomY';
+
+      // Add watermark
+      const watermark = new am4core.Label();
+      watermark.text = "Quantified-Self.io";
+      chart.plotContainer.children.push(watermark);
+      watermark.align = "right";
+      watermark.valign = "bottom";
+      watermark.fontSize = '2em';
+      watermark.opacity = 0.7;
+      watermark.marginRight = 10;
+      watermark.marginBottom = 5;
+      watermark.zIndex = 100;
+      // watermark.fontWeight = 'bold';
+
+
+      // Scrollbar
+      // chart.scrollbarX = new am4charts.XYChartScrollbar();
+
+      // Add exporting options
+      chart.exporting.menu = new am4core.ExportMenu();
+      chart.exporting.menu.align = 'right';
+      chart.exporting.menu.verticalAlign = 'bottom';
+      chart.exporting.useWebFonts = false;
+      chart.exporting.menu.items = [{
+        label: "...️",
+        menu: [
+          {"type": "png", "label": "PNG", options: {useRetina: true}},
+          {"type": "csv", "label": "CSV"},
+          {"label": "Print", "type": "print"},
+        ],
+      }];
+
+      // Disable the preloader
+      chart.preloader.disabled = true;
+
+      // Attach events
+      chart.events.on('validated', (ev) => {
+        this.logger.info('validated');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
+        //   this.loaded();
+        // }
+      });
+
+      chart.events.on('globalscalechanged', (ev) => {
+        this.logger.info('globalscalechanged');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+      chart.events.on('dataitemsvalidated', (ev) => {
+        this.logger.info('dataitemsvalidated');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+
+      chart.events.on('datavalidated', (ev) => {
+        this.logger.info('datavalidated');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+      chart.events.on('datarangechanged', (ev) => {
+        this.logger.info('datarangechanged');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+      chart.events.on('ready', (ev) => {
+        this.logger.info('ready');
+      });
+
+
+      chart.events.on('shown', (ev) => {
+        this.logger.info('shown');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+      chart.events.on('transformed', (ev) => {
+        this.logger.info('transformed');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+      chart.events.on('maxsizechanged', (ev) => {
+        this.logger.info('maxsizechanged');
+        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      });
+
+      chart.events.on('visibilitychanged', (ev) => {
+        this.logger.info('visibilitychanged');
+      });
+
+      chart.events.on('hidden', (ev) => {
+        this.logger.info('hidden');
+      });
+      chart.events.on('shown', (ev) => {
+        this.logger.info('shown');
+      });
+
+      chart.events.on('inited', (ev) => {
+        this.logger.info('inited');
+      });
+
+      return chart;
+    });
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
@@ -409,22 +405,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     let yAxis: am4charts.Axis;
 
-    if (this.showOnlyOneYAxis) {
-      if (!this.chart.yAxes.length) {
-        yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
-      } else {
-        yAxis = this.chart.yAxes.getIndex(0);
-      }
+    // Check if we have a series with the same name aka type
+    const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
+    if (!sameTypeSeries) {
+      yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
     } else {
-      // Check if we have a series with the same name aka type
-      const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
-      if (!sameTypeSeries) {
-        yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
-      } else {
-        // Share
-        // debugger;
-        yAxis = sameTypeSeries.yAxis;
-      }
+      // Share
+      yAxis = sameTypeSeries.yAxis;
     }
 
     // Then create a series
@@ -469,7 +456,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length >= 4) {
       this.hideSeries(series);
       // Disable the rest of the axis
-      if (!this.showOnlyOneYAxis && !this.getVisibleSeriesWithSameYAxis(series).length) {
+      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
         this.hideSeriesYAxis(series)
       }
     }
