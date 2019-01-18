@@ -311,7 +311,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
 
         // Scrollbar
-        chart.scrollbarX = new am4charts.XYChartScrollbar();
+        // chart.scrollbarX = new am4charts.XYChartScrollbar();
 
         // Add exporting options
         chart.exporting.menu = new am4core.ExportMenu();
