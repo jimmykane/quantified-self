@@ -271,19 +271,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       chart.legend.parent = legendContainer;
 
       chart.legend.itemContainers.template.events.on("hit", (ev) => {
+        ev.event.preventDefault();
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
         if (!series.isHidden) {
-          this.showSeriesYAxis(series)
-
-          // if we should only focus on one y Axis then we need to hide all the rest exluding the shared ones
-        } else { // .. hiding
-          // Block hiding and do nothing with the axis if there is some other same type visible as they share the same axis
-          // #notSameIDAndNotHiddenAndNoTSameName
-          if (this.getVisibleSeriesWithSameYAxis(series).length > 0) {
-            return;
-          }
-          this.hideSeriesYAxis(series)
+          this.showSeries(series)
+        } else {
+          this.hideSeries(series)
         }
       });
 
@@ -460,10 +454,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length >= 4) {
       this.hideSeries(series);
-      // Disable the rest of the axis
-      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
-        this.hideSeriesYAxis(series)
-      }
     }
 
     // Attach events
@@ -556,17 +546,17 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   private hideSeries(series: am4charts.XYSeries) {
-    // this.chart.scrollbarX.series.clear();
-    // series.disabled = true;
     series.hidden = true;
     series.hide();
+    if (!this.getVisibleSeriesWithSameYAxis(series).length) {
+      this.hideSeriesYAxis(series)
+    }
   }
 
   private showSeries(series: am4charts.XYSeries) {
-    // this.chart.scrollbarX.series.push(series);
-    // series.disabled = false;
     series.hidden = false;
-    series.show()
+    series.show();
+    this.showSeriesYAxis(series);
   }
 
   private loading() {
