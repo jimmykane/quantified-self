@@ -468,11 +468,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series.dataFields.dateX = "time";
     series.interactionsEnabled = false;
 
-
-    if ([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) {
+    if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length >= 4) {
       this.hideSeries(series);
       // Disable the rest of the axis
-      if (!this.showOnlyOneYAxis) {
+      if (!this.showOnlyOneYAxis && !this.getVisibleSeriesWithSameYAxis(series).length) {
         this.hideSeriesYAxis(series)
       }
     }
