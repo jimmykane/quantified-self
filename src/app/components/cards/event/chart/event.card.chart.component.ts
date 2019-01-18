@@ -460,7 +460,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
 
     series.strokeWidth = 1;
-    // series.fillOpacity = 0.1;
+    series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
     series.dataFields.valueY = "value";
     series.dataFields.dateX = "time";
