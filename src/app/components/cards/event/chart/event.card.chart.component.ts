@@ -163,7 +163,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
     // 1. If there is no chart create
     if (!this.chart) {
-      this.chart = await this.createChart();
+      this.chart = this.createChart();
     }
 
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
@@ -239,9 +239,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     });
   }
 
-  private createChart(): Promise<am4charts.XYChart> {
-    return new Promise((resolve, reject) => {
-      this.zone.runOutsideAngular(() => {
+  private createChart(): am4charts.XYChart {
+      return this.zone.runOutsideAngular(() => {
         // Create a chart
         const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
         chart.pixelPerfect = false;
@@ -396,9 +395,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
           this.logger.info('inited');
         });
 
-        resolve(chart);
+        return chart;
       });
-    });
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
