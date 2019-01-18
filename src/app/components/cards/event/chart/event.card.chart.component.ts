@@ -56,6 +56,7 @@ import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.cha
 
 // import am4themes_animated from "@amcharts/amcharts4/themes/animated";
 import am4themes_material from "@amcharts/amcharts4/themes/material";
+import {DataPace} from "quantified-self-lib/lib/data/data.pace";
 // import am4themes_frozen from "@amcharts/amcharts4/themes/frozen";
 // import am4themes_dataviz from "@amcharts/amcharts4/themes/dataviz";
 // import am4themes_dark from "@amcharts/amcharts4/themes/dark";
@@ -408,7 +409,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
     if (!sameTypeSeries) {
-      yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+      if (stream.type === DataPace.type) {
+        yAxis = this.chart.yAxes.push(new am4charts.DurationAxis()); // todo Same type series should be sharing a common axis
+      }else {
+        yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
+      }
     } else {
       // Share
       yAxis = sameTypeSeries.yAxis;
@@ -552,12 +557,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private hideSeries(series: am4charts.XYSeries) {
     // this.chart.scrollbarX.series.clear();
+    // series.disabled = true;
     series.hidden = true;
     series.hide();
   }
 
   private showSeries(series: am4charts.XYSeries) {
     // this.chart.scrollbarX.series.push(series);
+    // series.disabled = false;
     series.hidden = false;
     series.show()
   }
