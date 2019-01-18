@@ -225,7 +225,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
           // debugger;
           if (!data[dataItem.time]) {
-            data[dataItem.time] = {date: new Date(dataItem.time)}
+            data[dataItem.time] = {date: dataItem.time}
           }
           data[dataItem.time][series.id] = dataItem.value;
         });
@@ -515,12 +515,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
     const numberOfSamples = stream.getNumericData().length;
     let samplingRate = 1;
-    const hoursToKeep1sSamplingRateForAllActivities = 1; // 2 hours
-    const hoursToKeep1sSamplingRate = hoursToKeep1sSamplingRateForAllActivities / (this.selectedActivities.length * 2);
+    const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
-    if (numberOfSamplesToHours > hoursToKeep1sSamplingRate) {
-      samplingRate = Math.ceil((numberOfSamplesToHours * 4) / hoursToKeep1sSamplingRate)
-    }
+    samplingRate = Math.ceil((numberOfSamplesToHours  * 6 * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities)
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
