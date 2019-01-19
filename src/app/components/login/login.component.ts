@@ -8,6 +8,7 @@ import {UserService} from '../../services/app.user.service';
 import {UserFormComponent} from '../user-forms/user.form.component';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Raven from "raven-js";
+import {Log} from "ng2-logger/browser";
 
 @Component({
   selector: 'app-login',
@@ -17,6 +18,9 @@ import * as Raven from "raven-js";
 export class LoginComponent {
 
   isLoggingIn: boolean;
+
+  private logger = Log.create('LoginComponent');
+
 
   constructor(
     public authService: AppAuthService,
@@ -28,12 +32,28 @@ export class LoginComponent {
   }
 
   async anonymousLogin() {
-    return this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
+    try {
+      return this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
+    } catch (e) {
+      Raven.captureException(e);
+      this.logger.error(e);
+      this.snackBar.open(`Could not log in due to ${e}`, null, {
+        duration: 2000,
+      });
+    }
   }
 
 
   async googleLogin() {
-    return this.redirectOrShowDataPrivacyDialog(await this.authService.googleLogin());
+    try {
+      return this.redirectOrShowDataPrivacyDialog(await this.authService.googleLogin());
+    } catch (e) {
+      Raven.captureException(e);
+      this.logger.error(e);
+      this.snackBar.open(`Could not log in due to ${e}`, null, {
+        duration: 2000,
+      });
+    }
   }
 
 

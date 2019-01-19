@@ -38,6 +38,7 @@ import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings
 import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {Log} from "ng2-logger/browser";
 import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
+import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
 
 @Component({
   selector: 'app-user-settings',
@@ -53,46 +54,14 @@ export class UserSettingsComponent implements OnInit {
 
   private logger = Log.create('UserSettingsComponent');
 
-  private basicData = [
-    DataHeartRate.type,
-    DataAltitude.type,
-    DataCadence.type,
-    DataPower.type,
-    DataPace.type,
-    DataSpeed.type,
-  ];
-
-  private advancedData = [
-    DataGPSAltitude.type,
-    DataTemperature.type,
-    DataSeaLevelPressure.type,
-    DataSatellite5BestSNR.type,
-    DataNumberOfSatellites.type,
-    DataEVPE.type,
-    DataEHPE.type,
-    DataDistance.type,
-    DataAbsolutePressure.type,
-    DataPeakTrainingEffect.type,
-    DataEPOC.type,
-    DataEnergy.type,
-    DataNumberOfSamples.type,
-    DataBatteryCharge.type,
-    DataBatteryCurrent.type,
-    DataBatteryVoltage.type,
-    DataBatteryConsumption.type,
-    DataFormPower.type,
-    DataLegStiffness.type,
-    DataVerticalOscillation.type,
-  ];
-
   public dataGroups = [
     {
       name: 'Basic Data',
-      data: this.basicData
+      data: DynamicDataLoader.basicDataTypes
     },
     {
       name: 'Advanced Data',
-      data: this.advancedData
+      data: DynamicDataLoader.advancedDataTypes
     },
   ];
 
@@ -106,23 +75,11 @@ export class UserSettingsComponent implements OnInit {
   ngOnInit(): void {
 
     // Initialize the user settings and get the enabled ones
-    let dataTypesToUse:string[] = [];
-    if (this.user.settings && this.user.settings.chartSettings){
-      dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
-        return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
-      })
-    }
+    const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
+      return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
+    });
 
-    if (!dataTypesToUse.length){
-      dataTypesToUse = this.basicData
-    }
-
-    let appTheme: AppThemes = AppThemes.normal;
-    if (this.user.settings && this.user.settings.appSettings){
-      appTheme = this.user.settings.appSettings.theme;
-    }
-
-    // debugger;
+    const appTheme = this.user.settings.appSettings.theme;
 
     this.userSettingsFormGroup = new FormGroup({
       dataTypesToUse: new FormControl(dataTypesToUse, [
@@ -159,7 +116,7 @@ export class UserSettingsComponent implements OnInit {
       await this.userService.updateUserProperties(this.user, {
         settings: {
           chartSettings: userChartSettings,
-          appSettings: {theme: this.userSettingsFormGroup.get('appThemeDark').value ?  AppThemes.dark : AppThemes.normal}
+          appSettings: {theme: this.userSettingsFormGroup.get('appThemeDark').value ? AppThemes.dark : AppThemes.normal}
         }
       });
       this.snackBar.open('User updated', null, {

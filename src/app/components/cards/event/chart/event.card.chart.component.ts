@@ -61,9 +61,10 @@ import {DataPace} from "quantified-self-lib/lib/data/data.pace";
 // import am4themes_dataviz from "@amcharts/amcharts4/themes/dataviz";
 // import am4themes_dark from "@amcharts/amcharts4/themes/dark";
 // import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
-// import am4themes_am_dark from "@amcharts/amcharts4/themes/amchartsdark";
+import am4themes_am_dark from "@amcharts/amcharts4/themes/amchartsdark";
+import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
 // import am4themes_am from "@amcharts/amcharts4/themes/amcharts";
-am4core.useTheme(am4themes_material);
+// am4core.useTheme(am4themes_material);
 // am4core.useTheme(am4themes_animated);
 // am4core.useTheme(am4themes_dataviz);
 // am4core.useTheme(am4themes_kelly);
@@ -82,9 +83,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @ViewChild('legendDiv') legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
-  @Input() userChartSettings: UserChartSettingsInterface;
+  @Input() userChartSettings: UserSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
-  @Input() dataTypesToUse = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
 
@@ -95,40 +95,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private logger = Log.create('EventCardChartComponent');
 
   private renderPerSeries = true;
-
-  private basicData = [
-    DataHeartRate.type,
-    DataAltitude.type,
-    DataCadence.type,
-    DataPower.type,
-    DataPace.type,
-    DataSpeed.type,
-  ];
-
-  private allData = this.basicData.concat([
-    // DataGPSAltitude.type,
-    DataTemperature.type,
-    DataSeaLevelPressure.type,
-    DataSatellite5BestSNR.type,
-    DataNumberOfSatellites.type,
-    DataEVPE.type,
-    DataEHPE.type,
-    // DataDistance.type, @todo take out till on click on axis uses current clicked series
-    DataGPSAltitude.type,
-    DataAbsolutePressure.type,
-    DataPeakTrainingEffect.type,
-    DataEPOC.type,
-    DataEnergy.type,
-    DataNumberOfSamples.type,
-    DataBatteryCharge.type,
-    DataBatteryCurrent.type,
-    DataBatteryVoltage.type,
-    DataBatteryConsumption.type,
-    DataFormPower.type,
-    DataLegStiffness.type,
-    DataVerticalOscillation.type,
-    DataTotalTrainingEffect.type,
-  ]);
 
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
@@ -146,22 +112,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   }
 
   async ngOnChanges(simpleChanges) {
-    this.dataTypesToUse = this.basicData;
-    // Set the datatypes to show if all is selected
-    if (this.showAllData) {
-      this.dataTypesToUse = this.allData;
-    }
-    // If there is a change in the chart settings and its valid update settings
-    if (this.userChartSettings && !this.showAllData) {
-      // Set the datatypes to use
-      // debugger;
-      this.dataTypesToUse = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
-        if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-          dataTypesToUse.push(dataTypeSettingsKey);
-        }
-        return dataTypesToUse;
-      }, []);
-    }
     // 1. If there is no chart create
     if (!this.chart) {
       this.chart = this.createChart();
@@ -196,7 +146,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.loading();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
-        this.dataTypesToUse,
+        this.determineDataToUse(),
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
@@ -531,6 +481,25 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })
   }
 
+  private determineDataToUse(): string[] {
+    let dataTypes = DynamicDataLoader.basicDataTypes;
+    // Set the datatypes to show if all is selected
+    if (this.showAllData) {
+      dataTypes = DynamicDataLoader.allDataTypes;
+    }
+    // If there is a change in the chart settings and its valid update settings
+    if (this.userChartSettings && !this.showAllData) {
+      // Set the datatypes to use
+      dataTypes = Object.keys(this.userChartSettings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+        if (this.userChartSettings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
+          dataTypesToUse.push(dataTypeSettingsKey);
+        }
+        return dataTypesToUse;
+      }, []);
+    }
+    return dataTypes
+  }
+
   private getYAxisForSeries(streamType: string) {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if (streamType === DataPace.type) {
@@ -618,5 +587,4 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.destroyChart();
     this.unSubscribeFromAll();
   }
-
 }

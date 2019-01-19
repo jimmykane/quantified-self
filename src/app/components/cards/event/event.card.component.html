@@ -82,7 +82,7 @@
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"
-          [userChartSettings]="(currentUser && currentUser.settings && currentUser.settings.chartSettings) ? currentUser.settings.chartSettings : null"
+          [userChartSettings]="currentUser ? currentUser.settings : null"
           [event]="event">
         </app-event-card-chart>
       </mat-tab>
