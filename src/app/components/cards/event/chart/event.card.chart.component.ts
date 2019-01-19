@@ -250,12 +250,12 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
       legendContainer.width = am4core.percent(100);
       legendContainer.height = am4core.percent(100);
-      chart.legend.useDefaultMarker = true;
-      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-      marker.cornerRadius(12, 12, 12, 12);
-      marker.strokeWidth = 2;
-      marker.strokeOpacity = 1;
-      marker.stroke = am4core.color("#ccc");
+      // chart.legend.useDefaultMarker = true;
+      // const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
+      // marker.cornerRadius(12, 12, 12, 12);
+      // marker.strokeWidth = 2;
+      // marker.strokeOpacity = 1;
+      // marker.stroke = am4core.color("#ccc");
       chart.legend.parent = legendContainer;
 
       chart.legend.itemContainers.template.events.on("hit", (ev) => {
@@ -469,10 +469,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     series.events.on('ready', (ev) => {
       this.logger.info('Series ready');
-      this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-      // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
-        this.loaded();
-      // }
     });
 
     // Finally set the data and return
@@ -503,7 +499,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     let samplingRate = 1;
     const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
-    samplingRate = Math.ceil((numberOfSamplesToHours * 6 * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities)
+    samplingRate = Math.ceil((numberOfSamplesToHours * 3 * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities)
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
