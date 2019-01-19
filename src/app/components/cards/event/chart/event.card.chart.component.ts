@@ -190,11 +190,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
       this.subscribeToNewData();
     }
-
-    // // 5 Invalidate if becoming visible @todo perhaps move higher?
-    // if (simpleChanges.isVisible) {
-    //   this.chart.deepInvalidate();
-    // }
   }
 
   private subscribeToNewData() {
