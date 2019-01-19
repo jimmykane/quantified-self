@@ -94,7 +94,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
 
-  private
+  private renderPerSeries = true;
 
   private basicData = [
     DataHeartRate.type,
@@ -215,30 +215,14 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     })).pipe(map((seriesArrayOfArrays) => {
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
-    })).subscribe((series: am4charts.XYSeries[]) => {
-      // Map the data
-      // debugger;
-      // series.forEach((series) => series.data = series.dummyData);
+    })).subscribe((series: am4charts.LineSeries[]) => {
+      if (!this.renderPerSeries) {
+        this.addDataToChart(this.getDataFromSeriesDummyData(series));
+      } else {
+        series.forEach((series) => this.addDataToSeries(series, series.dummyData));
+      }
 
-      // this.chart.deepInvalidate();
-      let data = series.reduce((data, series) => {
-        // debugger;
-        series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
-          // debugger;
-          if (!data[dataItem.time]) {
-            data[dataItem.time] = {date: dataItem.time}
-          }
-          data[dataItem.time][series.id] = dataItem.value;
-        });
-        return data;
-      }, {});
-
-      this.addDataToChart(Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
-        return +dataItemA.date - +dataItemB.date;
-      }));
-
-      this.logger.info(`Data Injected`)
-
+      this.logger.info(`Data Injected`);
     });
   }
 
@@ -435,8 +419,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
-    // series.name = stream.type + ` ${activity.creator.name}`;
-    series.name = stream.type;
+    series.name = `${stream.type} ${activity.creator.name}`;
+
     // series.adapter.add("tooltipText", function (text, target, key) {
     //   debugger;
     //   return ">>> " + text + " <<<";
@@ -464,8 +448,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series.strokeWidth = 1;
     series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
-    series.dataFields.valueY = series.id;
-    series.dataFields.dateX = "date";
+
+    if (!this.renderPerSeries) {
+      series.dataFields.valueY = series.id;
+      series.dataFields.dateX = "date";
+
+    } else {
+      series.dataFields.valueY = 'value';
+      series.dataFields.dateX = "time";
+    }
+
     series.interactionsEnabled = false;
 
     if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length >= 4) {
@@ -484,9 +476,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     series.events.on('ready', (ev) => {
       this.logger.info('Series ready');
       this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-      // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
-      //   this.loaded();
-      // }
+      if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
+        this.loaded();
+      }
     });
 
     // Finally set the data and return
@@ -517,15 +509,38 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     let samplingRate = 1;
     const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
-    samplingRate = Math.ceil((numberOfSamplesToHours  * 6 * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities)
+    samplingRate = Math.ceil((numberOfSamplesToHours * 6 * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities)
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
 
-  private addDataToChart(data: any){
+  private addDataToChart(data: any) {
     this.zone.runOutsideAngular(() => {
       this.chart.data = data;
     });
+  }
+
+  private addDataToSeries(series: am4charts.LineSeries, data: any) {
+    this.zone.runOutsideAngular(() => {
+      series.data = data;
+    });
+  }
+
+  private getDataFromSeriesDummyData(series: am4charts.LineSeries[]): any {
+    let data = series.reduce((data, series) => {
+      // debugger;
+      series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
+        // debugger;
+        if (!data[dataItem.time]) {
+          data[dataItem.time] = {date: dataItem.time}
+        }
+        data[dataItem.time][series.id] = dataItem.value;
+      });
+      return data;
+    }, {});
+    return Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
+      return +dataItemA.date - +dataItemB.date;
+    })
   }
 
   private hideSeriesYAxis(series: am4charts.XYSeries) {
