@@ -8,6 +8,30 @@
           <mat-icon>show_chart</mat-icon>
         </div>
         <mat-card-title>
+          App
+        </mat-card-title>
+        <mat-card-subtitle>Settings</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="appThemeDark">
+      <span
+        matTooltip="Dark or white theme">
+        Use dark theme
+      </span>
+        </mat-slide-toggle>
+      </mat-card-content>
+    </mat-card>
+
+
+    <mat-card>
+      <mat-card-header>
+        <div mat-card-avatar class="avatar">
+          <mat-icon>show_chart</mat-icon>
+        </div>
+        <mat-card-title>
           Chart
         </mat-card-title>
         <mat-card-subtitle>Settings</mat-card-subtitle>

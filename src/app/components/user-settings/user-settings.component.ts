@@ -37,6 +37,7 @@ import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
 import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
 import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {Log} from "ng2-logger/browser";
+import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
 
 @Component({
   selector: 'app-user-settings',
@@ -51,9 +52,6 @@ export class UserSettingsComponent implements OnInit {
   public errorSaving;
 
   private logger = Log.create('UserSettingsComponent');
-
-
-  // public selectedDataToUse = [];
 
   private basicData = [
     DataHeartRate.type,
@@ -119,11 +117,21 @@ export class UserSettingsComponent implements OnInit {
       dataTypesToUse = this.basicData
     }
 
+    let appTheme: AppThemes = AppThemes.normal;
+    if (this.user.settings && this.user.settings.appSettings){
+      appTheme = this.user.settings.appSettings.theme;
+    }
+
     // debugger;
 
     this.userSettingsFormGroup = new FormGroup({
       dataTypesToUse: new FormControl(dataTypesToUse, [
         Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      appThemeDark: new FormControl(appTheme === AppThemes.dark, [
+        // Validators.required,
         // Validators.minLength(1),
       ]),
     });
@@ -150,7 +158,10 @@ export class UserSettingsComponent implements OnInit {
       }, {dataTypeSettings: {}});
       debugger;
       await this.userService.updateUserProperties(this.user, {
-        settings: {chartSettings: userChartSettings}
+        settings: {
+          chartSettings: userChartSettings,
+          appSettings: {theme: this.userSettingsFormGroup.get('dataTypesToUse').value ?  AppThemes.dark : AppThemes.dark}
+        }
       });
       this.snackBar.open('User updated', null, {
         duration: 2000,

@@ -32,3 +32,6 @@ button{
   text-align: right;
 }
 
+mat-card{
+  margin-bottom: 1em;
+}
