@@ -415,6 +415,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     const data = stream.data.reduce((dataArray: { time: number, value: number | string | boolean }[], streamData, index) => {
       if (!isNumber(streamData)) {
+        dataArray.push({
+          time: activity.startDate.getTime() + (index * 1000),
+          value: null, // Display value can be string this needs to be corrected
+        });
         return dataArray
       }
       dataArray.push({
