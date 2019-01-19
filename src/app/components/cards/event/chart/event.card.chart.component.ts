@@ -414,7 +414,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
-    series.name = `${stream.type} ${activity.creator.name}`;
+    series.name = `${stream.type}`;
 
     // series.adapter.add("tooltipText", function (text, target, key) {
     //   debugger;
@@ -427,7 +427,6 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     }
     series.legendSettings.labelText = `${stream.type} [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
-
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
     // Search if there is any other series with the same color we would like to have
@@ -462,18 +461,18 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Attach events
     series.events.on('validated', (ev) => {
       this.logger.info('Series validated');
-      // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
-      //   this.loaded();
+        this.loaded();
       // }
     });
 
     series.events.on('ready', (ev) => {
       this.logger.info('Series ready');
       this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-      if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
+      // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).data.length) {
         this.loaded();
-      }
+      // }
     });
 
     // Finally set the data and return
