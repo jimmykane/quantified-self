@@ -454,7 +454,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     series.interactionsEnabled = false;
 
-    if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > 4) {
+    if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
       this.hideSeries(series);
     }
 
