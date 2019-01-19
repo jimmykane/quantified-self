@@ -156,11 +156,10 @@ export class UserSettingsComponent implements OnInit {
         userChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};
         return userChartSettings
       }, {dataTypeSettings: {}});
-      debugger;
       await this.userService.updateUserProperties(this.user, {
         settings: {
           chartSettings: userChartSettings,
-          appSettings: {theme: this.userSettingsFormGroup.get('dataTypesToUse').value ?  AppThemes.dark : AppThemes.dark}
+          appSettings: {theme: this.userSettingsFormGroup.get('appThemeDark').value ?  AppThemes.dark : AppThemes.normal}
         }
       });
       this.snackBar.open('User updated', null, {

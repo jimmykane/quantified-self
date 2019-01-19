@@ -1,15 +1,21 @@
 import {
-  AfterViewChecked, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit,
+  AfterViewChecked,
+  AfterViewInit,
+  ChangeDetectorRef,
+  Component,
+  OnDestroy,
+  OnInit,
   ViewChild,
 } from '@angular/core';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatSidenav, MatSnackBar} from '@angular/material';
 import {Subscription} from 'rxjs';
-import {NavigationEnd, Router, RoutesRecognized} from '@angular/router';
+import {Router, RoutesRecognized} from '@angular/router';
 import {filter, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from "./services/side-nav/side-nav.service";
+import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
 
 @Component({
   selector: 'app-root',
@@ -24,6 +30,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
+  private userSubscription: Subscription;
 
   constructor(
     public authService: AppAuthService,
@@ -50,6 +57,15 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
       this.sideNav.toggle();
     }, 'material'));
+
+    this.authService.user.subscribe((user) => {
+      if (user.settings && user.settings.appSettings.theme === AppThemes.dark){
+        document.body.classList.add('dark-theme');
+      }else{
+        document.body.classList.remove('dark-theme');
+      }
+    })
+
   }
 
   ngAfterViewInit() {
@@ -66,5 +82,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   ngOnDestroy(): void {
     this.routerEventSubscription.unsubscribe();
     this.actionButtonsSubscription.unsubscribe();
+    this.userSubscription.unsubscribe();
   }
 }

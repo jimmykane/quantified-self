@@ -27,11 +27,7 @@ export class AppAuthService implements OnDestroy {
       switchMap(user => {
         if (user) {
           return this.afs.doc<User>(`users/${user.uid}`).valueChanges().pipe(map((dbUser: User) => {
-            if (dbUser) {
-              this.authState = true;
-            }else {
-              this.authState = false;
-            }
+            this.authState = !!dbUser;
             return dbUser;
           }));
         } else {
@@ -40,7 +36,6 @@ export class AppAuthService implements OnDestroy {
         }
       }),
     );
-    this.userSubscription = this.user.subscribe(); // Todo kill
   }
 
   authenticated(): boolean {
