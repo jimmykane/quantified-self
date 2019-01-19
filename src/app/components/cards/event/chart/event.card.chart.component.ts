@@ -94,14 +94,15 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
 
+  private
+
   private basicData = [
     DataHeartRate.type,
     DataAltitude.type,
     DataCadence.type,
     DataPower.type,
-    // DataPace.type,
+    DataPace.type,
     DataSpeed.type,
-    DataVO2Max.type,
   ];
 
   private allData = this.basicData.concat([
@@ -232,10 +233,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return data;
       }, {});
 
-
-      this.chart.data = Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
+      this.addDataToChart(Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
         return +dataItemA.date - +dataItemB.date;
-      });
+      }));
 
       this.logger.info(`Data Injected`)
 
@@ -522,19 +522,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     return samplingRate;
   }
 
-  private destroyChart() {
-    try {
-      this.zone.runOutsideAngular(() => {
-        if (this.chart) {
-          this.chart.dispose();
-          delete this.chart
-        }
-      });
-    } catch (e) {
-      this.logger.error('Could not destroy chart');
-      // Log to Sentry
-      Raven.captureException(e);
-    }
+  private addDataToChart(data: any){
+    this.zone.runOutsideAngular(() => {
+      this.chart.data = data;
+    });
   }
 
   private hideSeriesYAxis(series: am4charts.XYSeries) {
@@ -592,6 +583,21 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private unSubscribeFromAll() {
     if (this.streamsSubscription) {
       this.streamsSubscription.unsubscribe();
+    }
+  }
+
+  private destroyChart() {
+    try {
+      this.zone.runOutsideAngular(() => {
+        if (this.chart) {
+          this.chart.dispose();
+          delete this.chart
+        }
+      });
+    } catch (e) {
+      this.logger.error('Could not destroy chart');
+      // Log to Sentry
+      Raven.captureException(e);
     }
   }
 
