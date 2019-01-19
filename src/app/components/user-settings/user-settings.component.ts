@@ -129,7 +129,7 @@ export class UserSettingsComponent implements OnInit {
     });
   }
 
-  hasError(field: string) {
+  hasError(field?: string) {
     if (!field) {
       return !this.userSettingsFormGroup.valid;
     }
