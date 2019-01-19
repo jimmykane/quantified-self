@@ -1,4 +1,4 @@
-import {Component, Inject, Input, OnDestroy, OnInit} from '@angular/core';
+import {Component, Inject, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppAuthService} from '../../authentication/app.auth.service';
@@ -35,7 +35,7 @@ import {DataTotalTrainingEffect} from "quantified-self-lib/lib/data/data.total-t
 import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
 import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
 import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
-import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
+import {ChartThemes, UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {Log} from "ng2-logger/browser";
 import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
 import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
@@ -45,7 +45,7 @@ import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
   templateUrl: './user-settings.component.html',
   styleUrls: ['./user-settings.component.css'],
 })
-export class UserSettingsComponent implements OnInit {
+export class UserSettingsComponent implements OnChanges {
 
   @Input() user: User;
   public currentUser: User;
@@ -65,21 +65,19 @@ export class UserSettingsComponent implements OnInit {
     },
   ];
 
-  // private allChartStats = this.basicData.concat(this.advancedData);
+  public appThemes = AppThemes;
+  public chartThemes = ChartThemes;
 
   public userSettingsFormGroup: FormGroup;
 
   constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
   }
 
-  ngOnInit(): void {
-
+  ngOnChanges(): void {
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
       return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
     });
-
-    const appTheme = this.user.settings.appSettings.theme;
 
     this.userSettingsFormGroup = new FormGroup({
       dataTypesToUse: new FormControl(dataTypesToUse, [
@@ -87,10 +85,21 @@ export class UserSettingsComponent implements OnInit {
         // Validators.minLength(1),
       ]),
 
-      appThemeDark: new FormControl(appTheme === AppThemes.dark, [
+      appTheme: new FormControl(this.user.settings.appSettings.theme, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      chartTheme: new FormControl(this.user.settings.chartSettings.theme, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      useAnimations: new FormControl(this.user.settings.chartSettings.useAnimations, [
         // Validators.required,
         // Validators.minLength(1),
       ]),
+
     });
   }
 
@@ -112,11 +121,12 @@ export class UserSettingsComponent implements OnInit {
       const userChartSettings = Array.from(this.userSettingsFormGroup.get('dataTypesToUse').value).reduce((userChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
         userChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};
         return userChartSettings
-      }, {dataTypeSettings: {}});
+      }, {dataTypeSettings: {}, theme: this.userSettingsFormGroup.get('chartTheme').value , useAnimations: this.userSettingsFormGroup.get('useAnimations').value});
+
       await this.userService.updateUserProperties(this.user, {
         settings: {
           chartSettings: userChartSettings,
-          appSettings: {theme: this.userSettingsFormGroup.get('appThemeDark').value ? AppThemes.dark : AppThemes.normal}
+          appSettings: {theme: this.userSettingsFormGroup.get('appTheme').value}
         }
       });
       this.snackBar.open('User updated', null, {

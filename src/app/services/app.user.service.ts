@@ -1,14 +1,19 @@
 import {Injectable, OnDestroy} from '@angular/core';
 import {Log} from 'ng2-logger/browser';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
-import {Observable, of} from 'rxjs';
+import {Observable} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {EventService} from './app.event.service';
 import {map, take} from 'rxjs/operators';
 import {AppThemes, UserAppSettingsInterface} from "quantified-self-lib/lib/users/user.app.settings.interface";
-import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
+import {
+  ChartThemes,
+  DataTypeSettings,
+  UserChartSettingsInterface
+} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
+import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
 
 
 @Injectable()
@@ -30,15 +35,7 @@ export class UserService implements OnDestroy {
         if (!user) {
           return null
         }
-        if (!user.settings) {
-          user.settings = {}
-        }
-        if (!user.settings.appSettings) {
-          user.settings.appSettings = this.getDefaultUserAppSettings();
-        }
-        if (!user.settings.chartSettings) {
-          user.settings.chartSettings = this.getDefaultUserChartSettings();
-        }
+        user.settings = this.fillMissingAppSettings(user);
         return user
       }));
   }
@@ -74,22 +71,23 @@ export class UserService implements OnDestroy {
     return this.afs.collection('users').doc(user.uid).delete();
   }
 
-  getDefaultUserChartSettings(): UserChartSettingsInterface {
-    return DynamicDataLoader.basicDataTypes.reduce((userChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
-      userChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};
-      return userChartSettings
-    }, {dataTypeSettings: {}})
+  getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
+    return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
+      dataTypeSettings[dataTypeToUse] = {enabled: true};
+      return dataTypeSettings
+    }, {})
   }
 
-  getDefaultUserAppSettings(): UserAppSettingsInterface {
-    return {
-      theme: AppThemes.normal
-    }
+  fillMissingAppSettings(user: User): UserSettingsInterface {
+    const settings: UserSettingsInterface = user.settings || {};
+    settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
+    settings.appSettings.theme = settings.appSettings.theme || AppThemes.Normal;
+    settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
+    settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || this.getDefaultUserChartSettingsDataTypeSettings();
+    settings.chartSettings.theme = settings.chartSettings.theme || ChartThemes.Material;
+    settings.chartSettings.useAnimations = !!settings.chartSettings.useAnimations;
+    return settings;
   }
-
-  // chartSettings?: UserChartSettingsInterface,
-  // appSettings?: UserAppSettingsInterface,
-// }
 
   ngOnDestroy() {
   }

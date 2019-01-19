@@ -14,7 +14,7 @@ export class PrivacyIconComponent {
 
   getPrivacyIcon() {
     let iconName = 'lock';
-    if (this.privacy === Privacy.public){
+    if (this.privacy === Privacy.Public){
       iconName = 'public'
     }
     return iconName;

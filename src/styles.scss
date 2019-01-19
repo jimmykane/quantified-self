@@ -16,8 +16,8 @@ $candy-app-theme:   mat-light-theme($candy-app-primary, $candy-app-accent);
 
 
 // Define an alternate dark theme.
-$dark-primary: mat-palette($mat-blue-grey);
-$dark-accent:  mat-palette($mat-amber, A200, A100, A400);
+$dark-primary: mat-palette($mat-light-blue);
+$dark-accent:  mat-palette($mat-pink, A200, A100, A400);
 $dark-warn:    mat-palette($mat-deep-orange);
 $dark-theme:   mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 
@@ -28,9 +28,6 @@ $dark-theme:   mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
   @include angular-material-theme($dark-theme);
 }
 
-.background-color-gray {
-  background-color: mat-color(mat-palette($mat-grey, A400, A100, A700));
-}
 
 body {
   margin: 0;

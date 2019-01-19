@@ -78,11 +78,12 @@
           </app-chart-actions>
         </ng-template>
         <app-event-card-chart
+          *ngIf="currentUser !== undefined"
           [showAllData]="showAllData"
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"
-          [userChartSettings]="currentUser ? currentUser.settings : null"
+          [userChartSettings]="currentUser ? currentUser.settings.chartSettings : null"
           [event]="event">
         </app-event-card-chart>
       </mat-tab>

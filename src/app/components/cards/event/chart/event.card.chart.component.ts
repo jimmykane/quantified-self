@@ -24,52 +24,24 @@ import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 import {map} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
-import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
-import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
-import {DataCadence} from 'quantified-self-lib/lib/data/data.cadence';
-import {DataPower} from 'quantified-self-lib/lib/data/data.power';
-import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
-import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
-import {DataSatellite5BestSNR} from 'quantified-self-lib/lib/data/data.satellite-5-best-snr';
-import {DataNumberOfSatellites} from 'quantified-self-lib/lib/data/data.number-of-satellites';
-import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
-import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
-import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
-import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
-import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataNumberOfSamples} from 'quantified-self-lib/lib/data/data-number-of.samples';
-import {DataBatteryCharge} from 'quantified-self-lib/lib/data/data.battery-charge';
-import {DataBatteryCurrent} from 'quantified-self-lib/lib/data/data.battery-current';
-import {DataBatteryVoltage} from 'quantified-self-lib/lib/data/data.battery-voltage';
-import {DataBatteryConsumption} from 'quantified-self-lib/lib/data/data.battery-consumption';
-import {DataFormPower} from 'quantified-self-lib/lib/data/data.form-power';
-import {DataLegStiffness} from 'quantified-self-lib/lib/data/data.leg-stiffness';
-import {DataVerticalOscillation} from 'quantified-self-lib/lib/data/data.vertical-oscillation';
-import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
+import {DataPace} from "quantified-self-lib/lib/data/data.pace";
 import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
-// import am4themes_animated from "@amcharts/amcharts4/themes/animated";
-import am4themes_material from "@amcharts/amcharts4/themes/material";
-import {DataPace} from "quantified-self-lib/lib/data/data.pace";
-// import am4themes_frozen from "@amcharts/amcharts4/themes/frozen";
-// import am4themes_dataviz from "@amcharts/amcharts4/themes/dataviz";
-// import am4themes_dark from "@amcharts/amcharts4/themes/dark";
-// import am4themes_kelly from "@amcharts/amcharts4/themes/kelly";
-import am4themes_am_dark from "@amcharts/amcharts4/themes/amchartsdark";
-import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
-// import am4themes_am from "@amcharts/amcharts4/themes/amcharts";
-// am4core.useTheme(am4themes_material);
-// am4core.useTheme(am4themes_animated);
-// am4core.useTheme(am4themes_dataviz);
-// am4core.useTheme(am4themes_kelly);
+import animated from "@amcharts/amcharts4/themes/animated";
 
-// am4core.useTheme(am4themes_am);
+import material from "@amcharts/amcharts4/themes/material";
+import frozen from "@amcharts/amcharts4/themes/frozen";
+import dataviz from "@amcharts/amcharts4/themes/dataviz";
+import dark from "@amcharts/amcharts4/themes/dark";
+import amcharts from "@amcharts/amcharts4/themes/amcharts";
+import amchartsdark from "@amcharts/amcharts4/themes/amchartsdark";
+import moonrisekingdom from "@amcharts/amcharts4/themes/moonrisekingdom";
+import spiritedaway from "@amcharts/amcharts4/themes/spiritedaway";
+import kelly from "@amcharts/amcharts4/themes/kelly";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -83,7 +55,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @ViewChild('legendDiv') legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
-  @Input() userChartSettings: UserSettingsInterface;
+  @Input() userChartSettings: UserChartSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
@@ -95,6 +67,18 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   private logger = Log.create('EventCardChartComponent');
 
   private renderPerSeries = true;
+
+  private themes = {
+    'material': material,
+    'frozen': frozen,
+    'dataviz': dataviz,
+    'dark': dark,
+    'amcharts': amcharts,
+    'amchartsdark': amchartsdark,
+    'moonrisekingdom': moonrisekingdom,
+    'spiritedaway': spiritedaway,
+    'kelly': kelly,
+  };
 
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
@@ -133,16 +117,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return;
       }
       this.unsubscribeAndClearChart();
-      this.subscribeToNewData();
+      this.processChanges();
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      this.subscribeToNewData();
+      this.processChanges();
     }
   }
 
-  private subscribeToNewData() {
+  private processChanges() {
     this.loading();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
@@ -173,11 +157,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private createChart(): am4charts.XYChart {
     return this.zone.runOutsideAngular(() => {
+      this.applyChartStylesFromUserSettings();
+
       // Create a chart
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
       chart.fontSize = '0.9em';
-      chart.padding(15,0,15,0);
+      chart.padding(15, 0, 15, 0);
       // chart.resizable = false;
 
       // Create a date axis
@@ -211,7 +197,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       chart.legend.parent = legendContainer;
 
       chart.legend.itemContainers.template.events.on("hit", (ev) => {
-        ev.event.preventDefault();
+        // debugger;
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
         if (!series.isHidden) {
@@ -490,8 +476,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // If there is a change in the chart settings and its valid update settings
     if (this.userChartSettings && !this.showAllData) {
       // Set the datatypes to use
-      dataTypes = Object.keys(this.userChartSettings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
-        if (this.userChartSettings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
+      dataTypes = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+        if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
           dataTypesToUse.push(dataTypeSettingsKey);
         }
         return dataTypesToUse;
@@ -500,12 +486,28 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     return dataTypes
   }
 
+  private applyChartStylesFromUserSettings() {
+    this.zone.runOutsideAngular(() => {
+      am4core.unuseAllThemes();
+      // If no default settings then go on an apply ze defaults
+      if (!this.userChartSettings) {
+        am4core.useTheme(material);
+        return;
+      }
+
+      if (this.userChartSettings.useAnimations) {
+        am4core.useTheme(animated);
+      }
+      am4core.useTheme(this.themes[this.userChartSettings.theme]);
+    });
+  }
+
   private getYAxisForSeries(streamType: string) {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if (streamType === DataPace.type) {
       yAxis = new am4charts.DurationAxis()
-    }else{
-     yAxis = new am4charts.ValueAxis();
+    } else {
+      yAxis = new am4charts.ValueAxis();
     }
     return yAxis;
   }
