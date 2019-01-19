@@ -26,7 +26,7 @@ export class AppAuthService implements OnDestroy {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
         if (user) {
-          return this.afs.doc<User>(`users/${user.uid}`).valueChanges().pipe(map((dbUser: User) => {
+          return this.userService.getUserByID(user.uid).pipe(map((dbUser: User) => {
             this.authState = !!dbUser;
             return dbUser;
           }));
