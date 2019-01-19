@@ -226,7 +226,8 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Create a chart
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
-      // chart.fontSize = '0.85em';
+      chart.fontSize = '0.9em';
+      chart.padding(15,0,15,0);
       // chart.resizable = false;
 
       // Create a date axis
@@ -250,6 +251,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
       legendContainer.width = am4core.percent(100);
       legendContainer.height = am4core.percent(100);
+      // legendContainer.padding(0, 0,150,0);
       // chart.legend.useDefaultMarker = true;
       // const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
       // marker.cornerRadius(12, 12, 12, 12);
@@ -390,11 +392,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
     if (!sameTypeSeries) {
-      if (stream.type === DataPace.type) {
-        yAxis = this.chart.yAxes.push(new am4charts.DurationAxis()); // todo Same type series should be sharing a common axis
-      } else {
-        yAxis = this.chart.yAxes.push(new am4charts.ValueAxis()); // todo Same type series should be sharing a common axis
-      }
+      yAxis = this.chart.yAxes.push(this.getYAxisForSeries(stream.type));
     } else {
       // Share
       yAxis = sameTypeSeries.yAxis;
@@ -463,7 +461,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.logger.info('Series validated');
       this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
-        this.loaded();
+      this.loaded();
       // }
     });
 
@@ -531,6 +529,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     return Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
       return +dataItemA.date - +dataItemB.date;
     })
+  }
+
+  private getYAxisForSeries(streamType: string) {
+    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
+    if (streamType === DataPace.type) {
+      yAxis = new am4charts.DurationAxis()
+    }else{
+     yAxis = new am4charts.ValueAxis();
+    }
+    return yAxis;
   }
 
   private hideSeriesYAxis(series: am4charts.XYSeries) {
