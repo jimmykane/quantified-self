@@ -6,6 +6,8 @@
            [mapTypeControl]="true"
            [scaleControl]="true"
            [rotateControl]="true"
+           [gestureHandling]="'cooperative'"
+           [scrollwheel]="null"
            [mapTypeControlOptions]="mapTypeControlOptions">
     <ng-container *ngFor="let activityMapData of activitiesMapData">
       <!-- Start Marker -->
