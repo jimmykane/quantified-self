@@ -68,6 +68,18 @@ export class LoginComponent {
     }
   }
 
+  async twitterLLogin() {
+    try {
+      return this.redirectOrShowDataPrivacyDialog(await this.authService.twitterLogin());
+    } catch (e) {
+      Raven.captureException(e);
+      this.logger.error(e);
+      this.snackBar.open(`Could not log in due to ${e}`, null, {
+        duration: 2000,
+      });
+    }
+  }
+
 
   private async redirectOrShowDataPrivacyDialog(loginServiceUser) {
     this.isLoggingIn = true;
