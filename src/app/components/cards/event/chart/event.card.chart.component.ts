@@ -42,6 +42,11 @@ import amchartsdark from "@amcharts/amcharts4/themes/amchartsdark";
 import moonrisekingdom from "@amcharts/amcharts4/themes/moonrisekingdom";
 import spiritedaway from "@amcharts/amcharts4/themes/spiritedaway";
 import kelly from "@amcharts/amcharts4/themes/kelly";
+import {DataGPSAltitude} from "quantified-self-lib/lib/data/data.altitude-gps";
+import {DataEHPE} from "quantified-self-lib/lib/data/data.ehpe";
+import {DataEVPE} from "quantified-self-lib/lib/data/data.evpe";
+import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-pressure";
+import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -326,7 +331,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     let yAxis: am4charts.Axis;
 
     // Check if we have a series with the same name aka type
-    const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === stream.type);
+    const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(stream.type));
     if (!sameTypeSeries) {
       yAxis = this.chart.yAxes.push(this.getYAxisForSeries(stream.type));
     } else {
@@ -348,7 +353,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
-    series.name = `${stream.type}`;
+
+    // Name is acting like a type so get them grouped
+    series.name = this.getSeriesName(stream.type);
 
     // series.adapter.add("tooltipText", function (text, target, key) {
     //   debugger;
@@ -484,6 +491,20 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       }, []);
     }
     return dataTypes
+  }
+
+  // This helps to goup series vy providing the same name (type) for things that should have the same axis
+  private getSeriesName(name: string) {
+    if ([DataAltitude.type, DataGPSAltitude.type].indexOf(name) !== -1){
+      return DataAltitude.type;
+    }
+    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1){
+      return 'Positional Error'
+    }
+    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1){
+      return 'Pressure'
+    }
+    return name;
   }
 
   private applyChartStylesFromUserSettings() {
