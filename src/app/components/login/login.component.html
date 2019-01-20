@@ -1,12 +1,14 @@
 <mat-card>
   <app-shade [isActive]="isLoggingIn" ></app-shade>
-  <mat-grid-list cols="2">
+  <mat-grid-list cols="3">
     <mat-grid-tile>
       <button mat-stroked-button color="primary" (click)="anonymousLogin()">Login as Anonymous<br/><span class="mat-small">no worries, everything will work</span></button>
     </mat-grid-tile>
     <mat-grid-tile>
-      <button mat-stroked-button color="primary" (click)="googleLogin()">Login with Google<br/><span class="mat-small">if you have a google account</span></button>
+      <button mat-stroked-button color="primary" (click)="googleLogin()">Login with Google<br/><span class="mat-small">if you have a Google account</span></button>
+    </mat-grid-tile>
+    <mat-grid-tile>
+      <button mat-stroked-button color="primary" (click)="facebookLogin()">Login with Facebook<br/><span class="mat-small">if you have a Facebook account</span></button>
     </mat-grid-tile>
   </mat-grid-list>
-
 </mat-card>
