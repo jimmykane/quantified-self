@@ -37,8 +37,13 @@ import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
 import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
 import {ChartThemes, UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {Log} from "ng2-logger/browser";
-import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
+import {AppThemes, UserAppSettingsInterface} from "quantified-self-lib/lib/users/user.app.settings.interface";
 import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
+import {
+  PaceUnits,
+  SpeedUnits,
+  UserUnitSettingsInterface
+} from "quantified-self-lib/lib/users/user.unit.settings.interface";
 
 @Component({
   selector: 'app-user-settings',
@@ -67,6 +72,9 @@ export class UserSettingsComponent implements OnChanges {
 
   public appThemes = AppThemes;
   public chartThemes = ChartThemes;
+
+  public speedUnits = SpeedUnits;
+  public paceUnits = PaceUnits;
 
   public userSettingsFormGroup: FormGroup;
 
@@ -100,6 +108,16 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      speedUnitsToUse: new FormControl(this.user.settings.unitSettings.speedSettings, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      paceUnitsToUse: new FormControl(this.user.settings.unitSettings.paceSettings, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
     });
   }
 
@@ -124,9 +142,13 @@ export class UserSettingsComponent implements OnChanges {
       }, {dataTypeSettings: {}, theme: this.userSettingsFormGroup.get('chartTheme').value , useAnimations: this.userSettingsFormGroup.get('useAnimations').value});
 
       await this.userService.updateUserProperties(this.user, {
-        settings: {
+        settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
-          appSettings: {theme: this.userSettingsFormGroup.get('appTheme').value}
+          appSettings: <UserAppSettingsInterface>{theme: this.userSettingsFormGroup.get('appTheme').value},
+          unitSettings: <UserUnitSettingsInterface>{
+            speedSettings: this.userSettingsFormGroup.get('speedUnitsToUse').value,
+            paceSettings: this.userSettingsFormGroup.get('paceUnitsToUse').value,
+          }
         }
       });
       this.snackBar.open('User updated', null, {

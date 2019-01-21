@@ -14,6 +14,11 @@ import {
 } from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
 import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
+import {
+  PaceUnits,
+  SpeedUnits,
+  UserUnitSettingsInterface
+} from "quantified-self-lib/lib/users/user.unit.settings.interface";
 
 
 @Injectable()
@@ -86,6 +91,9 @@ export class UserService implements OnDestroy {
     settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || this.getDefaultUserChartSettingsDataTypeSettings();
     settings.chartSettings.theme = settings.chartSettings.theme || ChartThemes.Material;
     settings.chartSettings.useAnimations = !!settings.chartSettings.useAnimations;
+    settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
+    settings.unitSettings.speedSettings = settings.unitSettings.speedSettings || [SpeedUnits.MetersPerSecond];
+    settings.unitSettings.paceSettings = settings.unitSettings.paceSettings || [PaceUnits.MinutesPerKilometer];
     return settings;
   }
 
