@@ -259,7 +259,7 @@ export class EventService implements OnDestroy {
             .collection('activities')
             .doc(activity.getID())
             .collection('streams')
-            .doc(stream.type) // @todo check this how it behaves
+            .doc(this.afs.createId())
             .set({
               type: stream.type,
               data: this.getBlobFromStreamData(stream.data),
