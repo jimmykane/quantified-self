@@ -27,7 +27,7 @@ import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface'
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
-import {DataPace} from "quantified-self-lib/lib/data/data.pace";
+import {DataPace, DataPaceMinutesPerMile} from "quantified-self-lib/lib/data/data.pace";
 import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
@@ -47,6 +47,8 @@ import {DataEHPE} from "quantified-self-lib/lib/data/data.ehpe";
 import {DataEVPE} from "quantified-self-lib/lib/data/data.evpe";
 import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-pressure";
 import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
+import {UserUnitSettingsInterface} from "quantified-self-lib/lib/users/user.unit.settings.interface";
+import {DataSpeed} from "quantified-self-lib/lib/data/data.speed";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -61,6 +63,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() userChartSettings: UserChartSettingsInterface;
+  @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
@@ -341,9 +344,11 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
+
     this.chart.series.sort((left, right) => {
-      return left.name > right.name ? 1 : 0;
+      return left.name > right.name ? 1 : 0; // @todo does not work well
     });
+
     // Set the axis
     series.yAxis = yAxis;
     // Add the tooltips
@@ -361,13 +366,13 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     //   debugger;
     //   return ">>> " + text + " <<<";
     // });
-    if (stream.type === DataPace.type) {
-      series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
+      series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
-      series.tooltipText = `${activity.creator.name}  ${stream.type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-
+      series.tooltipText = `${activity.creator.name}  ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     }
-    series.legendSettings.labelText = `${stream.type} [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
+
+    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}) [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
     // Search if there is any other series with the same color we would like to have
@@ -490,6 +495,16 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return dataTypesToUse;
       }, []);
     }
+    // If there is pace selected for the data to show on the chart then show the units selected
+    if (this.userUnitSettings){
+      // If there is pace remove and only add the settings
+      if(dataTypes.indexOf(DataPace.type) !== -1){
+        dataTypes = dataTypes.filter(dataType => dataType !== DataPace.type).concat(this.userUnitSettings.paceUnits)
+      }
+      if(dataTypes.indexOf(DataSpeed.type) !== -1){
+        dataTypes = dataTypes.filter(dataType => dataType !== DataSpeed.type).concat(this.userUnitSettings.speedUnits)
+      }
+    }
     return dataTypes
   }
 
@@ -503,6 +518,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     }
     if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1){
       return 'Pressure'
+    }
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1){
+      return 'Pace'
     }
     return name;
   }
@@ -525,7 +543,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
   private getYAxisForSeries(streamType: string) {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if (streamType === DataPace.type) {
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(streamType) !== -1) {
       yAxis = new am4charts.DurationAxis()
     } else {
       yAxis = new am4charts.ValueAxis();

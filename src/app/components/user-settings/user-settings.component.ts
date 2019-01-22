@@ -108,12 +108,12 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
-      speedUnitsToUse: new FormControl(this.user.settings.unitSettings.speedSettings, [
+      speedUnitsToUse: new FormControl(this.user.settings.unitSettings.speedUnits, [
         Validators.required,
         // Validators.minLength(1),
       ]),
 
-      paceUnitsToUse: new FormControl(this.user.settings.unitSettings.paceSettings, [
+      paceUnitsToUse: new FormControl(this.user.settings.unitSettings.paceUnits, [
         Validators.required,
         // Validators.minLength(1),
       ]),
@@ -146,8 +146,8 @@ export class UserSettingsComponent implements OnChanges {
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{theme: this.userSettingsFormGroup.get('appTheme').value},
           unitSettings: <UserUnitSettingsInterface>{
-            speedSettings: this.userSettingsFormGroup.get('speedUnitsToUse').value,
-            paceSettings: this.userSettingsFormGroup.get('paceUnitsToUse').value,
+            speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
+            paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
           }
         }
       });

@@ -76,14 +76,16 @@ export class UserService implements OnDestroy {
     return this.afs.collection('users').doc(user.uid).delete();
   }
 
-  getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
+
+
+  private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
       dataTypeSettings[dataTypeToUse] = {enabled: true};
       return dataTypeSettings
     }, {})
   }
 
-  fillMissingAppSettings(user: User): UserSettingsInterface {
+  private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
     settings.appSettings.theme = settings.appSettings.theme || AppThemes.Normal;
@@ -92,8 +94,8 @@ export class UserService implements OnDestroy {
     settings.chartSettings.theme = settings.chartSettings.theme || ChartThemes.Material;
     settings.chartSettings.useAnimations = !!settings.chartSettings.useAnimations;
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
-    settings.unitSettings.speedSettings = settings.unitSettings.speedSettings || [SpeedUnits.MetersPerSecond];
-    settings.unitSettings.paceSettings = settings.unitSettings.paceSettings || [PaceUnits.MinutesPerKilometer];
+    settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
+    settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
     return settings;
   }
 
