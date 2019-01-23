@@ -77,7 +77,7 @@ export class UploadComponent implements OnInit{
         } catch (e) {
           metaData.status = UPLOAD_STATUS.ERROR;
           Raven.captureException(e);
-          console.error(`Could not load event from file  ${file.name}`, e);
+          this.logger.error(`Could not load event from file  ${file.name}`, e);
           resolve(); // no-op here!
           return;
         }
