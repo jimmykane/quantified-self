@@ -38,6 +38,7 @@
       </mat-card-header>
 
       <mat-card-content>
+
         <mat-form-field>
           <mat-select placeholder="Theme that the charts should use" formControlName="chartTheme">
             <mat-option *ngFor="let chartTheme of chartThemes | keyvalue" [value]="chartTheme.value">
@@ -46,6 +47,7 @@
           </mat-select>
           <mat-hint><b>Tip:</b> material and kelly are one of the best 😉</mat-hint>
         </mat-form-field>
+
         <mat-form-field>
           <mat-select placeholder="Data Types to show on charts" formControlName="dataTypesToUse" multiple>
             <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
@@ -57,14 +59,25 @@
           </mat-select>
           <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
         </mat-form-field>
-          <mat-slide-toggle
-            [color]="'accent'"
-            formControlName="useAnimations">
+
+        <mat-form-field>
+          <mat-select placeholder="XAxis chart type" formControlName="xAxisType">
+            <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
+              {{xAxisType.key}}
+            </mat-option>
+          </mat-select>
+          <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>
+        </mat-form-field>
+
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="useAnimations">
           <span matTooltip="Use animations or no">
              Animations
           </span>
-          </mat-slide-toggle>
+        </mat-slide-toggle>
         <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
+
       </mat-card-content>
     </mat-card>
 
@@ -80,6 +93,7 @@
       </mat-card-header>
 
       <mat-card-content>
+
         <mat-form-field>
           <mat-select placeholder="Units for speed" formControlName="speedUnitsToUse" multiple>
             <mat-option *ngFor="let speedUnit of speedUnits | keyvalue" [value]="speedUnit.value">

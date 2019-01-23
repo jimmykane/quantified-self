@@ -28,7 +28,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 import {DataPace, DataPaceMinutesPerMile} from "quantified-self-lib/lib/data/data.pace";
-import {UserChartSettingsInterface} from "quantified-self-lib/lib/users/user.chart.settings.interface";
+import {UserChartSettingsInterface, XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
 import animated from "@amcharts/amcharts4/themes/animated";
@@ -369,7 +369,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
     if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
       series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
-      series.tooltipText = `${activity.creator.name}  ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+      series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     }
 
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}) [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
@@ -417,7 +417,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.logger.info('Series ready');
     });
 
-    this.chart.invalidateData(); // @todo Perhaps this can go away.
+    // this.chart.invalidateData(); // @todo Perhaps this can go away.
     // Finally set the data and return
     series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
     return series;
@@ -431,7 +431,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return dataArray
       }
       dataArray.push({
-        time: activity.startDate.getTime() + (index * 1000),
+        time: this.useTimeXAxis()?  activity.startDate.getTime() + (index * 1000) : ((activity.startDate.getTime() - this.event.startDate.getTime()) + (index * 1000)) - 3600000,
         value: streamData, // Display value can be string this needs to be corrected
       });
       return dataArray
@@ -507,6 +507,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       }
     }
     return dataTypes
+  }
+
+  private useTimeXAxis() {
+    return this.userChartSettings && this.userChartSettings.xAxisType === XAxisTypes.Time;
   }
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
