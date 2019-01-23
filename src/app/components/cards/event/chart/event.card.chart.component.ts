@@ -431,7 +431,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return dataArray
       }
       dataArray.push({
-        time: this.useTimeXAxis()?  activity.startDate.getTime() + (index * 1000) : ((activity.startDate.getTime() - this.event.startDate.getTime()) + (index * 1000)) - 3600000,
+        time: this.useTimeXAxis()?  activity.startDate.getTime() + (index * 1000) : ((index * 1000)) - 3600000,
         value: streamData, // Display value can be string this needs to be corrected
       });
       return dataArray
