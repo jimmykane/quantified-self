@@ -44,3 +44,7 @@ Thumbs.db
 # credentials
 client-secret.json
 credentials.tar.gz
+
+
+#firebase
+.firebase
