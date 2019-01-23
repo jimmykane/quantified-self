@@ -7,7 +7,7 @@
     "start": "ng serve",
     "build": "ng build --verbose",
     "build-production": "ng build --verbose --prod",
-    "deploy": "gcloud app deploy --project quantified-self-io  --quiet --promote --stop-previous-version --version=v1",
+    "deploy": "firebase deploy",
     "build-and-deploy-prod": "npm run build-production && npm run deploy",
     "build-and-deploy-dev": "npm run build && npm run deploy",
     "test": "ng test",
