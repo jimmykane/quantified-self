@@ -175,9 +175,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // chart.resizable = false;
 
       // Create a date axis
-      const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+      const durationAxis = chart.xAxes.push(new am4charts.DurationAxis());
       // dateAxis.skipEmptyPeriods= true;
-      dateAxis.title.text = "Time";
+      durationAxis.title.text = "Time";
       // dateAxis.baseInterval = {
       //   timeUnit: "second",
       //   count: 1
@@ -391,11 +391,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
 
     if (!this.renderPerSeries) {
       series.dataFields.valueY = series.id;
-      series.dataFields.dateX = "date";
-
+      series.dataFields.valueX = "date";
     } else {
       series.dataFields.valueY = 'value';
-      series.dataFields.dateX = "time";
+      series.dataFields.valueX = "time";
     }
 
     series.interactionsEnabled = false;
@@ -430,7 +429,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return dataArray
       }
       dataArray.push({
-        time: activity.startDate.getTime() + (index * 1000),
+        time: ((activity.startDate.getTime() - this.event.startDate.getTime()) + (index * 1000))/1000,
         value: streamData, // Display value can be string this needs to be corrected
       });
       return dataArray
