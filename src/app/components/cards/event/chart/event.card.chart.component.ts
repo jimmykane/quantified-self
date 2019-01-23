@@ -417,6 +417,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       this.logger.info('Series ready');
     });
 
+    this.chart.invalidateData(); // @todo Perhaps this can go away.
     // Finally set the data and return
     series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
     return series;
