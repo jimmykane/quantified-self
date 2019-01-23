@@ -11,6 +11,7 @@ import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importer
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UPLOAD_STATUS} from "./upload.status";
+import {Log} from "ng2-logger/browser";
 
 @Component({
   selector: 'app-upload',
@@ -25,6 +26,9 @@ export class UploadComponent implements OnInit{
   // Whether an upload is currently active
   isUploadActive = false;
   activitiesMetaData = [];
+
+  protected logger = Log.create('UploadComponent');
+
 
   constructor(
     private snackBar: MatSnackBar,
@@ -85,6 +89,8 @@ export class UploadComponent implements OnInit{
           console.error(e);
           Raven.captureException(e);
           metaData.status = UPLOAD_STATUS.ERROR;
+          resolve();
+          return;
         }
         resolve(newEvent);
       };
@@ -114,15 +120,18 @@ export class UploadComponent implements OnInit{
     for (let index = 0; index < files.length; index++) {
       processPromises.push(this.processFile(files[index]));
     }
-    await Promise.all(processPromises);
+    try {
+      await Promise.all(processPromises);
+    }catch (e) {
+      this.logger.error(e);
+      Raven.captureException(e);
+    }
     this.isUploadActive = false;
     this.snackBar.open('Processed ' + processPromises.length + ' files', null, {
       duration: 2000,
     });
 
-
     // If there is an error show a modal
-
     if (this.activitiesMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
       const dialogRef = this.dialog.open(UploadErrorComponent, {
         width: '75vw',
