@@ -36,14 +36,14 @@ import {
   MatSlideToggleModule,
   MatDatepickerModule,
   MatNativeDateModule,
-  MatRadioModule, MatPaginatorModule, MatProgressSpinnerModule, MatSelectModule,
+  MatRadioModule, MatPaginatorModule, MatProgressSpinnerModule, MatSelectModule, MatPaginatorIntl,
 } from '@angular/material';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
-import {EventTableComponent} from './components/event-table/event.table.component';
+import {EventTableComponent, MatPaginatorIntlFireStore} from './components/event-table/event.table.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
@@ -211,6 +211,7 @@ export class RavenErrorHandler implements ErrorHandler {
     SideNavService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
+    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore}
   ],
   bootstrap: [AppComponent],
 })

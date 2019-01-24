@@ -14,7 +14,7 @@ import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {
   MatCard,
-  MatPaginator,
+  MatPaginator, MatPaginatorIntl,
   MatSnackBar,
   MatSort,
   MatSortable,
@@ -406,5 +406,20 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.eventsSubscription.unsubscribe();
     this.actionButtonService.removeActionButton('mergeEvents');
     this.actionButtonService.removeActionButton('deleteEvents');
+  }
+}
+
+
+export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
+  itemsPerPageLabel = 'Items par page';
+  nextPageLabel     = 'Load more...';
+  previousPageLabel = 'go to previous set';
+
+  getRangeLabel = (page: number, pageSize: number, length: number):string => {
+    if (length === (page+2) * pageSize){
+      return `${page * pageSize} - ${(page+1) * pageSize}`
+    }
+
+    return `${page * pageSize} - ${length} `
   }
 }
