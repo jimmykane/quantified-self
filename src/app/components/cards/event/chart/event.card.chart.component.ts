@@ -49,6 +49,7 @@ import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-p
 import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
 import {UserUnitSettingsInterface} from "quantified-self-lib/lib/users/user.unit.settings.interface";
 import {DataSpeed} from "quantified-self-lib/lib/data/data.speed";
+import {DataVerticalSpeed} from "quantified-self-lib/lib/data/data.vertical-speed";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -504,6 +505,9 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       }
       if(dataTypes.indexOf(DataSpeed.type) !== -1){
         dataTypes = dataTypes.filter(dataType => dataType !== DataSpeed.type).concat(this.userUnitSettings.speedUnits)
+      }
+      if(dataTypes.indexOf(DataVerticalSpeed.type) !== -1){
+        dataTypes = dataTypes.filter(dataType => dataType !== DataVerticalSpeed.type).concat(this.userUnitSettings.verticalSpeedUnits)
       }
     }
     return dataTypes

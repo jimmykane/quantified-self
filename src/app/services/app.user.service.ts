@@ -17,7 +17,7 @@ import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings
 import {
   PaceUnits,
   SpeedUnits,
-  UserUnitSettingsInterface
+  UserUnitSettingsInterface, VerticalSpeedUnits
 } from "quantified-self-lib/lib/users/user.unit.settings.interface";
 
 
@@ -97,6 +97,7 @@ export class UserService implements OnDestroy {
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
+    settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || [VerticalSpeedUnits.MetersPerSecond];
     return settings;
   }
 

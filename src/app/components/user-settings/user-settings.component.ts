@@ -17,7 +17,7 @@ import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
 import {
   PaceUnits,
   SpeedUnits,
-  UserUnitSettingsInterface
+  UserUnitSettingsInterface, VerticalSpeedUnits
 } from "quantified-self-lib/lib/users/user.unit.settings.interface";
 
 @Component({
@@ -49,6 +49,7 @@ export class UserSettingsComponent implements OnChanges {
   public chartThemes = ChartThemes;
 
   public speedUnits = SpeedUnits;
+  public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
 
   public xAxisTypes = XAxisTypes;
@@ -100,6 +101,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      verticalSpeedUnitsToUse: new FormControl(this.user.settings.unitSettings.verticalSpeedUnits, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
     });
   }
 
@@ -135,6 +141,7 @@ export class UserSettingsComponent implements OnChanges {
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
+            verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
           }
         }
       });

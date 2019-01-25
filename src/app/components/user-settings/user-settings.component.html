@@ -112,6 +112,15 @@
           <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
         </mat-form-field>
 
+        <mat-form-field>
+          <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse" multiple>
+            <mat-option *ngFor="let verticalSpeedUnit of verticalSpeedUnits | keyvalue" [value]="verticalSpeedUnit.value">
+              {{verticalSpeedUnit.value}}
+            </mat-option>
+          </mat-select>
+          <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+        </mat-form-field>
+
       </mat-card-content>
 
     </mat-card>
