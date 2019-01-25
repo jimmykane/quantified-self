@@ -577,20 +577,22 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
     return chart.series.values
-      .filter(series => !series.isHidden);
+      .filter(series => !series.hidden);
   }
 
   private hideSeries(series: am4charts.XYSeries) {
+    // series.disabled = true;
     series.hidden = true;
-    series.hide();
+    // series.hide();
     if (!this.getVisibleSeriesWithSameYAxis(series).length) {
       this.hideSeriesYAxis(series)
     }
   }
 
   private showSeries(series: am4charts.XYSeries) {
+    // series.disabled = false;
     series.hidden = false;
-    series.show();
+    // series.show();
     this.showSeriesYAxis(series);
   }
 
