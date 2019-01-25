@@ -205,7 +205,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // marker.stroke = am4core.color("#ccc");
 
 
-      chart.legend.itemContainers.template.events.on("toggled", (ev) => {
+      chart.legend.itemContainers.template.events.on("hit", (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
         if (!ev.target.readerChecked) {
@@ -431,7 +431,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         return dataArray
       }
       dataArray.push({
-        time: this.useTimeXAxis()?  activity.startDate.getTime() + (index * 1000) : ((index * 1000)) - 3600000,
+        time: this.useTimeXAxis() ? activity.startDate.getTime() + (index * 1000) : ((index * 1000)) - 3600000,
         value: streamData, // Display value can be string this needs to be corrected
       });
       return dataArray
@@ -497,15 +497,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       }, []);
     }
     // If there is pace selected for the data to show on the chart then show the units selected
-    if (this.userUnitSettings){
+    if (this.userUnitSettings) {
       // If there is pace remove and only add the settings
-      if(dataTypes.indexOf(DataPace.type) !== -1){
+      if (dataTypes.indexOf(DataPace.type) !== -1) {
         dataTypes = dataTypes.filter(dataType => dataType !== DataPace.type).concat(this.userUnitSettings.paceUnits)
       }
-      if(dataTypes.indexOf(DataSpeed.type) !== -1){
+      if (dataTypes.indexOf(DataSpeed.type) !== -1) {
         dataTypes = dataTypes.filter(dataType => dataType !== DataSpeed.type).concat(this.userUnitSettings.speedUnits)
       }
-      if(dataTypes.indexOf(DataVerticalSpeed.type) !== -1){
+      if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
         dataTypes = dataTypes.filter(dataType => dataType !== DataVerticalSpeed.type).concat(this.userUnitSettings.verticalSpeedUnits)
       }
     }
@@ -518,16 +518,16 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
   private getSeriesName(name: string) {
-    if ([DataAltitude.type, DataGPSAltitude.type].indexOf(name) !== -1){
+    if ([DataAltitude.type, DataGPSAltitude.type].indexOf(name) !== -1) {
       return DataAltitude.type;
     }
-    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1){
+    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
       return 'Positional Error'
     }
-    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1){
+    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
       return 'Pressure'
     }
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1){
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
       return 'Pace'
     }
     return name;
@@ -577,23 +577,28 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
     return chart.series.values
-      .filter(series => !series.hidden);
+      .filter(series => !series.hidden || !series.isHidden);
   }
 
   private hideSeries(series: am4charts.XYSeries) {
-    // series.disabled = true;
-    series.hidden = true;
-    // series.hide();
+    if (!series.data.length) {
+      series.disabled = true;
+    }
+    // series.hidden = true;
+    series.hide();
     if (!this.getVisibleSeriesWithSameYAxis(series).length) {
       this.hideSeriesYAxis(series)
     }
   }
 
   private showSeries(series: am4charts.XYSeries) {
-    // series.disabled = false;
+    if (series.disabled) {
+      series.disabled = false;
+    }
     series.hidden = false;
-    // series.show();
     this.showSeriesYAxis(series);
+    // series.show();
+
   }
 
   private loading() {
