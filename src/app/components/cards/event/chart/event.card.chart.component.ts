@@ -259,7 +259,7 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
       // Attach events
       chart.events.on('validated', (ev) => {
         this.logger.info('validated');
-        if (this.chart.data.length) {
+        if (ev.target.data.length) {
           this.loaded();
         }
       });
@@ -543,10 +543,10 @@ export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy,
         return;
       }
 
+      am4core.useTheme(this.themes[this.userChartSettings.theme]);
       if (this.userChartSettings.useAnimations) {
         am4core.useTheme(animated);
       }
-      am4core.useTheme(this.themes[this.userChartSettings.theme]);
     });
   }
 
