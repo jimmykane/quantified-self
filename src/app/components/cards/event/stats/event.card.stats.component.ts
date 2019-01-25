@@ -55,7 +55,7 @@ export class EventCardStatsComponent implements OnChanges {
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
           return rowObj;
-        }, {Name: stat.getType()}),
+        }, {Name: `${stat.getDisplayType()}` + (stat.getDisplayUnit() ? ` (${stat.getDisplayUnit()})`: '') }),
       );
       return array;
     }, []);
