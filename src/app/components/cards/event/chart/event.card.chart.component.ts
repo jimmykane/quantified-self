@@ -193,23 +193,22 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Create a Legend
       chart.legend = new am4charts.Legend();
       chart.legend.fontSize = '0.9em';
-      const legendContainer = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-      legendContainer.width = am4core.percent(100);
-      legendContainer.height = am4core.percent(100);
-      // legendContainer.padding(0, 0,150,0);
+      chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+      chart.legend.parent.width = am4core.percent(100);
+      chart.legend.parent.height = am4core.percent(100);
+
       // chart.legend.useDefaultMarker = true;
       // const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
       // marker.cornerRadius(12, 12, 12, 12);
       // marker.strokeWidth = 2;
       // marker.strokeOpacity = 1;
       // marker.stroke = am4core.color("#ccc");
-      chart.legend.parent = legendContainer;
 
-      chart.legend.itemContainers.template.events.on("hit", (ev) => {
-        // debugger;
+
+      chart.legend.itemContainers.template.events.on("toggled", (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
-        if (!series.isHidden) {
+        if (!ev.target.readerChecked) {
           this.showSeries(series)
         } else {
           this.hideSeries(series)
