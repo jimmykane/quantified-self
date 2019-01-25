@@ -61,7 +61,7 @@ import {EventFormComponent} from './components/event-form/event.form.component';
 import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
 import {MapActionsComponent} from './components/map-actions/map.actions.component';
 import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
-import {EventCardChartNewComponent} from './components/cards/event/chart/event.card.chart.component';
+import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
 import {UploadErrorComponent} from './components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from './components/activity-metadata/activity-metadata.component';
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
@@ -177,7 +177,7 @@ export class RavenErrorHandler implements ErrorHandler {
     ActivityFormComponent,
     ActivityActionsComponent,
     MapActionsComponent,
-    EventCardChartNewComponent,
+    EventCardChartComponent,
     UploadErrorComponent,
     ActivityMetadataComponent,
     ChartActionsComponent,

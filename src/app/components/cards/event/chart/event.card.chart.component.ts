@@ -57,7 +57,7 @@ import {DataVerticalSpeed} from "quantified-self-lib/lib/data/data.vertical-spee
   styleUrls: ['./event.card.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EventCardChartNewComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('chartDiv') chartDiv: ElementRef;
   @ViewChild('legendDiv') legendDiv: ElementRef;
