@@ -92,7 +92,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
     settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || this.getDefaultUserChartSettingsDataTypeSettings();
     settings.chartSettings.theme = settings.chartSettings.theme || ChartThemes.Material;
-    settings.chartSettings.useAnimations = !!settings.chartSettings.useAnimations;
+    settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || XAxisTypes.Duration;
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
