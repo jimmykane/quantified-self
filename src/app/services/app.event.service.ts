@@ -3,6 +3,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
 import {combineLatest, merge, EMPTY, of, Observable, Observer, from, zip} from 'rxjs';
 import {
+  Action,
   AngularFirestore,
   AngularFirestoreCollection,
   DocumentChangeAction, DocumentSnapshot, DocumentSnapshotExists,
@@ -205,25 +206,22 @@ export class EventService implements OnDestroy {
         .doc(eventID)
         .collection('activities')
         .doc(activityID)
-        .collection('streams', ref => ref.where('type', '==', type))
+        .collection('streams')
+        .doc(type)
         .snapshotChanges()
-        .pipe(map((streamSnapshots) => { // @todo should be reduce
-          return this.processStreamDocumentSnapshots(streamSnapshots)[0] // Get the first element of the return
+        .pipe(map((documentSnapshot) => { // @todo should be reduce
+          return documentSnapshot.payload.exists?   this.processStreamDocumentSnapshots(documentSnapshot) : null;
         }))                                                      // since the return with equality on the query should only fetch one afaik in my model
     })).pipe(map((streams: StreamInterface[]) => {
-      // debugger;
       return streams.filter((stream) => !!stream)
     }))
   }
 
-  private processStreamDocumentSnapshots(streamSnapshots: DocumentChangeAction<firestore.DocumentData>[]): StreamInterface[] {
-    return streamSnapshots.reduce((streamArray, streamSnapshot) => {
-      streamArray.push(EventImporterJSON.getStreamFromJSON({
-        type: <string>streamSnapshot.payload.doc.data().type,
-        data: this.getStreamDataFromBlob(streamSnapshot.payload.doc.data().data),
-      }));
-      return streamArray
-    }, [])
+  private processStreamDocumentSnapshots(streamSnapshot: Action<firestore.DocumentSnapshot>): StreamInterface {
+      return EventImporterJSON.getStreamFromJSON({
+        type: <string>streamSnapshot.payload.data().type,
+        data: this.getStreamDataFromBlob(streamSnapshot.payload.data().data),
+      });
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
