@@ -265,23 +265,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
       chart.events.on('globalscalechanged', (ev) => {
         this.logger.info('globalscalechanged');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       });
 
       chart.events.on('dataitemsvalidated', (ev) => {
         this.logger.info('dataitemsvalidated');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       });
 
 
       chart.events.on('datavalidated', (ev) => {
         this.logger.info('datavalidated');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       });
 
       chart.events.on('datarangechanged', (ev) => {
         this.logger.info('datarangechanged');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       });
 
       chart.events.on('ready', (ev) => {
@@ -291,17 +287,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
       chart.events.on('shown', (ev) => {
         this.logger.info('shown');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       });
 
       chart.events.on('transformed', (ev) => {
         this.logger.info('transformed');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       });
 
       chart.events.on('maxsizechanged', (ev) => {
         this.logger.info('maxsizechanged');
-        // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
       });
 
       chart.events.on('visibilitychanged', (ev) => {
@@ -407,8 +401,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // Attach events
     series.events.on('validated', (ev) => {
       this.logger.info('Series validated');
-      this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
+      // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
+      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
       this.loaded();
       // }
     });
