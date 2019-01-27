@@ -19,7 +19,7 @@ import {Log} from "ng2-logger/browser";
   styleUrls: ['./upload.component.css'],
 })
 
-export class UploadComponent implements OnInit{
+export class UploadComponent implements OnInit {
 
   @Input() user: User;
 
@@ -38,53 +38,45 @@ export class UploadComponent implements OnInit{
   }
 
   ngOnInit(): void {
-     if (!this.user){
+    if (!this.user) {
       throw "This component can only be used with a user"
     }
   }
+
   /**
    * Process each uploaded activity
    * @param file
    * @returns {Promise}
    */
-  processFile(file): Promise<EventInterface> {
+  processFile(metaData): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
-      const {name} = file,
-        nameParts = name.split('.'),
-        extension = nameParts.pop().toLowerCase(),
-        activityName = nameParts.join('.'),
-        metaData = {
-          name: activityName,
-          status: UPLOAD_STATUS.PROCESSING,
-        };
-      this.activitiesMetaData.push(metaData);
       fileReader.onload = async () => {
         let newEvent;
         const fileReaderResult = fileReader.result;
         try {
 
-          if ((typeof fileReaderResult === 'string') && extension === 'json') {
+          if ((typeof fileReaderResult === 'string') && metaData.extension === 'json') {
             newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
-          } else if ((typeof fileReaderResult === 'string') && extension === 'tcx') {
+          } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'tcx') {
             newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
-          } else if ((typeof fileReaderResult === 'string') && extension === 'gpx') {
+          } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'gpx') {
             newEvent = await EventImporterGPX.getFromString(fileReaderResult);
-          } else if ((fileReaderResult instanceof  ArrayBuffer) && extension === 'fit') {
+          } else if ((fileReaderResult instanceof ArrayBuffer) && metaData.extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
           }
-          newEvent.name = activityName;
+          newEvent.name = metaData.filename;
         } catch (e) {
           metaData.status = UPLOAD_STATUS.ERROR;
           Raven.captureException(e);
-          this.logger.error(`Could not load event from file  ${file.name}`, e);
+          this.logger.error(`Could not load event from file  ${metaData.file.name}`, e);
           resolve(); // no-op here!
           return;
         }
         try {
           await this.eventService.setEvent(this.user, newEvent);
           metaData.status = UPLOAD_STATUS.PROCESSED;
-        }catch (e) {
+        } catch (e) {
           // debugger;
           console.error(e);
           Raven.captureException(e);
@@ -95,12 +87,12 @@ export class UploadComponent implements OnInit{
         resolve(newEvent);
       };
       // Read it depending on the extension
-      if (extension === 'fit') {
+      if (metaData.extension === 'fit') {
         // Fit files should be read as array buffers
-        fileReader.readAsArrayBuffer(file);
+        fileReader.readAsArrayBuffer(metaData.file);
       } else {
         // All other as text
-        fileReader.readAsText(file);
+        fileReader.readAsText(metaData.file);
       }
     });
   }
@@ -116,18 +108,30 @@ export class UploadComponent implements OnInit{
 
     this.isUploadActive = true;
     const files = event.target.files || event.dataTransfer.files;
-    const processPromises = [];
+
+    // First create the metadata on a single loop so subcomponents can get updated
     for (let index = 0; index < files.length; index++) {
-      processPromises.push(this.processFile(files[index]));
+      this.activitiesMetaData.push({
+        file: files[index],
+        name: files[index].name,
+        status: UPLOAD_STATUS.PROCESSING,
+        extension: files[index].name.split('.').pop().toLowerCase(),
+        filename: files[index].name.split('.').shift(),
+      });
     }
-    try {
-      await Promise.all(processPromises);
-    }catch (e) {
-      this.logger.error(e);
-      Raven.captureException(e);
+
+    // Then actually start processing them
+    for (let index = 0; index < this.activitiesMetaData.length; index++) {
+      try {
+        await this.processFile(this.activitiesMetaData[index]);
+      } catch (e) {
+        this.logger.error(e);
+        Raven.captureException(e);
+      }
     }
+
     this.isUploadActive = false;
-    this.snackBar.open('Processed ' + processPromises.length + ' files', null, {
+    this.snackBar.open('Processed ' + this.activitiesMetaData.length + ' files', null, {
       duration: 2000,
     });
 

@@ -26,6 +26,12 @@ export class UploadInfoComponent implements OnInit {
     })
   }
 
+  getFailedActivities() {
+    return this.activitiesMetaData.filter((activity) => {
+      return activity.status === UPLOAD_STATUS.ERROR;
+    })
+  }
+
   ngOnInit() {
   }
 
