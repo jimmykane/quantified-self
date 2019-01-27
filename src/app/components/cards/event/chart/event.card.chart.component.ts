@@ -366,7 +366,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     }
 
-    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` +  (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})`: '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
+    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
     // Search if there is any other series with the same color we would like to have
@@ -383,14 +383,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
 
-    if (!this.renderPerSeries) {
-      series.dataFields.valueY = series.id;
-      series.dataFields.dateX = "date";
-
-    } else {
-      series.dataFields.valueY = 'value';
-      series.dataFields.dateX = "time";
-    }
+    series.dataFields.valueY = !this.renderPerSeries ? series.id : 'value';
+    series.dataFields.dateX = "date";
+    
 
     series.interactionsEnabled = false;
 
@@ -421,12 +416,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-    const data = stream.data.reduce((dataArray: { time: number, value: number | string | boolean }[], streamData, index) => {
+    const data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
       if (!isNumber(streamData)) {
         return dataArray
       }
       dataArray.push({
-        time: this.useTimeXAxis()?  activity.startDate.getTime() + (index * 1000) : ((index * 1000)) - 3600000,
+        date: this.useTimeXAxis() ? new Date(activity.startDate.getTime() + (index * 1000)) : new Date(((index * 1000)) - 3600000),
         value: streamData, // Display value can be string this needs to be corrected
       });
       return dataArray
@@ -492,15 +487,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       }, []);
     }
     // If there is pace selected for the data to show on the chart then show the units selected
-    if (this.userUnitSettings){
+    if (this.userUnitSettings) {
       // If there is pace remove and only add the settings
-      if(dataTypes.indexOf(DataPace.type) !== -1){
+      if (dataTypes.indexOf(DataPace.type) !== -1) {
         dataTypes = dataTypes.filter(dataType => dataType !== DataPace.type).concat(this.userUnitSettings.paceUnits)
       }
-      if(dataTypes.indexOf(DataSpeed.type) !== -1){
+      if (dataTypes.indexOf(DataSpeed.type) !== -1) {
         dataTypes = dataTypes.filter(dataType => dataType !== DataSpeed.type).concat(this.userUnitSettings.speedUnits)
       }
-      if(dataTypes.indexOf(DataVerticalSpeed.type) !== -1){
+      if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
         dataTypes = dataTypes.filter(dataType => dataType !== DataVerticalSpeed.type).concat(this.userUnitSettings.verticalSpeedUnits)
       }
     }
@@ -513,16 +508,16 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
   private getSeriesName(name: string) {
-    if ([DataAltitude.type, DataGPSAltitude.type].indexOf(name) !== -1){
+    if ([DataAltitude.type, DataGPSAltitude.type].indexOf(name) !== -1) {
       return DataAltitude.type;
     }
-    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1){
+    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
       return 'Positional Error'
     }
-    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1){
+    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
       return 'Pressure'
     }
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1){
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
       return 'Pace'
     }
     return name;
