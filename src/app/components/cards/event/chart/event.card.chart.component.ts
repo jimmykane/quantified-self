@@ -178,7 +178,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Create a date axis
       const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
       // dateAxis.skipEmptyPeriods= true;
-      dateAxis.title.text = "Time";
+      dateAxis.title.text =  this.useTimeXAxis() ? "Time" : 'Duration';
       // dateAxis.baseInterval = {
       //   timeUnit: "second",
       //   count: 1
@@ -384,8 +384,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = !this.renderPerSeries ? series.id : 'value';
-    series.dataFields.dateX = "date";
-    
+    series.dataFields.dateX = "time";
+
 
     series.interactionsEnabled = false;
 
@@ -416,16 +416,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-    const data = stream.data.reduce((dataArray: { date: Date, value: number | string | boolean }[], streamData, index) => {
-      if (!isNumber(streamData)) {
-        return dataArray
-      }
-      dataArray.push({
-        date: this.useTimeXAxis() ? new Date(activity.startDate.getTime() + (index * 1000)) : new Date(((index * 1000)) - 3600000),
-        value: streamData, // Display value can be string this needs to be corrected
-      });
-      return dataArray
-    }, [])
+    let data = this.useTimeXAxis() ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration(-3600000); // Default unix timestamp is at 1 hours its kinda hacky but easy
+    data = data
+      .filter((streamData) => streamData.value !== null)
       .filter((data, index) => (index % samplingRate) === 0);
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
