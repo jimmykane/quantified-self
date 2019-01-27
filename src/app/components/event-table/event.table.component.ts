@@ -71,6 +71,71 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnInit() {
+    this.subscribeToAll();
+  }
+
+  ngAfterViewInit() {
+  }
+
+  ngOnChanges(): void {
+  }
+
+  checkBoxClick(row) {
+    this.selection.toggle(row);
+    this.updateActionButtonService();
+  }
+
+  /** Whether the number of selected elements matches the total number of rows. */
+  isAllSelected() {
+    const numSelected = this.selection.selected.length;
+    const numRows = this.data.data.length;
+    return numSelected === numRows;
+  }
+
+
+  /** Selects all rows if they are not all selected; otherwise clear selection. */
+  masterToggle() {
+    this.isAllSelected() ?
+      this.selection.clear() :
+      this.data.data.forEach(row => this.selection.select(row));
+    this.updateActionButtonService();
+  }
+
+
+  applyFilter(filterValue: string) {
+    filterValue = filterValue.trim(); // Remove whitespace
+    filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
+    this.data.filter = filterValue;
+  }
+
+  getColumnHeaderIcon(columnName): string {
+    switch (columnName) {
+      case 'stats.Distance':
+        return 'trending_flat';
+      case 'stats.Duration':
+        return 'timer';
+      case 'startDate':
+        return 'date_range';
+      case 'device':
+        return 'watch';
+      case 'name':
+        return 'font_download';
+      case 'activities':
+        return 'filter_none';
+      case 'privacy':
+        return 'visibility';
+      default:
+        return null;
+    }
+  }
+
+  isColumnHeaderSortable(columnName): boolean {
+    return ['startDate', 'stats.Distance', 'stats.Duration'].indexOf(columnName) !== -1;
+  }
+
+  private subscribeToAll() {
+    this.paginator.pageIndex = 0;
+    this.currentPageIndex = 0;
     // If the user changes the sort order, reset back to the first page.
     this.sortSubscription = this.sort.sortChange.subscribe(() => {
       this.paginator.pageIndex = 0;
@@ -225,65 +290,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       });
   }
 
-  ngAfterViewInit() {
-  }
-
-  ngOnChanges(): void {
-  }
-
-  checkBoxClick(row) {
-    this.selection.toggle(row);
-    this.updateActionButtonService();
-  }
-
-  /** Whether the number of selected elements matches the total number of rows. */
-  isAllSelected() {
-    const numSelected = this.selection.selected.length;
-    const numRows = this.data.data.length;
-    return numSelected === numRows;
-  }
-
-
-  /** Selects all rows if they are not all selected; otherwise clear selection. */
-  masterToggle() {
-    this.isAllSelected() ?
-      this.selection.clear() :
-      this.data.data.forEach(row => this.selection.select(row));
-    this.updateActionButtonService();
-  }
-
-
-  applyFilter(filterValue: string) {
-    filterValue = filterValue.trim(); // Remove whitespace
-    filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
-    this.data.filter = filterValue;
-  }
-
-  getColumnHeaderIcon(columnName): string {
-    switch (columnName) {
-      case 'stats.Distance':
-        return 'trending_flat';
-      case 'stats.Duration':
-        return 'timer';
-      case 'startDate':
-        return 'date_range';
-      case 'device':
-        return 'watch';
-      case 'name':
-        return 'font_download';
-      case 'activities':
-        return 'filter_none';
-      case 'privacy':
-        return 'visibility';
-      default:
-        return null;
-    }
-  }
-
-  isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'stats.Distance', 'stats.Duration'].indexOf(columnName) !== -1;
-  }
-
   private updateActionButtonService() {
     // Remove all at start and add progressively
     this.actionButtonService.removeActionButton('mergeEvents');
@@ -327,12 +333,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.isLoadingResults = true;
           this.actionButtonService.removeActionButton('deleteEvents');
           this.actionButtonService.removeActionButton('mergeEvents');
+          this.unsubscribeFromAll();
           const deletePromises = [];
           this.selection.selected.map(selected => selected.checkbox).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
           this.eventSelectionMap.clear();
           this.selection.clear();
           await Promise.all(deletePromises);
           this.isLoadingResults = false;
+          this.subscribeToAll();
           this.snackBar.open('Events deleted', null, {
             duration: 2000,
           });
@@ -401,9 +409,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     return columns
   }
 
-  ngOnDestroy() {
+  private unsubscribeFromAll(){
     this.sortSubscription.unsubscribe();
     this.eventsSubscription.unsubscribe();
+  }
+
+  ngOnDestroy() {
+    this.unsubscribeFromAll();
     this.actionButtonService.removeActionButton('mergeEvents');
     this.actionButtonService.removeActionButton('deleteEvents');
   }
