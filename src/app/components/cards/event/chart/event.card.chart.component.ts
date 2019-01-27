@@ -416,7 +416,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-    let data = this.useTimeXAxis() ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration(-3600000); // Default unix timestamp is at 1 hours its kinda hacky but easy
+    let data = this.useTimeXAxis() ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date()).getTimezoneOffset()*60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
     data = data
       .filter((streamData) => streamData.value !== null)
       .filter((data, index) => (index % samplingRate) === 0);
