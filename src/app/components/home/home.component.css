@@ -7,3 +7,7 @@ mat-icon{
   height:50px;
   width: 50px;
 }
+
+mat-grid-list{
+  margin: 2em;
+}
