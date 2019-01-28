@@ -1,3 +1,7 @@
 mat-card{
   min-height: 100vh;
 }
+
+mat-icon{
+  font-size: 3.2em;
+}

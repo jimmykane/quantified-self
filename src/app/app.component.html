@@ -8,12 +8,8 @@
     <a matTabLink (click)="sidenav.toggle()">
       <mat-icon>menu</mat-icon>
     </a>
-    <a matTabLink *ngIf="authService.authenticated()" [routerLink]="['dashboard']">
-      Quantified Self
-      <!--{{ title }}-->
-    </a>
-    <a matTabLink *ngIf="!authService.authenticated()" [routerLink]="['home']">
-      Quantified Self
+    <a matTabLink [routerLink]="authService.authenticated() ? ['dashboard'] : ['home']">
+      <mat-icon class="app-icon">filter_hdr</mat-icon>Quantified-Self.io
       <!--{{ title }}-->
     </a>
 

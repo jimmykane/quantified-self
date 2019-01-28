@@ -14,6 +14,11 @@ mat-sidenav{
   border-right: 1px solid rgba(0,0,0,.12);
 }
 
+mat-icon.app-icon{
+  vertical-align: middle;
+  margin-right: 1em;
+}
+
 .mat-tab-link{
   min-width: 10%;
 }
