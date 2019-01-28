@@ -13,9 +13,12 @@ mat-sidenav{
   padding: 1vw;
   border-right: 1px solid rgba(0,0,0,.12);
 }
+mat-icon{
+  vertical-align: middle;
+
+}
 
 mat-icon.app-icon{
-  vertical-align: middle;
   margin-right: 1em;
 }
 
