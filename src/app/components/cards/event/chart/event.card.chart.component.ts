@@ -544,13 +544,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private hideSeriesYAxis(series: am4charts.XYSeries) {
     series.yAxis.disabled = true;
-    series.yAxis.hidden = true;
     series.yAxis.renderer.grid.template.disabled = true;
   }
 
   private showSeriesYAxis(series: am4charts.XYSeries) {
     series.yAxis.disabled = false;
-    series.yAxis.hidden = false;
     series.yAxis.renderer.grid.template.disabled = false;
   }
 
