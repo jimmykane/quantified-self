@@ -3,5 +3,7 @@ mat-card{
 }
 
 mat-icon{
-  font-size: 3.2em;
+  font-size: 50px;
+  height:50px;
+  width: 50px;
 }

@@ -1,4 +1,4 @@
-import {Component} from '@angular/core';
+import {Component, HostListener} from '@angular/core';
 import {MatDialog, MatSnackBar} from '@angular/material';
 import {Router} from '@angular/router';
 import {AppAuthService} from '../../authentication/app.auth.service';
@@ -111,6 +111,11 @@ export class LoginComponent {
     dialogRef.afterClosed().subscribe(result => {
       this.isLoggingIn = false;
     });
+  }
+
+  @HostListener('window:resize', ['$event'])
+  getColumnsToDisplayDependingOnScreenSize(event?) {
+   return window.innerWidth < 600 ? 1 : 2;
   }
 
 }

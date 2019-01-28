@@ -12,3 +12,6 @@ mat-icon{
 mat-toolbar-row{
   /*font-size: 1em;*/
 }
+.mat-toolbar{
+  background: inherit;
+}
