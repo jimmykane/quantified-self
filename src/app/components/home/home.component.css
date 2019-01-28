@@ -11,3 +11,7 @@ mat-icon{
 mat-grid-list{
   margin: 2em;
 }
+
+mat-grid-tile{
+  /*padding: 2em;*/
+}
