@@ -180,7 +180,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Create a date axis
       const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
       // dateAxis.skipEmptyPeriods= true;
-      dateAxis.title.text =  this.useTimeXAxis() ? "Time" : 'Duration';
+      dateAxis.title.text = this.useTimeXAxis() ? "Time" : 'Duration';
       // dateAxis.baseInterval = {
       //   timeUnit: "second",
       //   count: 1
@@ -249,7 +249,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         label: "...️",
         menu: [
           {"type": "png", "label": "PNG", options: {useRetina: true}},
+          {"type": "json", "label": "JSON"},
           {"type": "csv", "label": "CSV"},
+          {"type": "xlsx", "label": "XLSX"},
           {"label": "Print", "type": "print"},
         ],
       }];
@@ -418,7 +420,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-    let data = this.useTimeXAxis() ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date()).getTimezoneOffset()*60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
+    let data = this.useTimeXAxis() ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date()).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
     data = data
       .filter((streamData) => streamData.value !== null)
       .filter((data, index) => (index % samplingRate) === 0);
