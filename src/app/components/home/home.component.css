@@ -12,6 +12,7 @@ mat-grid-list{
   margin: 2em;
 }
 
-mat-grid-tile{
+mat-grid-tile.app-icon{
+  text-align: center;
   /*padding: 2em;*/
 }
