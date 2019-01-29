@@ -13,7 +13,11 @@
       <!--{{ title }}-->
     </a>
 
+    <span class="fill-space"></span>
+    <button class="login" *ngIf="!authService.authenticated()" [routerLink]="['login']"  mat-stroked-button color="accent">Login</button>
+
   </nav>
+
   <!--<mat-card>-->
     <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
   <!--</mat-card>-->
