@@ -49,7 +49,7 @@ export class ChartActionsComponent implements OnChanges {
     if (!value){
       return '';
     }
-    return `${((value -1)  *100 /40).toFixed(0) }%`
+    return `${((value -1)  *100 /20).toFixed(0) }%`
   }
 
   ngOnChanges(simpleChanges) {

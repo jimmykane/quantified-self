@@ -29,10 +29,10 @@
       Smoothing:  <b>{{formatLabel(dataSmoothingLevel)}}</b>
     </mat-hint>
     <mat-slider
-      [max]="40"
+      [max]="20"
       [min]="1"
-      [step]="4"
-      [tickInterval]="2"
+      [step]="1"
+      [tickInterval]="1"
       [thumbLabel]="true"
       [displayWith]="formatLabel"
       [(ngModel)]="dataSmoothingLevel"
