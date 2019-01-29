@@ -68,6 +68,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
+  @Input() dataSmoothingLevel: number;
+
 
   public isLoading: boolean;
 
@@ -120,7 +122,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.userChartSettings) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -426,10 +428,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
     const numberOfSamples = stream.getNumericData().length;
-    let samplingRate = 1;
+    let samplingRate;
     const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
-    samplingRate = Math.ceil((numberOfSamplesToHours * 3 * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities)
+    samplingRate = Math.ceil((numberOfSamplesToHours * 3 * this.dataSmoothingLevel * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities);
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }

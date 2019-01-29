@@ -1,7 +1,7 @@
 <button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu">
+<mat-menu #menu="matMenu" >
   <!--<section mat-menu-item>-->
     <!--<mat-slide-toggle-->
       <!--[color]="'accent'"-->
@@ -15,11 +15,30 @@
   <section mat-menu-item>
     <mat-slide-toggle
       [color]="'accent'"
-      (change)="checkBoxChanged($event)"
+      (change)="somethingChanged($event)"
+      (click)="$event.stopPropagation();"
       [(ngModel)]="showAllData">
-      <span matTooltip="Some data are filtered to not clutter the chart by default. Turn this toggle on to show all available data that exist">
+      <span matTooltip="Show everything that was read from the file">
         Show all data
       </span>
     </mat-slide-toggle>
+  </section>
+
+  <section mat-menu-item class="smoothing">
+    <mat-hint>
+      Smoothing:  <b>{{formatLabel(dataSmoothingLevel)}}</b>
+    </mat-hint>
+    <mat-slider
+      [max]="40"
+      [min]="1"
+      [step]="4"
+      [tickInterval]="2"
+      [thumbLabel]="true"
+      [displayWith]="formatLabel"
+      [(ngModel)]="dataSmoothingLevel"
+      (change)="somethingChanged($event)"
+      (click)="$event.stopPropagation();"
+      [vertical]="false">
+    </mat-slider>
   </section>
 </mat-menu>

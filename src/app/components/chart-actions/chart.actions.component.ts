@@ -22,10 +22,11 @@ export class ChartActionsComponent implements OnChanges {
 
   @Input() useDistanceAxis: boolean;
   @Input() showAllData: boolean;
-  @Input() showOnlyOneYAxis: boolean;
+  @Input() dataSmoothingLevel: number;
 
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() useDistanceAxisChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() dataSmoothingLevelChange: EventEmitter<number> = new EventEmitter<number>();
 
   constructor(
     private eventService: EventService,
@@ -34,13 +35,21 @@ export class ChartActionsComponent implements OnChanges {
     private userSettingsService: UserSettingsService) {
   }
 
-  checkBoxChanged(event) {
+  somethingChanged(event) {
     this.useDistanceAxisChange.emit(this.useDistanceAxis);
     this.showAllDataChange.emit(this.showAllData);
+    this.dataSmoothingLevelChange.emit(this.dataSmoothingLevel);
     this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
     this.userSettingsService.setShowAllData(this.showAllData);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
+  }
+
+  formatLabel(value: number | null) {
+    if (!value){
+      return '';
+    }
+    return `${((value -1)  *100 /40).toFixed(0) }%`
   }
 
   ngOnChanges(simpleChanges) {

@@ -74,6 +74,7 @@
           <app-chart-actions
             [(useDistanceAxis)]="useDistanceAxis"
             [(showAllData)]="showAllData"
+            [(dataSmoothingLevel)]="dataSmoothingLevel"
             align="end">
           </app-chart-actions>
         </ng-template>
@@ -85,6 +86,7 @@
           [user]="targetUser"
           [userChartSettings]="currentUser ? currentUser.settings.chartSettings : null"
           [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
+          [dataSmoothingLevel]="dataSmoothingLevel"
           [event]="event">
         </app-event-card-chart>
       </mat-tab>
