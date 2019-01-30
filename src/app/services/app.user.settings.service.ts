@@ -52,6 +52,17 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
+  public async selectedDataTypes(): Promise<string[]|null> {
+    let defaultValue = null;
+    try {
+      const stringValue = await this.chartSettingsLocalStorageService.getItem('selectedDataTypes');
+      defaultValue = stringValue.split(',');
+    } catch (e) {
+      this.chartSettingsLocalStorageService.setItem('showAllData', null);
+    }
+    return defaultValue;
+  }
+
   public setShowAutoLaps(value: boolean) {
     this.mapSettingsLocalStorageService.setItem('showAutoLaps', String(value));
   }
@@ -66,6 +77,10 @@ export class UserSettingsService {
 
   public setShowAllData(value: boolean) {
     this.chartSettingsLocalStorageService.setItem('showAllData', String(value));
+  }
+
+  public setSelectedDataTypes(value: string[]) {
+    this.chartSettingsLocalStorageService.setItem('selectedDataTypes', value.join(','));
   }
 }
 

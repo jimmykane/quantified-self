@@ -50,6 +50,7 @@ import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-
 import {UserUnitSettingsInterface} from "quantified-self-lib/lib/users/user.unit.settings.interface";
 import {DataSpeed} from "quantified-self-lib/lib/data/data.speed";
 import {DataVerticalSpeed} from "quantified-self-lib/lib/data/data.vertical-speed";
+import {UserSettingsService} from "../../../../services/app.user.settings.service";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -94,6 +95,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   constructor(private  changeDetector: ChangeDetectorRef,
               private zone: NgZone,
               private eventService: EventService,
+              private userSettingsService: UserSettingsService,
               private eventColorService: EventColorService) {
   }
 
@@ -107,6 +109,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   async ngOnChanges(simpleChanges) {
+
     // 1. If there is no chart create
     if (!this.chart) {
       this.chart = this.createChart();
@@ -128,16 +131,16 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         return;
       }
       this.unsubscribeAndClearChart();
-      this.processChanges();
+      this.processChanges(await this.userSettingsService.selectedDataTypes());
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      this.processChanges();
+      this.processChanges(await this.userSettingsService.selectedDataTypes());
     }
   }
 
-  private processChanges() {
+  private processChanges(selectedDataTypes: string[] | null) {
     this.loading();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
@@ -149,7 +152,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         }
         // debugger;
         return streams.map((stream) => {
-          return this.createOrUpdateChartSeries(activity, stream);
+          return this.createOrUpdateChartSeries(activity, stream, selectedDataTypes);
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
@@ -321,7 +324,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     });
   }
 
-  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
+  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface, selectedDataTypes?: string[] | null): am4charts.XYSeries {
     let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
     // If there is already a series with this id only data update should be done
     if (series) {
@@ -393,7 +396,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
     series.interactionsEnabled = false;
 
-    if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
+    // Show an hide on condition
+
+    if (selectedDataTypes) {
+      if (selectedDataTypes.indexOf(series.id) === -1) {
+        this.hideSeries(series);
+      }
+    } else if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
       this.hideSeries(series);
     }
 
@@ -572,6 +581,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     if (!this.getVisibleSeriesWithSameYAxis(series).length) {
       this.hideSeriesYAxis(series)
     }
+    this.userSettingsService.setSelectedDataTypes(this.getVisibleSeries(series.chart).map(series => series.id));
   }
 
   private showSeries(series: am4charts.XYSeries) {
@@ -579,6 +589,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.hidden = false;
     // series.show();
     this.showSeriesYAxis(series);
+    this.userSettingsService.setSelectedDataTypes(this.getVisibleSeries(series.chart).map(series => series.id));
   }
 
   private loading() {
