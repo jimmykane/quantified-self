@@ -131,12 +131,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         return;
       }
       this.unsubscribeAndClearChart();
-      this.processChanges(await this.userSettingsService.selectedDataTypes());
+      this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      this.processChanges(await this.userSettingsService.selectedDataTypes());
+      this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
     }
   }
 
@@ -397,8 +397,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.interactionsEnabled = false;
 
     // Show an hide on condition
-
-    if (selectedDataTypes) {
+    if (selectedDataTypes && selectedDataTypes.length) {
       if (selectedDataTypes.indexOf(series.id) === -1) {
         this.hideSeries(series);
       }
@@ -581,7 +580,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     if (!this.getVisibleSeriesWithSameYAxis(series).length) {
       this.hideSeriesYAxis(series)
     }
-    this.userSettingsService.setSelectedDataTypes(this.getVisibleSeries(series.chart).map(series => series.id));
+    this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
   }
 
   private showSeries(series: am4charts.XYSeries) {
@@ -589,7 +588,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.hidden = false;
     // series.show();
     this.showSeriesYAxis(series);
-    this.userSettingsService.setSelectedDataTypes(this.getVisibleSeries(series.chart).map(series => series.id));
+    this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
   }
 
   private loading() {

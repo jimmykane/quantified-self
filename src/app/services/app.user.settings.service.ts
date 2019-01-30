@@ -2,6 +2,7 @@ import {Injectable} from '@angular/core';
 import {Log} from 'ng2-logger/browser';
 import {MapSettingsLocalStorageService} from './storage/app.map.settings.local.storage.service';
 import {ChartSettingsLocalStorageService} from './storage/app.chart.settings.local.storage.service';
+import {EventInterface} from "quantified-self-lib/lib/events/event.interface";
 
 
 @Injectable()
@@ -52,13 +53,13 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-  public async selectedDataTypes(): Promise<string[]|null> {
+  public async selectedDataTypes(event: EventInterface): Promise<string[]|null> {
     let defaultValue = null;
     try {
-      const stringValue = await this.chartSettingsLocalStorageService.getItem('selectedDataTypes');
+      const stringValue = await this.chartSettingsLocalStorageService.getItem(`selectedDataTypes${event.getID()}`);
       defaultValue = stringValue.split(',');
     } catch (e) {
-      this.chartSettingsLocalStorageService.setItem('showAllData', null);
+      this.chartSettingsLocalStorageService.setItem(`selectedDataTypes${event.getID()}`, null);
     }
     return defaultValue;
   }
@@ -79,8 +80,8 @@ export class UserSettingsService {
     this.chartSettingsLocalStorageService.setItem('showAllData', String(value));
   }
 
-  public setSelectedDataTypes(value: string[]) {
-    this.chartSettingsLocalStorageService.setItem('selectedDataTypes', value.join(','));
+  public setSelectedDataTypes(event: EventInterface, selectedDataTypes: string[]) {
+    this.chartSettingsLocalStorageService.setItem(`selectedDataTypes${event.getID()}`, selectedDataTypes.join(','));
   }
 }
 
