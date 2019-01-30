@@ -464,14 +464,14 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
         // debugger;
         if (!data[dataItem.time]) {
-          data[dataItem.time] = {date: dataItem.time}
+          data[dataItem.time] = {time: dataItem.time}
         }
         data[dataItem.time][series.id] = dataItem.value;
       });
       return data;
     }, {});
     return Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
-      return +dataItemA.date - +dataItemB.date;
+      return dataItemA.time - dataItemB.time;
     })
   }
 
