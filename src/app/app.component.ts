@@ -63,6 +63,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         return;
       }
       user.settings.appSettings.theme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
+      localStorage.setItem('appTheme', user.settings.appSettings.theme);
     })
 
   }
