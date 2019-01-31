@@ -1,4 +1,4 @@
-<mat-card *ngIf="targetUser.displayName"> <!-- todo check a valid if -->
+<mat-card class="container" *ngIf="targetUser.displayName"> <!-- todo check a valid if -->
   <mat-card-header>
     <app-user-actions *ngIf="isOwner()" [user]="targetUser" align="end"></app-user-actions>
     <div *ngIf="targetUser.photoURL"

@@ -1,5 +1,10 @@
 mat-card{
-  min-height: 100vh;
+  padding: 0;
+  min-height: calc(100vh - 48px);
+}
+
+mat-grid-list{
+  min-height: calc(100vh - 48px);
 }
 
 mat-icon{
@@ -8,9 +13,6 @@ mat-icon{
   width: 50px;
 }
 
-mat-grid-list{
-  margin: 2em;
-}
 
 mat-grid-tile.app-icon{
   text-align: center;
