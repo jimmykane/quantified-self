@@ -31,6 +31,7 @@
     *ngIf="authService.authenticated()"
     routerLinkActive="active"
     [routerLink]="['/user/' + (authService.user | async)?.uid]"
+    [routerLinkActiveOptions]="{exact:true}"
     (click)="sideNav.close();">
     <mat-icon>account_circle</mat-icon>
     <span>My Profile</span>
