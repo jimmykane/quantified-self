@@ -1,8 +1,7 @@
 <mat-toolbar>
   <mat-toolbar-row
-    class="mat-elevation-z4"
+    class="mat-elevation-z6"
     routerLink="/home"
-    routerLinkActive="active"
     (click)="sideNav.close();">
     <mat-icon>filter_hdr</mat-icon>
     Quantified-Self.io
@@ -11,7 +10,7 @@
 <mat-nav-list>
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="active"
+    routerLinkActive="mat-elevation-z2"
     routerLink="/home"
     (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
@@ -20,7 +19,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="active"
+    routerLinkActive="mat-elevation-z2"
     routerLink="/dashboard"
     (click)="sideNav.close();">
     <mat-icon>dashboard</mat-icon>
@@ -29,25 +28,16 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="active"
+    routerLinkActive="mat-elevation-z2"
     [routerLink]="['/user/' + (authService.user | async)?.uid]"
-    [routerLinkActiveOptions]="{exact:true}"
     (click)="sideNav.close();">
     <mat-icon>account_circle</mat-icon>
     <span>My Profile</span>
   </mat-list-item>
-  <!---->
-  <!--<mat-list-item-->
-  <!--*ngIf="authService.authenticated() && (authService.user | async)?.uid"-->
-  <!--routerLinkActive="active"-->
-  <!--[routerLink]="['/user/', (authService.user | async)?.uid]">-->
-  <!--<mat-icon>account_circle</mat-icon>-->
-  <!--<span>My Profile</span>-->
-  <!--</mat-list-item>-->
 
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="active"
+    routerLinkActive="mat-elevation-z2"
     routerLink="/login" (click)="sideNav.close();">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>

@@ -5,15 +5,13 @@ mat-icon{
 .active{
   font-weight: bold;
 }
-mat-toolbar-row{
-  /*font-size: 1em;*/
+mat-toolbar-row.title{
+  margin-bottom: 1em;
 }
 .mat-toolbar{
   background: inherit;
 }
 
 mat-toolbar-row{
-  box-shadow:none;
-  border-color:transparent;
   outline: none;
 }
