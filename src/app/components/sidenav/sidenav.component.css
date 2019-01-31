@@ -11,3 +11,9 @@ mat-toolbar-row{
 .mat-toolbar{
   background: inherit;
 }
+
+mat-toolbar-row{
+  box-shadow:none;
+  border-color:transparent;
+  outline: none;
+}
