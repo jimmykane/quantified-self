@@ -31,6 +31,8 @@ import {merge, of, Subscription} from "rxjs";
 import * as Raven from "raven-js";
 import {Log} from "ng2-logger/browser";
 import {Privacy} from "quantified-self-lib/lib/privacy/privacy.class.interface";
+import {DataAscent} from "quantified-self-lib/lib/data/data.ascent";
+import {DataDescent} from "quantified-self-lib/lib/data/data.descent";
 
 
 @Component({
@@ -112,6 +114,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     switch (columnName) {
       case 'stats.Distance':
         return 'trending_flat';
+      case 'stats.Ascent':
+        return 'trending_up';
+      case 'stats.Descent':
+        return 'trending_down';
       case 'stats.Duration':
         return 'timer';
       case 'startDate':
@@ -130,7 +136,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'name', 'stats.Distance', 'stats.Duration'].indexOf(columnName) !== -1;
+    return ['startDate', 'name', 'stats.Distance', 'stats.Duration', 'stats.Ascent', 'stats.Descent'].indexOf(columnName) !== -1;
   }
 
   private subscribeToAll() {
@@ -200,12 +206,18 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             if (this.hasActions) {
               dataObject.checkbox = event;
             }
+
+
+            const ascent = event.getStat(DataAscent.type);
+            const descent = event.getStat(DataDescent.type);
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
             dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
             dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
             dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
+            dataObject['stats.Ascent'] = ascent ? ascent.getDisplayValue() + ascent.getDisplayUnit() : '';
+            dataObject['stats.Descent'] = descent ? descent.getDisplayValue() + descent.getDisplayUnit() : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
             // dataObject.event = event;
@@ -395,16 +407,18 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'startDate',
       'activities',
       'stats.Distance',
+      'stats.Ascent',
+      // 'stats.Descent',
       'stats.Duration',
       'device',
     ]);
 
     if (window.innerWidth < 800) {
-      columns = columns.filter(column => ['name'].indexOf(column) === -1)
+      columns = columns.filter(column => ['name', 'stats.Descent' ].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 700) {
-      columns = columns.filter(column => ['activities'].indexOf(column) === -1)
+      columns = columns.filter(column => ['activities', 'stats.Ascent'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 600) {
@@ -418,7 +432,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     return columns
   }
 
-  private unsubscribeFromAll(){
+  private unsubscribeFromAll() {
     this.sortSubscription.unsubscribe();
     this.eventsSubscription.unsubscribe();
   }
@@ -433,12 +447,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
   itemsPerPageLabel = 'Items par page';
-  nextPageLabel     = 'Load more...';
+  nextPageLabel = 'Load more...';
   previousPageLabel = 'go to previous set';
 
-  getRangeLabel = (page: number, pageSize: number, length: number):string => {
-    if (length === (page+2) * pageSize){
-      return `${page * pageSize} - ${(page+1) * pageSize}`
+  getRangeLabel = (page: number, pageSize: number, length: number): string => {
+    if (length === (page + 2) * pageSize) {
+      return `${page * pageSize} - ${(page + 1) * pageSize}`
     }
 
     return `${page * pageSize} - ${length} `
