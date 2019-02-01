@@ -10,15 +10,6 @@
       {{ event.startDate | date:'medium' }}
     </mat-card-subtitle>
     <mat-card-subtitle>
-      <mat-icon>filter_{{ event.getActivities().length }}</mat-icon>
-      Total
-      <span class="mat-body-2">{{ (event.getDistance().getValue()/1000).toFixed(2) }}</span> km
-      in
-      <span class="mat-body-2">{{ event.getDuration().getDisplayValue() }}</span>
-      /
-      <span class="mat-body-2">{{ event.getPause().getDisplayValue() }}</span>
-    </mat-card-subtitle>
-    <mat-card-subtitle>
       <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser" [event]="event" [(selectedActivities)]="selectedActivities">
       </app-activities-checkboxes>
       <app-activity-header
