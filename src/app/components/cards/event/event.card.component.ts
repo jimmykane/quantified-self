@@ -33,7 +33,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showMapManualLaps: boolean;
   public showAllData: boolean;
   public useDistanceAxis: boolean;
-  public dataSmoothingLevel: number = 1;
+  public dataSmoothingLevel: number = 3;
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;

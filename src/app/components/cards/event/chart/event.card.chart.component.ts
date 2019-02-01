@@ -442,7 +442,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     let samplingRate;
     const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
-    samplingRate = Math.ceil((numberOfSamplesToHours * 3 * this.dataSmoothingLevel * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities);
+    samplingRate = Math.ceil((numberOfSamplesToHours * this.dataSmoothingLevel * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities);
     this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
