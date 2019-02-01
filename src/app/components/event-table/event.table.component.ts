@@ -130,7 +130,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'stats.Distance', 'stats.Duration'].indexOf(columnName) !== -1;
+    return ['startDate', 'name', 'stats.Distance', 'stats.Duration'].indexOf(columnName) !== -1;
   }
 
   private subscribeToAll() {
@@ -202,6 +202,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             }
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
+            dataObject.name = event.name;
             dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
             dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
             dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
@@ -390,6 +391,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     // push all the rest
     columns.push(...[
       'privacy',
+      'name',
       'startDate',
       'activities',
       'stats.Distance',
@@ -397,9 +399,16 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'device',
     ]);
 
-    // If it's a small screen remove some
+    if (window.innerWidth < 800) {
+      columns = columns.filter(column => ['name'].indexOf(column) === -1)
+    }
+
+    if (window.innerWidth < 700) {
+      columns = columns.filter(column => ['activities'].indexOf(column) === -1)
+    }
+
     if (window.innerWidth < 600) {
-      columns = columns.filter(column => ['activities', 'privacy'].indexOf(column) === -1)
+      columns = columns.filter(column => ['privacy'].indexOf(column) === -1)
     }
 
     // Push the last
