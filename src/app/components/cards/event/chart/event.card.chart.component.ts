@@ -78,8 +78,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private chart: am4charts.XYChart;
   private logger = Log.create('EventCardChartComponent');
 
-  private renderPerSeries = true;
-
   private themes = {
     'material': material,
     'frozen': frozen,
@@ -159,9 +157,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-      if (!this.renderPerSeries) {
+      if (!this.renderPerSeries()) {
+        this.logger.info(`Rendering chart data at once`);
         this.addDataToChart(this.getDataFromSeriesDummyData(series));
       } else {
+        this.logger.info(`Rendering chart data per series`);
         series.forEach((series) => this.addDataToSeries(series, series.dummyData));
       }
 
@@ -391,7 +391,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
 
-    series.dataFields.valueY = !this.renderPerSeries ? series.id : 'value';
+    series.dataFields.valueY = !this.renderPerSeries() ? series.id : 'value';
     series.dataFields.dateX = "time";
 
 
@@ -527,6 +527,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return 'Pace'
     }
     return name;
+  }
+
+  private renderPerSeries(): boolean {
+    if (!this.userChartSettings){
+      return true
+    }
+    return this.userChartSettings.renderPerSeries;
   }
 
   private applyChartStylesFromUserSettings() {

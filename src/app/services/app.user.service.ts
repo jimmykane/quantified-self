@@ -94,6 +94,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.theme = settings.chartSettings.theme || ChartThemes.Material;
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || XAxisTypes.Duration;
+    settings.chartSettings.renderPerSeries = settings.chartSettings.renderPerSeries !== false;
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];

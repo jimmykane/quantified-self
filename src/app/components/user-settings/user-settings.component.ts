@@ -91,6 +91,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      exportingEnabled: new FormControl(!this.user.settings.chartSettings.renderPerSeries, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       speedUnitsToUse: new FormControl(this.user.settings.unitSettings.speedUnits, [
         Validators.required,
         // Validators.minLength(1),
@@ -131,6 +136,7 @@ export class UserSettingsComponent implements OnChanges {
         dataTypeSettings: {},
         theme: this.userSettingsFormGroup.get('chartTheme').value ,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
+        renderPerSeries: !this.userSettingsFormGroup.get('exportingEnabled').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value
       });
 
