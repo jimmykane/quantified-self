@@ -5,8 +5,8 @@
   <mat-table [dataSource]="data">
     <ng-container *ngFor="let column of columns" [matColumnDef]="column">
       <mat-header-cell *matHeaderCellDef>
-        {{ column }}
-        <span *ngIf="column == 'Difference'">
+      {{ column }}
+      <span *ngIf="column == 'Difference'">
         <mat-icon matTooltip="Up to 2% of difference is acceptable, up to 5% it gets worse and more than 5% it's bad">info</mat-icon>
       </span>
       </mat-header-cell>

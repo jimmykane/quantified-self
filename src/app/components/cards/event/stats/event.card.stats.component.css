@@ -1,5 +1,7 @@
 mat-icon {
-  vertical-align: middle;
+  vertical-align: top;
+  font-size: 12px;
+  margin-left: 0.5em;
 }
 
 mat-card{
