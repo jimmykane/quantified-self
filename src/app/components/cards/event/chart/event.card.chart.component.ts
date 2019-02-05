@@ -160,6 +160,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       if (!this.renderPerSeries()) {
         this.logger.info(`Rendering chart data at once`);
         this.addDataToChart(this.getDataFromSeriesDummyData(series));
+        this.chart.exporting.menu.invalidate();
       } else {
         this.logger.info(`Rendering chart data per series`);
         series.forEach((series) => this.addDataToSeries(series, series.dummyData));
@@ -252,10 +253,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         label: "...️",
         menu: [
           {"type": "png", "label": "PNG", options: {useRetina: true}},
-          {"type": "json", "label": "JSON"},
+          // {"type": "json", "label": "JSON"},
           {"type": "csv", "label": "CSV"},
           {"type": "xlsx", "label": "XLSX"},
-          {"label": "Print", "type": "print"},
+          // {"label": "Print", "type": "print"},
         ],
       }];
 
