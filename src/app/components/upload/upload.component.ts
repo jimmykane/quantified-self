@@ -12,6 +12,7 @@ import {UploadErrorComponent} from '../upload-error/upload-error.component';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UPLOAD_STATUS} from "./upload.status";
 import {Log} from "ng2-logger/browser";
+import {EventImporterSuuntoSML} from "quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.sml";
 
 @Component({
   selector: 'app-upload',
@@ -45,8 +46,8 @@ export class UploadComponent implements OnInit {
 
   /**
    * Process each uploaded activity
-   * @param file
    * @returns {Promise}
+   * @param metaData
    */
   processFile(metaData): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
@@ -58,6 +59,8 @@ export class UploadComponent implements OnInit {
 
           if ((typeof fileReaderResult === 'string') && metaData.extension === 'json') {
             newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
+          } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'sml') {
+            newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult, 'application/xml');
           } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'tcx') {
             newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
           } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'gpx') {
