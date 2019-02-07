@@ -91,9 +91,10 @@ import {UserSettingsComponent} from "./components/user-settings/user-settings.co
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
     environment: environment.production ? 'Production' : 'Development',
-    shouldSendCallback: function () {
-      return environment.production;
-    },
+    // shouldSendCallback: function () {
+    //   // return environment.production;
+    //   return true;
+    // },
   })
   .install();
 
