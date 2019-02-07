@@ -58,7 +58,12 @@ export class UploadComponent implements OnInit {
         try {
 
           if ((typeof fileReaderResult === 'string') && metaData.extension === 'json') {
-            newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
+            try {
+              newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
+            }catch (e) {
+              this.logger.info(`Could not read via JSON trying via SML JSON`);
+              newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
+            }
           } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'sml') {
             newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult, 'application/xml');
           } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'tcx') {
