@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.0.38-MFF73",
+  "version": "2.0.39-MFF73",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
