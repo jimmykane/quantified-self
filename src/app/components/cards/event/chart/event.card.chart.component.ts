@@ -439,6 +439,9 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
+    if (this.dataSmoothingLevel === 1){
+      return 1;
+    }
     const numberOfSamples = stream.getNumericData().length;
     let samplingRate;
     const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
