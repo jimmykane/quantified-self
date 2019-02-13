@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.0.45-MFF73",
+  "version": "2.0.46-MFF73",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -18,7 +18,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
-    "@amcharts/amcharts4": "^4.1.5",
+    "@amcharts/amcharts4": "4.1.5",
     "@angular/animations": "7.2.4",
     "@angular/cdk": "^7.3.2",
     "@angular/common": "7.2.4",
