@@ -1,4 +1,4 @@
-Quantified Self
+Quantified Self 2.0.47-MFF73
 ==============
 
 Master

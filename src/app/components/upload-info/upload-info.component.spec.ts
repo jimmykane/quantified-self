@@ -7,8 +7,9 @@ import {
   MatList, MatListItem, MatProgressBar,
   MatRipple
 } from '@angular/material';
-import {UPLOAD_STATUS} from '../upload/upload.component';
+
 import {ActivityMetadataComponent} from '../activity-metadata/activity-metadata.component';
+import {UPLOAD_STATUS} from "../upload/upload.status";
 
 describe('UploadInfoComponent', () => {
   let component: UploadInfoComponent;
