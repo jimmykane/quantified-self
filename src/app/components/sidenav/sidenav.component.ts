@@ -7,6 +7,9 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {MatSnackBar} from '@angular/material';
 import {SideNavService} from "../../services/side-nav/side-nav.service";
 
+declare function require(moduleName: string): any;
+const { version: appVersion } = require('../../../../package.json');
+
 
 @Component({
   selector: 'app-sidenav',
@@ -16,6 +19,8 @@ import {SideNavService} from "../../services/side-nav/side-nav.service";
 export class SideNavComponent implements OnInit {
 
   public events: EventInterface[] = [];
+  public appVersion = appVersion;
+
 
   constructor(public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router, private eventService: EventService, private route: ActivatedRoute) {
   }

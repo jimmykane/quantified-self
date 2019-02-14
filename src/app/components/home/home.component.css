@@ -18,3 +18,8 @@ mat-grid-tile.app-icon{
   text-align: center;
   /*padding: 2em;*/
 }
+
+
+a{
+  padding: 0;
+}
