@@ -108,16 +108,16 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   async ngOnChanges(simpleChanges) {
 
-    // 1. If there is no chart create
-    if (!this.chart) {
-      this.chart = this.createChart();
-    }
-
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
 
     // 2. If not visible and no data is bound do nothing
     if (!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)) {
       return;
+    }
+
+    // 1. If there is no chart create
+    if (!this.chart) {
+      this.chart = this.createChart();
     }
 
     // Beyond here component is visible and data is not bound //
