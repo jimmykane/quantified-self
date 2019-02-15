@@ -37,7 +37,7 @@ export class EventCardStatsComponent implements OnChanges {
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
-        statsMap.set(stat.getDisplayType(), stat);
+        statsMap.set(stat.getType(), stat);
       });
       return statsMap;
     }, new Map<string, DataInterface>());
