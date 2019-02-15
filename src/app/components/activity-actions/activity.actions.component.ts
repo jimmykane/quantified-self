@@ -50,7 +50,6 @@ export class ActivityActionsComponent implements OnInit {
 
   async deleteActivity() {
     this.event.removeActivity(this.activity);
-    EventUtilities.generateStatsForEvent(this.event)
     await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
     EventUtilities.generateStatsForEvent(this.event);
     await this.eventService.setEvent(this.user, this.event);
