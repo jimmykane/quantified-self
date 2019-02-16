@@ -346,7 +346,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
-    series.simplifiedProcessing = true;
+    // series.simplifiedProcessing = true;
 
     this.chart.series.sort((left, right) => {
       return left.name > right.name ? 1 : 0; // @todo does not work well
@@ -409,7 +409,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
     // Attach events
     series.events.on('validated', (ev) => {
-      this.logger.info('Series validated');
+      this.logger.info(`Series ${ev.target.id} validated`);
       // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
       ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
@@ -439,7 +439,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
-    if (this.dataSmoothingLevel === 1){
+    if (this.dataSmoothingLevel === 1) {
       return 1;
     }
     const numberOfSamples = stream.getNumericData().length;
@@ -534,7 +534,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private renderPerSeries(): boolean {
-    if (!this.userChartSettings){
+    if (!this.userChartSettings) {
       return true
     }
     return this.userChartSettings.renderPerSeries;
