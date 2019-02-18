@@ -126,7 +126,7 @@ export class ActivityFormComponent implements OnInit {
       EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
       this.activity.clearStats();
       EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
-      EventUtilities.generateStatsForEvent(this.event);
+      EventUtilities.reGenerateStatsForEvent(this.event);
       await this.eventService.setEvent(this.user, this.event);
       this.snackBar.open('Activity saved', null, {
         duration: 2000,

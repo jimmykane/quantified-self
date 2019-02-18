@@ -7,6 +7,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.utilities";
+import {take} from "rxjs/operators";
 
 @Component({
   selector: 'app-activity-actions',
@@ -48,10 +49,26 @@ export class ActivityActionsComponent implements OnInit {
     // });
   }
 
+  async reGenerateStatistics() {
+    this.snackBar.open('Re-calculating activity statistics', null, {
+      duration: 2000,
+    });
+    // To use this component we need the full hydrated object and we might not have it
+    this.activity.clearStreams();
+    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
+    this.activity.clearStats();
+    EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
+    EventUtilities.reGenerateStatsForEvent(this.event);
+    await this.eventService.setEvent(this.user, this.event);
+    this.snackBar.open('Activity and event statistics have been recalculated', null, {
+      duration: 2000,
+    });
+  }
+
   async deleteActivity() {
     this.event.removeActivity(this.activity);
     await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
-    EventUtilities.generateStatsForEvent(this.event);
+    EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.setEvent(this.user, this.event);
     this.snackBar.open('Activity deleted', null, {
       duration: 2000,

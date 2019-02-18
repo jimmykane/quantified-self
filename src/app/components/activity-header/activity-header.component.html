@@ -19,7 +19,7 @@
     </span>
   </span>
   &nbsp;
-  <span *ngIf="showDistance">
+  <span *ngIf="showDistance && activity.getDistance()">
     <span >
       <b>{{ activity.getDistance().getDisplayValue() }}</b>
       {{ activity.getDistance().getDisplayUnit() }}
