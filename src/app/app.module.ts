@@ -88,9 +88,13 @@ import {ShadeComponent} from "./components/loading/shade.component";
 import {SideNavService} from "./services/side-nav/side-nav.service";
 import {UserSettingsComponent} from "./components/user-settings/user-settings.component";
 
+declare function require(moduleName: string): any;
+const { version: appVersion } = require('../../package.json');
+
 Raven
   .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
     environment: environment.production ? 'Production' : 'Development',
+    release: appVersion,
     // shouldSendCallback: function () {
     //   // return environment.production;
     //   return true;
