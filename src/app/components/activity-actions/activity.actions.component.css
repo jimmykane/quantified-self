@@ -3,3 +3,8 @@
   align-items: center;
   justify-content: space-around;
 }
+
+mat-icon.toolTip{
+  font-size: 14px;
+  margin-left: 0.5em;
+}

@@ -8,7 +8,7 @@
   </button>
   <button mat-menu-item (click)="reGenerateStatistics()">
   <mat-icon>autorenew</mat-icon>
-  <span>Refresh activity statistics <mat-icon matTooltip="This will re-calculate statistics like distance, ascent, descent">info</mat-icon>
+  <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent">info</mat-icon>
 </span>
   </button>
   <button mat-menu-item (click)="deleteActivity()" *ngIf="event.getActivities().length > 1">
