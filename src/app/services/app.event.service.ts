@@ -11,7 +11,7 @@ import {
 } from '@angular/fire/firestore';
 import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switchMap, take} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
-import {firestore} from 'firebase/app';
+import {FirebaseError, firestore} from 'firebase/app';
 import * as Pako from 'pako';
 import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.interface';
 import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity.json.interface';
@@ -49,10 +49,12 @@ export class EventService implements OnDestroy {
         })),
       this.getActivities(user, eventID),
     ).pipe(catchError((error) => {
-      // debugger;
-      this.logger.error(error);
+      if (error.code && error.code === "permission-denied"){
+        return of([null, null])
+      }
       Raven.captureException(error);
-      return of(null) // @todo fix this
+      this.logger.error(error);
+      return of([null, null]) // @todo fix this
     })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
       if (!event){
         return null;
