@@ -346,7 +346,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
-    // series.simplifiedProcessing = true;
+    series.simplifiedProcessing = true;
 
     this.chart.series.sort((left, right) => {
       return left.name > right.name ? 1 : 0; // @todo does not work well
