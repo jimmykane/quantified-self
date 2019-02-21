@@ -349,7 +349,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.simplifiedProcessing = true;
 
     this.chart.series.sort((left, right) => {
-      return left.name > right.name ? 1 : 0; // @todo does not work well
+      if (left.name < right.name)
+        return -1;
+      if (left.name > right.name)
+        return 1;
+      return 0;
     });
 
     // Set the axis

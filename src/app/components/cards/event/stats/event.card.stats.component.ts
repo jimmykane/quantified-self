@@ -37,7 +37,7 @@ export class EventCardStatsComponent implements OnChanges {
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
-        statsMap.set(stat.getType(), stat);
+        statsMap.set( activity.getID() + stat.getType(), stat);
       });
       return statsMap;
     }, new Map<string, DataInterface>());
@@ -55,10 +55,16 @@ export class EventCardStatsComponent implements OnChanges {
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
           return rowObj;
-        }, {Name: `${stat.getDisplayType()}` + (stat.getDisplayUnit() ? ` (${stat.getDisplayUnit()})`: '') }),
+        }, {Name: `${stat.getDisplayType()}` }),
       );
       return array;
-    }, []);
+    }, []).sort((left, right) => {
+      if (left.Name < right.Name)
+        return -1;
+      if (left.Name > right.Name)
+        return 1;
+      return 0;
+    });
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
