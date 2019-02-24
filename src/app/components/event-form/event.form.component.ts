@@ -61,6 +61,7 @@ export class EventFormComponent implements OnInit {
   }
 
   async onSubmit() {
+    event.preventDefault();
     if (!this.eventFormGroup.valid) {
       this.validateAllFormFields(this.eventFormGroup);
       return;

@@ -1,4 +1,5 @@
 <mat-card class="mat-elevation-z0">
+  <app-event-search (searchChange)="search($event)"></app-event-search>
 
   <app-shade [isActive]="isLoadingResults" [hasError]="errorLoading" [errorMessage]="errorLoading"></app-shade>
   <app-shade [isActive]="false" [hasError]="(!this.events || !this.events.length) && !isLoadingResults" [errorMessage]="'Nothing to show'"></app-shade>

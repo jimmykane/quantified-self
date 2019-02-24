@@ -87,6 +87,7 @@ import {UserAgreementFormComponent} from './components/user-forms/user-agreement
 import {ShadeComponent} from "./components/loading/shade.component";
 import {SideNavService} from "./services/side-nav/side-nav.service";
 import {UserSettingsComponent} from "./components/user-settings/user-settings.component";
+import {EventSearchComponent} from "./components/event-search/event-search.component";
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -192,6 +193,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UserAgreementFormComponent,
     ShadeComponent,
     UserSettingsComponent,
+    EventSearchComponent
   ],
   entryComponents: [
     EventFormComponent,

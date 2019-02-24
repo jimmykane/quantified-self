@@ -122,6 +122,7 @@ export class UserSettingsComponent implements OnChanges {
   }
 
   async onSubmit() {
+    event.preventDefault();
     if (!this.userSettingsFormGroup.valid) {
       this.validateAllFormFields(this.userSettingsFormGroup);
       return;

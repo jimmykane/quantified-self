@@ -1,0 +1,38 @@
+<form [formGroup]="searchFormGroup" (submit)="onSubmit()" autocomplete="off">
+  <!--  <mat-form-field>-->
+  <!--    <input matInput placeholder="Name" formControlName="search">-->
+  <!--    <button mat-button *ngIf="this.searchFormGroup.get('search').value" matSuffix mat-icon-button aria-label="Clear"-->
+  <!--            (click)="clear('search')">-->
+  <!--      <mat-icon>close</mat-icon>-->
+  <!--    </button>-->
+  <!--    <mat-hint>Absolute name</mat-hint>-->
+  <!--  </mat-form-field>-->
+
+
+  <mat-form-field>
+    <input matInput [matDatepicker]="startDatepicker" placeholder="From" formControlName="startDate">
+    <mat-datepicker-toggle matSuffix [for]="startDatepicker">
+      <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
+    </mat-datepicker-toggle>
+    <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
+<!--    <mat-hint>The start date</mat-hint>-->
+    <mat-error *ngIf="hasError('startDate')">
+      invalid date
+    </mat-error>
+  </mat-form-field>
+
+  <mat-form-field>
+    <input matInput [matDatepicker]="endDatepicker" placeholder="To" formControlName="endDate">
+    <mat-datepicker-toggle matSuffix [for]="endDatepicker">
+      <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
+    </mat-datepicker-toggle>
+    <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
+<!--    <mat-hint>The end date</mat-hint>-->
+    <mat-error *ngIf="hasError('endDate')">
+      invalid date
+    </mat-error>
+  </mat-form-field>
+
+  <button mat-button (click)="reset()">reset</button>
+  <button *ngIf="!hasError()" mat-button color="primary" (click)="onSubmit()">search</button>
+</form>

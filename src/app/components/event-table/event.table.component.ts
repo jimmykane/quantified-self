@@ -33,6 +33,8 @@ import {Log} from "ng2-logger/browser";
 import {Privacy} from "quantified-self-lib/lib/privacy/privacy.class.interface";
 import {DataAscent} from "quantified-self-lib/lib/data/data.ascent";
 import {DataDescent} from "quantified-self-lib/lib/data/data.descent";
+import WhereFilterOp = firebase.firestore.WhereFilterOp; // @todo investigate if this import is ok
+
 
 
 @Component({
@@ -53,11 +55,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @ViewChild(MatCard) table: MatCard;
   events: EventInterface[];
   data: MatTableDataSource<any>;
-  columns = [];
   selection = new SelectionModel(true, []);
   resultsLength = 0;
   isLoadingResults = true;
   errorLoading;
+  searchTerm: string;
+  searchStartDate: Date;
+  searchEndDate: Date;
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
   private currentPageIndex = 0;
@@ -104,10 +108,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
 
-  applyFilter(filterValue: string) {
-    filterValue = filterValue.trim(); // Remove whitespace
-    filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
-    this.data.filter = filterValue;
+  search(search: {searchTerm: string, startDate: Date, endDate: Date}) {
+    this.searchTerm = search.searchTerm;
+    this.searchStartDate = search.startDate;
+    this.searchEndDate = search.endDate;
+    this.subscribeToAll();
   }
 
   getColumnHeaderIcon(columnName): string {
@@ -139,7 +144,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     return ['startDate', 'name', 'stats.Distance', 'stats.Duration', 'stats.Ascent', 'stats.Descent'].indexOf(columnName) !== -1;
   }
 
+
   private subscribeToAll() {
+    this.unsubscribeFromAll();
     this.paginator.pageIndex = 0;
     this.currentPageIndex = 0;
     // If the user changes the sort order, reset back to the first page.
@@ -153,31 +160,48 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         startWith({}),
         switchMap(() => {
           this.isLoadingResults = true;
-          if (this.currentPageIndex === this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.privacyFilter ? {
+          const where = [];
+          if (this.searchTerm){
+            where.push({
+              fieldPath: 'name',
+              opStr: <WhereFilterOp>"==",
+              value: this.searchTerm
+            })
+          }
+          if (this.searchStartDate){
+            where.push({
+              fieldPath: 'startDate',
+              opStr: <WhereFilterOp>">=",
+              value: this.searchStartDate.toISOString()
+            })
+          }
+          if (this.searchEndDate){
+            where.push({
+              fieldPath: 'startDate',
+              opStr: <WhereFilterOp>"<=",
+              value: this.searchEndDate.toISOString()
+            })
+          }
+          if (this.privacyFilter){
+            where.push({
               fieldPath: 'privacy',
-              opStr: "==",
+              opStr: <WhereFilterOp>"==",
               value: this.privacyFilter
-            } : null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
+            })
+          }
+          if (this.currentPageIndex === this.paginator.pageIndex) {
+            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
           }
 
           // Going to next page
           if (this.currentPageIndex < this.paginator.pageIndex) {
             // Increase the results length
-            return this.eventService.getEventsForUser(this.user, this.privacyFilter ? {
-              fieldPath: 'privacy',
-              opStr: "==",
-              value: this.privacyFilter
-            } : null, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
+            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, this.privacyFilter ? {
-              fieldPath: 'privacy',
-              opStr: "==",
-              value: this.privacyFilter
-            } : null, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
+            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
           }
 
           // return this.exampleDatabase!.getRepoIssues(
@@ -433,8 +457,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   private unsubscribeFromAll() {
-    this.sortSubscription.unsubscribe();
-    this.eventsSubscription.unsubscribe();
+    if (this.sortSubscription) {
+      this.sortSubscription.unsubscribe();
+    }
+    if (this.eventsSubscription) {
+      this.eventsSubscription.unsubscribe();
+    }
   }
 
   ngOnDestroy() {
