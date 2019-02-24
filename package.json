@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.1.0-Sego",
+  "version": "2.1.0",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
