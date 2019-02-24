@@ -55,6 +55,7 @@ export class EventSearchComponent {
     this.clear('search');
     this.clear('startDate');
     this.clear('endDate');
+    this.searchFormGroup.markAsUntouched();
     this.onSubmit();
   }
 

@@ -33,6 +33,6 @@
     </mat-error>
   </mat-form-field>
 
-  <button mat-button (click)="reset()">reset</button>
-  <button *ngIf="!hasError()" mat-button color="primary" (click)="onSubmit()">search</button>
+  <button mat-button *ngIf="searchFormGroup.touched" (click)="reset()">reset</button>
+  <button *ngIf="!hasError() && searchFormGroup.touched" mat-button color="primary" (click)="onSubmit()">search</button>
 </form>
