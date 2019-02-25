@@ -31,7 +31,7 @@ export class EventSearchComponent {
     });
   }
 
-  hasError(field: string) {
+  hasError(field?: string) {
     if (!field) {
       return !this.searchFormGroup.valid;
     }
