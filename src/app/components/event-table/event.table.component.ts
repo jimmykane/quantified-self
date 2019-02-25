@@ -259,18 +259,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             if (this.hasActions) {
               dataObject.actions = event;
             }
-            // eventArray.push({
-            //   Checkbox: event,
-            //   Privacy: event.privacy,
-            //   startDate: this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm'),
-            //   Activities: this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type)),
-            //   'stats.Distance': event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit(),
-            //   'stats.Duration': event.getDuration().getDisplayValue(),
-            //   Device:
-            //     this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name)),
-            //   Actions:
-            //   event,
-            // });
+
             eventArray.push(dataObject);
             return eventArray;
           }, []);
