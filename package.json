@@ -41,7 +41,7 @@
     "hammerjs": "^2.0.8",
     "material-design-icons": "^3.0.1",
     "ng2-logger": "2.0.46",
-    "quantified-self-lib": "^2.2.3",
+    "quantified-self-lib": "github:jimmykane/quantified-self-lib#feature/streams-pub",
     "raven-js": "^3.27.0",
     "roboto-fontface": "^0.10.0",
     "rxjs": "^6.4.0",
