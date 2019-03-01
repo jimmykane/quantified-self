@@ -58,13 +58,7 @@ export class EventCardStatsComponent implements OnChanges {
         }, {Name: `${stat.getDisplayType()}` }),
       );
       return array;
-    }, []).sort((left, right) => {
-      if (left.Name < right.Name)
-        return -1;
-      if (left.Name > right.Name)
-        return 1;
-      return 0;
-    });
+    }, []);
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
@@ -92,6 +86,13 @@ export class EventCardStatsComponent implements OnChanges {
       })
     }
 
+    data.sort((left, right) => {
+      if (left.Name < right.Name)
+        return -1;
+      if (left.Name > right.Name)
+        return 1;
+      return 0;
+    });
 
     // debugger;
 
