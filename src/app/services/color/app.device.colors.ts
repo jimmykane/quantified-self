@@ -19,4 +19,5 @@ export enum AppDeviceColors {
   'Suunto Spartan Trainer' = AppColors.Purple,
   'Suunto Spartan WHR Baro' = AppColors.Red,
   'Suunto Spartan WHR' = AppColors.LightGreen,
+  'Monza' = AppColors.DeepBlue,
 }
