@@ -270,7 +270,13 @@ export class EventService implements OnDestroy {
       await Promise.all(writePromises);
       return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
     } catch (e) {
-      Raven.captureException(e);
+      Raven.captureException(e, {extra: {
+        event: event.toJSON(),
+        activities: event.getActivities().reduce((array, activity) => {
+          array.push(activity.toJSON());
+          return array;
+        }, [])
+        }});
       debugger;
       // Try to delete the parent entity and all subdata
       await this.deleteAllEventData(user, event.getID());
