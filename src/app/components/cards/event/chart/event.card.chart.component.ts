@@ -260,6 +260,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         ],
       }];
 
+      chart.exporting.extraSprites.push({
+        "sprite": chart.legend.parent,
+        "position": "bottom",
+        "marginTop": 20
+      });
+
       // Disable the preloader
       chart.preloader.disabled = true;
 
