@@ -214,9 +214,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.legend.itemContainers.template.events.on("toggled", (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
-        if (!ev.target.readerChecked) {
+        if (!ev.target.readerChecked === true) {
           this.showSeries(series)
         } else {
+          // debugger;
           this.hideSeries(series)
         }
       });
@@ -260,11 +261,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         ],
       }];
 
-      chart.exporting.extraSprites.push({
-        "sprite": chart.legend.parent,
-        "position": "bottom",
-        "marginTop": 20
-      });
+      // chart.exporting.extraSprites.push({
+      //   "sprite": chart.legend.parent,
+      //   "position": "bottom",
+      //   "marginTop": 20
+      // });
 
       // Disable the preloader
       chart.preloader.disabled = true;
@@ -380,7 +381,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     //   return ">>> " + text + " <<<";
     // });
     if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
-      series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+      series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
       series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     }
