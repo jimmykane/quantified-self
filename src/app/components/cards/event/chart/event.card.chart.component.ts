@@ -254,7 +254,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         label: "...️",
         menu: [
           {"type": "png", "label": "PNG", options: {useRetina: true}},
-          // {"type": "json", "label": "JSON"},
+          {"type": "json", "label": "JSON"},
           {"type": "csv", "label": "CSV"},
           {"type": "xlsx", "label": "XLSX"},
           // {"label": "Print", "type": "print"},
