@@ -178,7 +178,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
       chart.fontSize = '0.9em';
-      chart.padding(15, 0, 15, 0);
+      chart.padding(15, 15, 15, 0);
       // chart.resizable = false;
 
       // Create a date axis
