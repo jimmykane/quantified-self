@@ -18,7 +18,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
-    "@amcharts/amcharts4": "4.2.1",
+    "@amcharts/amcharts4": "4.2.2",
     "@angular/animations": "7.2.9",
     "@angular/cdk": "^7.3.4",
     "@angular/common": "7.2.9",
@@ -65,7 +65,7 @@
     "karma-jasmine-html-reporter": "^1.4.0",
     "protractor": "~5.4.2",
     "ts-node": "~8.0.3",
-    "tslint": "~5.13.1",
+    "tslint": "~5.14.0",
     "typescript": "3.2.4"
   }
 }
