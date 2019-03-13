@@ -214,7 +214,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.legend.itemContainers.template.events.on("toggled", (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
-        if (!ev.target.readerChecked === true) {
+        if (ev.target.readerChecked === true) {
           this.showSeries(series)
         } else {
           // debugger;
