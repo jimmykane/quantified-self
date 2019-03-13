@@ -177,7 +177,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Create a chart
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
-      chart.fontSize = '0.9em';
+      chart.fontSize = '0.8em';
       chart.padding(15, 15, 15, 0);
       // chart.resizable = false;
 
@@ -214,7 +214,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.legend.itemContainers.template.events.on("toggled", (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
-        if (ev.target.readerChecked === true) {
+        if (!ev.target.readerChecked === true) {
           this.showSeries(series)
         } else {
           // debugger;
@@ -249,7 +249,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.exporting.menu = new am4core.ExportMenu();
       chart.exporting.menu.align = 'right';
       chart.exporting.menu.verticalAlign = 'bottom';
-      chart.exporting.useWebFonts = false;
+      chart.exporting.useWebFonts = true;
       chart.exporting.menu.items = [{
         label: "...️",
         menu: [
@@ -261,11 +261,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         ],
       }];
 
-      // chart.exporting.extraSprites.push({
-      //   "sprite": chart.legend.parent,
-      //   "position": "bottom",
-      //   "marginTop": 20
-      // });
+      chart.exporting.extraSprites.push({
+        "sprite": chart.legend.parent,
+        "position": "bottom",
+        "marginTop": 20
+      });
 
       // Disable the preloader
       chart.preloader.disabled = true;
