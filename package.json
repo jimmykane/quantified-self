@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.1.9-Damian",
+  "version": "2.1.10-Damian",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
