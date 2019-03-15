@@ -215,10 +215,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
         if (!ev.target.readerChecked === true) {
-          this.showSeries(series)
+          this.showSeries(series, true)
         } else {
           // debugger;
-          this.hideSeries(series)
+          this.hideSeries(series, true)
         }
       });
 
@@ -410,9 +410,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.interactionsEnabled = false;
 
     // Show an hide on condition
-    if (selectedDataTypes && selectedDataTypes.length) {
+    if (selectedDataTypes && selectedDataTypes.length){
       if (selectedDataTypes.indexOf(series.id) === -1) {
         this.hideSeries(series);
+      }else {
+        this.showSeries(series);
       }
     } else if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
       this.hideSeries(series);
@@ -596,22 +598,26 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       .filter(series => !series.hidden);
   }
 
-  private hideSeries(series: am4charts.XYSeries) {
+  private hideSeries(series: am4charts.XYSeries, save?: boolean) {
     // series.disabled = true;
     series.hidden = true;
     // series.hide();
     if (!this.getVisibleSeriesWithSameYAxis(series).length) {
       this.hideSeriesYAxis(series)
     }
-    this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
+    if (save) {
+      this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
+    }
   }
 
-  private showSeries(series: am4charts.XYSeries) {
+  private showSeries(series: am4charts.XYSeries, save?: boolean) {
     // series.disabled = false;
     series.hidden = false;
     // series.show();
     this.showSeriesYAxis(series);
-    this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
+    if (save) {
+      this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
+    }
   }
 
   private loading() {
