@@ -217,7 +217,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         if (!ev.target.readerChecked === true) {
           this.showSeries(series, true)
         } else {
-          // debugger;
           this.hideSeries(series, true)
         }
       });
