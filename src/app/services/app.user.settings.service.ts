@@ -57,7 +57,7 @@ export class UserSettingsService {
     let defaultValue = null;
     try {
       const stringValue = await this.chartSettingsLocalStorageService.getItem(`selectedDataTypes${event.getID()}`);
-      defaultValue = stringValue.split(',');
+      defaultValue = stringValue !== "null" ? stringValue.split(',') : defaultValue;
     } catch (e) {
       this.chartSettingsLocalStorageService.setItem(`selectedDataTypes${event.getID()}`, null);
     }
