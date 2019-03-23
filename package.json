@@ -36,7 +36,7 @@
     "@types/uuid": "^3.4.4",
     "angular2-fontawesome": "^5.2.1",
     "core-js": "^2.6.5",
-    "firebase": "^5.9.0",
+    "firebase": "^5.9.1",
     "font-awesome": "^4.7.0",
     "hammerjs": "^2.0.8",
     "material-design-icons": "^3.0.1",
@@ -46,14 +46,14 @@
     "roboto-fontface": "^0.10.0",
     "rxjs": "^6.4.0",
     "yarn": "^1.13.0",
-    "zone.js": "^0.8.29"
+    "zone.js": "^0.9.0"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "~0.12.3",
     "@angular/cli": "7.3.6",
     "@angular/compiler-cli": "7.2.10",
     "@types/jasmine": "3.3.12",
-    "@types/node": "^11.11.4",
+    "@types/node": "^11.11.6",
     "codelyzer": "~5.0.0-beta.1",
     "jasmine-core": "^3.3.0",
     "jasmine-spec-reporter": "~4.2.1",
@@ -63,7 +63,7 @@
     "karma-coverage-istanbul-reporter": "^2.0.5",
     "karma-jasmine": "~2.0.1",
     "karma-jasmine-html-reporter": "^1.4.0",
-    "protractor": "~5.4.2",
+    "protractor": "~6.0.0",
     "ts-node": "~8.0.3",
     "tslint": "~5.14.0",
     "typescript": "3.2.4"
