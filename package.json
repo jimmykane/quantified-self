@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.1.14-Damian",
+  "version": "2.1.15-Valdis",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
