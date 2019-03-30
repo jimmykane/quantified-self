@@ -157,15 +157,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-      if (!this.renderPerSeries()) {
-        this.logger.info(`Rendering chart data at once`);
-        this.addDataToChart(this.getDataFromSeriesDummyData(series));
-        this.chart.exporting.menu.invalidate();
-      } else {
-        this.logger.info(`Rendering chart data per series`);
-        series.forEach((series) => this.addDataToSeries(series, series.dummyData));
-      }
-
+      this.logger.info(`Rendering chart data per series`);
+      series.forEach((series) => this.addDataToSeries(series, series.dummyData));
       this.logger.info(`Data Injected`);
     });
   }
@@ -402,17 +395,17 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
 
-    series.dataFields.valueY = !this.renderPerSeries() ? series.id : 'value';
+    series.dataFields.valueY = 'value';
     series.dataFields.dateX = "time";
 
 
     series.interactionsEnabled = false;
 
     // Show an hide on condition
-    if (selectedDataTypes && selectedDataTypes.length){
+    if (selectedDataTypes && selectedDataTypes.length) {
       if (selectedDataTypes.indexOf(series.id) === -1) {
         this.hideSeries(series);
-      }else {
+      } else {
         this.showSeries(series);
       }
     } else if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
@@ -543,13 +536,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return 'Pace'
     }
     return name;
-  }
-
-  private renderPerSeries(): boolean {
-    if (!this.userChartSettings) {
-      return true
-    }
-    return this.userChartSettings.renderPerSeries;
   }
 
   private applyChartStylesFromUserSettings() {
