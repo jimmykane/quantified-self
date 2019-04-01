@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.1.15-Valdis",
+  "version": "2.1.16",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
