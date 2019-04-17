@@ -69,6 +69,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
+  @Input() useDurationAxis: boolean;
   @Input() dataSmoothingLevel: number;
 
 
@@ -107,7 +108,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   async ngOnChanges(simpleChanges) {
-
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
 
     // 2. If not visible and no data is bound do nothing
@@ -123,7 +123,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.useDurationAxis || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -157,9 +157,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
+      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? "Time" : 'Duration';
       this.logger.info(`Rendering chart data per series`);
       series.forEach((series) => this.addDataToSeries(series, series.dummyData));
       this.logger.info(`Data Injected`);
+      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? "Time" : 'Duration';
     });
   }
 
@@ -518,7 +520,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private useTimeXAxis() {
-    return this.userChartSettings && this.userChartSettings.xAxisType === XAxisTypes.Time;
+    return !this.useDurationAxis;
+    // return this.userChartSettings && this.userChartSettings.xAxisType === XAxisTypes.Time;
   }
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis

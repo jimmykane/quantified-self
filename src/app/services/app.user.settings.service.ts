@@ -53,6 +53,16 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
+  public async useDurationAxis(): Promise<boolean> {
+    let defaultValue = 'false';
+    try {
+      defaultValue = await this.chartSettingsLocalStorageService.getItem('useDurationAxis');
+    } catch (e) {
+      this.chartSettingsLocalStorageService.setItem('useDurationAxis', defaultValue);
+    }
+    return defaultValue === 'true';
+  }
+
   public async selectedDataTypes(event: EventInterface): Promise<string[]|null> {
     let defaultValue = null;
     try {
@@ -74,6 +84,10 @@ export class UserSettingsService {
 
   public setUseDistanceAxis(value: boolean) {
     this.chartSettingsLocalStorageService.setItem('useDistanceAxis', String(value));
+  }
+
+  public setUseDurationAxis(value: boolean) {
+    this.chartSettingsLocalStorageService.setItem('useDurationAxis', String(value));
   }
 
   public setShowAllData(value: boolean) {

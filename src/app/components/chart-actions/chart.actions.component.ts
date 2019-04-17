@@ -21,11 +21,13 @@ import {UserSettingsService} from '../../services/app.user.settings.service';
 export class ChartActionsComponent implements OnChanges {
 
   @Input() useDistanceAxis: boolean;
+  @Input() useDurationAxis: boolean;
   @Input() showAllData: boolean;
   @Input() dataSmoothingLevel: number;
 
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() useDistanceAxisChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() useDurationAxisChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() dataSmoothingLevelChange: EventEmitter<number> = new EventEmitter<number>();
 
   constructor(
@@ -37,9 +39,11 @@ export class ChartActionsComponent implements OnChanges {
 
   somethingChanged(event) {
     this.useDistanceAxisChange.emit(this.useDistanceAxis);
+    this.useDurationAxisChange.emit(this.useDurationAxis);
     this.showAllDataChange.emit(this.showAllData);
     this.dataSmoothingLevelChange.emit(this.dataSmoothingLevel);
     this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
+    this.userSettingsService.setUseDurationAxis(this.useDurationAxis);
     this.userSettingsService.setShowAllData(this.showAllData);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()

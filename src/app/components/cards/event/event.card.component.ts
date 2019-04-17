@@ -1,18 +1,18 @@
 import {Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
-import {EMPTY, Subscription} from 'rxjs';
-import {ActivatedRoute, ParamMap, Router} from '@angular/router';
+import {Subscription} from 'rxjs';
+import {ActivatedRoute, Router} from '@angular/router';
 import {EventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
-import {map, mergeMap, switchMap} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 
 
 @Component({
@@ -33,6 +33,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showMapManualLaps: boolean;
   public showAllData: boolean;
   public useDistanceAxis: boolean;
+  public useDurationAxis: boolean;
   public dataSmoothingLevel: number = 3;
 
   private userSubscription: Subscription;
@@ -52,7 +53,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges() {
-    // debugger;
   }
 
   async ngOnInit() {
@@ -60,6 +60,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSettingsService.showAutoLaps().then(value => this.showMapAutoLaps = value);
     this.userSettingsService.showManualLaps().then(value => this.showMapManualLaps = value);
     this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
+    this.userSettingsService.useDurationAxis().then(value => this.useDurationAxis = value);
     this.userSettingsService.showAllData().then(value => this.showAllData = value);
 
     // Get the path params

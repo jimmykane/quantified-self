@@ -2,16 +2,16 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu" >
-  <!--<section mat-menu-item>-->
-    <!--<mat-slide-toggle-->
-      <!--[color]="'accent'"-->
-      <!--(change)="checkBoxChanged($event)"-->
-      <!--[(ngModel)]="useDistanceAxis">-->
-      <!--<span matTooltip="If you want to use distance instead of time for the X Axis of the chart">-->
-        <!--Use distance Axis-->
-      <!--</span>-->
-    <!--</mat-slide-toggle>-->
-  <!--</section>-->
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="somethingChanged($event)"
+      [(ngModel)]="useDurationAxis">
+      <span matTooltip="If you want to use duration instead of time for the X Axis of the chart">
+        Use duration Axis
+      </span>
+    </mat-slide-toggle>
+  </section>
   <section mat-menu-item>
     <mat-slide-toggle
       [color]="'accent'"

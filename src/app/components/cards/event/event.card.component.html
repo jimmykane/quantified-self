@@ -65,6 +65,7 @@
           <app-chart-actions
             [(useDistanceAxis)]="useDistanceAxis"
             [(showAllData)]="showAllData"
+            [(useDurationAxis)]="useDurationAxis"
             [(dataSmoothingLevel)]="dataSmoothingLevel"
             align="end">
           </app-chart-actions>
@@ -72,6 +73,7 @@
         <app-event-card-chart
           *ngIf="currentUser !== undefined"
           [showAllData]="showAllData"
+          [useDurationAxis]="useDurationAxis"
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"
