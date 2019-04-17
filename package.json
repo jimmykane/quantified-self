@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.1.17",
+  "version": "2.2.0-Bastien",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
