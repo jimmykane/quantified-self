@@ -18,7 +18,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
-    "@amcharts/amcharts4": "4.3.14",
+    "@amcharts/amcharts4": "4.4.0",
     "@angular/animations": "7.2.13",
     "@angular/cdk": "^7.3.7",
     "@angular/common": "7.2.13",
@@ -57,15 +57,15 @@
     "codelyzer": "~5.0.0",
     "jasmine-core": "^3.4.0",
     "jasmine-spec-reporter": "~4.2.1",
-    "karma": "~4.0.1",
+    "karma": "~4.1.0",
     "karma-chrome-launcher": "~2.2.0",
     "karma-cli": "~2.0.0",
     "karma-coverage-istanbul-reporter": "^2.0.5",
     "karma-jasmine": "~2.0.1",
     "karma-jasmine-html-reporter": "^1.4.0",
     "protractor": "~6.0.0",
-    "ts-node": "~8.0.3",
-    "tslint": "~5.15.0",
+    "ts-node": "~8.1.0",
+    "tslint": "~5.16.0",
     "typescript": "3.2.4"
   }
 }
