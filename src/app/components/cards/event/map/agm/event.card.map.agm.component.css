@@ -7,4 +7,5 @@ mat-icon{
 }
 mat-card{
   min-height: 90vh;
+  padding: 0;
 }

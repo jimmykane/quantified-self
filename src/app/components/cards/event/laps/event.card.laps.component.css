@@ -2,3 +2,7 @@ table{
   width: 100%;
   padding-top: 2%;
 }
+
+mat-card{
+  padding: 0;
+}

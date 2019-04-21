@@ -6,4 +6,9 @@ mat-icon {
 
 mat-card{
   min-height: 100vh;
+  padding: 0;
+}
+
+mat-form-field{
+  padding: 1em;
 }
