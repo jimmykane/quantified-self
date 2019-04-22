@@ -6,9 +6,9 @@ section {
   display: flex;
   align-items: center;
   vertical-align: middle;
-  padding: 1em;
 }
 
 mat-chip {
   font-size: 12px;
 }
+
