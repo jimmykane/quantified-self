@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.2.1-Bastien",
+  "version": "2.2.2-Veldkip",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
