@@ -8,3 +8,8 @@ mat-icon.toolTip{
   font-size: 14px;
   margin-left: 0.5em;
 }
+
+.mat-icon-button{
+  height: 24px;
+  line-height: 24px;
+}

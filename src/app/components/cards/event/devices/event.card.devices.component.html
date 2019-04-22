@@ -1,0 +1,16 @@
+<mat-card *ngFor="let activity of selectedActivities">
+  <app-activity-header
+    [activity]="activity"
+    [event]="event"
+    [showType]="true"
+    [showDuration]="false">
+  </app-activity-header>
+  <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
+    <ng-container *ngFor="let column of getColumns(activity)" [matColumnDef]="column">
+      <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
+      <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+    </ng-container>
+    <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
+    <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+  </mat-table>
+</mat-card>

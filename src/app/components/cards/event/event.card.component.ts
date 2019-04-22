@@ -111,4 +111,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   hasLaps(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
   }
+  hasDevices(event: EventInterface): boolean {
+    return !!this.event.getActivities().reduce((devicesArray, activity) => devicesArray.concat(activity.creator.devices), []).length
+  }
 }

@@ -92,6 +92,15 @@
           [event]="event">
         </app-event-card-laps>
       </mat-tab>
+      <mat-tab label="Devices" *ngIf="hasDevices(event)">
+        <ng-template matTabLabel>
+          <mat-icon>leak_add</mat-icon>
+        </ng-template>
+        <app-event-card-devices
+          [selectedActivities]="selectedActivities"
+          [event]="event">
+        </app-event-card-devices>
+      </mat-tab>
       <!--<mat-tab label="Tools">-->
         <!--<ng-template matTabLabel>-->
           <!--<mat-icon>build</mat-icon>-->
