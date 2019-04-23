@@ -6159,9 +6159,9 @@ qs@6.5.2, qs@~6.5.2:
   version "2.2.5"
   resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/83e0db8d15a96d52c70c43e60ad1cdc0985cced2"
   dependencies:
-    "@types/node" "^11.13.6"
+    "@types/node" "^11.13.0"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.2"
+    fit-file-parser "^1.5.10"
     geolib "^2.0.24"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
