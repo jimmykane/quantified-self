@@ -46,4 +46,24 @@ How to run this project
 - Open it on your browser
  
   `http://localhost:4200/`
+  
+Alternative to run this project
+-------------------------------
+
+- Clone this project
+
+  `git clone https://github.com/jimmykane/quantified-self.git`
+  
+- Install the dependencies 
+
+  `yarn install`
+  
+- Start the Angular Server
+  
+  `yarn start`
+  
+- Open it on your browser
+ 
+  `http://localhost:4200/`
+  
 
