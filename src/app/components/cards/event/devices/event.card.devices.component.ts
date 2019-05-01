@@ -27,7 +27,7 @@ export class EventCardDevicesComponent implements OnChanges {
       const deviceObject = {
         '#': index + 1,
         'Type': device.type,
-        'Name': device.name,
+        //'Name': device.name,
         'Battery Status': device.batteryStatus,
         // 'batteryVoltage': device.batteryVoltage,
         'Manufacturer': device.manufacturer,
