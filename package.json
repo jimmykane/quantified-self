@@ -46,14 +46,14 @@
     "roboto-fontface": "^0.10.0",
     "rxjs": "^6.4.0",
     "yarn": "^1.15.2",
-    "zone.js": "^0.9.0"
+    "zone.js": "^0.9.1"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "~0.13.8",
     "@angular/cli": "7.3.8",
     "@angular/compiler-cli": "7.2.14",
     "@types/jasmine": "3.3.12",
-    "@types/node": "^11.13.9",
+    "@types/node": "^12.0.0",
     "codelyzer": "~5.0.0",
     "jasmine-core": "^3.4.0",
     "jasmine-spec-reporter": "~4.2.1",
