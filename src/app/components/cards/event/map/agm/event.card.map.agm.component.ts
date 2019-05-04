@@ -20,8 +20,9 @@ import {Log} from 'ng2-logger/browser';
 import {EventService} from '../../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
-import {Subscription} from 'rxjs';
+import {combineLatest, forkJoin, Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {map} from "rxjs/operators";
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -42,6 +43,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
   private streamsSubscriptions: Subscription[] = [];
   public activitiesMapData: MapData[] = [];
+  public isLoading = true;
+  public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
   public clickedPoint: PointInterface;
@@ -96,6 +99,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   private bindToNewData() {
+    this.isLoading = true;
+    this.noMapData = false;
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
@@ -110,6 +115,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
             if (index !== -1) {
               this.activitiesMapData.splice(index, 1);
             }
+            this.isLoading = false;
+            if (!this.activitiesMapData.length){
+              this.noMapData = true;
+            }
             this.changeDetectorRef.detectChanges();
             return;
           }
@@ -119,6 +128,10 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
           // If no numeric data for any reason
           if (!latData.length || !longData.length){
+            this.isLoading = false;
+            if (!this.activitiesMapData.length){
+              this.noMapData = true;
+            }
             return;
           }
 
@@ -132,7 +145,11 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
               return latLongArray
             }, []),
           });
+
+
+
           // debugger;
+          this.isLoading = false;
           this.changeDetectorRef.detectChanges();
           this.resizeMapToBounds();
         }))

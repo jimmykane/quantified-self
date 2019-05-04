@@ -9,6 +9,6 @@ import {Component, Input, OnInit} from '@angular/core';
 export class ShadeComponent{
   @Input() isActive: boolean;
   @Input() hasError: boolean;
-  @Input() errorMessage: boolean;
+  @Input() errorMessage: string;
   @Input() mode?: string = 'buffer';
 }
