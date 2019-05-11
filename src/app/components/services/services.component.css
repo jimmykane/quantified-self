@@ -1,0 +1,7 @@
+mat-grid-list{
+  min-height: calc(100vh - 48px);
+}
+
+mat-form-field {
+  margin-bottom: 1em;
+}

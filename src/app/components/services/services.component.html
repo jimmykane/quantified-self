@@ -1,0 +1,26 @@
+<mat-card>
+  <mat-grid-list [cols]="1" [rowHeight]="'fit'">
+    <mat-grid-tile>
+      <form [formGroup]="eventFormGroup" (submit)="onSubmit()">
+
+        <span class="mat-headline">Suunto</span>
+        <span class="mat-subheader">Export from Suunto app</span>
+
+        <mat-form-field>
+          <label>
+            <input matInput placeholder="Link" formControlName="input">
+          </label>
+          <mat-hint>Paste a Suunto app link</mat-hint>
+          <mat-error *ngIf="hasError('input')">
+            This cannot be empty
+          </mat-error>
+        </mat-form-field>
+
+        <div>
+        <button mat-flat-button color="primary" (click)="onSubmit()">Download</button>
+        </div>
+      </form>
+
+    </mat-grid-tile>
+  </mat-grid-list>
+</mat-card>

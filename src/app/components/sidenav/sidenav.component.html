@@ -44,6 +44,14 @@
     <span class="example-spacer"></span>
   </mat-list-item>
 
+  <mat-list-item
+    routerLinkActive="mat-elevation-z2 active"
+    routerLink="/services" (click)="sideNav.close();">
+    <mat-icon>change_history</mat-icon>
+    <span>Services</span>
+    <span class="example-spacer"></span>
+  </mat-list-item>
+
   <mat-list-item onclick="window.open('mailto:jimmykane9@gmail.com')">
     <mat-icon>email</mat-icon>
     <span>Contact</span>
