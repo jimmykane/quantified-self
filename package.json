@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "2.2.8-NordicFlyer",
+  "version": "2.2.9-NordicFlyer",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
