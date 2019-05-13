@@ -22,6 +22,7 @@ const {version: appVersion} = require('../../../../package.json');
 export class ServicesComponent {
   public appVersion = appVersion;
   public eventFormGroup: FormGroup;
+  public isLoading = false;
 
 
   constructor(private http: HttpClient, private fileService: FileService,
@@ -56,6 +57,12 @@ export class ServicesComponent {
       return;
     }
 
+    if (this.isLoading){
+      return false;
+    }
+
+    this.isLoading = true;
+
     const parts = this.eventFormGroup.get('input').value.split('?')[0].split('/');
     const activityID = parts[parts.length - 1] === '' ? parts[parts.length - 2] : parts[parts.length - 1]
     try {
@@ -77,6 +84,8 @@ export class ServicesComponent {
         duration: 5000,
       });
       Raven.captureException(e);
+    }finally {
+      this.isLoading = false;
     }
   }
 
