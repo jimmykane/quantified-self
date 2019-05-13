@@ -90,6 +90,7 @@ import {UserSettingsComponent} from "./components/user-settings/user-settings.co
 import {EventSearchComponent} from "./components/event-search/event-search.component";
 import {EventCardDevicesComponent} from "./components/cards/event/devices/event.card.devices.component";
 import {ServicesComponent} from "./components/services/services.component";
+import {AngularFireFunctionsModule, FunctionsRegionToken} from "@angular/fire/functions";
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -120,6 +121,7 @@ export class RavenErrorHandler implements ErrorHandler {
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
     AngularFirestoreModule.enablePersistence({experimentalTabSynchronization: true}),
+    AngularFireFunctionsModule,
     AngularFireStorageModule,
     AngularFireAuthModule,
     AgmCoreModule.forRoot({
@@ -223,7 +225,8 @@ export class RavenErrorHandler implements ErrorHandler {
     SideNavService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
-    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore}
+    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
+    { provide: FunctionsRegionToken, useValue: 'europe-west2' }
   ],
   bootstrap: [AppComponent],
 })

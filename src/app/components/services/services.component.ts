@@ -5,6 +5,9 @@ import * as Raven from "raven-js";
 import {HttpClient} from "@angular/common/http";
 import {take} from "rxjs/operators";
 import {FileService} from "../../services/app.file.service";
+import {AngularFireFunctions} from "@angular/fire/functions";
+import {Observable} from "rxjs";
+import {first} from "rxjs/internal/operators/first";
 
 declare function require(moduleName: string): any;
 
@@ -22,6 +25,7 @@ export class ServicesComponent {
 
 
   constructor(private http: HttpClient, private fileService: FileService,
+              private fns: AngularFireFunctions,
               private snackBar: MatSnackBar) {
   }
 
@@ -56,7 +60,7 @@ export class ServicesComponent {
     const activityID = parts[parts.length - 1] === '' ? parts[parts.length - 2] : parts[parts.length - 1]
     try {
       const result = await this.http.get(
-        `https://us-central1-quantified-self-io.cloudfunctions.net/cors`, {
+        `https://europe-west2-quantified-self-io.cloudfunctions.net/stWorkoutDownLoadAsFit`, {
           params: {
             activityID: activityID
           },

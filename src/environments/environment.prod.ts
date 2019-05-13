@@ -7,5 +7,5 @@ export const environment = {
     projectId: "quantified-self-io",
     storageBucket: "quantified-self-io.appspot.com",
     messagingSenderId: "242713487388"
-  }
+  },
 };
