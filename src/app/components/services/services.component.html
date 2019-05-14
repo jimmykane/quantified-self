@@ -19,6 +19,7 @@
 
         <div>
         <button mat-flat-button color="primary" (click)="onSubmit()">Download</button>
+        <button *ngIf="user" mat-flat-button color="primary" (click)="onImportAndOpen()">Import and open</button>
         </div>
       </form>
 

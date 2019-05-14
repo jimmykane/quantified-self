@@ -5,3 +5,7 @@ mat-grid-list{
 mat-form-field {
   margin-bottom: 2em;
 }
+
+button {
+  margin-right: 1em;
+}
