@@ -1,0 +1,18 @@
+{
+  "name": "cors-proxy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "firebase-admin": "^7.3.0",
+    "firebase-functions": "^2.3.1",
+    "node-fetch": "^2.5.0"
+  },
+  "engines": {
+    "node": "10"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^0.1.6"
+  }
+}
