@@ -5,9 +5,11 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "start-functions": "firebase emulators:start --only functions",
     "build": "ng build --verbose",
     "build-production": "ng build --verbose --prod",
     "deploy": "firebase deploy",
+    "deploy-functions": "firebase deploy --only functions",
     "build-and-deploy-prod": "npm run build-production && npm run deploy",
     "build-and-deploy-dev": "npm run build && npm run deploy",
     "test": "ng test",
