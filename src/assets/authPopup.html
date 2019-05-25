@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="description"
+        content="Demonstrates how to authorize Firebase with Instagram auth using Firebase Functions">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authenticate with Suunto App</title>
+</head>
+<body>
+
+Please wait...
+
+
+<script>
+  /**
+   * Returns the value of the given URL query parameter.
+   */
+  function getURLParameter(name) {
+    return decodeURIComponent((new RegExp('[?|&]' + name + '=' + '([^&;]+?)(&|#|;|$)').exec(location.search) ||
+      [null, ''])[1].replace(/\+/g, '%20')) || null;
+  }
+
+  /**
+   * This callback is called by the JSONP callback of the 'token' Firebase Function with the Firebase auth token.
+   */
+  function tokenReceived(data) {
+    if (data.serviceName && data.serviceAuthResponse) {
+      window.opener.dispatchEvent(new CustomEvent("tokensReceived", {
+        detail: {
+          firebaseAuthToken: data.firebaseAuthToken,
+          serviceName: data.serviceName,
+          serviceAuthResponse: data.serviceAuthResponse
+        }
+      }));
+      window.close();
+      // firebase.auth().tokensReceived(data.token).then(function(test) {
+      //
+      //   window.close();
+      // });
+    } else {
+      console.error(data);
+      document.body.innerText = 'Error in the token Function: ' + data.error;
+    }
+  }
+
+  var code = getURLParameter('code');
+  var state = getURLParameter('state');
+  var error = getURLParameter('error');
+  var signInWithService = getURLParameter('signInWithService') === 'true';
+  var redirect_uri = encodeURIComponent(location.protocol + '//' + location.host + location.pathname);
+  if (error) {
+    document.body.innerText = 'Error back from the service auth page: ' + error;
+  } else if (!code) {
+    // Start the auth flow.
+    // @todo fix https://github.com/firebase/firebase-tools/issues/1314
+    window.location.href = location.hostname === "localhost" ?
+      `http://localhost:5000/quantified-self-io/us-central1/authRedirect/?signInWithService=${signInWithService}&redirect_uri=${redirect_uri}` :
+      `https://europe-west2-quantified-self-io.cloudfunctions.net/authRedirect/?signInWithService=${signInWithService}&redirect_uri=${redirect_uri}`;
+  } else {
+    // console.log(2)
+    // Use JSONP to load the 'token' Firebase Function to exchange the auth code against a Firebase custom token.
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    // @todo fix https://github.com/firebase/firebase-tools/issues/1314
+    var tokenFunctionURL = location.hostname === "localhost" ? 'http://localhost:5000/quantified-self-io/us-central1/authToken/' : `https://europe-west2-quantified-self-io.cloudfunctions.net/authToken/`;
+    script.src = tokenFunctionURL +
+      '?code=' + encodeURIComponent(code) +
+      '&state=' + encodeURIComponent(state) +
+      '&callback=' + tokenReceived.name +
+      '&redirect_uri=' + redirect_uri;
+    document.head.appendChild(script);
+    console.log(script.src);
+  }
+</script>
+</body>
+</html>

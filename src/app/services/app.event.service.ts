@@ -23,7 +23,8 @@ import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {getSize} from "quantified-self-lib/lib/events/utilities/helpers";
+import {getSize} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {Buffer} from 'buffer';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -43,20 +44,20 @@ export class EventService implements OnDestroy {
       this.afs
         .collection('users')
         .doc(user.uid)
-        .collection("events").doc(eventID).snapshotChanges().pipe(
+        .collection('events').doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
-          return eventSnapshot.payload.exists?  EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
+          return eventSnapshot.payload.exists ?  EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
         })),
       this.getActivities(user, eventID),
     ).pipe(catchError((error) => {
-      if (error.code && error.code === "permission-denied"){
+      if (error.code && error.code === 'permission-denied') {
         return of([null, null])
       }
       Raven.captureException(error);
       this.logger.error(error);
       return of([null, null]) // @todo fix this
     })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
-      if (!event){
+      if (!event) {
         return null;
       }
       event.clearActivities();
@@ -83,7 +84,7 @@ export class EventService implements OnDestroy {
       observables.push(this.afs
         .collection('users')
         .doc(user.uid)
-        .collection("events")
+        .collection('events')
         .doc(startAfter.getID()).get()
         .pipe(take(1)))
     }
@@ -91,7 +92,7 @@ export class EventService implements OnDestroy {
       observables.push(this.afs
         .collection('users')
         .doc(user.uid)
-        .collection("events")
+        .collection('events')
         .doc(endBefore.getID()).get()
         .pipe(take(1)))
     }
@@ -111,9 +112,9 @@ export class EventService implements OnDestroy {
   private getEventsForUserInternal(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.afs.collection('users')
       .doc(user.uid)
-      .collection("events", ((ref) => {
+      .collection('events', ((ref) => {
         let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
-        if (where.length){
+        if (where.length) {
           where.forEach(whereClause => query = query.where(whereClause.fieldPath, whereClause.opStr, whereClause.value));
         }
         if (limit > 0) {
@@ -131,7 +132,6 @@ export class EventService implements OnDestroy {
       }))
       .snapshotChanges()
       .pipe(map((eventSnapshots) => {
-        // debugger;
         return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
           eventIDS.push(eventSnapshot.payload.doc.id);
           return eventIDS;
@@ -149,7 +149,7 @@ export class EventService implements OnDestroy {
 
   getEventActivitiesAndStreams(user: User, eventID) {
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
-      if (!event){
+      if (!event) {
         return of(null);
       }
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
@@ -174,7 +174,7 @@ export class EventService implements OnDestroy {
     return this.afs
       .collection('users')
       .doc(user.uid)
-      .collection("events").doc(eventID).collection('activities').snapshotChanges().pipe(
+      .collection('events').doc(eventID).collection('activities').snapshotChanges().pipe(
         map(activitySnapshots => {
           return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
@@ -212,7 +212,7 @@ export class EventService implements OnDestroy {
         .doc(type)
         .snapshotChanges()
         .pipe(map((documentSnapshot) => { // @todo should be reduce
-          return documentSnapshot.payload.exists?   this.processStreamDocumentSnapshots(documentSnapshot) : null;
+          return documentSnapshot.payload.exists ?   this.processStreamDocumentSnapshots(documentSnapshot) : null;
         }))                                                      // since the return with equality on the query should only fetch one afaik in my model
     })).pipe(map((streams: StreamInterface[]) => {
       return streams.filter((stream) => !!stream)
@@ -251,6 +251,8 @@ export class EventService implements OnDestroy {
 
         activity.getAllStreams().forEach((stream) => {
           this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
+          // this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromUint8Array(Pako.gzip(JSON.stringify(stream.data))))}`);
+          // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
           writePromises.push(this.afs
             .collection('users')
             .doc(user.uid)
@@ -280,7 +282,7 @@ export class EventService implements OnDestroy {
       debugger;
       // Try to delete the parent entity and all subdata
       await this.deleteAllEventData(user, event.getID());
-      throw 'Could not parse event';
+      throw new Error('Could not parse event');
     }
   }
 

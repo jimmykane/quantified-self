@@ -4,8 +4,23 @@ mat-grid-list{
 
 mat-form-field {
   margin-bottom: 2em;
+  width: 100%;
 }
 
-button {
+button:first-child {
   margin-right: 1em;
+  /*width: 47%;*/
+}
+
+button.big{
+  width: 100%;
+}
+
+section{
+  text-align: center;
+}
+
+mat-icon{
+  vertical-align: middle;
+  font-size: 1.6em;
 }

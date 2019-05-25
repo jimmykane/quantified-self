@@ -2,27 +2,48 @@
   <mat-grid-list [cols]="1" [rowHeight]="'fit'">
     <mat-grid-tile>
       <app-shade [isActive]="isLoading"></app-shade>
-      <form [formGroup]="eventFormGroup" (submit)="onSubmit()">
+      <section>
+        <section>
+          <mat-icon>arrow_drop_up</mat-icon>
+          <h1>Suunto app`</h1>
+          <section >
+            <p class="mat-small" *ngIf="this.isConnectedToSuuntoApp()">
+              Connected at {{serviceToken.dateCreated  | date:'medium'}}
+              <mat-icon matTooltip="Sync happens for activities done after this date">
+                info
+              </mat-icon>
+            </p>
+            <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
+            <button class="big" mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
+                    *ngIf="!isConnectedToSuuntoApp()"
+                    (click)="connectWithSuuntoApp($event)">Connect
+            </button>
+            <button  class="big" mat-flat-button color="warn"
+                    *ngIf="isConnectedToSuuntoApp()"
+                    (click)="deauthorizeSuuntoApp($event)">Disconnect
+            </button>
+          </section>
+        </section>
 
-        <span class="mat-headline">Suunto</span>
-        <span class="mat-subheader">Export from Suunto app</span>
+        <section>
+          <form [formGroup]="eventFormGroup" (submit)="onSubmit()">
+            <mat-form-field>
+              <label>
+                <input matInput placeholder="Link" formControlName="input">
+              </label>
+              <mat-hint>Paste a Suunto app link that is public</mat-hint>
+              <mat-error *ngIf="hasError('input')">
+                This cannot be empty
+              </mat-error>
+            </mat-form-field>
 
-        <mat-form-field>
-          <label>
-            <input matInput placeholder="Link" formControlName="input">
-          </label>
-          <mat-hint>Paste a Suunto app link that is public</mat-hint>
-          <mat-error *ngIf="hasError('input')">
-            This cannot be empty
-          </mat-error>
-        </mat-form-field>
-
-        <div>
-        <button mat-flat-button color="primary" (click)="onSubmit()">Download</button>
-        <button *ngIf="user" mat-flat-button color="primary" (click)="onImportAndOpen()">Import and open</button>
-        </div>
-      </form>
-
+            <section>
+              <button mat-flat-button color="accent" (click)="onSubmit()">Download</button>
+              <button *ngIf="user" mat-flat-button color="accent" (click)="onImportAndOpen()">Import and open</button>
+            </section>
+          </form>
+        </section>
+      </section>
     </mat-grid-tile>
   </mat-grid-list>
 </mat-card>

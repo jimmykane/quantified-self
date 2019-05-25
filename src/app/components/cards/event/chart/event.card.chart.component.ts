@@ -26,7 +26,6 @@ import {map} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 import {DataPace, DataPaceMinutesPerMile} from "quantified-self-lib/lib/data/data.pace";
 import {UserChartSettingsInterface, XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 

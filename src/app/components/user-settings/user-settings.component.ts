@@ -56,7 +56,7 @@ export class UserSettingsComponent implements OnChanges {
 
   public userSettingsFormGroup: FormGroup;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
+  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog) {
   }
 
   ngOnChanges(): void {

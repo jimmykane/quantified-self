@@ -1,18 +1,19 @@
 import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
-import {FormControl, FormGroup, Validators} from "@angular/forms";
-import {MatSnackBar} from "@angular/material";
-import * as Raven from "raven-js";
-import {HttpClient} from "@angular/common/http";
-import {map, take} from "rxjs/operators";
-import {FileService} from "../../services/app.file.service";
-import {AngularFireFunctions} from "@angular/fire/functions";
-import {Observable, Subscription} from "rxjs";
-import {first} from "rxjs/internal/operators/first";
-import {EventService} from "../../services/app.event.service";
-import {EventImporterFIT} from "quantified-self-lib/lib/events/adapters/importers/fit/importer.fit";
-import {AppAuthService} from "../../authentication/app.auth.service";
-import {User} from "quantified-self-lib/lib/users/user";
-import {Router} from "@angular/router";
+import {FormControl, FormGroup, Validators} from '@angular/forms';
+import {MatSnackBar} from '@angular/material';
+import * as Raven from 'raven-js';
+import {HttpClient} from '@angular/common/http';
+import {FileService} from '../../services/app.file.service';
+import {AngularFireFunctions} from '@angular/fire/functions';
+import {combineLatest, of, Subscription} from 'rxjs';
+import {EventService} from '../../services/app.event.service';
+import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
+import {AppAuthService} from '../../authentication/app.auth.service';
+import {User} from 'quantified-self-lib/lib/users/user';
+import {Router} from '@angular/router';
+import {UserService} from '../../services/app.user.service';
+import {concatMap, mergeMap, switchMap} from 'rxjs/operators';
+import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
 
 declare function require(moduleName: string): any;
 
@@ -29,21 +30,37 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public eventFormGroup: FormGroup;
   public isLoading = false;
   public user: User;
+  private serviceToken: ServiceTokenInterface;
   private userSubscription: Subscription;
 
+
+  @HostListener('window:tokensReceived', ['$event'])
+  async tokensReceived(event) {
+    await this.userService.setServiceAuthToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse)
+    this.isLoading = false;
+    this.snackBar.open(`Connected successfully`, null, {
+      duration: 2000,
+    });
+  }
 
   constructor(private http: HttpClient, private fileService: FileService,
               private fns: AngularFireFunctions,
               private eventService: EventService,
-              private authService: AppAuthService,
+              public authService: AppAuthService,
+              private userService: UserService,
               private router: Router,
               private snackBar: MatSnackBar) {
   }
 
-
   ngOnInit(): void {
-    this.userSubscription = this.authService.user.subscribe((user) => {
+    this.userSubscription = this.authService.user.pipe(switchMap((user) => {
+      if (!user) {
+        return of(null);
+      }
       this.user = user;
+      return this.userService.getServiceAuthToken(user, 'Suunto App');
+    })).subscribe((token) => {
+      this.serviceToken = token;
     });
     this.eventFormGroup = new FormGroup({
       input: new FormControl('', [
@@ -68,7 +85,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   async onSubmit(shouldImportAndOpen?: boolean) {
-    event.preventDefault();
     if (!this.eventFormGroup.valid) {
       this.validateAllFormFields(this.eventFormGroup);
       return;
@@ -123,6 +139,30 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.validateAllFormFields(control);
       }
     });
+  }
+
+  connectWithSuuntoApp(event) {
+    this.isLoading = true;
+    const wnd = window.open('assets/authPopup.html?signInWithService=false', 'name', 'height=585,width=400');
+    wnd.onunload = () => this.isLoading = false;
+  }
+
+  isConnectedToSuuntoApp(){
+    return !!this.serviceToken;
+  }
+  async deauthorizeSuuntoApp(event) {
+    this.isLoading = true;
+    try {
+      await this.userService.deauthorizeSuuntoAppService();
+      this.snackBar.open(`Disconnected successfully`, null, {
+        duration: 2000,
+      });
+    } catch (e) {
+      this.snackBar.open(`Could not disconnect due to ${e}`, null, {
+        duration: 2000,
+      });
+    }
+    this.isLoading = false;
   }
 
   ngOnDestroy(): void {

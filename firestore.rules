@@ -23,5 +23,12 @@ service cloud.firestore {
           }
         }
     }
+
+    match /suuntoAppAccessTokens/{userID} {
+      allow read, write, create, update, delete: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+    match /suuntoAppWorkoutQueue/{userID} {
+      allow read, write, create, update, delete: if false;
+    }
   }
 }

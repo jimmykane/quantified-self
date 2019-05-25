@@ -38,6 +38,10 @@ export class AppAuthService implements OnDestroy {
     );
   }
 
+  isCurrentUserAnonymous() {
+    return this.afAuth.auth.currentUser.isAnonymous;
+  }
+
   authenticated(): boolean {
     return this.authState;
   }

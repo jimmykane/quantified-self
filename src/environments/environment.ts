@@ -6,11 +6,14 @@
 export const environment = {
   production: false,
   firebase: {
-    apiKey: "AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0",
-    authDomain: "quantified-self-io.firebaseapp.com",
-    databaseURL: "https://quantified-self-io.firebaseio.com",
-    projectId: "quantified-self-io",
-    storageBucket: "quantified-self-io.appspot.com",
-    messagingSenderId: "242713487388"
+    apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
+    authDomain: 'quantified-self-io.firebaseapp.com',
+    databaseURL: 'https://quantified-self-io.firebaseio.com',
+    projectId: 'quantified-self-io',
+    storageBucket: 'quantified-self-io.appspot.com',
+    messagingSenderId: '242713487388',
+  },
+  functions: {
+    deauthorizeSuuntoAppServiceURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorize'
   }
 };
