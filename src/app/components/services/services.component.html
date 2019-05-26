@@ -4,23 +4,24 @@
       <app-shade [isActive]="isLoading"></app-shade>
       <section>
         <section>
-          <mat-icon (click)="connectWithSuuntoApp($event)">arrow_drop_up</mat-icon>
-          <h1>Suunto app`</h1>
-          <section >
-            <p class="mat-small" *ngIf="this.isConnectedToSuuntoApp()">
-              Connected at {{serviceToken.dateCreated  | date:'medium'}}
-              <mat-icon matTooltip="Sync happens for activities done after this date">
+          <mat-icon class="suunto" (click)="connectWithSuuntoApp($event)">arrow_drop_up</mat-icon>
+          <h1>Suunto <span class="smaller">app</span></h1>
+          <p *ngIf="serviceTokens && serviceTokens.length">Up to 2 Suunto app accounts</p>
+          <section>
+            <p class="mat-small" *ngFor="let serviceToken of serviceTokens; let i = index;">
+              {{ i+1 }}. Connected at {{serviceToken.dateCreated  | date:'medium'}}
+              <mat-icon matTooltip="Account with username '{{ serviceToken.userName }}' is connected. NOTE: Sync happens for activities done after this date">
                 info
               </mat-icon>
             </p>
-            <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
-            <button class="big" mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
-                    *ngIf="!isConnectedToSuuntoApp()"
-                    (click)="connectWithSuuntoApp($event)">Connect
+            <p class="mat-small" *ngIf="serviceTokens && !user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
+            <button  [class.big]="serviceTokens.length > 1"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
+                    *ngIf="serviceTokens && serviceTokens.length < 2"
+                    (click)="connectWithSuuntoApp($event)">{{ serviceTokens.length === 1 ? 'Connect another' : 'Connect' }}
             </button>
-            <button  class="big" mat-flat-button color="warn"
-                    *ngIf="isConnectedToSuuntoApp()"
-                    (click)="deauthorizeSuuntoApp($event)">Disconnect
+            <button  [class.big]="serviceTokens.length > 1"  mat-flat-button color="warn"
+                    *ngIf="serviceTokens && serviceTokens.length"
+                    (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
             </button>
           </section>
         </section>
@@ -38,7 +39,7 @@
             </mat-form-field>
 
             <section>
-              <button mat-flat-button color="accent" (click)="onSubmit()">Download</button>
+              <button mat-flat-button color="primary" (click)="onSubmit()">Download</button>
               <button *ngIf="user" mat-flat-button color="accent" (click)="onImportAndOpen()">Import and open</button>
             </section>
           </form>

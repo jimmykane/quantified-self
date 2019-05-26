@@ -12,9 +12,8 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Router} from '@angular/router';
 import {UserService} from '../../services/app.user.service';
-import {concatMap, first, map, mergeMap, switchMap} from 'rxjs/operators';
-import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
-import {flatMap} from "tslint/lib/utils";
+import {switchMap} from 'rxjs/operators';
+import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 
 declare function require(moduleName: string): any;
 
@@ -31,7 +30,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public eventFormGroup: FormGroup;
   public isLoading = false;
   public user: User;
-  private serviceToken: ServiceTokenInterface;
+  public serviceTokens: ServiceTokenInterface[];
   private userSubscription: Subscription;
 
 
@@ -60,9 +59,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       }
       this.user = user;
       return this.userService.getServiceAuthToken(user, 'Suunto App')
-        .pipe(map((tokens) => tokens[0])); // Get awlays only the first \(he can have more)
-    })).subscribe((token) => {
-      this.serviceToken = token;
+    })).subscribe((tokens) => {
+      this.serviceTokens = tokens;
     });
     this.eventFormGroup = new FormGroup({
       input: new FormControl('', [
@@ -149,8 +147,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
     wnd.onunload = () => this.isLoading = false;
   }
 
-  isConnectedToSuuntoApp(){
-    return !!this.serviceToken;
+  isConnectedToSuuntoApp() {
+    return !!this.serviceTokens.length;
   }
   async deauthorizeSuuntoApp(event) {
     this.isLoading = true;
