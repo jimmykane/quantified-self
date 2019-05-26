@@ -25,7 +25,6 @@ const OAUTH_SCOPES = 'workout';
 // const OAUTH_REDIRECT_URI = `https://quantified-self.io/assets/authPopup.html`;
 
 
-
 /**
  * Redirects the User to the authentication consent screen. Also the 'state' cookie is set for later state
  * verification.
@@ -37,7 +36,7 @@ export const authRedirect = functions.region('europe-west2').https.onRequest(asy
   console.log('Setting state cookie for verification:', state);
   const requestHost = req.get('host');
   let secureCookie = true;
-  if (requestHost && requestHost.indexOf('localhost:') === 0){
+  if (requestHost && requestHost.indexOf('localhost:') === 0) {
     secureCookie = false;
   }
   console.log('Need a secure cookie (i.e. not on localhost)?', secureCookie);
@@ -85,7 +84,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
 
       // Create a Firebase account and get the Custom Auth Token.
       let firebaseToken;
-      if (signInWithService){
+      if (signInWithService) {
         firebaseToken = await createFirebaseAccount(suuntoAppUserName, accessToken);
       }
       return res.jsonp({
@@ -103,7 +102,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
         serviceName: 'Suunto App'
       });
     });
-  } catch(error) {
+  } catch (error) {
     return res.jsonp({
       error: error.toString(),
     });
@@ -115,7 +114,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
  */
 export const deauthorize = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
-  if (['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) === -1){
+  if (['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) === -1) {
     res.status(403);
     res.send();
     return
@@ -125,14 +124,14 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
   res.set('Access-Control-Allow-Methods', 'POST');
   res.set('Access-Control-Allow-Headers', 'origin, content-type, accept');
 
-  if (req.method === 'OPTIONS'){
+  if (req.method === 'OPTIONS') {
     res.status(200);
     res.send();
     return;
   }
 
-  if (req.method !== 'POST'){
-    console.error(`Only post is allowed` );
+  if (req.method !== 'POST') {
+    console.error(`Only post is allowed`);
     res.status(403);
     res.send();
     return;
@@ -141,7 +140,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
   let decodedIdToken;
   try {
     decodedIdToken = await admin.auth().verifyIdToken(req.body.firebaseAuthToken);
-  }catch (e) {
+  } catch (e) {
     console.error(e);
     console.error(`Could not verify user token aborting operation`);
     res.status(500);
@@ -149,62 +148,57 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
     return;
   }
 
-  if (!decodedIdToken){
+  if (!decodedIdToken) {
     console.error(`Could not verify and decode token`);
     res.status(500);
     res.send();
     return;
   }
 
-  const doc = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).get();
-  if (!doc.exists){
-    console.error(`Token not found for user ${decodedIdToken.uid}` );
-    res.status(404);
-    res.send({result: 'Token not found'});
-    return
-  }
+  const documentSnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
 
-  const data = <ServiceTokenInterface>doc.data();
-  if (!data){
-    console.error(`Token data not found for user ${decodedIdToken.uid}` );
-    res.status(404);
-    res.send({result: 'Token data not found'});
-    return ;
-  }
+  console.log(`Found ${documentSnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
-  try {
-    await requestPromise.get({
-      headers: {
-        'Authorization': `Bearer ${data.accessToken}`,
-      },
-      url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
-    });
-    console.log(`Deauthorized token for ${decodedIdToken.uid}`)
-  }catch (e) {
-    console.error(e);
-    console.error(`Could not deauthorize token for ${decodedIdToken.uid}`);
-    res.status(500);
-    res.send({result: 'Could not deauthorize'});
-    return ;
-  }
-
-  // @todo Should deauth all tokens connected
-  const tokenSpans = await admin.firestore().collection('suuntoAppAccessTokens').where("userName", "==", data.userName).get()
-
-  try {
-    for (const token of tokenSpans.docs){
-      await token.ref.delete();
-      console.log(`Deleted token ${token.id}`);
+  // Deauthorize all tokens for that user
+  for (const doc of documentSnapshots.docs) {
+    // Get the first token
+    const data = <ServiceTokenInterface>doc.data();
+    try {
+      await requestPromise.get({
+        headers: {
+          'Authorization': `Bearer ${data.accessToken}`,
+        },
+        url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
+      });
+      console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
+    } catch (e) {
+      console.error(e);
+      console.error(`Could not deauthorize token ${doc.id} for ${decodedIdToken.uid}`);
+      res.status(500);
+      res.send({result: 'Could not deauthorize'});
+      return;
     }
-  }catch (e) {
-    console.error(e);
-    console.error(`Could not deauthorize token for ${decodedIdToken.uid}`);
-    res.status(500);
-    res.send({result: 'Could not deauthorize'});
-    return ;
-  }
 
-  console.log(`Deauthorized successfully token for ${decodedIdToken.uid}`);
+    // Now get from all users the same username token
+    // Note this will return the current doc as well
+    const otherUserTokens = await admin.firestore().collectionGroup('tokens').where("userName", "==", data.userName).get();
+
+    console.log(`Found ${otherUserTokens.size} tokens for token username ${data.userName}`)
+
+    try {
+      for (const token of otherUserTokens.docs) {
+        await token.ref.delete();
+        console.log(`Deleted token ${token.id}`);
+      }
+    } catch (e) {
+      console.error(e);
+      console.error(`Could not deauthorize token for ${decodedIdToken.uid}`);
+      res.status(500);
+      res.send({result: 'Could not deauthorize'});
+      return;
+    }
+    console.log(`Deauthorized successfully token for ${decodedIdToken.uid}`);
+  }
 
   res.status(200);
   res.send({result: 'Deauthorized'});
@@ -218,7 +212,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
  *
  * @returns {Promise<string>} The Firebase custom auth token in a promise.
  */
-async function createFirebaseAccount(serviceUserID:string, accessToken:string) {
+async function createFirebaseAccount(serviceUserID: string, accessToken: string) {
   // The UID we'll assign to the user.
   const uid = generateIDFromParts(['suuntoApp', serviceUserID]);
 
@@ -231,7 +225,7 @@ async function createFirebaseAccount(serviceUserID:string, accessToken:string) {
       displayName: serviceUserID,
       // photoURL: photoURL,
     })
-  }catch (e) {
+  } catch (e) {
     if (e.code === 'auth/user-not-found') {
       await admin.auth().createUser({
         uid: uid,
@@ -246,7 +240,7 @@ async function createFirebaseAccount(serviceUserID:string, accessToken:string) {
   return token;
 }
 
-function determineRedirectURI(req: Request): string{
+function determineRedirectURI(req: Request): string {
   return req.query.redirect_uri; // @todo should check for authorized redirects as well
 }
 

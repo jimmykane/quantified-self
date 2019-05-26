@@ -4,7 +4,7 @@
       <app-shade [isActive]="isLoading"></app-shade>
       <section>
         <section>
-          <mat-icon>arrow_drop_up</mat-icon>
+          <mat-icon (click)="connectWithSuuntoApp($event)">arrow_drop_up</mat-icon>
           <h1>Suunto app`</h1>
           <section >
             <p class="mat-small" *ngIf="this.isConnectedToSuuntoApp()">

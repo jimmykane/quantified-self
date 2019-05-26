@@ -25,6 +25,7 @@ import {environment} from '../../environments/environment';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import * as Raven from 'raven-js';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
+import {FirebaseError, firestore} from 'firebase/app';
 
 
 @Injectable()
@@ -69,18 +70,17 @@ export class UserService implements OnDestroy {
     if (serviceName !== 'Suunto App') {
       throw new Error('Service not supported');
     }
-    return this.afs.doc(
-      `suuntoAppAccessTokens/${user.uid}`,
-    ).set(JSON.parse(JSON.stringify(serviceToken)))
+    return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(serviceToken.userName)
+    .set(JSON.parse(JSON.stringify(serviceToken)))
   }
 
-  public getServiceAuthToken(user: User, serviceName: string): Observable<ServiceTokenInterface> {
+  public getServiceAuthToken(user: User, serviceName: string) {
     if (serviceName !== 'Suunto App') {
       throw new Error('Service not supported');
     }
     return this.afs
       .collection('suuntoAppAccessTokens')
-      .doc<ServiceTokenInterface>(user.uid).valueChanges();
+      .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges();
   }
 
   public async deauthorizeSuuntoAppService() {

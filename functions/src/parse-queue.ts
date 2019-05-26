@@ -14,10 +14,10 @@ import {refreshTokenIfNeeded} from "./service-tokens";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
 
 
-export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 120}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
+export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 360}).pubsub.schedule('every 30 minutes').onRun(async (context) => {
   console.log('This will be run every 3 minutes!');
   // Suunto app refresh tokens should be refreshed every 180days we target at 15 days before 165 days
-  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(50).get(); // Max 10 retries
+  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
   // Async foreach is ok here
   querySnapshot.forEach(async (queueItem) => {
     await processQueueItem(queueItem);
@@ -28,7 +28,7 @@ export async function processQueueItem(queueItem: any) {
 
   console.log(`Processing queue item ${queueItem.id} at retry count ${queueItem.data().retryCount}`);
   // queueItem.data() is never undefined for query queueItem snapshots
-  const tokens = await admin.firestore().collection('suuntoAppAccessTokens').where("userName", "==", queueItem.data()['userName']).get();
+  const tokens = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.data()['userName']).get();
 
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokens.size) {
