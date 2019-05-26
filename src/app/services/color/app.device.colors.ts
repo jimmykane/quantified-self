@@ -6,7 +6,7 @@ export enum AppDeviceColors {
   'Suunto 2' = AppColors.Green,
   'Suunto 3' = AppColors.Green,
   'Suunto 4' = AppColors.Green,
-  'Suunto 5' = AppColors.Green,
+  'Suunto 5' = AppColors.DeepBlue,
   'Suunto 6' = AppColors.Green,
   'Suunto 7' = AppColors.Green,
   'Suunto 8' = AppColors.Green,
