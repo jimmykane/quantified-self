@@ -27,12 +27,12 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {catchError, first, map, startWith, switchMap, take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {merge, of, Subscription} from "rxjs";
-import * as Raven from "raven-js";
-import {Log} from "ng2-logger/browser";
-import {Privacy} from "quantified-self-lib/lib/privacy/privacy.class.interface";
-import {DataAscent} from "quantified-self-lib/lib/data/data.ascent";
-import {DataDescent} from "quantified-self-lib/lib/data/data.descent";
+import {merge, of, Subscription} from 'rxjs';
+import * as Raven from 'raven-js';
+import {Log} from 'ng2-logger/browser';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import WhereFilterOp = firebase.firestore.WhereFilterOp; // @todo investigate if this import is ok
 
 
@@ -48,7 +48,7 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp; // @todo investigate if
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() privacyFilter?: Privacy;
-  @Input() eventsPerPage? = 10;
+  @Input() eventsPerPage ? = 10;
   @Input() hasActions?: boolean;
   @ViewChild(MatSort) sort: MatSort;
   @ViewChild(MatPaginator) paginator: MatPaginator;
@@ -161,27 +161,27 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         switchMap(() => {
           this.isLoadingResults = true;
           const where = [];
-          if (this.searchTerm){
+          if (this.searchTerm) {
             where.push({
               fieldPath: 'name',
-              opStr: <WhereFilterOp>"==",
+              opStr: <WhereFilterOp>'==',
               value: this.searchTerm
             })
           }
-          if (this.searchStartDate){
-            const searchStartDate = (new Date(this.searchStartDate.getTime() - (this.searchStartDate.getTimezoneOffset()*60000)));
+          if (this.searchStartDate) {
+            const searchStartDate = (new Date(this.searchStartDate.getTime() - (this.searchStartDate.getTimezoneOffset() * 60000)));
             searchStartDate.setHours(0);
             searchStartDate.setMinutes(0);
             searchStartDate.setSeconds(0);
             searchStartDate.setMilliseconds(0);
             where.push({
               fieldPath: 'startDate',
-              opStr: <WhereFilterOp>">=",
+              opStr: <WhereFilterOp>'>=',
               value: searchStartDate.toISOString()
             })
           }
-          if (this.searchEndDate){
-            const searchEndDate = (new Date(this.searchEndDate.getTime() - (this.searchEndDate.getTimezoneOffset()*60000)));
+          if (this.searchEndDate) {
+            const searchEndDate = (new Date(this.searchEndDate.getTime() - (this.searchEndDate.getTimezoneOffset() * 60000)));
             searchEndDate.setDate(searchEndDate.getDate() + 1);
             searchEndDate.setHours(0);
             searchEndDate.setMinutes(0);
@@ -189,14 +189,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             searchEndDate.setMilliseconds(0);
             where.push({
               fieldPath: 'startDate',
-              opStr: <WhereFilterOp>"<=",
+              opStr: <WhereFilterOp>'<=',
               value: searchEndDate.toISOString()
             })
           }
-          if (this.privacyFilter){
+          if (this.privacyFilter) {
             where.push({
               fieldPath: 'privacy',
-              opStr: <WhereFilterOp>"==",
+              opStr: <WhereFilterOp>'==',
               value: this.privacyFilter
             })
           }
@@ -248,7 +248,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
-            dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
+            dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'd MMM yy HH:mm') : 'None?';
             dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
             dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
             dataObject['stats.Ascent'] = ascent ? ascent.getDisplayValue() + ascent.getDisplayUnit() : '';
