@@ -14,12 +14,12 @@
                 info
               </mat-icon>
             </p>
-            <p class="mat-small" *ngIf="serviceTokens && !user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
-            <button  [class.big]="serviceTokens.length > 1"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
-                    *ngIf="serviceTokens && serviceTokens.length < 2"
-                    (click)="connectWithSuuntoApp($event)">{{ serviceTokens.length === 1 ? 'Connect another' : 'Connect' }}
+            <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
+            <button  [class.big]="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && (serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
+                    *ngIf="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && serviceTokens.length < 2)"
+                    (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
             </button>
-            <button  [class.big]="serviceTokens.length > 1"  mat-flat-button color="warn"
+            <button  [class.big]="serviceTokens.length > 1" [class.margin-left]="serviceTokens.length <= 1" mat-flat-button color="warn" class="margin-left"
                     *ngIf="serviceTokens && serviceTokens.length"
                     (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
             </button>
@@ -39,8 +39,8 @@
             </mat-form-field>
 
             <section>
-              <button mat-flat-button color="primary" (click)="onSubmit()">Download</button>
-              <button *ngIf="user" mat-flat-button color="accent" (click)="onImportAndOpen()">Import and open</button>
+              <button [class.big]="!user"  mat-flat-button color="primary" (click)="onSubmit()">Download</button>
+              <button *ngIf="user" class="margin-left" mat-flat-button color="accent" (click)="onImportAndOpen()">Import and open</button>
             </section>
           </form>
         </section>

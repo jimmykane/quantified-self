@@ -58,6 +58,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
         return of(null);
       }
       this.user = user;
+      if (this.authService.isCurrentUserAnonymous()){
+        return of(null);
+      }
       return this.userService.getServiceAuthToken(user, 'Suunto App')
     })).subscribe((tokens) => {
       this.serviceTokens = tokens;

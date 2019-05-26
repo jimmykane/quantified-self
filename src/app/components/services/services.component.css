@@ -7,7 +7,7 @@ mat-form-field {
   width: 100%;
 }
 
-button:last-child {
+button.margin-left {
   margin-left: 1em;
   /*width: 47%;*/
 }
