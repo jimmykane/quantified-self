@@ -33,7 +33,7 @@ export async function processQueueItem(queueItem: any) {
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokens.size) {
     console.error(`No token found for queue item ${queueItem.id} increasing count just in case`);
-    await increaseRetryCountForQueueItem(queueItem);
+    await increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
     return;
   }
 
@@ -62,7 +62,7 @@ export async function processQueueItem(queueItem: any) {
         console.error(e);
         console.error(`Could not refresh token for ${queueItem.id} and token user ${data.userName}`)
       }
-      await increaseRetryCountForQueueItem(queueItem);
+      await increaseRetryCountForQueueItem(queueItem, e);
       return; // Next
     }
 
@@ -73,7 +73,7 @@ export async function processQueueItem(queueItem: any) {
       event.setID(generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]));
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       const parent1 = doc.ref.parent
-      if (!parent1){
+      if (!parent1) {
         throw new Error(`No parent found for ${doc.id}`);
       }
       const parentID = parent1.parent!.id;
@@ -86,15 +86,15 @@ export async function processQueueItem(queueItem: any) {
       // @todo should delete event  or seperate catch
       console.error(e);
       console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${data.userName} to ${queueItem.data().retryCount + 1}`);
-      await increaseRetryCountForQueueItem(queueItem);
+      await increaseRetryCountForQueueItem(queueItem, e);
       return;
     }
   }
 
   // If not all tokens are processed log it and increase the retry count
-  if (processedCount !== tokens.size){
+  if (processedCount !== tokens.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later`);
-    await increaseRetryCountForQueueItem(queueItem);
+    await increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
     return;
   }
 
@@ -103,10 +103,17 @@ export async function processQueueItem(queueItem: any) {
 
 }
 
-async function increaseRetryCountForQueueItem(queueItem: any) {
+async function increaseRetryCountForQueueItem(queueItem: any, error: Error) {
+  const errors = queueItem.data().errors || [];
+  errors.push({
+    error: JSON.stringify(error),
+    retryCount: queueItem.data().retryCount,
+    date: (new Date()).toJSON(),
+  });
   try {
     await queueItem.ref.update({
-      'retryCount': queueItem.data().retryCount + 1,
+      retryCount: queueItem.data().retryCount + 1,
+      errors: errors,
     });
     console.error(`Updated retry count for ${queueItem.id} to ${queueItem.data().retryCount + 1}`);
   } catch (e) {
