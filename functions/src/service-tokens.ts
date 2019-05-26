@@ -16,6 +16,23 @@ export const refreshTheRefreshTokens = functions.region('europe-west2').runWith(
   });
 });
 
+// export const convertTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
+//   console.log('This will be run every 2 hours!');
+//   // Suunto app refresh tokens should be refreshed every 180days we target at 15 days before 165 days
+//   const querySnapshot = await admin.firestore().collection('suuntoAppAccessTokens').get();
+//
+//   for (const doc of querySnapshot.docs){
+//     const data = doc.data();
+//     console.log(data);
+//     await admin.firestore().collection('suuntoAppAccessTokens').doc(doc.id).collection('tokens').doc(data.userName).set(doc.data());
+//   }
+//
+//   // Async foreach is ok here
+//   // querySnapshot.forEach(async (doc) => {
+//   //   await refreshTokenIfNeeded(doc);
+//   // });
+// });
+
 export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefresh = true) {
   const serviceToken = <ServiceTokenInterface>doc.data();
   const oauth2 = suuntoAppAuth();
