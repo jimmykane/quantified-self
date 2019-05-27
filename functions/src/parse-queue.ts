@@ -25,13 +25,13 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
 
 export async function processQueueItem(queueItem: any) {
 
-  console.log(`Processing queue item ${queueItem.id} and username ${queueItem.data().retryCount} at retry count ${queueItem.data().retryCount}`);
+  console.log(`Processing queue item ${queueItem.id} and username ${queueItem.data().userName} at retry count ${queueItem.data().retryCount}`);
   // queueItem.data() is never undefined for query queueItem snapshots
   const tokens = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.data()['userName']).get();
 
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokens.size) {
-    console.error(`No token found for queue item ${queueItem.id} increasing count just in case`);
+    console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.data().userName} increasing count just in case`);
     await increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
     return;
   }
@@ -82,7 +82,7 @@ export async function processQueueItem(queueItem: any) {
       console.log(`Parsed ${processedCount}/${tokens.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
     } catch (e) {
-      // @todo should delete event  or seperate catch
+      // @todo should delete event  or separate catch
       console.error(e);
       console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${data.userName} to ${queueItem.data().retryCount + 1}`);
       await increaseRetryCountForQueueItem(queueItem, e);
