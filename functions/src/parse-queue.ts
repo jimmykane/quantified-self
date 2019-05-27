@@ -40,6 +40,11 @@ export async function processQueueItem(queueItem: any) {
   let processedCount = 0;
   for (const doc of tokens.docs) {
     const data = <ServiceTokenInterface>doc.data();
+    const parent1 = doc.ref.parent;
+    if (!parent1) {
+      throw new Error(`No parent found for ${doc.id}`);
+    }
+    const parentID = parent1.parent!.id;
     // Check the token if needed
     await refreshTokenIfNeeded(doc, false);
     let result;
@@ -72,11 +77,6 @@ export async function processQueueItem(queueItem: any) {
       // Id for the event should be serviceName + workoutID
       event.setID(generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]));
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
-      const parent1 = doc.ref.parent
-      if (!parent1) {
-        throw new Error(`No parent found for ${doc.id}`);
-      }
-      const parentID = parent1.parent!.id;
       await setEvent(parentID, event);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${data.userName}`);
       processedCount++;
