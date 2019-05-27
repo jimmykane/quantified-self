@@ -6,7 +6,8 @@ export const environment = {
     databaseURL: 'https://quantified-self-io.firebaseio.com',
     projectId: 'quantified-self-io',
     storageBucket: 'quantified-self-io.appspot.com',
-    messagingSenderId: '242713487388'
+    messagingSenderId: '242713487388',
+    appId: '1:242713487388:web:af0b3e931f2e96ed',
   },
   functions: {
     deauthorizeSuuntoAppServiceURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorize'
