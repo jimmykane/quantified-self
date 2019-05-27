@@ -5,7 +5,6 @@ import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import {EventImporterFIT} from "quantified-self-lib/lib/events/adapters/importers/fit/importer.fit";
 import {EventInterface} from "quantified-self-lib/lib/events/event.interface";
-import {getSize} from "quantified-self-lib/lib/events/utilities/helpers";
 import * as Pako from "pako";
 import {generateIDFromParts} from "./utils";
 import {MetaData} from "quantified-self-lib/lib/meta-data/meta-data";
@@ -26,7 +25,7 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
 
 export async function processQueueItem(queueItem: any) {
 
-  console.log(`Processing queue item ${queueItem.id} at retry count ${queueItem.data().retryCount}`);
+  console.log(`Processing queue item ${queueItem.id} and username ${queueItem.data().retryCount} at retry count ${queueItem.data().retryCount}`);
   // queueItem.data() is never undefined for query queueItem snapshots
   const tokens = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.data()['userName']).get();
 
@@ -152,7 +151,7 @@ async function setEvent(userID: string, event: EventInterface) {
           .set(activity.toJSON()));
 
       activity.getAllStreams().forEach((stream) => {
-        console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
+        // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
         writePromises.push(
           admin.firestore()
             .collection('users')
