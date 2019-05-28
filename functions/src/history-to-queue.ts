@@ -61,11 +61,11 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
   // Get the history for those tokens
-  for (const suuntoAppAccessTokenQuerySnapshot of tokenQuerySnapshots.docs) {
-    await refreshTokenIfNeeded(suuntoAppAccessTokenQuerySnapshot, false);
+  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
+    await refreshTokenIfNeeded(tokenQueryDocumentSnapshot, false);
 
     // Get the first token
-    const data = <ServiceTokenInterface>suuntoAppAccessTokenQuerySnapshot.data();
+    const data = <ServiceTokenInterface>tokenQueryDocumentSnapshot.data();
     let result:any;
     try {
       result = await requestPromise.get({
@@ -79,23 +79,23 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       result = JSON.parse(result);
       // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
     } catch (e) {
-      console.error(`Could not get history for token ${suuntoAppAccessTokenQuerySnapshot.id} for user ${decodedIdToken.uid}`, e);
+      console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`, e);
       res.status(500);
       res.send({result: 'Could not get history'});
       return; // @todo go to next
     }
 
     if (result.error !== null) {
-      console.error(`Could not get history for token ${suuntoAppAccessTokenQuerySnapshot.id} for user ${decodedIdToken.uid} due to service error`, result.error);
+      console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid} due to service error`, result.error);
       continue;
     }
 
     if (result.metadata.workoutcount === 0) {
-      console.log(`No workouts to add to history for token ${suuntoAppAccessTokenQuerySnapshot.id} for user ${decodedIdToken.uid}`);
+      console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
       continue;
     }
 
-    console.log(`Found ${result.metadata.workoutcount} for  to  for token ${suuntoAppAccessTokenQuerySnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Found ${result.metadata.workoutcount} for  to  for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
 
     const batchCount = Math.ceil(result.metadata.workoutcount / 500);
     const batchesToProcess: any[] = [];
@@ -105,7 +105,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
-    console.log(`Created ${batchCount} batches for token ${suuntoAppAccessTokenQuerySnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
@@ -120,7 +120,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       try {
         await batch.commit();
       }catch (e) {
-        console.error(`Could not save batch ${suuntoAppAccessTokenQuerySnapshot.id} for user ${decodedIdToken.uid} due to service error aborting`, result.error);
+        console.error(`Could not save batch ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid} due to service error aborting`, result.error);
         // @todo resolve somehow
         continue; // Unnecessary but clear to the user that it will continue
       }
