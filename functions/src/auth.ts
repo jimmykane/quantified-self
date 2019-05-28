@@ -154,17 +154,17 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
     return;
   }
 
-  const documentSnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
+  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
 
-  console.log(`Found ${documentSnapshots.size} tokens for user ${decodedIdToken.uid}`);
+  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
   // Deauthorize all tokens for that user
-  for (const doc of documentSnapshots.docs) {
+  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
-    await refreshTokenIfNeeded(doc, false);
+    await refreshTokenIfNeeded(tokenQueryDocumentSnapshot, false);
 
     // Get the first token
-    const data = <ServiceTokenInterface>doc.data();
+    const data = <ServiceTokenInterface>tokenQueryDocumentSnapshot.data();
     try {
       await requestPromise.get({
         headers: {
@@ -172,13 +172,13 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
         },
         url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
       });
-      console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
+      console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`)
     } catch (e) {
       console.error(e);
-      console.error(`Could not deauthorize token ${doc.id} for ${decodedIdToken.uid}`);
+      console.error(`Could not deauthorize token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
-      return; // @todo go to next
+      continue;
     }
 
     // Now get from all users the same username token
@@ -197,7 +197,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
       console.error(`Could not deauthorize token for ${decodedIdToken.uid}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
-      return;
+      continue;
     }
     console.log(`Deauthorized successfully token for ${decodedIdToken.uid}`);
   }

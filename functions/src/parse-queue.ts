@@ -35,24 +35,24 @@ export async function processQueueItem(queueItem: any) {
 
   console.log(`Processing queue item ${queueItem.id} and username ${queueItem.data().userName} at retry count ${queueItem.data().retryCount}`);
   // queueItem.data() is never undefined for query queueItem snapshots
-  const tokens = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.data()['userName']).get();
+  const tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.data()['userName']).get();
 
   // If there is no token for the user skip @todo or retry in case the user reconnects?
-  if (!tokens.size) {
+  if (!tokenQuerySnapshots.size) {
     console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.data().userName} increasing count just in case`);
     return  increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
   }
 
   let processedCount = 0;
-  for (const doc of tokens.docs) {
-    const data = <ServiceTokenInterface>doc.data();
-    const parent1 = doc.ref.parent;
+  for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
+    const data = <ServiceTokenInterface>tokenQueryDocumentSnapshot.data();
+    const parent1 = tokenQueryDocumentSnapshot.ref.parent;
     if (!parent1) {
-      throw new Error(`No parent found for ${doc.id}`);
+      throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
     }
     const parentID = parent1.parent!.id;
     // Check the token if needed
-    await refreshTokenIfNeeded(doc, false);
+    await refreshTokenIfNeeded(tokenQueryDocumentSnapshot, false);
     let result;
     try {
       result = await requestPromise.get({
@@ -68,7 +68,7 @@ export async function processQueueItem(queueItem: any) {
       console.error(e);
       console.error(`Could not get workout for ${queueItem.id} and token user ${data.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`);
       try {
-        await refreshTokenIfNeeded(doc); // This should delete the token and break this loop eventually
+        await refreshTokenIfNeeded(tokenQueryDocumentSnapshot); // This should delete the token and break this loop eventually
       } catch (e) {
         console.error(e);
         console.error(`Could not refresh token for ${queueItem.id} and token user ${data.userName}`)
@@ -85,7 +85,7 @@ export async function processQueueItem(queueItem: any) {
       await setEvent(parentID, event);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${data.userName}`);
       processedCount++;
-      console.log(`Parsed ${processedCount}/${tokens.size} for ${queueItem.id}`);
+      console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
     } catch (e) {
       // @todo should delete event  or separate catch
@@ -96,7 +96,7 @@ export async function processQueueItem(queueItem: any) {
   }
 
   // If not all tokens are processed log it and increase the retry count
-  if (processedCount !== tokens.size) {
+  if (processedCount !== tokenQuerySnapshots.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later`);
     return  increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
   }

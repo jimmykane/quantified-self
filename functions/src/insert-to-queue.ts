@@ -23,7 +23,7 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
     const queueItemDocumentReference = await addToQueue(userName, workoutID);
     await processQueueItem(await queueItemDocumentReference.get());
   }catch (e) {
-    throw e;
+    throw e; // @todo better handling
   }
   res.send();
 });
