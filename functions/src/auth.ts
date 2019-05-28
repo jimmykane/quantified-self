@@ -129,6 +129,13 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
     return;
   }
 
+  if (!req.body.firebaseAuthToken){
+    console.error(`No params provided. This call needs: 'firebaseAuthToken'`);
+    res.status(500);
+    res.send();
+    return
+  }
+
   let decodedIdToken;
   try {
     decodedIdToken = await admin.auth().verifyIdToken(req.body.firebaseAuthToken);

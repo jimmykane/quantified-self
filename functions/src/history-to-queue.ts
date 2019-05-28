@@ -28,6 +28,16 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     return;
   }
 
+  if (!req.body.firebaseAuthToken || !req.body.startDate || !req.body.endDate){
+    console.error(`No params provided. This call needs: 'firebaseAuthToken', 'startDate' and 'endDate'`);
+    res.status(500);
+    res.send();
+    return
+  }
+
+  const startDate = new Date(req.body.startDate);
+  const endDate = new Date(req.body.endDate);
+
   let decodedIdToken;
   try {
     decodedIdToken = await admin.auth().verifyIdToken(req.body.firebaseAuthToken);
@@ -46,16 +56,16 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     return;
   }
 
-  const documentSnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
+  const suuntoAppAccessTokensDocSnaps = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
 
-  console.log(`Found ${documentSnapshots.size} tokens for user ${decodedIdToken.uid}`);
+  console.log(`Found ${suuntoAppAccessTokensDocSnaps.size} tokens for user ${decodedIdToken.uid}`);
 
   // Get the history for those tokens
-  for (const doc of documentSnapshots.docs) {
-    await refreshTokenIfNeeded(doc, false);
+  for (const suuntoAppAccessTokenDocument of suuntoAppAccessTokensDocSnaps.docs) {
+    await refreshTokenIfNeeded(suuntoAppAccessTokenDocument, false);
 
     // Get the first token
-    const data = <ServiceTokenInterface>doc.data();
+    const data = <ServiceTokenInterface>suuntoAppAccessTokenDocument.data();
     let result:any;
     try {
       result = await requestPromise.get({
@@ -64,27 +74,28 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
           json: true,
         },
-        url: `https://cloudapi.suunto.com/v2/workouts?since=1540504800000&limit=1000000`,
+        url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000`,
       });
       result = JSON.parse(result);
       // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
     } catch (e) {
-      console.error(`Could not get history for token ${doc.id} for user ${decodedIdToken.uid}`, e);
+      console.error(`Could not get history for token ${suuntoAppAccessTokenDocument.id} for user ${decodedIdToken.uid}`, e);
       res.status(500);
       res.send({result: 'Could not get history'});
       return; // @todo go to next
     }
 
     if (result.error !== null) {
-      console.error(`Could not get history for token ${doc.id} for user ${decodedIdToken.uid} due to service error`, result.error);
-      // @todo go to next
+      console.error(`Could not get history for token ${suuntoAppAccessTokenDocument.id} for user ${decodedIdToken.uid} due to service error`, result.error);
+      continue;
     }
 
     if (result.metadata.workoutcount === 0) {
-      // @todo go to next
+      console.log(`No workouts to add to history for token ${suuntoAppAccessTokenDocument.id} for user ${decodedIdToken.uid}`);
+      continue;
     }
 
-    console.log(`Found ${result.metadata.workoutcount} for  to  for token ${doc.id} for user ${decodedIdToken.uid}`);
+    console.log(`Found ${result.metadata.workoutcount} for  to  for token ${suuntoAppAccessTokenDocument.id} for user ${decodedIdToken.uid}`);
 
     const batchCount = Math.ceil(result.metadata.workoutcount / 500);
     const batchesToProcess: any[] = [];
@@ -94,7 +105,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
-    console.log(`Created ${batchCount} batches for token ${doc.id} for user ${decodedIdToken.uid}`);
+    console.log(`Created ${batchCount} batches for token ${suuntoAppAccessTokenDocument.id} for user ${decodedIdToken.uid}`);
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
@@ -109,13 +120,14 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       try {
         await batch.commit();
       }catch (e) {
-        console.error(`Could not process batch ${doc.id} for user ${decodedIdToken.uid} due to service error aborting`, result.error);
+        console.error(`Could not save batch ${suuntoAppAccessTokenDocument.id} for user ${decodedIdToken.uid} due to service error aborting`, result.error);
         // @todo resolve somehow
+        continue; // Unnecessary but clear to the user that it will continue
       }
     }
   }
 
   res.status(200);
-  res.send({result: 'Deauthorized'});
+  res.send({result: 'History items added to queue'});
 
 });
