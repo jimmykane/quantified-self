@@ -102,7 +102,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
-    console.log(`Created ${batchCount} batches for token ${doc.id} for user ${decodedIdToken.uid}`)
+    console.log(`Created ${batchCount} batches for token ${doc.id} for user ${decodedIdToken.uid}`);
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
