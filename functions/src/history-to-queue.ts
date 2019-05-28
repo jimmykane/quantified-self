@@ -7,6 +7,7 @@ import {getTokenData} from "./service-tokens";
 import {generateIDFromParts} from "./utils";
 import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth";
 import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.interface";
+import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
 
 
 /**
@@ -56,6 +57,13 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     return;
   }
 
+  // First check last history import
+  // const userMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get()
+  // if ((new Date(userMetaDocumentSnapshot.data()!.didLastHistoryImport)) < )
+
+  // @todo BLOCK SEE above
+
+
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
 
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
@@ -81,7 +89,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`, e);
       res.status(500);
       res.send({result: 'Could not get history'});
-      return; // @todo go to next
+      continue;
     }
 
     if (result.error !== null) {
@@ -103,6 +111,16 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       const end = (index + 1) * 500;
       batchesToProcess.push(result.payload.slice(start, end))
     });
+
+    try {
+      await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).set({
+        didLastHistoryImport: (new Date()).toJSON(),
+        lastHistoryImportWorkoutBatchCount: batchCount
+      });
+    }catch (e) {
+      console.error(`Could not write data to firestore`, e);
+      continue;
+    }
 
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
     let processedBatchesCount = 0;
@@ -128,7 +146,8 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
         continue; // Unnecessary but clear to the user that it will continue
       }
     }
-    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `)
+    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+
   }
 
   res.status(200);

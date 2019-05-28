@@ -22,6 +22,9 @@ service cloud.firestore {
             }
           }
         }
+        match /meta/{document=**} {
+          allow read: if request.auth.uid == userID;
+        }
     }
 
  		match /suuntoAppAccessTokens/{userID} {
@@ -33,5 +36,6 @@ service cloud.firestore {
     match /suuntoAppWorkoutQueue/{userID} {
       allow read, write: if false;
     }
+
   }
 }
