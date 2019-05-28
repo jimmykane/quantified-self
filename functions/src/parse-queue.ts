@@ -15,7 +15,6 @@ import {getTokenData} from "./service-tokens";
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
 
   // @todo add queue item sort date for creation
-  // Suunto app refresh tokens should be refreshed every 180days we target at 15 days before 165 days
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;

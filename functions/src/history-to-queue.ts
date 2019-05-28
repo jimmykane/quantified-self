@@ -93,7 +93,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       continue;
     }
 
-    console.log(`Found ${result.metadata.workoutcount} for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Found ${result.metadata.workoutcount} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
 
     const batchCount = Math.ceil(result.metadata.workoutcount / 500);
     const batchesToProcess: any[] = [];
@@ -104,22 +104,23 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     });
 
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
-    let processedBatchesCount = 1;
+    let processedBatchesCount = 0;
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
+        console.log(generateIDFromParts([serviceToken.userName, payload.workoutKey]));
         batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])), {
           userName: serviceToken.userName,
           workoutID: payload.workoutKey,
           retryCount: 0,
           processed: false,
-        });
+        }, { mergeFields: ['retryCount']}); // @todo perhaps allow the retry count?
       }
-
+      // Try to commit it
       try {
         await batch.commit();
+        console.log(`Batch #${processedBatchesCount+1} saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
         processedBatchesCount++;
-        console.log(`Batch ${processedBatchesCount} saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `)
       }catch (e) {
         console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, result.error);
         // @todo resolve somehow
