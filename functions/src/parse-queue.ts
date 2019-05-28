@@ -72,9 +72,8 @@ export async function processQueueItem(queueItem: any) {
       const event = await EventImporterFIT.getFromArrayBuffer(result);
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
       // Id for the event should be serviceName + workoutID
-      event.setID(generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]));
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
-      await setEvent(parentID, event);
+      await setEvent(parentID,generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
@@ -130,8 +129,7 @@ async function updateToProcessed(queueItem: any) {
   }
 }
 
-// @todo fix the ids
-async function setEvent(userID: string, event: EventInterface) {
+async function setEvent(userID: string, eventID:string , event: EventInterface) {
   const writePromises: Promise<any>[] = [];
   event.getActivities()
     .forEach((activity, index) => {
