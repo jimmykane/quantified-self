@@ -14,6 +14,7 @@ import {Router} from '@angular/router';
 import {UserService} from '../../services/app.user.service';
 import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
+import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
 
 declare function require(moduleName: string): any;
 
@@ -61,7 +62,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       if (this.authService.isCurrentUserAnonymous()){
         return of(null);
       }
-      return this.userService.getServiceAuthToken(user, 'Suunto App')
+      return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
     })).subscribe((tokens) => {
       this.serviceTokens = tokens;
     });
