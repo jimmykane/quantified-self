@@ -31,7 +31,7 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
 async function addToQueue(workoutUserName: string, workoutID:string): Promise<admin.firestore.DocumentReference>{
   console.log(`Inserting to queue ${workoutUserName} ${workoutID}`);
   // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
-  // @todo ask about this
+  // @todo ask  Suunto about this
   const queueItemDocument = admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([workoutUserName, workoutID]));
   await queueItemDocument.set({
     userName: workoutUserName,

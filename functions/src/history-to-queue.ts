@@ -6,6 +6,7 @@ import * as requestPromise from "request-promise-native";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
 import {refreshTokenIfNeeded} from "./service-tokens";
 import {generateIDFromParts} from "./utils";
+import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth";
 
 
 /**
@@ -13,25 +14,16 @@ import {generateIDFromParts} from "./utils";
  */
 export const addHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
-  if (['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) === -1) {
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST') ) {
     res.status(403);
     res.send();
     return
   }
 
-  res.set('Access-Control-Allow-Origin', `${req.get('origin')}`);
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept');
+  setAccessControlHeadersOnResponse(req, res);
 
   if (req.method === 'OPTIONS') {
     res.status(200);
-    res.send();
-    return;
-  }
-
-  if (req.method !== 'POST') {
-    console.error(`Only post is allowed`);
-    res.status(403);
     res.send();
     return;
   }
@@ -58,7 +50,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
   console.log(`Found ${documentSnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
-  // Deauthorize all tokens for that user
+  // Get the history for those tokens
   for (const doc of documentSnapshots.docs) {
     await refreshTokenIfNeeded(doc, false);
 

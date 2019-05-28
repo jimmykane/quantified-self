@@ -115,25 +115,16 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
  */
 export const deauthorize = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
-  if (['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) === -1) {
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST') ) {
     res.status(403);
     res.send();
     return
   }
 
-  res.set('Access-Control-Allow-Origin', `${req.get('origin')}`);
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept');
+  setAccessControlHeadersOnResponse(req, res);
 
   if (req.method === 'OPTIONS') {
     res.status(200);
-    res.send();
-    return;
-  }
-
-  if (req.method !== 'POST') {
-    console.error(`Only post is allowed`);
-    res.status(403);
     res.send();
     return;
   }
@@ -246,6 +237,17 @@ async function createFirebaseAccount(serviceUserID: string, accessToken: string)
 
 function determineRedirectURI(req: Request): string {
   return req.query.redirect_uri; // @todo should check for authorized redirects as well
+}
+
+export function setAccessControlHeadersOnResponse(req: Request, res: functions.Response) {
+  res.set('Access-Control-Allow-Origin', `${req.get('origin')}`);
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept');
+  return res;
+}
+
+export function isCorsAllowed(req: Request){
+  return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }
 
 // /**
