@@ -10,6 +10,7 @@ export const environment = {
     appId: '1:242713487388:web:af0b3e931f2e96ed',
   },
   functions: {
-    deauthorizeSuuntoAppServiceURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorize'
+    deauthorizeSuuntoAppServiceURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorize',
+    historyImportURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/addHistoryToQueue'
   }
 };
