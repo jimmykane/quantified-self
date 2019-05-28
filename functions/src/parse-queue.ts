@@ -67,12 +67,6 @@ export async function processQueueItem(queueItem: any) {
     } catch (e) {
       console.error(e);
       console.error(`Could not get workout for ${queueItem.id} and token user ${data.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`);
-      try {
-        await refreshTokenIfNeeded(tokenQueryDocumentSnapshot); // This should delete the token and break this loop eventually
-      } catch (e) {
-        console.error(e);
-        console.error(`Could not refresh token for ${queueItem.id} and token user ${data.userName}`)
-      }
       return  increaseRetryCountForQueueItem(queueItem, e);
     }
 

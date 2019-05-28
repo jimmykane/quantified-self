@@ -88,7 +88,4 @@ export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefr
   });
 
   console.log(`Successfully refreshed token ${doc.id}`);
-
-  // Get again the token
-  return doc.ref.get();
 }
