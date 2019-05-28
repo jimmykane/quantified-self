@@ -18,17 +18,17 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
   // @todo add queue item sort date for creation
   // Suunto app refresh tokens should be refreshed every 180days we target at 15 days before 165 days
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
-  console.log(`V5 Found ${querySnapshot.size} items to process`);
+  console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   for (const queueItem of querySnapshot.docs){
     try {
       await processQueueItem(queueItem);
       count++;
     }catch (e) {
-      console.error(`error parsing item ${count} of ${querySnapshot.size}`)
+      console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`)
     }
   }
-  console.log(`Parsed ${count} out of ${querySnapshot.size}`);
+  console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 });
 
 export async function processQueueItem(queueItem: any) {
