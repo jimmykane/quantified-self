@@ -83,8 +83,17 @@ export class UserService implements OnDestroy {
       .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges();
   }
 
+  public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
+    return this.http.post(
+      environment.functions.historyImportURI, {
+        firebaseAuthToken: await this.afAuth.auth.currentUser.getIdToken(true),
+        startDate: startDate,
+        endDate: endDate
+      }).toPromise();
+  }
+
   public async deauthorizeSuuntoAppService() {
-    return await this.http.post(
+    return this.http.post(
       environment.functions.deauthorizeSuuntoAppServiceURI, {
         firebaseAuthToken: await this.afAuth.auth.currentUser.getIdToken(true)
       }).toPromise();

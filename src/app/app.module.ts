@@ -91,6 +91,7 @@ import {EventSearchComponent} from "./components/event-search/event-search.compo
 import {EventCardDevicesComponent} from "./components/cards/event/devices/event.card.devices.component";
 import {ServicesComponent} from "./components/services/services.component";
 import {AngularFireFunctionsModule, FunctionsRegionToken} from "@angular/fire/functions";
+import {HistoryImportFormComponent} from "./components/history-import-form/history-import.form.component";
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -201,6 +202,7 @@ export class RavenErrorHandler implements ErrorHandler {
     EventSearchComponent,
     EventCardDevicesComponent,
     ServicesComponent,
+    HistoryImportFormComponent,
   ],
   entryComponents: [
     EventFormComponent,
@@ -208,6 +210,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UserAgreementFormComponent,
     ActivityFormComponent,
     UploadErrorComponent,
+    HistoryImportFormComponent
   ],
   providers: [
     AppAuthService,

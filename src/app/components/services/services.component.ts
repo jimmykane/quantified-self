@@ -1,6 +1,6 @@
 import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
-import {MatSnackBar} from '@angular/material';
+import {MatDialog, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {HttpClient} from '@angular/common/http';
 import {FileService} from '../../services/app.file.service';
@@ -15,6 +15,8 @@ import {UserService} from '../../services/app.user.service';
 import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
+import {UserAgreementFormComponent} from "../user-forms/user-agreement.form.component";
+import {HistoryImportFormComponent} from "../history-import-form/history-import.form.component";
 
 declare function require(moduleName: string): any;
 
@@ -28,7 +30,7 @@ const {version: appVersion} = require('../../../../package.json');
 })
 export class ServicesComponent implements OnInit, OnDestroy {
   public appVersion = appVersion;
-  public eventFormGroup: FormGroup;
+  public suuntoAppLinkFormGroup: FormGroup;
   public isLoading = false;
   public user: User;
   public serviceTokens: ServiceTokenInterface[];
@@ -50,6 +52,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
               public authService: AppAuthService,
               private userService: UserService,
               private router: Router,
+              private dialog: MatDialog,
               private snackBar: MatSnackBar) {
   }
 
@@ -66,7 +69,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     })).subscribe((tokens) => {
       this.serviceTokens = tokens;
     });
-    this.eventFormGroup = new FormGroup({
+    this.suuntoAppLinkFormGroup = new FormGroup({
       input: new FormControl('', [
         Validators.required,
         // Validators.minLength(4),
@@ -81,7 +84,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
 
   hasError(field: string) {
-    return !(this.eventFormGroup.get(field).valid && this.eventFormGroup.get(field).touched);
+    return !(this.suuntoAppLinkFormGroup.get(field).valid && this.suuntoAppLinkFormGroup.get(field).touched);
   }
 
   async onImportAndOpen() {
@@ -89,8 +92,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   async onSubmit(shouldImportAndOpen?: boolean) {
-    if (!this.eventFormGroup.valid) {
-      this.validateAllFormFields(this.eventFormGroup);
+    if (!this.suuntoAppLinkFormGroup.valid) {
+      this.validateAllFormFields(this.suuntoAppLinkFormGroup);
       return;
     }
 
@@ -102,7 +105,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
     try {
 
-      const parts = this.eventFormGroup.get('input').value.split('?')[0].split('/');
+      const parts = this.suuntoAppLinkFormGroup.get('input').value.split('?')[0].split('/');
       const activityID = parts[parts.length - 1] === '' ? parts[parts.length - 2] : parts[parts.length - 1];
 
       const result = await this.http.get(
@@ -151,9 +154,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
     wnd.onunload = () => this.isLoading = false;
   }
 
-  isConnectedToSuuntoApp() {
-    return !!this.serviceTokens.length;
-  }
   async deauthorizeSuuntoApp(event) {
     this.isLoading = true;
     try {
@@ -167,6 +167,20 @@ export class ServicesComponent implements OnInit, OnDestroy {
       });
     }
     this.isLoading = false;
+  }
+
+  openHistoryImportForm() {
+    const dialogRef = this.dialog.open(HistoryImportFormComponent, {
+      width: '75vw',
+      disableClose: true,
+      data: {
+        user: this.user,
+      },
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      this.isLoading = false;
+    });
   }
 
   ngOnDestroy(): void {
