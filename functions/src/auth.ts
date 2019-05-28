@@ -10,6 +10,7 @@ import * as requestPromise from "request-promise-native";
 import {suuntoAppAuth} from "./suunto-app-auth";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
 import {getTokenData} from "./service-tokens";
+import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
 
 
 // console.log(process.env)
@@ -100,7 +101,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
           dateCreated: currentDate.toJSON(),
           dateRefreshed: currentDate.getTime(),
         },
-        serviceName: 'Suunto App'
+        serviceName: ServiceNames.SuuntoApp
       });
     });
   } catch (error) {
