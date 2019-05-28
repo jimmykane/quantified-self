@@ -13,14 +13,22 @@ import {refreshTokenIfNeeded} from "./service-tokens";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
 
 
-export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 360}).pubsub.schedule('every 30 minutes').onRun(async (context) => {
-  console.log('This will be run every 3 minutes!');
+export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
+
+  // @todo add queue item sort date for creation
   // Suunto app refresh tokens should be refreshed every 180days we target at 15 days before 165 days
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
-  // Async foreach is ok here
-  querySnapshot.forEach(async (queueItem) => {
-    await processQueueItem(queueItem);
-  });
+  console.log(`V5 Found ${querySnapshot.size} items to process`);
+  let count = 0;
+  for (const queueItem of querySnapshot.docs){
+    try {
+      await processQueueItem(queueItem);
+      count++;
+    }catch (e) {
+      console.error(`error parsing item ${count} of ${querySnapshot.size}`)
+    }
+  }
+  console.log(`Parsed ${count} out of ${querySnapshot.size}`);
 });
 
 export async function processQueueItem(queueItem: any) {
@@ -32,8 +40,7 @@ export async function processQueueItem(queueItem: any) {
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokens.size) {
     console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.data().userName} increasing count just in case`);
-    await increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
-    return;
+    return  increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
   }
 
   let processedCount = 0;
@@ -66,8 +73,7 @@ export async function processQueueItem(queueItem: any) {
         console.error(e);
         console.error(`Could not refresh token for ${queueItem.id} and token user ${data.userName}`)
       }
-      await increaseRetryCountForQueueItem(queueItem, e);
-      return; // Next
+      return  increaseRetryCountForQueueItem(queueItem, e);
     }
 
     try {
@@ -85,20 +91,18 @@ export async function processQueueItem(queueItem: any) {
       // @todo should delete event  or separate catch
       console.error(e);
       console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${data.userName} to ${queueItem.data().retryCount + 1}`);
-      await increaseRetryCountForQueueItem(queueItem, e);
-      return;
+      return  increaseRetryCountForQueueItem(queueItem, e);
     }
   }
 
   // If not all tokens are processed log it and increase the retry count
   if (processedCount !== tokens.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later`);
-    await increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
-    return;
+    return  increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
   }
 
   // For each ended so we can set it to processed
-  await updateToProcessed(queueItem);
+  return updateToProcessed(queueItem);
 
 }
 
@@ -137,7 +141,6 @@ async function updateToProcessed(queueItem: any) {
 // @todo fix the ids
 async function setEvent(userID: string, event: EventInterface) {
   const writePromises: Promise<any>[] = [];
-  event.setID(event.getID() || admin.firestore().collection('users').doc(userID).collection('events').doc().id);
   event.getActivities()
     .forEach((activity, index) => {
       activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));

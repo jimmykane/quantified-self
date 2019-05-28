@@ -34,6 +34,7 @@ export const refreshTheRefreshTokens = functions.region('europe-west2').runWith(
 // });
 
 export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefresh = true) {
+  // @todo should also update the response
   const serviceToken = <ServiceTokenInterface>doc.data();
   const oauth2 = suuntoAppAuth();
   // doc.data() is never undefined for query doc snapshots
@@ -72,7 +73,7 @@ export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefr
   await doc.ref.update(<ServiceTokenInterface>{
       accessToken: responseToken.token.access_token,
       refreshToken: responseToken.token.refresh_token,
-      expiresAt: responseToken.token.expires_at.getTime(),
+      expiresAt: responseToken.token.expires_at.getTime() - 6000,
       scope: responseToken.token.scope,
       tokenType: responseToken.token.token_type,
       userName: responseToken.token.user,

@@ -9,6 +9,7 @@ import {Request} from "firebase-functions/lib/providers/https";
 import * as requestPromise from "request-promise-native";
 import {suuntoAppAuth} from "./suunto-app-auth";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
+import {refreshTokenIfNeeded} from "./service-tokens";
 
 
 // console.log(process.env)
@@ -161,6 +162,9 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
 
   // Deauthorize all tokens for that user
   for (const doc of documentSnapshots.docs) {
+
+    await refreshTokenIfNeeded(doc, false);
+
     // Get the first token
     const data = <ServiceTokenInterface>doc.data();
     try {
@@ -176,7 +180,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
       console.error(`Could not deauthorize token ${doc.id} for ${decodedIdToken.uid}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
-      return;
+      return; // @todo go to next
     }
 
     // Now get from all users the same username token

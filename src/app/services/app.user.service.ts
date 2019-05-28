@@ -67,7 +67,7 @@ export class UserService implements OnDestroy {
   }
 
   public async setServiceAuthToken(user: User, serviceName: string, serviceToken: ServiceTokenInterface) {
-    if (serviceName !== 'Suunto App') {
+    if (serviceName !== ServiceNames.SuuntoApp) {
       throw new Error('Service not supported');
     }
     return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(serviceToken.userName)
@@ -75,7 +75,7 @@ export class UserService implements OnDestroy {
   }
 
   public getServiceAuthToken(user: User, serviceName: string) {
-    if (serviceName !== 'Suunto App') {
+    if (serviceName !== ServiceNames.SuuntoApp) {
       throw new Error('Service not supported');
     }
     return this.afs

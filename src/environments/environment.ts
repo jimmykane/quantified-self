@@ -14,6 +14,7 @@ export const environment = {
     messagingSenderId: '242713487388',
   },
   functions: {
-    deauthorizeSuuntoAppServiceURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorize'
+    deauthorizeSuuntoAppServiceURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorize',
+    historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addHistoryToQueue'
   }
 };
