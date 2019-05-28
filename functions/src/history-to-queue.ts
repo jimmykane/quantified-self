@@ -114,7 +114,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
           workoutID: payload.workoutKey,
           retryCount: 0,
           processed: false,
-        }, { mergeFields: ['retryCount']}); // @todo perhaps allow the retry count?
+        }, { mergeFields: []}); // @todo perhaps allow the retry count?
       }
       // Try to commit it
       try {
