@@ -35,6 +35,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public user: User;
   public serviceTokens: ServiceTokenInterface[];
   private userSubscription: Subscription;
+  private clickCount = 0;
 
 
   @HostListener('window:tokensReceived', ['$event'])
@@ -170,6 +171,13 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   openHistoryImportForm() {
+    if (this.clickCount < 10) {
+      this.clickCount++;
+      return;
+    }
+
+    this.clickCount = 0;
+
     const dialogRef = this.dialog.open(HistoryImportFormComponent, {
       width: '75vw',
       disableClose: true,
