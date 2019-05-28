@@ -59,7 +59,7 @@ export class ActivityFormComponent implements OnInit {
 
   async ngOnInit() {
     if (!this.user || !this.event) {
-      throw 'Component needs event and user'
+      throw new Error('Component needs event and user')
     }
 
     // Set this to loading
