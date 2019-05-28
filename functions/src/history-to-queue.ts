@@ -108,7 +108,6 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
-        console.log(generateIDFromParts([serviceToken.userName, payload.workoutKey]));
         batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])), {
           userName: serviceToken.userName,
           workoutID: payload.workoutKey,

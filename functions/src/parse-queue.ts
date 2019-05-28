@@ -70,6 +70,7 @@ export async function processQueueItem(queueItem: any) {
 
     try {
       const event = await EventImporterFIT.getFromArrayBuffer(result);
+      event.name = event.startDate.toJSON(); // @todo improve
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
       // Id for the event should be serviceName + workoutID
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
