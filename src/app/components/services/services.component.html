@@ -15,7 +15,7 @@
               </mat-icon>
             </p>
             <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
-            <button  [class.big]="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && (serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
+            <button  [class.big]="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
                     *ngIf="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && serviceTokens.length < 2)"
                     (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
             </button>
