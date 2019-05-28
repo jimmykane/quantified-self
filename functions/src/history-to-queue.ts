@@ -6,6 +6,7 @@ import * as requestPromise from "request-promise-native";
 import {getTokenData} from "./service-tokens";
 import {generateIDFromParts} from "./utils";
 import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth";
+import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.interface";
 
 
 /**
@@ -13,7 +14,7 @@ import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth";
  */
 export const addHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST') ) {
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     res.status(403);
     res.send();
     return
@@ -27,7 +28,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     return;
   }
 
-  if (!req.body.firebaseAuthToken || !req.body.startDate || !req.body.endDate){
+  if (!req.body.firebaseAuthToken || !req.body.startDate || !req.body.endDate) {
     console.error(`No params provided. This call needs: 'firebaseAuthToken', 'startDate' and 'endDate'`);
     res.status(500);
     res.send();
@@ -64,7 +65,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
 
-    let result:any;
+    let result: any;
     try {
       result = await requestPromise.get({
         headers: {
@@ -98,29 +99,30 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     const batchCount = Math.ceil(result.metadata.workoutcount / 500);
     const batchesToProcess: any[] = [];
     (Array(batchCount)).fill(null).forEach((justNull, index) => {
-      const start = index*500;
-      const end = (index+1)*500;
+      const start = index * 500;
+      const end = (index + 1) * 500;
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
     let processedBatchesCount = 0;
-    for (const batchToProcess of batchesToProcess){
+    for (const batchToProcess of batchesToProcess) {
       const batch = admin.firestore().batch();
-      for (const payload of batchToProcess){
-        batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])), {
+      for (const payload of batchToProcess) {
+        // Maybe do a get or insert it at another queue
+        batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])), <QueueItemInterface>{
           userName: serviceToken.userName,
           workoutID: payload.workoutKey,
-          retryCount: 0,
-          processed: false,
-        }, { mergeFields: []}); // @todo perhaps allow the retry count?
+          retryCount: 0, // So it can be re-processed
+          processed: false, //So it can be re-processed
+        });
       }
       // Try to commit it
       try {
         await batch.commit();
-        console.log(`Batch #${processedBatchesCount+1} saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+        console.log(`Batch #${processedBatchesCount + 1} saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
         processedBatchesCount++;
-      }catch (e) {
+      } catch (e) {
         console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, result.error);
         // @todo resolve somehow
         continue; // Unnecessary but clear to the user that it will continue

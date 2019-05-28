@@ -10,10 +10,10 @@ import {generateIDFromParts} from "./utils";
 import {MetaData} from "quantified-self-lib/lib/meta-data/meta-data";
 import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
 import {getTokenData} from "./service-tokens";
+import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.interface";
 
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
-
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
@@ -28,6 +28,23 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
   }
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 });
+
+// export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
+//   // @todo add queue item sort date for creation
+//   // const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
+//   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where("userName", "==", 'dimitrioskanellopoulos').limit(15).get();
+//   console.log(`Found ${querySnapshot.size} queue items to process`);
+//   let count = 0;
+//   for (const queueItem of querySnapshot.docs) {
+//     try {
+//       await queueItem.ref.delete();
+//       count++;
+//     } catch (e) {
+//       console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`)
+//     }
+//   }
+//   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
+// });
 
 export async function processQueueItem(queueItem: any) {
 
@@ -74,7 +91,7 @@ export async function processQueueItem(queueItem: any) {
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
       // Id for the event should be serviceName + workoutID
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
-      await setEvent(parentID,generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
+      await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
@@ -98,19 +115,20 @@ export async function processQueueItem(queueItem: any) {
 
 }
 
-async function increaseRetryCountForQueueItem(queueItem: any, error: Error) {
-  const errors = queueItem.data().errors || [];
-  errors.push({
-    error: JSON.stringify(error),
-    retryCount: queueItem.data().retryCount,
+async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
+  const data: QueueItemInterface = queueItem.data();
+  data.retryCount++;
+  data.totalRetryCount = (data.totalRetryCount + 1) || 1;
+  data.errors = data.errors || [];
+  data.errors.push({
+    error: error.message,
+    atRetryCount: data.totalRetryCount,
     date: (new Date()).toJSON(),
   });
+
   try {
-    await queueItem.ref.update({
-      retryCount: queueItem.data().retryCount + 1,
-      errors: errors,
-    });
-    console.error(`Updated retry count for ${queueItem.id} to ${queueItem.data().retryCount + 1}`);
+    await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
+    console.error(`Updated retry count for ${queueItem.id} to ${data.retryCount + 1}`);
   } catch (e) {
     console.error(e);
     console.error(`Could not update retry count on ${queueItem.id}`)
@@ -121,7 +139,7 @@ async function updateToProcessed(queueItem: any) {
   try {
     await queueItem.ref.update({
       'processed': true,
-      'processedAt': new Date(),
+      'processedAt': (new Date()).getTime(),
     });
     console.log(`Updated to processed  ${queueItem.id}`);
   } catch (e) {
@@ -132,6 +150,7 @@ async function updateToProcessed(queueItem: any) {
 
 async function setEvent(userID: string, eventID:string , event: EventInterface) {
   const writePromises: Promise<any>[] = [];
+  event.setID(eventID);
   event.getActivities()
     .forEach((activity, index) => {
       activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
