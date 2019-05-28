@@ -9,7 +9,7 @@ import {Request} from "firebase-functions/lib/providers/https";
 import * as requestPromise from "request-promise-native";
 import {suuntoAppAuth} from "./suunto-app-auth";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
-import {refreshTokenIfNeeded} from "./service-tokens";
+import {getTokenData} from "./service-tokens";
 
 
 // console.log(process.env)
@@ -161,14 +161,12 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
   // Deauthorize all tokens for that user
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
-    await refreshTokenIfNeeded(tokenQueryDocumentSnapshot, false);
+    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, true);
 
-    // Get the first token
-    const data = <ServiceTokenInterface>tokenQueryDocumentSnapshot.data();
     try {
       await requestPromise.get({
         headers: {
-          'Authorization': `Bearer ${data.accessToken}`,
+          'Authorization': `Bearer ${serviceToken.accessToken}`,
         },
         url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
       });
@@ -183,23 +181,23 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
 
     // Now get from all users the same username token
     // Note this will return the current doc as well
-    const otherUserTokens = await admin.firestore().collectionGroup('tokens').where("userName", "==", data.userName).get();
+    const otherUsersTokensQuerySnapshot = await admin.firestore().collectionGroup('tokens').where("userName", "==", serviceToken.userName).get();
 
-    console.log(`Found ${otherUserTokens.size} tokens for token username ${data.userName}`)
+    console.log(`Found ${otherUsersTokensQuerySnapshot.size} tokens for token username ${serviceToken.userName}`);
 
     try {
-      for (const token of otherUserTokens.docs) {
-        await token.ref.delete();
-        console.log(`Deleted token ${token.id}`);
+      for (const otherUserQueryDocumentSnapshot of otherUsersTokensQuerySnapshot.docs) {
+        await otherUserQueryDocumentSnapshot.ref.delete();
+        console.log(`Deleted token ${otherUserQueryDocumentSnapshot.id}`);
       }
     } catch (e) {
       console.error(e);
-      console.error(`Could not deauthorize token for ${decodedIdToken.uid}`);
+      console.error(`Could not deauthorize token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
       continue;
     }
-    console.log(`Deauthorized successfully token for ${decodedIdToken.uid}`);
+    console.log(`Deauthorized successfully token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
   }
 
   res.status(200);

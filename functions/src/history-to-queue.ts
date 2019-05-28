@@ -3,8 +3,7 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
-import {refreshTokenIfNeeded} from "./service-tokens";
+import {getTokenData} from "./service-tokens";
 import {generateIDFromParts} from "./utils";
 import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth";
 
@@ -62,15 +61,14 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
   // Get the history for those tokens
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    await refreshTokenIfNeeded(tokenQueryDocumentSnapshot, false);
 
-    // Get the first token
-    const data = <ServiceTokenInterface>tokenQueryDocumentSnapshot.data();
+    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
+
     let result:any;
     try {
       result = await requestPromise.get({
         headers: {
-          'Authorization': data.accessToken,
+          'Authorization': serviceToken.accessToken,
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
           json: true,
         },
@@ -109,8 +107,8 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
-        batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([data.userName, payload.workoutKey])), {
-          userName: data.userName,
+        batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])), {
+          userName: serviceToken.userName,
           workoutID: payload.workoutKey,
           retryCount: 0,
           processed: false,

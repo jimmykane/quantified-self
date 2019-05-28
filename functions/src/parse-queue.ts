@@ -9,8 +9,7 @@ import * as Pako from "pako";
 import {generateIDFromParts} from "./utils";
 import {MetaData} from "quantified-self-lib/lib/meta-data/meta-data";
 import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
-import {refreshTokenIfNeeded} from "./service-tokens";
-import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
+import {getTokenData} from "./service-tokens";
 
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
@@ -20,11 +19,11 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
-  for (const queueItem of querySnapshot.docs){
+  for (const queueItem of querySnapshot.docs) {
     try {
       await processQueueItem(queueItem);
       count++;
-    }catch (e) {
+    } catch (e) {
       console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`)
     }
   }
@@ -40,59 +39,59 @@ export async function processQueueItem(queueItem: any) {
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokenQuerySnapshots.size) {
     console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.data().userName} increasing count just in case`);
-    return  increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
+    return increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
   }
 
   let processedCount = 0;
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    const data = <ServiceTokenInterface>tokenQueryDocumentSnapshot.data();
+
+    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot);
+
     const parent1 = tokenQueryDocumentSnapshot.ref.parent;
     if (!parent1) {
       throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
     }
     const parentID = parent1.parent!.id;
-    // Check the token if needed
-    await refreshTokenIfNeeded(tokenQueryDocumentSnapshot, false);
     let result;
     try {
       result = await requestPromise.get({
         headers: {
-          'Authorization': data.accessToken,
+          'Authorization': serviceToken.accessToken,
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
         },
         encoding: null,
         url: `https://cloudapi.suunto.com/v2/workout/exportFit/${queueItem.data()['workoutID']}`,
       });
-      console.log(`Downloaded FIT file for ${queueItem.id} and token user ${data.userName}`)
+      console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
       console.error(e);
-      console.error(`Could not get workout for ${queueItem.id} and token user ${data.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`);
-      return  increaseRetryCountForQueueItem(queueItem, e);
+      console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`);
+      return increaseRetryCountForQueueItem(queueItem, e);
     }
 
     try {
       const event = await EventImporterFIT.getFromArrayBuffer(result);
-      console.log(`Created Event from FIT file of ${queueItem.id} and token user ${data.userName}`);
+      console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
       // Id for the event should be serviceName + workoutID
       event.setID(generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]));
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       await setEvent(parentID, event);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${data.userName}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
     } catch (e) {
       // @todo should delete event  or separate catch
       console.error(e);
-      console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${data.userName} to ${queueItem.data().retryCount + 1}`);
-      return  increaseRetryCountForQueueItem(queueItem, e);
+      console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`);
+      return increaseRetryCountForQueueItem(queueItem, e);
     }
   }
 
   // If not all tokens are processed log it and increase the retry count
   if (processedCount !== tokenQuerySnapshots.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later`);
-    return  increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
+    return increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
   }
 
   // For each ended so we can set it to processed

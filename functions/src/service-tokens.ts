@@ -14,7 +14,7 @@ export const refreshTheRefreshTokens = functions.region('europe-west2').runWith(
   let count = 0;
   for (const authToken of querySnapshot.docs){
     try {
-      await refreshTokenIfNeeded(authToken);
+      await getTokenData(authToken, true);
       count++;
     }catch (e) {
       console.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`)
@@ -36,24 +36,33 @@ export const refreshTheRefreshTokens = functions.region('europe-west2').runWith(
 //
 //   // Async foreach is ok here
 //   // querySnapshot.forEach(async (doc) => {
-//   //   await refreshTokenIfNeeded(doc);
+//   //   await getTokenData(doc);
 //   // });
 // });
 
-export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefresh = true) {
-  // @todo should also update the response
-  const serviceToken = <ServiceTokenInterface>doc.data();
+export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSave = false): Promise<ServiceTokenInterface> {
+
+  const serviceTokenData = <ServiceTokenInterface>doc.data();
   const oauth2 = suuntoAppAuth();
   // doc.data() is never undefined for query doc snapshots
   const token = oauth2.accessToken.create({
-    'access_token': serviceToken.accessToken,
-    'refresh_token': serviceToken.refreshToken,
-    'expires_at': serviceToken.expiresAt
+    'access_token': serviceTokenData.accessToken,
+    'refresh_token': serviceTokenData.refreshToken,
+    'expires_at': serviceTokenData.expiresAt
   });
 
-  if (!token.expired() && !forceRefresh){
+  if (!token.expired() && !forceRefreshAndSave){
     console.log(`Token is not expired won't refresh ${doc.id}`);
-    return;
+    return {
+      accessToken: serviceTokenData.accessToken,
+      refreshToken: serviceTokenData.refreshToken,
+      expiresAt: serviceTokenData.expiresAt,
+      scope: serviceTokenData.scope,
+      tokenType: serviceTokenData.tokenType,
+      userName: serviceTokenData.userName,
+      dateRefreshed: serviceTokenData.dateRefreshed,
+      dateCreated: serviceTokenData.dateCreated
+    };
   }
 
   if (token.expired()){
@@ -64,17 +73,27 @@ export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefr
   const date = new Date();
   try {
     responseToken = await token.refresh();
+    console.log(`Successfully refreshed token ${doc.id}`);
   } catch (e) {
     console.log(`Could not refresh token for user ${doc.id}`);
-    if (e.code === 1) {
-      console.log(`Error with code 1 deleting token ${doc.id}`);
-      try {
-        await doc.ref.delete();
-      } catch (e) {
-        console.error(`Could not delete token ${doc.id}`);
-      }
-    }
-    return;
+    // if (e.code === 1) {
+    //   console.log(`Error with code 1 deleting token ${doc.id}`);
+    //   try {
+    //     await doc.ref.delete();
+    //   } catch (e) {
+    //     console.error(`Could not delete token ${doc.id}`);
+    //   }
+    // }
+    return {
+      accessToken: serviceTokenData.accessToken,
+      refreshToken: serviceTokenData.refreshToken,
+      expiresAt: serviceTokenData.expiresAt,
+      scope: serviceTokenData.scope,
+      tokenType: serviceTokenData.tokenType,
+      userName: serviceTokenData.userName,
+      dateRefreshed: serviceTokenData.dateRefreshed,
+      dateCreated: serviceTokenData.dateCreated
+    };
   }
 
   await doc.ref.update(<ServiceTokenInterface>{
@@ -87,5 +106,18 @@ export async function refreshTokenIfNeeded(doc: QueryDocumentSnapshot, forceRefr
       dateRefreshed: date.getTime(),
   });
 
-  console.log(`Successfully refreshed token ${doc.id}`);
+  console.log(`Successfully saved refreshed token ${doc.id}`);
+
+  return {
+    // We return all from the update except the date created
+    accessToken: responseToken.token.access_token,
+    refreshToken: responseToken.token.refresh_token,
+    expiresAt: responseToken.token.expires_at.getTime() - 6000,
+    scope: responseToken.token.scope,
+    tokenType: responseToken.token.token_type,
+    userName: responseToken.token.user,
+    dateRefreshed: date.getTime(),
+    dateCreated: serviceTokenData.dateCreated, // Date created comes from the original doc
+  }
+
 }
