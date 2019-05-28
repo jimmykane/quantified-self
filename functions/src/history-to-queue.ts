@@ -93,7 +93,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       continue;
     }
 
-    console.log(`Found ${result.metadata.workoutcount} for  to  for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Found ${result.metadata.workoutcount} for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
 
     const batchCount = Math.ceil(result.metadata.workoutcount / 500);
     const batchesToProcess: any[] = [];
@@ -104,6 +104,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     });
 
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+    let processedBatchesCount = 1;
     for (const batchToProcess of batchesToProcess){
       const batch = admin.firestore().batch();
       for (const payload of batchToProcess){
@@ -117,12 +118,15 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
       try {
         await batch.commit();
+        processedBatchesCount++;
+        console.log(`Batch ${processedBatchesCount} saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `)
       }catch (e) {
-        console.error(`Could not save batch ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid} due to service error aborting`, result.error);
+        console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, result.error);
         // @todo resolve somehow
         continue; // Unnecessary but clear to the user that it will continue
       }
     }
+    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `)
   }
 
   res.status(200);
