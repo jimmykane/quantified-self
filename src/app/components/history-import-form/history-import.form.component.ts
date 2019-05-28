@@ -15,7 +15,7 @@ import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@an
 import * as Raven from 'raven-js';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';
-import {UserService} from "../../services/app.user.service";
+import {UserService} from '../../services/app.user.service';
 
 
 @Component({
@@ -89,8 +89,6 @@ export class HistoryImportFormComponent implements OnInit {
     this.isLoading = true;
 
     try {
-      debugger;
-
       await this.userService.importSuuntoAppHistory(this.formGroup.get('startDate').value, this.formGroup.get('endDate').value);
 
       this.snackBar.open('History import started', null, {

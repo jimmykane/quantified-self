@@ -14,9 +14,8 @@ import {Router} from '@angular/router';
 import {UserService} from '../../services/app.user.service';
 import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
-import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
-import {UserAgreementFormComponent} from "../user-forms/user-agreement.form.component";
-import {HistoryImportFormComponent} from "../history-import-form/history-import.form.component";
+import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
+import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
 
 declare function require(moduleName: string): any;
 
@@ -63,7 +62,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         return of(null);
       }
       this.user = user;
-      if (this.authService.isCurrentUserAnonymous()){
+      if (this.authService.isCurrentUserAnonymous()) {
         return of(null);
       }
       return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
