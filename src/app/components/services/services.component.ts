@@ -171,8 +171,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   openHistoryImportForm() {
     const dialogRef = this.dialog.open(HistoryImportFormComponent, {
-      width: '75vw',
-      height: '75vh',
+      minWidth: '75vw',
+      maxWidth: '95vw',
+      minHeight: '65vh',
+      maxHeight: '90vh',
       disableClose: false,
       data: {
         user: this.user,

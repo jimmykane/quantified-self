@@ -62,10 +62,11 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get();
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-    if ((new Date(data.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 > (new Date()).getTime() && data.processedActivities !== 0) {
+    const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivities / 285) * 24 * 60 * 60 * 1000));   // 7 days for  285,7142857143 per day
+    if ((nextHistoryImportAvailableDate > new Date()) && data.processedActivities !== 0) {
       console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
       res.status(403);
-      res.send(`History import not allowed for this user. 7 days have not passed`);
+      res.send(`History import cannot happend before ${nextHistoryImportAvailableDate}`);
       return
     }
   }
@@ -145,7 +146,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
           <UserServiceMetaInterface>{
             didLastHistoryImport: (new Date()).getTime(),
             processedActivities: totalProcessedWorkoutsCount,
-        });
+          });
 
         await batch.commit();
         console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);

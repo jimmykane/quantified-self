@@ -54,19 +54,32 @@ mat-icon.suunto{
 }
 
 .smaller{
-  font-size: 0.75em;
+  font-size: 0.90em;
+  line-height: 0.90em;
 }
+
 
 /deep/.mat-dialog-container {
   padding: 0;
 }
 
 /deep/.mat-dialog-content{
-  /*height: 100%;*/
-  max-height: 75vh;
+  height: 100%;
+  max-height: 100%;
 }
 
 .no-margin{
   margin: 0;
 }
 
+form{
+  height: 100%;
+}
+
+p{
+  font-size: 0.9em;
+}
+
+mat-hint{
+  font-size: 0.9em;
+}

@@ -36,6 +36,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
 
   public isAllowedToDoHistoryImport = false;
 
+  public nextImportAvailableDate: Date;
+
   public isLoading: boolean;
 
   constructor(
@@ -82,10 +84,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
           this.isAllowedToDoHistoryImport = true;
           return;
         }
+        this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivities / 285) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.userMetaForService = userMetaForService;
+
         // He is only allowed if he did it about 7 days ago
         this.isAllowedToDoHistoryImport =
-          ((new Date(this.userMetaForService.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 < (new Date()).getTime())
+          this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivities === 0;
       });
 

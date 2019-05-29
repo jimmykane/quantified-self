@@ -1,12 +1,12 @@
 <mat-dialog-content>
 
-
   <form *ngIf="formGroup" [formGroup]="formGroup">
+
     <app-shade [isActive]="isLoading"></app-shade>
 
     <section>
       <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
-      <p class="no-margin">Import your history</p>
+      <p style="margin-top: 0;">Import your history</p>
     </section>
 
     <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
@@ -36,6 +36,8 @@
           </mat-error>
         </mat-form-field>
 
+        <p>Note: Please consider donating as history import is a heavy operation for all modern systems if the load is big</p>
+
         <button mat-stroked-button (click)="close($event)" type="button">Cancel</button>
         <button mat-stroked-button color="primary" matStepperNext>Next</button>
       </mat-step>
@@ -45,10 +47,16 @@
         <p><b>Start date</b>: {{ formGroup.get('formArray')['controls'][0].get('startDate').value | date: 'medium' }}</p>
         <p><b>End date</b>: {{ formGroup.get('formArray')['controls'][0].get('endDate').value | date: 'medium' }}</p>
 
-        <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport"><b>Status</b>: Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}} and queued {{ userMetaForService.processedActivities }} activities</p>
+        <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport">
+          <b>Status</b>: <span class="smaller">Your last history import was at <b>{{ userMetaForService.didLastHistoryImport | date: 'medium'}}</b>
+          and queued <b>{{ userMetaForService.processedActivities }}</b> activities. You can run the next import at <b>{{ nextImportAvailableDate | date: 'medium'}}</b></span>
+        </p>
 
         <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
-          <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have.<br/>Your activities will start appearing at your dashboard.<br/>
+          <mat-hint>
+            <p>
+              <b>I understand that</b>: <span class="smaller">History import can take up to days depending on how many activities you have. Your activities will start appearing at your dashboard.</span><br/>
+            </p>
           </mat-hint>
         </mat-checkbox>
 
