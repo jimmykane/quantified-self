@@ -44,7 +44,9 @@
 
         <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport">Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}}</p>
         <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
-          <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have. <b>Only after a week you will be able to redo an import</b></mat-hint>
+          <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have. Your activities will start appearing at your dashboard.<br/>
+            <b>Only after a week you will be able to redo an import</b>
+          </mat-hint>
         </mat-checkbox>
 
         <mat-error *ngIf="!isAllowedToDoHistoryImport">You have imported your history less than one week ago!</mat-error>
