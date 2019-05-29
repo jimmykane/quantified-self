@@ -33,3 +33,8 @@ mat-icon.suunto{
 .smaller{
   font-size: 0.75em;
 }
+
+.history{
+  display: block;
+  margin-bottom: 2em;
+}

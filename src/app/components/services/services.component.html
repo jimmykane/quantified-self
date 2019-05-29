@@ -4,7 +4,7 @@
       <app-shade [isActive]="isLoading"></app-shade>
       <section>
         <section>
-          <mat-icon class="suunto" (click)="openHistoryImportForm()">arrow_drop_up</mat-icon>
+          <mat-icon class="suunto">arrow_drop_up</mat-icon>
           <h1>Suunto <span class="smaller">app</span></h1>
           <p *ngIf="serviceTokens && serviceTokens.length">Up to 2 Suunto app accounts</p>
           <section>
@@ -15,6 +15,9 @@
               </mat-icon>
             </p>
             <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
+
+            <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>
+
             <button  [class.big]="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
                     *ngIf="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && serviceTokens.length < 2)"
                     (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
