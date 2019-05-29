@@ -2,6 +2,8 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, On
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {
+  AbstractControl,
+  FormArray,
   FormBuilder,
   FormControl,
   FormGroup,
@@ -55,24 +57,39 @@ export class HistoryImportFormComponent implements OnInit {
 
     // Now build the controls
     this.formGroup = new FormGroup({
-        startDate: new FormControl(new Date(), [
-          Validators.required,
-        ]),
-        endDate: new FormControl(new Date(), [
-          Validators.required,
-        ]),
-      });
+      formArray: new FormArray([
+        new FormGroup({
+          startDate: new FormControl(new Date(), [
+            Validators.required,
+          ]),
+          endDate: new FormControl(new Date(), [
+            Validators.required,
+          ])
+        }),
+        new FormGroup({
+          accepted: new FormControl(false, [
+            Validators.requiredTrue,
+            // Validators.minLength(4),
+          ]),
+        })
+      ])
+    });
+
+
 
     // Set this to done loading
     this.isLoading = false;
   }
 
+  /** Returns a FormArray with the name 'formArray'. */
+  get formArray(): AbstractControl | null { return this.formGroup.get('formArray'); }
 
-  hasError(field?: string) {
+  hasError(formGroupIndex?: number, field?: string) {
     if (!field) {
       return !this.formGroup.valid;
     }
-    return !(this.formGroup.get(field).valid && this.formGroup.get(field).touched);
+    const formArray = <FormArray>this.formGroup.get('formArray');
+    return !(formArray.controls[formGroupIndex].get(field).valid && formArray.controls[formGroupIndex].get(field).touched);
   }
 
   async onSubmit() {

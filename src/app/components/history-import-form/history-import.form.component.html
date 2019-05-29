@@ -1,43 +1,53 @@
 <mat-dialog-content>
+  <span class="mat-headline">Suunto app history import</span>
 
 
-  <form *ngIf="formGroup" [formGroup]="formGroup" (submit)="onSubmit()">
-
+  <form *ngIf="formGroup" [formGroup]="formGroup">
     <app-shade [isActive]="isLoading"></app-shade>
 
-    <span class="mat-headline">Suunto app history import</span>
-    <span class="mat-subheader">Some</span>
+    <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
 
-    <!-- Start Date -->
-    <mat-form-field>
-    <input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate">
-    <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
-    <mat-datepicker #startDate></mat-datepicker>
-    <mat-hint>The start date</mat-hint>
-    <mat-error *ngIf="hasError('startDate')">
-    invalid date
-    </mat-error>
-    </mat-form-field>
+      <mat-step formGroupName="0" [stepControl]="formArray?.get([0])">
+        <ng-template matStepLabel>Select the dates needed</ng-template>
 
-    <!-- End Date -->
-    <mat-form-field>
-    <input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate">
-    <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
-    <mat-datepicker #endDate></mat-datepicker>
-    <mat-hint>The end date</mat-hint>
-    <mat-error *ngIf="hasError('startDate')">
-    invalid date
-    </mat-error>
-    </mat-form-field>
+        <!-- Start Date -->
+        <mat-form-field>
+          <input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate">
+          <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
+          <mat-datepicker #startDate></mat-datepicker>
+          <mat-hint>The start date</mat-hint>
+          <mat-error *ngIf="hasError(0, 'startDate')">
+            invalid date
+          </mat-error>
+        </mat-form-field>
 
+        <!-- End Date -->
+        <mat-form-field>
+          <input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate">
+          <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
+          <mat-datepicker #endDate></mat-datepicker>
+          <mat-hint>The end date</mat-hint>
+          <mat-error *ngIf="hasError(0, 'startDate')">
+            invalid date
+          </mat-error>
+        </mat-form-field>
 
-    <mat-hint><b>Note</b>: History import can take up to days depending on how many activities you have</mat-hint>
+        <button mat-stroked-button (click)="close($event)" type="button">Cancel</button>
+        <button mat-stroked-button color="primary" matStepperNext>Next</button>
+      </mat-step>
 
-    <mat-error class="generic-form-error" *ngIf="hasError()">Something does not seem logical above 🤔</mat-error>
+      <mat-step formGroupName="1" [stepControl]="formArray?.get([1])">
+        <ng-template matStepLabel>Read the note</ng-template>
 
+        <mat-checkbox formControlName="accepted">
+          <mat-hint><b>Note</b>: History import can take up to days depending on how many activities you have</mat-hint>
+        </mat-checkbox>
+        <mat-error *ngIf="hasError(1, 'accepted')">You need read the note</mat-error>
+        <button mat-stroked-button matStepperPrevious>back</button>
+        <button mat-flat-button color="primary" (click)="onSubmit()" [disabled]="!this.formGroup.valid">Import</button>
+      </mat-step>
 
-    <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Start import</button>
+    </mat-horizontal-stepper>
   </form>
 
 
