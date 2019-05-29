@@ -170,13 +170,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   openHistoryImportForm() {
-    if (this.clickCount < 10) {
-      this.clickCount++;
-      return;
-    }
-
-    this.clickCount = 0;
-
     const dialogRef = this.dialog.open(HistoryImportFormComponent, {
       width: '75vw',
       disableClose: false,

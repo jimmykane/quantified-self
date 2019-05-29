@@ -63,7 +63,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   if (userServiceMetaDocumentSnapshot.exists){
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
     if ((new Date(data.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 > (new Date()).getTime()){
-      console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`)
+      console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
       res.status(403);
       res.send(`History import not allowed for this user. 7 days have not passed`);
       return

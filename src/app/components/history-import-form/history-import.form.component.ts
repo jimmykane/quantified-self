@@ -1,27 +1,19 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnDestroy, OnInit} from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {EventService} from '../../services/app.event.service';
+import {Component, Inject, OnDestroy, OnInit} from '@angular/core';
 import {
   AbstractControl,
   FormArray,
-  FormBuilder,
   FormControl,
   FormGroup,
-  FormGroupDirective,
-  NgForm,
-  ValidationErrors,
-  ValidatorFn,
   Validators,
 } from '@angular/forms';
-import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import * as Raven from 'raven-js';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';
 import {UserService} from '../../services/app.user.service';
 import {MetaDataInterface, ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
-import {take} from 'rxjs/operators';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
-import {Subscription} from "rxjs";
+import {Subscription} from 'rxjs';
 
 
 @Component({
