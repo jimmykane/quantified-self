@@ -4,8 +4,7 @@
       <app-shade [isActive]="isLoading"></app-shade>
       <section>
         <section>
-          <mat-icon class="suunto">arrow_drop_up</mat-icon>
-          <h1>Suunto <span class="smaller">app</span></h1>
+          <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
           <p *ngIf="serviceTokens && serviceTokens.length">Up to 2 Suunto app accounts</p>
           <section>
             <p class="mat-small" *ngFor="let serviceToken of serviceTokens; let i = index;">

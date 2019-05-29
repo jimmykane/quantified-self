@@ -1,8 +1,7 @@
 <mat-dialog-content>
   <section>
-    <mat-icon class="suunto">arrow_drop_up</mat-icon>
-    <h1 class="mat-h1">Suunto <span class="smaller">app</span></h1>
-    <p>Import your history</p>
+    <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
+    <p class="no-margin">Import your history</p>
   </section>
   <form *ngIf="formGroup" [formGroup]="formGroup">
     <app-shade [isActive]="isLoading"></app-shade>
