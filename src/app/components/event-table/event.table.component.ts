@@ -177,7 +177,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'>=',
-              value: searchStartDate.toISOString()
+              value: searchStartDate.getTime()
             })
           }
           if (this.searchEndDate) {
@@ -190,7 +190,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'<=',
-              value: searchEndDate.toISOString()
+              value: searchEndDate.getTime()
             })
           }
           if (this.privacyFilter) {

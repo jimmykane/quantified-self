@@ -98,7 +98,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
           expiresAt: currentDate.getTime() + (results.expires_in * 1000),
           scope: results.scope,
           userName: results.user,
-          dateCreated: currentDate.toJSON(),
+          dateCreated: currentDate.getTime(),
           dateRefreshed: currentDate.getTime(),
         },
         serviceName: ServiceNames.SuuntoApp

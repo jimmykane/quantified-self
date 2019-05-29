@@ -123,7 +123,7 @@ async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
   data.errors.push({
     error: error.message,
     atRetryCount: data.totalRetryCount,
-    date: (new Date()).toJSON(),
+    date: (new Date()).getTime(),
   });
 
   try {
