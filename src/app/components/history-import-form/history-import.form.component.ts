@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnDestroy, OnInit} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {
@@ -21,6 +21,7 @@ import {UserService} from '../../services/app.user.service';
 import {MetaDataInterface, ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {take} from 'rxjs/operators';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
+import {Subscription} from "rxjs";
 
 
 @Component({
@@ -31,7 +32,7 @@ import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.servi
 })
 
 
-export class HistoryImportFormComponent implements OnInit {
+export class HistoryImportFormComponent implements OnInit, OnDestroy {
   protected logger = Log.create('ActivityFormComponent');
 
   public user: User;
@@ -39,6 +40,7 @@ export class HistoryImportFormComponent implements OnInit {
   public formGroup: FormGroup;
 
   public userMetaForService: UserServiceMetaInterface;
+  public userMetaForServiceSubscription: Subscription;
 
   public isAllowedToDoHistoryImport = false;
 
@@ -60,11 +62,6 @@ export class HistoryImportFormComponent implements OnInit {
     // Set this to loading
     this.isLoading = true;
 
-    this.userMetaForService = await this.userService.getUserMetaForService(this.user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise();
-
-    // He is only allowed if he did it about 7 days ago
-    this.isAllowedToDoHistoryImport = this.userMetaForService.didLastHistoryImport + 7 * 24 * 60 * 1000 < (new Date()).getTime();
-
     // Now build the controls
     this.formGroup = new FormGroup({
       formArray: new FormArray([
@@ -83,6 +80,17 @@ export class HistoryImportFormComponent implements OnInit {
           ]),
         })
       ])
+    });
+
+
+    this.userMetaForServiceSubscription = await this.userService.getUserMetaForService(this.user, ServiceNames.SuuntoApp).subscribe((userMetaForService) => {
+      if (!userMetaForService) {
+        this.isAllowedToDoHistoryImport = true;
+        return;
+      }
+      this.userMetaForService = userMetaForService;
+      // He is only allowed if he did it about 7 days ago
+      this.isAllowedToDoHistoryImport = (new Date(this.userMetaForService.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 < (new Date()).getTime();
     });
 
     // Set this to done loading
@@ -116,22 +124,22 @@ export class HistoryImportFormComponent implements OnInit {
     this.isLoading = true;
 
     try {
-      await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate'), this.formGroup.get('formArray')['controls'][0].get('endDate'));
+      await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value);
 
       this.snackBar.open('History import started', null, {
         duration: 2000,
       });
+      this.dialogRef.close();
     } catch (e) {
       // debugger;
       Raven.captureException(e);
       this.logger.error(e);
-      this.snackBar.open(`Could import history due to ${e.toString()}`, null, {
+      this.snackBar.open(`Could import history due to ${e.error}`, null, {
         duration: 2000,
       });
       Raven.captureException(e);
     } finally {
       this.isLoading = false;
-      this.dialogRef.close();
     }
   }
 
@@ -146,7 +154,16 @@ export class HistoryImportFormComponent implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+    if (this.userMetaForServiceSubscription) {
+      this.userMetaForServiceSubscription.unsubscribe();
+    }
+  }
+
   close(event) {
+    if (this.userMetaForServiceSubscription) {
+      this.userMetaForServiceSubscription.unsubscribe();
+    }
     event.stopPropagation();
     event.preventDefault();
     this.dialogRef.close();

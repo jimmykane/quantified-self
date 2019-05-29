@@ -1,14 +1,16 @@
 <mat-dialog-content>
-  <span class="mat-headline">Suunto app history import</span>
-
-
+  <section>
+    <mat-icon class="suunto">arrow_drop_up</mat-icon>
+    <h1 class="mat-h1">Suunto <span class="smaller">app</span></h1>
+    <p>Import your history</p>
+  </section>
   <form *ngIf="formGroup" [formGroup]="formGroup">
     <app-shade [isActive]="isLoading"></app-shade>
 
     <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
 
       <mat-step formGroupName="0" [stepControl]="formArray?.get([0])">
-        <ng-template matStepLabel>Select the dates</ng-template>
+        <ng-template matStepLabel>Setup the dates</ng-template>
 
         <!-- Start Date -->
         <mat-form-field>
@@ -41,7 +43,7 @@
         <p><b>Start date</b>: {{ formGroup.get('formArray')['controls'][0].get('startDate').value | date: 'medium' }}</p>
         <p><b>End date</b>: {{ formGroup.get('formArray')['controls'][0].get('endDate').value | date: 'medium' }}</p>
 
-        <p>Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}}</p>
+        <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport">Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}}</p>
         <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
           <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have. <b>Only after a week you will be able to redo an import</b></mat-hint>
         </mat-checkbox>

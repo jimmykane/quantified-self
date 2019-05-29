@@ -37,3 +37,21 @@ button {
 mat-error {
   margin-top: 0.5em;
 }
+
+section{
+  text-align: center;
+}
+
+mat-icon{
+  vertical-align: middle;
+  font-size: 1.6em;
+}
+
+mat-icon.suunto{
+  color: #F01716;
+  font-size: 2.5em;
+}
+
+.smaller{
+  font-size: 0.75em;
+}
