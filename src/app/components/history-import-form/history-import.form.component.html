@@ -8,7 +8,7 @@
     <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
 
       <mat-step formGroupName="0" [stepControl]="formArray?.get([0])">
-        <ng-template matStepLabel>Select the dates needed</ng-template>
+        <ng-template matStepLabel>Select the dates</ng-template>
 
         <!-- Start Date -->
         <mat-form-field>
@@ -37,13 +37,17 @@
       </mat-step>
 
       <mat-step formGroupName="1" [stepControl]="formArray?.get([1])">
-        <ng-template matStepLabel>Read the note</ng-template>
+        <ng-template matStepLabel>Confirm</ng-template>
+        <p><b>Start date</b>: {{ formGroup.get('formArray')['controls'][0].get('startDate').value | date: 'medium' }}</p>
+        <p><b>End date</b>: {{ formGroup.get('formArray')['controls'][0].get('endDate').value | date: 'medium' }}</p>
 
-        <mat-checkbox formControlName="accepted">
-          <mat-hint><b>Note</b>: History import can take up to days depending on how many activities you have</mat-hint>
+        <p>Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}}</p>
+        <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
+          <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have. <b>Only after a week you will be able to redo an import</b></mat-hint>
         </mat-checkbox>
-        <mat-error *ngIf="hasError(1, 'accepted')">You need read the note</mat-error>
-        <button mat-stroked-button matStepperPrevious>back</button>
+
+        <mat-error *ngIf="!isAllowedToDoHistoryImport">You have imported your history less than one week ago!</mat-error>
+        <button mat-stroked-button matStepperPrevious>Back</button>
         <button mat-flat-button color="primary" (click)="onSubmit()" [disabled]="!this.formGroup.valid">Import</button>
       </mat-step>
 

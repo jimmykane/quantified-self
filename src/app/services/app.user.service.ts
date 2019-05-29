@@ -24,8 +24,9 @@ import {HttpClient} from '@angular/common/http';
 import {environment} from '../../environments/environment';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import * as Raven from 'raven-js';
-import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
+import {MetaDataInterface, ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {FirebaseError, firestore} from 'firebase/app';
+import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 
 
 @Injectable()
@@ -71,7 +72,7 @@ export class UserService implements OnDestroy {
       throw new Error('Service not supported');
     }
     return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(serviceToken.userName)
-    .set(JSON.parse(JSON.stringify(serviceToken)))
+      .set(JSON.parse(JSON.stringify(serviceToken)))
   }
 
   public getServiceAuthToken(user: User, serviceName: string) {
@@ -81,6 +82,18 @@ export class UserService implements OnDestroy {
     return this.afs
       .collection('suuntoAppAccessTokens')
       .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges();
+  }
+
+  public getAllUserMeta(user: User) {
+    return this.afs
+      .collection('users')
+      .doc(user.uid).collection('meta');
+  }
+
+  public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
+    return this.getAllUserMeta(user).doc(serviceName).valueChanges().pipe(map((doc) => {
+      return <UserServiceMetaInterface>doc;
+    }))
   }
 
   public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
@@ -134,6 +147,7 @@ export class UserService implements OnDestroy {
       }
     }
   }
+
   private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
       dataTypeSettings[dataTypeToUse] = {enabled: true};

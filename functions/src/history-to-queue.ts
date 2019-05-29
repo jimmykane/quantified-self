@@ -114,7 +114,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
     try {
       await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).set({
-        didLastHistoryImport: (new Date()).toJSON(),
+        didLastHistoryImport: (new Date()).getTime(),
         lastHistoryImportWorkoutBatchCount: batchCount
       });
     }catch (e) {

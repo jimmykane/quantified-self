@@ -18,6 +18,9 @@ import * as Raven from 'raven-js';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';
 import {UserService} from '../../services/app.user.service';
+import {MetaDataInterface, ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
+import {take} from 'rxjs/operators';
+import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 
 
 @Component({
@@ -35,6 +38,9 @@ export class HistoryImportFormComponent implements OnInit {
 
   public formGroup: FormGroup;
 
+  public userMetaForService: UserServiceMetaInterface;
+
+  public isAllowedToDoHistoryImport = false;
 
   public isLoading: boolean;
 
@@ -51,18 +57,22 @@ export class HistoryImportFormComponent implements OnInit {
     if (!this.user) {
       throw new Error('Component needs a user')
     }
-
     // Set this to loading
     this.isLoading = true;
+
+    this.userMetaForService = await this.userService.getUserMetaForService(this.user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise();
+
+    // He is only allowed if he did it about 7 days ago
+    this.isAllowedToDoHistoryImport = this.userMetaForService.didLastHistoryImport + 7 * 24 * 60 * 1000 < (new Date()).getTime();
 
     // Now build the controls
     this.formGroup = new FormGroup({
       formArray: new FormArray([
         new FormGroup({
-          startDate: new FormControl(new Date(), [
+          startDate: new FormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
             Validators.required,
           ]),
-          endDate: new FormControl(new Date(), [
+          endDate: new FormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
             Validators.required,
           ])
         }),
@@ -75,14 +85,14 @@ export class HistoryImportFormComponent implements OnInit {
       ])
     });
 
-
-
     // Set this to done loading
     this.isLoading = false;
   }
 
   /** Returns a FormArray with the name 'formArray'. */
-  get formArray(): AbstractControl | null { return this.formGroup.get('formArray'); }
+  get formArray(): AbstractControl | null {
+    return this.formGroup.get('formArray');
+  }
 
   hasError(formGroupIndex?: number, field?: string) {
     if (!field) {
@@ -106,7 +116,7 @@ export class HistoryImportFormComponent implements OnInit {
     this.isLoading = true;
 
     try {
-      await this.userService.importSuuntoAppHistory(this.formGroup.get('startDate').value, this.formGroup.get('endDate').value);
+      await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate'), this.formGroup.get('formArray')['controls'][0].get('endDate'));
 
       this.snackBar.open('History import started', null, {
         duration: 2000,
