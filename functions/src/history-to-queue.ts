@@ -60,9 +60,9 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
   // First check last history import
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get();
-  if (userServiceMetaDocumentSnapshot.exists){
+  if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-    if ((new Date(data.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 > (new Date()).getTime()){
+    if ((new Date(data.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 > (new Date()).getTime() && data.processedActivities !== 0) {
       console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
       res.status(403);
       res.send(`History import not allowed for this user. 7 days have not passed`);
@@ -119,44 +119,48 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
-    try {
-      await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).set({
-        didLastHistoryImport: (new Date()).getTime(),
-        lastHistoryImportWorkoutBatchCount: batchCount
-      });
-    }catch (e) {
-      console.error(`Could not write data to firestore`, e);
-      continue;
-    }
-
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
     let processedBatchesCount = 0;
+    let totalProcessedWorkoutsCount = 0;
     for (const batchToProcess of batchesToProcess) {
       const batch = admin.firestore().batch();
+      let processedWorkoutsCount = 0;
       for (const payload of batchToProcess) {
         // Maybe do a get or insert it at another queue
-        batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])), <QueueItemInterface>{
-          userName: serviceToken.userName,
-          workoutID: payload.workoutKey,
-          retryCount: 0, // So it can be re-processed
-          processed: false, //So it can be re-processed
-        });
+        batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])),
+          <QueueItemInterface>{
+            userName: serviceToken.userName,
+            workoutID: payload.workoutKey,
+            retryCount: 0, // So it can be re-processed
+            processed: false, //So it can be re-processed
+          });
+        processedWorkoutsCount++;
       }
       // Try to commit it
       try {
-        await batch.commit();
-        console.log(`Batch #${processedBatchesCount + 1} saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
         processedBatchesCount++;
+        totalProcessedWorkoutsCount += processedWorkoutsCount;
+        batch.set(
+          admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp),
+          <UserServiceMetaInterface>{
+            didLastHistoryImport: (new Date()).getTime(),
+            processedActivities: totalProcessedWorkoutsCount,
+        });
+
+        await batch.commit();
+        console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+
       } catch (e) {
         console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, result.error);
-        // @todo resolve somehow
+        processedBatchesCount--;
+        totalProcessedWorkoutsCount -= processedWorkoutsCount;
         continue; // Unnecessary but clear to the user that it will continue
       }
     }
     console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
-
   }
 
+  // Respond
   res.status(200);
   res.send({result: 'History items added to queue'});
 

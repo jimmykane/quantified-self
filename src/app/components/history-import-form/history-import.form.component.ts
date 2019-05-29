@@ -75,15 +75,19 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     });
 
 
-    this.userMetaForServiceSubscription = await this.userService.getUserMetaForService(this.user, ServiceNames.SuuntoApp).subscribe((userMetaForService) => {
-      if (!userMetaForService) {
-        this.isAllowedToDoHistoryImport = true;
-        return;
-      }
-      this.userMetaForService = userMetaForService;
-      // He is only allowed if he did it about 7 days ago
-      this.isAllowedToDoHistoryImport = (new Date(this.userMetaForService.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 < (new Date()).getTime();
-    });
+    this.userMetaForServiceSubscription = await this.userService
+      .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
+      .subscribe((userMetaForService) => {
+        if (!userMetaForService) {
+          this.isAllowedToDoHistoryImport = true;
+          return;
+        }
+        this.userMetaForService = userMetaForService;
+        // He is only allowed if he did it about 7 days ago
+        this.isAllowedToDoHistoryImport =
+          ((new Date(this.userMetaForService.didLastHistoryImport)).getTime() + 7 * 24 * 60 * 1000 < (new Date()).getTime())
+          || this.userMetaForService.processedActivities === 0;
+      });
 
     // Set this to done loading
     this.isLoading = false;

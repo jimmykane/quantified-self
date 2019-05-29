@@ -61,6 +61,11 @@ mat-icon.suunto{
   padding: 0;
 }
 
+/deep/.mat-dialog-content{
+  /*height: 100%;*/
+  max-height: 75vh;
+}
+
 .no-margin{
   margin: 0;
 }

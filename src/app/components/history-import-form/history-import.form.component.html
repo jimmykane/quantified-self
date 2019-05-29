@@ -1,10 +1,13 @@
 <mat-dialog-content>
-  <section>
-    <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
-    <p class="no-margin">Import your history</p>
-  </section>
+
+
   <form *ngIf="formGroup" [formGroup]="formGroup">
     <app-shade [isActive]="isLoading"></app-shade>
+
+    <section>
+      <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
+      <p class="no-margin">Import your history</p>
+    </section>
 
     <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
 
@@ -42,10 +45,10 @@
         <p><b>Start date</b>: {{ formGroup.get('formArray')['controls'][0].get('startDate').value | date: 'medium' }}</p>
         <p><b>End date</b>: {{ formGroup.get('formArray')['controls'][0].get('endDate').value | date: 'medium' }}</p>
 
-        <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport">Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}}</p>
+        <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport"><b>Status</b>: Your last history import was at {{ userMetaForService.didLastHistoryImport | date: 'medium'}} and queued {{ userMetaForService.processedActivities }} activities</p>
+
         <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
-          <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have. Your activities will start appearing at your dashboard.<br/>
-            <b>Only after a week you will be able to redo an import</b>
+          <mat-hint><b>Confirm</b>: History import can take up to days depending on how many activities you have.<br/>Your activities will start appearing at your dashboard.<br/>
           </mat-hint>
         </mat-checkbox>
 
