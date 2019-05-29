@@ -36,7 +36,7 @@
           </mat-error>
         </mat-form-field>
 
-        <p>Note: Please consider donating as history import is a heavy operation for all modern systems if the load is big</p>
+        <p><b>Note</b>: Please consider <a href="https://paypal.me/DKanellopoulos" target="_blank">donating</a> as history import is a costy operation.</p>
 
         <button mat-stroked-button (click)="close($event)" type="button">Cancel</button>
         <button mat-stroked-button color="primary" matStepperNext>Next</button>
@@ -49,7 +49,7 @@
 
         <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport">
           <b>Status</b>: <span class="smaller">Your last history import was at <b>{{ userMetaForService.didLastHistoryImport | date: 'medium'}}</b>
-          and queued <b>{{ userMetaForService.processedActivities }}</b> activities. You can run the next import at <b>{{ nextImportAvailableDate | date: 'medium'}}</b></span>
+          and queued <b>{{ userMetaForService.processedActivities }}</b> activities. You can run the next import after <b>{{ nextImportAvailableDate | date: 'medium'}}</b></span>
         </p>
 
         <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
@@ -60,7 +60,7 @@
           </mat-hint>
         </mat-checkbox>
 
-        <mat-error *ngIf="!isAllowedToDoHistoryImport">You have imported your history less than one week ago!</mat-error>
+        <mat-error *ngIf="!isAllowedToDoHistoryImport">You cannot import your history at this moment</mat-error>
         <button mat-stroked-button matStepperPrevious>Back</button>
         <button mat-flat-button color="primary" (click)="onSubmit()" [disabled]="!this.formGroup.valid">Import</button>
       </mat-step>

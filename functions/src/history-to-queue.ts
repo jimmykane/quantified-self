@@ -77,6 +77,8 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
   // Get the history for those tokens
+  let totalProcessedWorkoutsCount = 0;
+  let processedBatchesCount = 0;
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
@@ -121,8 +123,6 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     });
 
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
-    let processedBatchesCount = 0;
-    let totalProcessedWorkoutsCount = 0;
     for (const batchToProcess of batchesToProcess) {
       const batch = admin.firestore().batch();
       let processedWorkoutsCount = 0;
@@ -158,8 +158,10 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
         continue; // Unnecessary but clear to the user that it will continue
       }
     }
-    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+    console.log(`${processedBatchesCount} out of ${batchesToProcess.length +1} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
   }
+
+  console.log(`${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${decodedIdToken.uid}`);
 
   // Respond
   res.status(200);
