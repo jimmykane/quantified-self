@@ -30,10 +30,5 @@ if (localStorage.getItem('appTheme')) {
   localStorage.getItem('appTheme') === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme')
 }
 
-// Clear cache due to version bump
-if (appVersion !== localStorage.getItem('version')) {
-  localStorage.clear();
-  localStorage.setItem('version', appVersion);
-}
 
 platformBrowserDynamic().bootstrapModule(AppModule);

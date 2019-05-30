@@ -83,17 +83,37 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.themeService.changeTheme(user.settings.appSettings.theme);
     });
 
-    this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string }) => {
+    this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
       if (!versions) {
         return
       }
 
-      // debugger;
-      if (environment.production || environment.beta) {
-        // if (environment.production && versions.production !== this.version)
+      if (environment.localhost && (versions.localhost !== localStorage.getItem('version'))) {
+        this.showUpdateAppVersionSnackMessage(versions.localhost);
+        return;
       }
+
+      if (environment.production && (versions.production !== localStorage.getItem('version'))) {
+        this.showUpdateAppVersionSnackMessage(versions.production);
+        return;
+      }
+
+      if (environment.beta && (versions.beta !== localStorage.getItem('version'))) {
+        this.showUpdateAppVersionSnackMessage(versions.beta);
+        return;
+      }
+
     });
 
+  }
+
+  private showUpdateAppVersionSnackMessage(version){
+    const snackBarRef = this.snackBar.open(`New version ${version} found!`, 'Reload', {duration: 0});
+    snackBarRef.onAction().subscribe(() => {
+      window.location.reload(true);
+      localStorage.clear();
+      localStorage.setItem('version', version);
+    });
   }
 
   ngAfterViewInit() {

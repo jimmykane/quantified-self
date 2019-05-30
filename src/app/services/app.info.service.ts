@@ -8,18 +8,18 @@ import {environment} from '../../environments/environment';
 @Injectable()
 export class AppInfoService {
 
-  private appVersions: BehaviorSubject<{beta: string, production: string}> = new BehaviorSubject(null);
+  private appVersions: BehaviorSubject<{beta: string, production: string, localhost: string}> = new BehaviorSubject(null);
 
   constructor(
     private userService: UserService,
     private afs: AngularFirestore
   ) {
-    this.afs.collection('appInfo').doc('version').valueChanges().subscribe((doc: {beta: string, production: string}) => {
+    this.afs.collection('appInfo').doc('version').valueChanges().subscribe((doc: {beta: string, production: string, localhost: string}) => {
       this.appVersions.next(doc);
     })
   }
 
-  getAppVersions(): Observable<{beta: string, production: string}> {
+  getAppVersions(): Observable<{beta: string, production: string, localhost: string}> {
     return this.appVersions.asObservable()
   }
 
