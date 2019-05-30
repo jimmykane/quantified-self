@@ -32,7 +32,7 @@ import {map} from "rxjs/operators";
 })
 
 export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @ViewChild(AgmMap) agmMap;
+  @ViewChild(AgmMap, { static: false }) agmMap;
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];

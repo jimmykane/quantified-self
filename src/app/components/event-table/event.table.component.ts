@@ -12,15 +12,11 @@ import {ActionButtonService} from '../../services/action-buttons/app.action-butt
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {
-  MatCard,
-  MatPaginator, MatPaginatorIntl,
-  MatSnackBar,
-  MatSort,
-  MatSortable,
-  MatTable,
-  MatTableDataSource
-} from '@angular/material';
+import { MatCard } from '@angular/material/card';
+import { MatPaginator, MatPaginatorIntl } from '@angular/material/paginator';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSort, MatSortable } from '@angular/material/sort';
+import { MatTable, MatTableDataSource } from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -50,9 +46,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @Input() privacyFilter?: Privacy;
   @Input() eventsPerPage ? = 10;
   @Input() hasActions?: boolean;
-  @ViewChild(MatSort) sort: MatSort;
-  @ViewChild(MatPaginator) paginator: MatPaginator;
-  @ViewChild(MatCard) table: MatCard;
+  @ViewChild(MatSort, { static: true }) sort: MatSort;
+  @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
+  @ViewChild(MatCard, { static: true }) table: MatCard;
   events: EventInterface[];
   data: MatTableDataSource<any>;
   selection = new SelectionModel(true, []);

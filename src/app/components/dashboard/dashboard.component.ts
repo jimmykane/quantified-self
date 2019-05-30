@@ -7,7 +7,7 @@ import {combineLatest, of, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {switchMap} from 'rxjs/operators';
 import {Router} from '@angular/router';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 

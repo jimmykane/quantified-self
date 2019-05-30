@@ -21,19 +21,19 @@
   "dependencies": {
     "@agm/core": "^1.0.0-beta.5",
     "@amcharts/amcharts4": "4.4.8",
-    "@angular/animations": "7.2.15",
-    "@angular/cdk": "^7.3.7",
-    "@angular/common": "7.2.15",
-    "@angular/compiler": "7.2.15",
-    "@angular/core": "7.2.15",
+    "@angular/animations": "8.0.0",
+    "@angular/cdk": "^8.0.0",
+    "@angular/common": "8.0.0",
+    "@angular/compiler": "8.0.0",
+    "@angular/core": "8.0.0",
     "@angular/fire": "^5.2.0-rc.1",
-    "@angular/forms": "7.2.15",
+    "@angular/forms": "8.0.0",
     "@angular/http": "7.2.15",
-    "@angular/material": "^7.3.7",
-    "@angular/platform-browser": "7.2.15",
-    "@angular/platform-browser-dynamic": "7.2.15",
-    "@angular/platform-server": "7.2.15",
-    "@angular/router": "7.2.15",
+    "@angular/material": "^8.0.0",
+    "@angular/platform-browser": "8.0.0",
+    "@angular/platform-browser-dynamic": "8.0.0",
+    "@angular/platform-server": "8.0.0",
+    "@angular/router": "8.0.0",
     "@types/pako": "^1.0.1",
     "@types/uuid": "^3.4.4",
     "angular2-fontawesome": "^5.2.1",
@@ -52,9 +52,9 @@
     "zone.js": "^0.9.1"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "~0.13.9",
-    "@angular/cli": "7.3.9",
-    "@angular/compiler-cli": "7.2.15",
+    "@angular-devkit/build-angular": "~0.800.0",
+    "@angular/cli": "8.0.0",
+    "@angular/compiler-cli": "8.0.0",
     "@types/jasmine": "3.3.12",
     "@types/node": "^12.0.2",
     "codelyzer": "~5.0.1",
@@ -69,6 +69,6 @@
     "protractor": "~6.0.0",
     "ts-node": "~8.2.0",
     "tslint": "~5.16.0",
-    "typescript": "3.2.4"
+    "typescript": "3.4.5"
   }
 }

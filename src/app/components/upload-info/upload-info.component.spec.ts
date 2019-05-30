@@ -1,12 +1,11 @@
 import {async, ComponentFixture, TestBed} from '@angular/core/testing';
 
 import {UploadInfoComponent} from './upload-info.component';
-import {
-  MatCard,
-  MatIcon,
-  MatList, MatListItem, MatProgressBar,
-  MatRipple
-} from '@angular/material';
+import { MatCard } from '@angular/material/card';
+import { MatRipple } from '@angular/material/core';
+import { MatIcon } from '@angular/material/icon';
+import { MatList, MatListItem } from '@angular/material/list';
+import { MatProgressBar } from '@angular/material/progress-bar';
 
 import {ActivityMetadataComponent} from '../activity-metadata/activity-metadata.component';
 import {UPLOAD_STATUS} from "../upload/upload.status";

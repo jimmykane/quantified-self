@@ -9,7 +9,9 @@ import {
 } from '@angular/core';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
-import {MatIconRegistry, MatSidenav, MatSnackBar} from '@angular/material';
+import { MatIconRegistry } from '@angular/material/icon';
+import { MatSidenav } from '@angular/material/sidenav';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {Subscription} from 'rxjs';
 import {Router, RoutesRecognized} from '@angular/router';
 import {filter, map} from 'rxjs/operators';
@@ -28,7 +30,7 @@ import {User} from "quantified-self-lib/lib/users/user";
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
-  @ViewChild('sidenav') sideNav: MatSidenav;
+  @ViewChild('sidenav', { static: true }) sideNav: MatSidenav;
   public actionButtons: ActionButton[] = [];
   public title;
   private actionButtonsSubscription: Subscription;

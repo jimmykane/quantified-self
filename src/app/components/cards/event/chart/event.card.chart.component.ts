@@ -60,8 +60,8 @@ import {ThemeService} from '../../../../services/app.theme.service';
 })
 export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
-  @ViewChild('chartDiv') chartDiv: ElementRef;
-  @ViewChild('legendDiv') legendDiv: ElementRef;
+  @ViewChild('chartDiv', { static: true }) chartDiv: ElementRef;
+  @ViewChild('legendDiv', { static: true }) legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() userChartSettings: UserChartSettingsInterface;
@@ -109,7 +109,6 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   async ngOnChanges(simpleChanges) {
-    debugger;
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
 
     // 2. If not visible and no data is bound do nothing
