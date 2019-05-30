@@ -5,6 +5,7 @@
 
 export const environment = {
   production: false,
+  beta: true,
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
     authDomain: 'beta.quantified-self.io',

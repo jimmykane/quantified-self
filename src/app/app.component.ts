@@ -9,9 +9,9 @@ import {
 } from '@angular/core';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
-import { MatIconRegistry } from '@angular/material/icon';
-import { MatSidenav } from '@angular/material/sidenav';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatIconRegistry} from '@angular/material/icon';
+import {MatSidenav} from '@angular/material/sidenav';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subscription} from 'rxjs';
 import {Router, RoutesRecognized} from '@angular/router';
 import {filter, map} from 'rxjs/operators';
@@ -19,8 +19,10 @@ import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {DomSanitizer} from '@angular/platform-browser';
-import {ThemeService} from "./services/app.theme.service";
-import {User} from "quantified-self-lib/lib/users/user";
+import {ThemeService} from './services/app.theme.service';
+import {User} from 'quantified-self-lib/lib/users/user';
+import {AppInfoService} from "./services/app.info.service";
+import {environment} from "../environments/environment";
 
 @Component({
   selector: 'app-root',
@@ -30,11 +32,12 @@ import {User} from "quantified-self-lib/lib/users/user";
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
-  @ViewChild('sidenav', { static: true }) sideNav: MatSidenav;
+  @ViewChild('sidenav', {static: true}) sideNav: MatSidenav;
   public actionButtons: ActionButton[] = [];
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
+  private appVersionSubscription: Subscription;
   private userSubscription: Subscription;
   public user: User;
 
@@ -47,6 +50,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
     public themeService: ThemeService,
+    public appInfoSerice: AppInfoService,
     private snackBar: MatSnackBar) {
 
     this.matIconRegistry.addSvgIcon(
@@ -77,7 +81,18 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       }
       this.user = user;
       this.themeService.changeTheme(user.settings.appSettings.theme);
-    })
+    });
+
+    this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string }) => {
+      if (!versions) {
+        return
+      }
+
+      // debugger;
+      if (environment.production || environment.beta) {
+        // if (environment.production && versions.production !== this.version)
+      }
+    });
 
   }
 

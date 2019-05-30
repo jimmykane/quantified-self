@@ -86,15 +86,16 @@ import {UserService} from './services/app.user.service';
 import {UserActionsComponent} from './components/user-actions/user.actions.component';
 import {UserFormComponent} from './components/user-forms/user.form.component';
 import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
-import {ShadeComponent} from "./components/loading/shade.component";
-import {SideNavService} from "./services/side-nav/side-nav.service";
-import {UserSettingsComponent} from "./components/user-settings/user-settings.component";
-import {EventSearchComponent} from "./components/event-search/event-search.component";
-import {EventCardDevicesComponent} from "./components/cards/event/devices/event.card.devices.component";
-import {ServicesComponent} from "./components/services/services.component";
-import {AngularFireFunctionsModule, FunctionsRegionToken} from "@angular/fire/functions";
-import {HistoryImportFormComponent} from "./components/history-import-form/history-import.form.component";
-import {ThemeService} from "./services/app.theme.service";
+import {ShadeComponent} from './components/loading/shade.component';
+import {SideNavService} from './services/side-nav/side-nav.service';
+import {UserSettingsComponent} from './components/user-settings/user-settings.component';
+import {EventSearchComponent} from './components/event-search/event-search.component';
+import {EventCardDevicesComponent} from './components/cards/event/devices/event.card.devices.component';
+import {ServicesComponent} from './components/services/services.component';
+import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
+import {HistoryImportFormComponent} from './components/history-import-form/history-import.form.component';
+import {ThemeService} from './services/app.theme.service';
+import {AppInfoService} from './services/app.info.service';
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -231,6 +232,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UserService,
     SideNavService,
     ThemeService,
+    AppInfoService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},

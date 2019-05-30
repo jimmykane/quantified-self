@@ -37,5 +37,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /appInfo/{document=**} {
+      allow write: if false;
+      allow read: if true;
+    }
+
   }
 }
