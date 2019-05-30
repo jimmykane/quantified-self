@@ -13,7 +13,7 @@
     </a>
 
     <span class="fill-space"></span>
-    <button class="right"  (click)="themeService.toggleTheme(user);" mat-stroked-button color="accent">
+    <button class="right" (click)="themeService.toggleTheme(user);" mat-stroked-button color="accent">
       <mat-icon class="mat-icon material-icons mat-icon-no-color">format_color_fill</mat-icon>
     </button>
     <button class="right" *ngIf="!authService.authenticated()" [routerLink]="['login']" mat-stroked-button color="accent">Login</button>

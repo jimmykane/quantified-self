@@ -26,30 +26,31 @@ import {map} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {DataPace, DataPaceMinutesPerMile} from "quantified-self-lib/lib/data/data.pace";
-import {UserChartSettingsInterface, XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
+import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
+import {UserChartSettingsInterface, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 
 
-import animated from "@amcharts/amcharts4/themes/animated";
+import animated from '@amcharts/amcharts4/themes/animated';
 
-import material from "@amcharts/amcharts4/themes/material";
-import frozen from "@amcharts/amcharts4/themes/frozen";
-import dataviz from "@amcharts/amcharts4/themes/dataviz";
-import dark from "@amcharts/amcharts4/themes/dark";
-import amcharts from "@amcharts/amcharts4/themes/amcharts";
-import amchartsdark from "@amcharts/amcharts4/themes/amchartsdark";
-import moonrisekingdom from "@amcharts/amcharts4/themes/moonrisekingdom";
-import spiritedaway from "@amcharts/amcharts4/themes/spiritedaway";
-import kelly from "@amcharts/amcharts4/themes/kelly";
-import {DataGPSAltitude} from "quantified-self-lib/lib/data/data.altitude-gps";
-import {DataEHPE} from "quantified-self-lib/lib/data/data.ehpe";
-import {DataEVPE} from "quantified-self-lib/lib/data/data.evpe";
-import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-pressure";
-import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
-import {UserUnitSettingsInterface} from "quantified-self-lib/lib/users/user.unit.settings.interface";
-import {DataSpeed} from "quantified-self-lib/lib/data/data.speed";
-import {DataVerticalSpeed} from "quantified-self-lib/lib/data/data.vertical-speed";
-import {UserSettingsService} from "../../../../services/app.user.settings.service";
+import material from '@amcharts/amcharts4/themes/material';
+import frozen from '@amcharts/amcharts4/themes/frozen';
+import dataviz from '@amcharts/amcharts4/themes/dataviz';
+import dark from '@amcharts/amcharts4/themes/dark';
+import amcharts from '@amcharts/amcharts4/themes/amcharts';
+import amchartsdark from '@amcharts/amcharts4/themes/amchartsdark';
+import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
+import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
+import kelly from '@amcharts/amcharts4/themes/kelly';
+import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
+import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
+import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
+import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
+import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
+import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
+import {UserSettingsService} from '../../../../services/app.user.settings.service';
+import {ThemeService} from '../../../../services/app.theme.service';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -94,6 +95,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
               private zone: NgZone,
               private eventService: EventService,
               private userSettingsService: UserSettingsService,
+              private themeService: ThemeService,
               private eventColorService: EventColorService) {
   }
 
@@ -102,11 +104,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   async ngOnInit() {
     if (!this.user || !this.event) {
-      throw 'Component needs events and users';
+      throw new Error('Component needs events and users');
     }
   }
 
   async ngOnChanges(simpleChanges) {
+    debugger;
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
 
     // 2. If not visible and no data is bound do nothing
@@ -156,11 +159,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? "Time" : 'Duration';
+      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
       this.logger.info(`Rendering chart data per series`);
       series.forEach((series) => this.addDataToSeries(series, series.dummyData));
       this.logger.info(`Data Injected`);
-      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? "Time" : 'Duration';
+      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
     });
   }
 
@@ -178,7 +181,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Create a date axis
       const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
       // dateAxis.skipEmptyPeriods= true;
-      dateAxis.title.text = this.useTimeXAxis() ? "Time" : 'Duration';
+      dateAxis.title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
       // dateAxis.baseInterval = {
       //   timeUnit: "second",
       //   count: 1
@@ -205,7 +208,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // marker.stroke = am4core.color("#ccc");
 
 
-      chart.legend.itemContainers.template.events.on("toggled", (ev) => {
+      chart.legend.itemContainers.template.events.on('toggled', (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
         if (!ev.target.readerChecked === true) {
@@ -223,10 +226,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
       // Add watermark
       const watermark = new am4core.Label();
-      watermark.text = "Quantified-Self.io";
+      watermark.text = 'Quantified-Self.io';
       chart.plotContainer.children.push(watermark);
-      watermark.align = "right";
-      watermark.valign = "bottom";
+      watermark.align = 'right';
+      watermark.valign = 'bottom';
       watermark.fontSize = '2em';
       watermark.opacity = 0.7;
       watermark.marginRight = 10;
@@ -244,20 +247,20 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.exporting.menu.verticalAlign = 'bottom';
       chart.exporting.useWebFonts = true;
       chart.exporting.menu.items = [{
-        label: "...️",
+        label: '...️',
         menu: [
-          {"type": "png", "label": "PNG", options: {useRetina: true}},
-          {"type": "json", "label": "JSON"},
-          {"type": "csv", "label": "CSV"},
-          {"type": "xlsx", "label": "XLSX"},
+          {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
+          {'type': 'json', 'label': 'JSON'},
+          {'type': 'csv', 'label': 'CSV'},
+          {'type': 'xlsx', 'label': 'XLSX'},
           // {"label": "Print", "type": "print"},
         ],
       }];
 
       chart.exporting.extraSprites.push({
-        "sprite": chart.legend.parent,
-        "position": "bottom",
-        "marginTop": 20
+        'sprite': chart.legend.parent,
+        'position': 'bottom',
+        'marginTop': 20
       });
 
       // Disable the preloader
@@ -303,7 +306,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
       chart.events.on('maxsizechanged', (ev) => {
         this.logger.info('maxsizechanged');
-        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
+        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       });
 
       chart.events.on('visibilitychanged', (ev) => {
@@ -349,10 +352,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.simplifiedProcessing = true;
 
     this.chart.series.sort((left, right) => {
-      if (left.name < right.name)
+      if (left.name < right.name) {
         return -1;
-      if (left.name > right.name)
+      }
+      if (left.name > right.name) {
         return 1;
+      }
       return 0;
     });
 
@@ -397,7 +402,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
-    series.dataFields.dateX = "time";
+    series.dataFields.dateX = 'time';
 
 
     series.interactionsEnabled = false;
@@ -418,7 +423,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       this.logger.info(`Series ${ev.target.id} validated`);
       // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
-      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
+      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       this.loaded();
       // }
     });
@@ -470,7 +475,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getDataFromSeriesDummyData(series: am4charts.LineSeries[]): any {
-    let data = series.reduce((data, series) => {
+    const data = series.reduce((data, series) => {
       // debugger;
       series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
         // debugger;
@@ -545,7 +550,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       am4core.unuseAllThemes();
       // If no default settings then go on an apply ze defaults
       if (!this.userChartSettings) {
-        am4core.useTheme(material);
+        am4core.useTheme(this.themes[this.themeService.getChartTheme()]);
         return;
       }
 
