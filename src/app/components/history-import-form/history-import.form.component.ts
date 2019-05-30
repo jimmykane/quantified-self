@@ -6,7 +6,8 @@ import {
   FormGroup,
   Validators,
 } from '@angular/forms';
-import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';

@@ -1,6 +1,7 @@
 import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
-import {MatDialog, MatSnackBar} from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {HttpClient} from '@angular/common/http';
 import {FileService} from '../../services/app.file.service';

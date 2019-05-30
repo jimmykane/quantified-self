@@ -1,7 +1,7 @@
 import {
   ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {EventService} from '../../../../services/app.event.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';

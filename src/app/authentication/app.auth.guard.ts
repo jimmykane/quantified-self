@@ -4,7 +4,7 @@ import {Observable} from 'rxjs';
 import {AppAuthService} from './app.auth.service';
 import {map, take, tap} from 'rxjs/operators';
 import {Log} from 'ng2-logger/browser';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 @Injectable()
 export class AppAuthGuard implements CanActivate {

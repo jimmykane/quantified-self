@@ -1,5 +1,5 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {MatTableDataSource} from '@angular/material';
+import { MatTableDataSource } from '@angular/material/table';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';

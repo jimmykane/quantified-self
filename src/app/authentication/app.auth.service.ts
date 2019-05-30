@@ -5,7 +5,7 @@ import {User as FireBaseUser} from 'firebase/app';
 
 import {Observable, of, Subscription} from 'rxjs';
 import {map, switchMap, take} from 'rxjs/operators';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {User} from 'quantified-self-lib/lib/users/user';

@@ -7,7 +7,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';

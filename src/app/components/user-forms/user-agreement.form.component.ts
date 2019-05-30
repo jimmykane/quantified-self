@@ -1,6 +1,8 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import { ErrorStateMatcher } from '@angular/material/core';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
