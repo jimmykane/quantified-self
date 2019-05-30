@@ -98,6 +98,7 @@ import {EventCardDevicesComponent} from "./components/cards/event/devices/event.
 import {ServicesComponent} from "./components/services/services.component";
 import {AngularFireFunctionsModule, FunctionsRegionToken} from "@angular/fire/functions";
 import {HistoryImportFormComponent} from "./components/history-import-form/history-import.form.component";
+import {ThemeService} from "./services/app.theme.service";
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -233,6 +234,7 @@ export class RavenErrorHandler implements ErrorHandler {
     FileService,
     UserService,
     SideNavService,
+    ThemeService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},

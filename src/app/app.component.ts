@@ -17,6 +17,8 @@ import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {DomSanitizer} from '@angular/platform-browser';
+import {ThemeService} from "./services/app.theme.service";
+import {User} from "quantified-self-lib/lib/users/user";
 
 @Component({
   selector: 'app-root',
@@ -32,6 +34,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
   private userSubscription: Subscription;
+  public user: User;
 
   constructor(
     public authService: AppAuthService,
@@ -41,6 +44,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private sideNavService: SideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
+    public themeService: ThemeService,
     private snackBar: MatSnackBar) {
 
     this.matIconRegistry.addSvgIcon(
@@ -69,8 +73,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       if (!user) {
         return;
       }
-      user.settings.appSettings.theme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
-      localStorage.setItem('appTheme', user.settings.appSettings.theme);
+      this.user = user;
+      this.themeService.changeTheme(user.settings.appSettings.theme);
     })
 
   }
