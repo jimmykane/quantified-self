@@ -21,8 +21,8 @@ import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interfa
 import {DomSanitizer} from '@angular/platform-browser';
 import {ThemeService} from './services/app.theme.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {AppInfoService} from "./services/app.info.service";
-import {environment} from "../environments/environment";
+import {AppInfoService} from './services/app.info.service';
+import {environment} from '../environments/environment';
 
 @Component({
   selector: 'app-root',
@@ -112,7 +112,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   }
 
-  private showUpdateAppVersionSnackMessage(version){
+  private showUpdateAppVersionSnackMessage(version) {
     const snackBarRef = this.snackBar.open(`New version ${version} found!`, 'Reload', {duration: 0});
     snackBarRef.onAction().subscribe(() => {
       window.location.reload(true);
