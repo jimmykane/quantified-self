@@ -173,7 +173,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.searchEndDate) {
-            this.searchEndDate.setHours(0, 0, 0, 0) ;
+            this.searchEndDate.setHours(24, 0, 0, 0) ;
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'<=', // Should remove mins from date
