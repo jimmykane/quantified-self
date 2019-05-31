@@ -84,6 +84,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.themeService.setChartTheme(user.settings.chartSettings.theme);
     });
 
+
+    // @todo fix this.
+    // When a user loads for the fist time the version should be updated since the first load is the most recent version
+
     this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
       if (!versions) {
         return
