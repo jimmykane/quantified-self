@@ -19,13 +19,14 @@ const LIMIT = 60;
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
+  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('userName', '==', 'dimitrioskanellopoulos').where('processed', '==', false).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   for (const queueItem of querySnapshot.docs) {
     try {
       await processQueueItem(queueItem);
       count++;
+      console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
     } catch (e) {
       console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`, e)
     }
