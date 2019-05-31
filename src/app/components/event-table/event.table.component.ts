@@ -165,28 +165,19 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.searchStartDate) {
-            const searchStartDate = (new Date(this.searchStartDate.getTime() - (this.searchStartDate.getTimezoneOffset() * 60000)));
-            searchStartDate.setHours(0);
-            searchStartDate.setMinutes(0);
-            searchStartDate.setSeconds(0);
-            searchStartDate.setMilliseconds(0);
+            this.searchStartDate.setHours(0, 0, 0, 0) ;
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'>=',
-              value: searchStartDate.getTime()
+              value: this.searchStartDate.getTime() // Should remove mins from date
             })
           }
           if (this.searchEndDate) {
-            const searchEndDate = (new Date(this.searchEndDate.getTime() - (this.searchEndDate.getTimezoneOffset() * 60000)));
-            searchEndDate.setDate(searchEndDate.getDate() + 1);
-            searchEndDate.setHours(0);
-            searchEndDate.setMinutes(0);
-            searchEndDate.setSeconds(0);
-            searchEndDate.setMilliseconds(0);
+            this.searchEndDate.setHours(0, 0, 0, 0) ;
             where.push({
               fieldPath: 'startDate',
-              opStr: <WhereFilterOp>'<=',
-              value: searchEndDate.getTime()
+              opStr: <WhereFilterOp>'<=', // Should remove mins from date
+              value: this.searchEndDate.getTime()
             })
           }
           if (this.privacyFilter) {
