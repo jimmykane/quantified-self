@@ -15,7 +15,7 @@ import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
+  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(40).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   for (const queueItem of querySnapshot.docs) {
@@ -23,28 +23,11 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
       await processQueueItem(queueItem);
       count++;
     } catch (e) {
-      console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`)
+      console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`, e)
     }
   }
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 });
-
-// export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
-//   // @todo add queue item sort date for creation
-//   // const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(100).get(); // Max 10 retries
-//   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where("userName", "==", 'dimitrioskanellopoulos').limit(15).get();
-//   console.log(`Found ${querySnapshot.size} queue items to process`);
-//   let count = 0;
-//   for (const queueItem of querySnapshot.docs) {
-//     try {
-//       await queueItem.ref.delete();
-//       count++;
-//     } catch (e) {
-//       console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`)
-//     }
-//   }
-//   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
-// });
 
 export async function processQueueItem(queueItem: any) {
 
@@ -80,9 +63,9 @@ export async function processQueueItem(queueItem: any) {
       });
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
-      console.error(e);
-      console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`);
-      return increaseRetryCountForQueueItem(queueItem, e);
+      console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`, e);
+      await increaseRetryCountForQueueItem(queueItem, e);
+      continue;
     }
 
     try {
@@ -98,9 +81,9 @@ export async function processQueueItem(queueItem: any) {
       // await queueItem.ref.delete();
     } catch (e) {
       // @todo should delete event  or separate catch
-      console.error(e);
-      console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`);
-      return increaseRetryCountForQueueItem(queueItem, e);
+      console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`, e);
+      await increaseRetryCountForQueueItem(queueItem, e);
+      continue;
     }
   }
 
@@ -128,10 +111,9 @@ async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
 
   try {
     await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
-    console.error(`Updated retry count for ${queueItem.id} to ${data.retryCount + 1}`);
+    console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + 1}`);
   } catch (e) {
-    console.error(e);
-    console.error(`Could not update retry count on ${queueItem.id}`)
+    console.error(`Could not update retry count on ${queueItem.id}`, e)
   }
 }
 
