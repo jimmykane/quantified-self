@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "firebase-functions-test": "^0.1.6",
-    "tslint": "^5.16.0",
-    "typescript": "^3.4.5"
+    "tslint": "^5.17.0",
+    "typescript": "^3.5.1"
   }
 }
