@@ -7,7 +7,7 @@ mat-card{
 }
 
 .mat-tab-link{
-  font-size: 1.2em;
+  font-size: 1.1em;
   font-weight: 400;
 }
 
@@ -27,12 +27,20 @@ mat-icon{
 }
 
 .right{
-  border: 0;
   margin-right: 1.0em;
 }
 
+.right, .no-border{
+  border: 0;
+}
+
 mat-icon.app-icon{
-  margin-right: 1em;
+  margin-right: 0.5em;
+}
+
+.theme{
+  margin: 0;
+  padding: 0;
 }
 
 .mat-tab-link{

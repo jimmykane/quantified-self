@@ -8,15 +8,15 @@
     <a matTabLink (click)="sidenav.toggle()">
       <mat-icon>menu</mat-icon>
     </a>
-    <a matTabLink [routerLink]="authService.authenticated() ? ['dashboard'] : ['home']">
+    <a matTabLink class="theme" [routerLink]="authService.authenticated() ? ['dashboard'] : ['home']">
       <mat-icon class="app-icon">filter_hdr</mat-icon>Quantified Self.io
     </a>
 
     <span class="fill-space"></span>
-    <button class="right" (click)="themeService.toggleTheme(user);" mat-stroked-button >
-      <mat-icon class="mat-icon material-icons mat-icon-no-color">format_color_fill</mat-icon>
+    <button class="no-border theme" (click)="themeService.toggleTheme(user);" mat-stroked-button >
+      <mat-icon class="mat-icon material-icons mat-icon-no-color theme">format_color_fill</mat-icon>
     </button>
-    <button class="right" *ngIf="!authService.authenticated()" [routerLink]="['login']" mat-stroked-button color="accent">Login</button>
+    <button class="right theme" *ngIf="!authService.authenticated()" [routerLink]="['login']" mat-stroked-button color="accent">Login</button>
 
   </nav>
 
