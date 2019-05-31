@@ -76,10 +76,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     }, 'material'));
 
     this.authService.user.subscribe((user) => {
+      this.user = user;
       if (!user) {
         return;
       }
-      this.user = user;
       this.themeService.setAppTheme(user.settings.appSettings.theme);
       this.themeService.setChartTheme(user.settings.chartSettings.theme);
     });

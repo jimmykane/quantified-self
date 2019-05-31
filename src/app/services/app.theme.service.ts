@@ -19,8 +19,7 @@ export class ThemeService {
     this.chartTheme.next(this.getChartThemeFromStorage());
   }
 
-  public async changeTheme(theme: AppThemes, user?: User) {
-    theme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
+  private async changeTheme(theme: AppThemes, user?: User) {
     const chartTheme = theme === AppThemes.Normal ? ChartThemes.Material : ChartThemes.ChartsDark;
     // Save it to the user if he exists
     if (user) {
@@ -31,12 +30,12 @@ export class ThemeService {
       });
     }
     // Save it to local storage to prevent flashes
-    localStorage.setItem('appTheme', theme);
-    localStorage.setItem('chartTheme', chartTheme);
+    this.setAppTheme(theme);
+    this.setChartTheme(chartTheme);
   }
 
-
   public setAppTheme(appTheme: AppThemes){
+    appTheme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
     localStorage.setItem('appTheme', appTheme);
     this.appTheme.next(appTheme);
   }
