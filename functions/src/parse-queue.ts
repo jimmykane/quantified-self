@@ -15,7 +15,7 @@ import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: 240}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(40).get(); // Max 10 retries
+  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", 10).limit(30).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   for (const queueItem of querySnapshot.docs) {
