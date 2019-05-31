@@ -24,6 +24,10 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
 
+declare function require(moduleName: string): any;
+const {version: appVersion} = require('../../package.json');
+
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -84,26 +88,22 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.themeService.setChartTheme(user.settings.chartSettings.theme);
     });
 
-
-    // @todo fix this.
-    // When a user loads for the fist time the version should be updated since the first load is the most recent version
-    const serverVersionsTake = await this.appInfoSerice.getAppVersions().pipe(first()).toPromise();
     this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
       if (!versions) {
         return
       }
 
-      if (environment.localhost && (versions.localhost !== localStorage.getItem('version'))) {
+      if (environment.localhost && (versions.localhost !== appVersion)) {
         this.showUpdateAppVersionSnackMessage(versions.localhost);
         return;
       }
 
-      if (environment.production && (versions.production !== localStorage.getItem('version'))) {
+      if (environment.production && (versions.production !== appVersion)) {
         this.showUpdateAppVersionSnackMessage(versions.production);
         return;
       }
 
-      if (environment.beta && (versions.beta !== localStorage.getItem('version'))) {
+      if (environment.beta && (versions.beta !== appVersion)) {
         this.showUpdateAppVersionSnackMessage(versions.beta);
         return;
       }
@@ -116,8 +116,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     const snackBarRef = this.snackBar.open(`New version ${version} found!`, 'Reload', {duration: 0});
     snackBarRef.onAction().subscribe(() => {
       window.location.reload(true);
-      localStorage.clear();
-      localStorage.setItem('version', version);
     });
   }
 

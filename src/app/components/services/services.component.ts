@@ -18,9 +18,7 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
 
-declare function require(moduleName: string): any;
 
-const {version: appVersion} = require('../../../../package.json');
 
 
 @Component({
@@ -29,7 +27,6 @@ const {version: appVersion} = require('../../../../package.json');
   styleUrls: ['./services.component.css'],
 })
 export class ServicesComponent implements OnInit, OnDestroy {
-  public appVersion = appVersion;
   public suuntoAppLinkFormGroup: FormGroup;
   public isLoading = false;
   public user: User;
