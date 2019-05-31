@@ -202,12 +202,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.legend.parent.width = am4core.percent(100);
       chart.legend.parent.height = am4core.percent(100);
 
-      // chart.legend.useDefaultMarker = true;
-      // const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-      // marker.cornerRadius(12, 12, 12, 12);
-      // marker.strokeWidth = 2;
-      // marker.strokeOpacity = 1;
-      // marker.stroke = am4core.color("#ccc");
+      chart.legend.useDefaultMarker = true;
+      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
+      marker.cornerRadius(12, 12, 12, 12);
+      marker.strokeWidth = 2;
+      marker.strokeOpacity = 1;
+      marker.stroke = am4core.color('#ccc');
 
 
       chart.legend.itemContainers.template.events.on('toggled', (ev) => {
