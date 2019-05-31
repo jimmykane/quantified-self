@@ -10,22 +10,23 @@ import {AppThemes, UserAppSettingsInterface} from 'quantified-self-lib/lib/users
 import {
   ChartThemes,
   DataTypeSettings,
-  UserChartSettingsInterface, XAxisTypes
+  UserChartSettingsInterface,
+  XAxisTypes
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {UserSettingsInterface} from 'quantified-self-lib/lib/users/user.settings.interface';
 import {
   PaceUnits,
   SpeedUnits,
-  UserUnitSettingsInterface, VerticalSpeedUnits
+  UserUnitSettingsInterface,
+  VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {HttpClient} from '@angular/common/http';
 import {environment} from '../../environments/environment';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import * as Raven from 'raven-js';
-import {MetaDataInterface, ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
-import {FirebaseError, firestore} from 'firebase/app';
+import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 
 
@@ -148,6 +149,14 @@ export class UserService implements OnDestroy {
     }
   }
 
+  public getDefaultChartTheme(): ChartThemes {
+    return ChartThemes.Material;
+  }
+
+  public getDefaultAppTheme(): AppThemes {
+    return AppThemes.Normal;
+  }
+
   private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
       dataTypeSettings[dataTypeToUse] = {enabled: true};
@@ -158,10 +167,10 @@ export class UserService implements OnDestroy {
   private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
-    settings.appSettings.theme = settings.appSettings.theme || AppThemes.Normal;
+    settings.appSettings.theme = settings.appSettings.theme || this.getDefaultAppTheme();
     settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
     settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || this.getDefaultUserChartSettingsDataTypeSettings();
-    settings.chartSettings.theme = settings.chartSettings.theme || ChartThemes.Material;
+    settings.chartSettings.theme = settings.chartSettings.theme || this.getDefaultChartTheme();
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || XAxisTypes.Duration;
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

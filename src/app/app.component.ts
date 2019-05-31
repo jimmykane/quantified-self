@@ -80,7 +80,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         return;
       }
       this.user = user;
-      this.themeService.changeTheme(user.settings.appSettings.theme);
+      this.themeService.setAppTheme(user.settings.appSettings.theme);
+      this.themeService.setChartTheme(user.settings.chartSettings.theme);
     });
 
     this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {

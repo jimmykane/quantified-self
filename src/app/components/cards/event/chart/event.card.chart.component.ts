@@ -27,11 +27,9 @@ import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface'
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
-import {UserChartSettingsInterface, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-
-
+import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+// Chart Themes
 import animated from '@amcharts/amcharts4/themes/animated';
-
 import material from '@amcharts/amcharts4/themes/material';
 import frozen from '@amcharts/amcharts4/themes/frozen';
 import dataviz from '@amcharts/amcharts4/themes/dataviz';
@@ -71,6 +69,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   @Input() showAllData: boolean;
   @Input() useDurationAxis: boolean;
   @Input() dataSmoothingLevel: number;
+  @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
   public isLoading: boolean;
@@ -116,6 +115,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return;
     }
 
+    if (simpleChanges.chartTheme) {
+      this.destroyChart();
+    }
+
     // 1. If there is no chart create
     if (!this.chart) {
       this.chart = this.createChart();
@@ -124,7 +127,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.useDurationAxis || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.useDurationAxis || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel || simpleChanges.chartTheme) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -547,13 +550,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private applyChartStylesFromUserSettings() {
     this.zone.runOutsideAngular(() => {
       am4core.unuseAllThemes();
-      // If no default settings then go on an apply ze defaults
-      if (!this.userChartSettings) {
-        am4core.useTheme(this.themes[this.themeService.getChartTheme()]);
-        return;
-      }
-
-      am4core.useTheme(this.themes[this.userChartSettings.theme]);
+      am4core.useTheme(this.themes[this.chartTheme]);
       if (this.userChartSettings.useAnimations) {
         am4core.useTheme(animated);
       }
