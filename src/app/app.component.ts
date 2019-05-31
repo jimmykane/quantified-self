@@ -14,7 +14,7 @@ import {MatSidenav} from '@angular/material/sidenav';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subscription} from 'rxjs';
 import {Router, RoutesRecognized} from '@angular/router';
-import {filter, map} from 'rxjs/operators';
+import {filter, first, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
@@ -59,7 +59,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     );
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events
       .pipe(filter(event => event instanceof RoutesRecognized))
@@ -87,7 +87,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
     // @todo fix this.
     // When a user loads for the fist time the version should be updated since the first load is the most recent version
-
+    const serverVersionsTake = await this.appInfoSerice.getAppVersions().pipe(first()).toPromise();
     this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
       if (!versions) {
         return
