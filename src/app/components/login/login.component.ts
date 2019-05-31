@@ -85,25 +85,6 @@ export class LoginComponent {
     // const wnd = window.open('http://localhost:5001/quantified-self-io/us-central1/authRedirect', 'name', 'height=585,width=400');
     const wnd = window.open('assets/authPopup.html?signInWithService=true', 'name', 'height=585,width=400');
     wnd.onunload = () => this.isLoggingIn = false;
-
-    // @todo add close detection
-    // var pollTimer = window.setInterval(async () => {
-    //   if (wnd.closed !== false) { // !== is required for compatibility with Opera
-    //     window.clearInterval(pollTimer);
-    //     const user = await this.afAuth.user.toPromise();
-    //     debugger;
-    //
-    //   }
-    // }, 200);
-    // try {
-    //   return this.redirectOrShowDataPrivacyDialog(await this.authService.suuntoAppLogin());
-    // } catch (e) {
-    //   Raven.captureException(e);
-    //   this.logger.error(e);
-    //   this.snackBar.open(`Could not log in due to ${e}`, null, {
-    //     duration: 2000,
-    //   });
-    // }
   }
 
   async twitterLogin() {

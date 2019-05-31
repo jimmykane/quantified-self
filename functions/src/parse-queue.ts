@@ -15,7 +15,7 @@ import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.
 
 const TIMEOUT_IN_SECONDS = 240;
 const RETRY_COUNT = 10;
-const LIMIT = 40;
+const LIMIT = 60;
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS}).pubsub.schedule('every 5 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
@@ -91,10 +91,10 @@ export async function processQueueItem(queueItem: any) {
     }
   }
 
-  // If not all tokens are processed log it and increase the retry count
+  // If not all tokens are processed log it and increase the retry count @todo fix message
   if (processedCount !== tokenQuerySnapshots.size) {
-    console.error(`Could not process all tokens for ${queueItem.id} will try again later`);
-    return increaseRetryCountForQueueItem(queueItem, new Error('Not all tokens could be processed'));
+    console.error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`);
+    return increaseRetryCountForQueueItem(queueItem, new Error('Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}'));
   }
 
   // For each ended so we can set it to processed
