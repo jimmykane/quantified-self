@@ -58,6 +58,7 @@ export async function processQueueItem(queueItem: any) {
     const parentID = parent1.parent!.id;
     let result;
     try {
+      console.time('DownloadFit');
       result = await requestPromise.get({
         headers: {
           'Authorization': serviceToken.accessToken,
@@ -66,6 +67,7 @@ export async function processQueueItem(queueItem: any) {
         encoding: null,
         url: `https://cloudapi.suunto.com/v2/workout/exportFit/${queueItem.data()['workoutID']}`,
       });
+      console.timeEnd('DownloadFit');
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
       console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`, e);
@@ -170,6 +172,7 @@ async function setEvent(userID: string, eventID:string , event: EventInterface) 
     });
   try {
     await Promise.all(writePromises);
+    console.log(`Wrote ${writePromises.length+1} documents for event with id ${eventID}`);
     return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
   } catch (e) {
     console.error(e);
