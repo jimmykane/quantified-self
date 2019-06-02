@@ -14,6 +14,6 @@ export const environment = {
   functions: {
     deauthorizeSuuntoAppServiceURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorize',
     historyImportURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/addHistoryToQueue',
-    stWorkoutDownloadAsFit: 'https://europe-west2-quantified-self-io.cloudfunctions.net/stWorkoutDownloadAsFit/',
+    stWorkoutDownloadAsFit: 'https://europe-west2-quantified-self-io.cloudfunctions.net/stWorkoutDownloadAsFit',
   }
 };
