@@ -23,6 +23,7 @@ import {ThemeService} from './services/app.theme.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
+import {DataStore, DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
 
 declare function require(moduleName: string): any;
 const {version: appVersion} = require('../../package.json');
@@ -64,6 +65,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
+
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events
       .pipe(filter(event => event instanceof RoutesRecognized))

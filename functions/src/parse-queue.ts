@@ -81,8 +81,9 @@ export async function processQueueItem(queueItem: any) {
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
       // Id for the event should be serviceName + workoutID
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
+      // @todo move metadata to its own document for firestore read/write rules
       await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id} and token user ${serviceToken.userName}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id}, user ${parentID} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
@@ -152,7 +153,7 @@ async function setEvent(userID: string, eventID:string , event: EventInterface) 
           .doc(<string>activity.getID())
           .set(activity.toJSON()));
 
-      activity.getAllStreams().forEach((stream) => {
+      activity.getAllExportableStreams().forEach((stream) => {
         // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
         writePromises.push(
           admin.firestore()

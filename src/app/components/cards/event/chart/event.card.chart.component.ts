@@ -49,6 +49,7 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {UserSettingsService} from '../../../../services/app.user.settings.service';
 import {ThemeService} from '../../../../services/app.theme.service';
+import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.utilities";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -58,8 +59,8 @@ import {ThemeService} from '../../../../services/app.theme.service';
 })
 export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
-  @ViewChild('chartDiv', { static: true }) chartDiv: ElementRef;
-  @ViewChild('legendDiv', { static: true }) legendDiv: ElementRef;
+  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
+  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() userChartSettings: UserChartSettingsInterface;
@@ -146,14 +147,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.loading();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
-        this.determineDataToUse(),
+        this.getDataTypesToRequest(), //
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
           return [];
         }
+        // @todo create whitelist for unitstreams and not generate all and then remove ...
+        // We get the unit streams and we filter on them based on the user pref
+        const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
+          return this.getUnitBasedDataTypesToUseFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
+        });
         // debugger;
-        return streams.map((stream) => {
+        return unitStreams.concat(streams).map((stream) => {
           return this.createOrUpdateChartSeries(activity, stream, selectedDataTypes);
         });
       }))
@@ -163,7 +169,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     })).subscribe((series: am4charts.LineSeries[]) => {
       this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
       this.logger.info(`Rendering chart data per series`);
-      series.forEach((series) => this.addDataToSeries(series, series.dummyData));
+      series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
       this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
     });
@@ -232,7 +238,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.plotContainer.children.push(watermark);
       watermark.align = 'right';
       watermark.valign = 'bottom';
-      watermark.fontSize = '2em';
+      watermark.fontSize = '2.1em';
       watermark.opacity = 0.7;
       watermark.marginRight = 10;
       watermark.marginBottom = 5;
@@ -493,13 +499,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     })
   }
 
-  private determineDataToUse(): string[] {
+  private getDataTypesToRequest(): string[] {
+    return this.getNonUnitBasedDataTypes();
+  }
+
+  /**
+   * This get's the basic data types for the charts depending or not on the user datatype settings
+   * There are no unit specific datatypes here so if the user has selected pace it implies metric
+   */
+  private getNonUnitBasedDataTypes(): string[] {
     let dataTypes = DynamicDataLoader.basicDataTypes;
     // Set the datatypes to show if all is selected
     if (this.showAllData) {
       dataTypes = DynamicDataLoader.allDataTypes;
     }
-    // If there is a change in the chart settings and its valid update settings
+    // If there is a change in the user chart settings and its valid update settings
     if (this.userChartSettings && !this.showAllData) {
       // Set the datatypes to use
       dataTypes = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
@@ -509,20 +523,26 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         return dataTypesToUse;
       }, []);
     }
-    // If there is pace selected for the data to show on the chart then show the units selected
-    if (this.userUnitSettings) {
-      // If there is pace remove and only add the settings
-      if (dataTypes.indexOf(DataPace.type) !== -1) {
-        dataTypes = dataTypes.filter(dataType => dataType !== DataPace.type).concat(this.userUnitSettings.paceUnits)
-      }
-      if (dataTypes.indexOf(DataSpeed.type) !== -1) {
-        dataTypes = dataTypes.filter(dataType => dataType !== DataSpeed.type).concat(this.userUnitSettings.speedUnits)
-      }
-      if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
-        dataTypes = dataTypes.filter(dataType => dataType !== DataVerticalSpeed.type).concat(this.userUnitSettings.verticalSpeedUnits)
-      }
+    return dataTypes;
+  }
+
+  /**
+   * This gets the base and extended unit datatypes from a datatype array depending on the user settings
+   * @param dataTypes
+   * @param userSettings
+   */
+  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userSettings: UserUnitSettingsInterface): string[] {
+    let unitBasedDataTypes = [];
+    if (dataTypes.indexOf(DataPace.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.paceUnits);
     }
-    return dataTypes
+    if (dataTypes.indexOf(DataSpeed.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.speedUnits);
+    }
+    if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.verticalSpeedUnits);
+    }
+    return unitBasedDataTypes;
   }
 
   private useTimeXAxis() {
