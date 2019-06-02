@@ -15,7 +15,7 @@
             </p>
             <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
 
-<!--            <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>-->
+            <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>
 
             <button  [class.big]="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.authService.isCurrentUserAnonymous()"
                     *ngIf="(!user || this.authService.isCurrentUserAnonymous()) || (serviceTokens && serviceTokens.length < 2)"
