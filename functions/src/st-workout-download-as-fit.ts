@@ -18,6 +18,8 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
       activityID = req.body.activityID;
     }
 
+    console.log(activityID);
+
     if (!activityID) {
       res.status(403).send('No activity ID provided.');
     }

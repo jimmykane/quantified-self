@@ -66,7 +66,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     if ((nextHistoryImportAvailableDate > new Date()) && data.processedActivities !== 0) {
       console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
       res.status(403);
-      res.send(`History import cannot happend before ${nextHistoryImportAvailableDate}`);
+      res.send(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
       return
     }
   }

@@ -17,6 +17,7 @@ import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
+import {environment} from "../../../environments/environment";
 
 
 
@@ -107,7 +108,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       const activityID = parts[parts.length - 1] === '' ? parts[parts.length - 2] : parts[parts.length - 1];
 
       const result = await this.http.get(
-        `https://europe-west2-quantified-self-io.cloudfunctions.net/stWorkoutDownLoadAsFit`, {
+        environment.functions.stWorkoutDownloadAsFit, {
           params: {
             activityID: activityID
           },
