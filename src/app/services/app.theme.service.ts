@@ -20,7 +20,7 @@ export class ThemeService {
   }
 
   private async changeTheme(theme: AppThemes, user?: User) {
-    const chartTheme = theme === AppThemes.Normal ? ChartThemes.Material : ChartThemes.ChartsDark;
+    const chartTheme = theme === AppThemes.Normal ? ChartThemes.Material : ChartThemes.Dark;
     // Save it to the user if he exists
     if (user) {
       user.settings.appSettings.theme = theme;
