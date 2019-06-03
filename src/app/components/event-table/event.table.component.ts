@@ -12,27 +12,23 @@ import {ActionButtonService} from '../../services/action-buttons/app.action-butt
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {
-  MatCard,
-  MatPaginator, MatPaginatorIntl,
-  MatSnackBar,
-  MatSort,
-  MatSortable,
-  MatTable,
-  MatTableDataSource
-} from '@angular/material';
+import { MatCard } from '@angular/material/card';
+import { MatPaginator, MatPaginatorIntl } from '@angular/material/paginator';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSort, MatSortable } from '@angular/material/sort';
+import { MatTable, MatTableDataSource } from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {catchError, first, map, startWith, switchMap, take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {merge, of, Subscription} from "rxjs";
-import * as Raven from "raven-js";
-import {Log} from "ng2-logger/browser";
-import {Privacy} from "quantified-self-lib/lib/privacy/privacy.class.interface";
-import {DataAscent} from "quantified-self-lib/lib/data/data.ascent";
-import {DataDescent} from "quantified-self-lib/lib/data/data.descent";
+import {merge, of, Subscription} from 'rxjs';
+import * as Raven from 'raven-js';
+import {Log} from 'ng2-logger/browser';
+import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import WhereFilterOp = firebase.firestore.WhereFilterOp; // @todo investigate if this import is ok
 
 
@@ -48,11 +44,11 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp; // @todo investigate if
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() privacyFilter?: Privacy;
-  @Input() eventsPerPage? = 10;
+  @Input() eventsPerPage ? = 10;
   @Input() hasActions?: boolean;
-  @ViewChild(MatSort) sort: MatSort;
-  @ViewChild(MatPaginator) paginator: MatPaginator;
-  @ViewChild(MatCard) table: MatCard;
+  @ViewChild(MatSort, { static: true }) sort: MatSort;
+  @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
+  @ViewChild(MatCard, { static: true }) table: MatCard;
   events: EventInterface[];
   data: MatTableDataSource<any>;
   selection = new SelectionModel(true, []);
@@ -161,42 +157,33 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         switchMap(() => {
           this.isLoadingResults = true;
           const where = [];
-          if (this.searchTerm){
+          if (this.searchTerm) {
             where.push({
               fieldPath: 'name',
-              opStr: <WhereFilterOp>"==",
+              opStr: <WhereFilterOp>'==',
               value: this.searchTerm
             })
           }
-          if (this.searchStartDate){
-            const searchStartDate = (new Date(this.searchStartDate.getTime() - (this.searchStartDate.getTimezoneOffset()*60000)));
-            searchStartDate.setHours(0);
-            searchStartDate.setMinutes(0);
-            searchStartDate.setSeconds(0);
-            searchStartDate.setMilliseconds(0);
+          if (this.searchStartDate) {
+            this.searchStartDate.setHours(0, 0, 0, 0) ;
             where.push({
               fieldPath: 'startDate',
-              opStr: <WhereFilterOp>">=",
-              value: searchStartDate.toISOString()
+              opStr: <WhereFilterOp>'>=',
+              value: this.searchStartDate.getTime() // Should remove mins from date
             })
           }
-          if (this.searchEndDate){
-            const searchEndDate = (new Date(this.searchEndDate.getTime() - (this.searchEndDate.getTimezoneOffset()*60000)));
-            searchEndDate.setDate(searchEndDate.getDate() + 1);
-            searchEndDate.setHours(0);
-            searchEndDate.setMinutes(0);
-            searchEndDate.setSeconds(0);
-            searchEndDate.setMilliseconds(0);
+          if (this.searchEndDate) {
+            this.searchEndDate.setHours(24, 0, 0, 0) ;
             where.push({
               fieldPath: 'startDate',
-              opStr: <WhereFilterOp>"<=",
-              value: searchEndDate.toISOString()
+              opStr: <WhereFilterOp>'<=', // Should remove mins from date
+              value: this.searchEndDate.getTime()
             })
           }
-          if (this.privacyFilter){
+          if (this.privacyFilter) {
             where.push({
               fieldPath: 'privacy',
-              opStr: <WhereFilterOp>"==",
+              opStr: <WhereFilterOp>'==',
               value: this.privacyFilter
             })
           }
@@ -248,7 +235,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
-            dataObject.startDate = this.datePipe.transform(event.startDate || null, 'd MMM yy HH:mm');
+            dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'd MMM yy HH:mm') : 'None?';
             dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
             dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
             dataObject['stats.Ascent'] = ascent ? ascent.getDisplayValue() + ascent.getDisplayUnit() : '';

@@ -1,0 +1,85 @@
+form {
+  /*width: 100%;*/
+  padding: 2%;
+  position: relative;
+}
+
+mat-form-field {
+  margin: 2%;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+.radio-container {
+  margin-bottom: 1em;
+}
+
+.mat-radio-button {
+  margin-top: 1em;
+  margin-right: 1em;
+}
+
+button {
+  width: 100%;
+  margin-top: 1em;
+}
+
+.generic-form-error {
+  margin-top: 1.5em;
+}
+
+/deep/ .mat-checkbox-layout {
+  white-space: normal !important;
+}
+
+mat-error {
+  margin-top: 0.5em;
+}
+
+section{
+  text-align: center;
+}
+
+mat-icon{
+  vertical-align: middle;
+  font-size: 1.6em;
+}
+
+mat-icon.suunto{
+  font-size: 3em;
+  width: 3em;
+  height: 1.5em;
+}
+
+.smaller{
+  font-size: 0.90em;
+  line-height: 0.90em;
+}
+
+
+/deep/.mat-dialog-container {
+  padding: 0;
+}
+
+/deep/.mat-dialog-content{
+  height: 100%;
+  max-height: 100%;
+}
+
+.no-margin{
+  margin: 0;
+}
+
+form{
+  height: 100%;
+}
+
+p{
+  font-size: 0.9em;
+}
+
+mat-hint{
+  font-size: 0.9em;
+}

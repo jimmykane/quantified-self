@@ -6,6 +6,10 @@ mat-card{
   margin: 0.5em;
 }
 
+.mat-tab-link{
+  font-size: 1.1em;
+  font-weight: 400;
+}
 
 mat-sidenav{
   min-width: 300px;
@@ -22,13 +26,21 @@ mat-icon{
   flex: 1 1 auto;
 }
 
-.login{
-  border: 0;
+.right{
   margin-right: 1.0em;
 }
 
+.right, .no-border{
+  border: 0;
+}
+
 mat-icon.app-icon{
-  margin-right: 1em;
+  margin-right: 0.5em;
+}
+
+.theme{
+  margin: 0;
+  padding: 0;
 }
 
 .mat-tab-link{

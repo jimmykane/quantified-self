@@ -4,8 +4,38 @@ mat-grid-list{
 
 mat-form-field {
   margin-bottom: 2em;
+  width: 100%;
 }
 
-button {
-  margin-right: 1em;
+button.margin-left {
+  margin-left: 1em;
+  /*width: 47%;*/
+}
+
+button.big{
+  width: 100%;
+}
+
+section{
+  text-align: center;
+}
+
+mat-icon{
+  vertical-align: middle;
+  font-size: 1.6em;
+}
+
+mat-icon.suunto{
+  font-size: 4em;
+  width: 4em;
+  height: 1.5em;
+}
+
+.smaller{
+  font-size: 0.75em;
+}
+
+.history{
+  display: block;
+  margin-bottom: 2em;
 }

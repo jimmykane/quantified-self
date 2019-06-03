@@ -22,4 +22,7 @@ button{
 
 mat-card{
   margin-bottom: 0.5em;
+  font-size: 0.85em;
+  line-height: 1.5em;
 }
+

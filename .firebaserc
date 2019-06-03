@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "quantified-self-io"
+  },
+  "targets": {
+    "quantified-self-io": {
+      "hosting": {
+        "production": [
+          "quantified-self-io"
+        ],
+        "beta": [
+          "quantified-self-io-beta"
+        ]
+      }
+    }
   }
 }

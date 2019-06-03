@@ -3,7 +3,8 @@ import {ActivatedRoute, Router} from '@angular/router';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
-import {MatDialog, MatDialogRef, MatSnackBar} from '@angular/material';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {FormControl, FormGroup, Validators} from "@angular/forms";
 import * as Raven from "raven-js";
 import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
@@ -56,7 +57,7 @@ export class UserSettingsComponent implements OnChanges {
 
   public userSettingsFormGroup: FormGroup;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
+  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog) {
   }
 
   ngOnChanges(): void {

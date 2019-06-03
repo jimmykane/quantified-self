@@ -1,12 +1,15 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import { ErrorStateMatcher } from '@angular/material/core';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
+import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 
 
 @Component({
@@ -20,13 +23,14 @@ import {Router} from '@angular/router';
 export class UserAgreementFormComponent implements OnInit {
 
   public privacy = Privacy;
-  public consentToDelete: boolean;
   public user: User;
   public originalValues: {
     displayName: string;
   };
 
   public userFormGroup: FormGroup;
+  private serviceName?: string;
+  private serviceToken?: ServiceTokenInterface;
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -38,8 +42,10 @@ export class UserAgreementFormComponent implements OnInit {
     private formBuilder: FormBuilder,
   ) {
     this.user = data.user; // Perhaps move to service?
+    this.serviceName = data.serviceName;
+    this.serviceToken = data.serviceToken;
     if (!this.user) {
-      throw  'Component needs user'
+      throw new Error('Component needs user');
     }
   }
 
@@ -83,6 +89,10 @@ export class UserAgreementFormComponent implements OnInit {
       this.user.acceptedTrackingPolicy = true;
       this.user.acceptedDiagnosticsPolicy = true;
       const dbUser = await this.userService.createOrUpdateUser(this.user);
+      // debugger;
+      if (this.serviceName && this.serviceToken) {
+        await this.userService.setServiceAuthToken(dbUser, this.serviceName, this.serviceToken);
+      }
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
@@ -91,7 +101,7 @@ export class UserAgreementFormComponent implements OnInit {
         duration: 2000,
       });
     } catch (e) {
-      debugger;
+      // debugger;
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });

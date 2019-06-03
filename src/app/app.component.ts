@@ -9,13 +9,25 @@ import {
 } from '@angular/core';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
-import {MatSidenav, MatSnackBar} from '@angular/material';
+import {MatIconRegistry} from '@angular/material/icon';
+import {MatSidenav} from '@angular/material/sidenav';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subscription} from 'rxjs';
 import {Router, RoutesRecognized} from '@angular/router';
-import {filter, map} from 'rxjs/operators';
+import {filter, first, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
-import {SideNavService} from "./services/side-nav/side-nav.service";
-import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
+import {SideNavService} from './services/side-nav/side-nav.service';
+import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
+import {DomSanitizer} from '@angular/platform-browser';
+import {ThemeService} from './services/app.theme.service';
+import {User} from 'quantified-self-lib/lib/users/user';
+import {AppInfoService} from './services/app.info.service';
+import {environment} from '../environments/environment';
+import {DataStore, DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
+
+declare function require(moduleName: string): any;
+const {version: appVersion} = require('../../package.json');
+
 
 @Component({
   selector: 'app-root',
@@ -25,12 +37,14 @@ import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interfa
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
-  @ViewChild('sidenav') sideNav: MatSidenav;
+  @ViewChild('sidenav', {static: true}) sideNav: MatSidenav;
   public actionButtons: ActionButton[] = [];
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
+  private appVersionSubscription: Subscription;
   private userSubscription: Subscription;
+  public user: User;
 
   constructor(
     public authService: AppAuthService,
@@ -38,11 +52,20 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private changeDetectorRef: ChangeDetectorRef,
     private actionButtonService: ActionButtonService,
     private sideNavService: SideNavService,
+    private matIconRegistry: MatIconRegistry,
+    private domSanitizer: DomSanitizer,
+    public themeService: ThemeService,
+    public appInfoSerice: AppInfoService,
     private snackBar: MatSnackBar) {
 
+    this.matIconRegistry.addSvgIcon(
+      'suunto',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto_logo.svg')
+    );
   }
 
-  ngOnInit() {
+  async ngOnInit() {
+
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events
       .pipe(filter(event => event instanceof RoutesRecognized))
@@ -59,13 +82,43 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     }, 'material'));
 
     this.authService.user.subscribe((user) => {
-      if (!user){
+      this.user = user;
+      if (!user) {
         return;
       }
-      user.settings.appSettings.theme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
-      localStorage.setItem('appTheme', user.settings.appSettings.theme);
-    })
+      this.themeService.setAppTheme(user.settings.appSettings.theme);
+      this.themeService.setChartTheme(user.settings.chartSettings.theme);
+    });
 
+    this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
+      if (!versions) {
+        return
+      }
+
+      if (environment.localhost && (versions.localhost !== appVersion)) {
+        this.showUpdateAppVersionSnackMessage(versions.localhost);
+        return;
+      }
+
+      if (environment.production && (versions.production !== appVersion)) {
+        this.showUpdateAppVersionSnackMessage(versions.production);
+        return;
+      }
+
+      if (environment.beta && (versions.beta !== appVersion)) {
+        this.showUpdateAppVersionSnackMessage(versions.beta);
+        return;
+      }
+
+    });
+
+  }
+
+  private showUpdateAppVersionSnackMessage(version) {
+    const snackBarRef = this.snackBar.open(`New version ${version} found!`, 'Reload', {duration: 5000});
+    snackBarRef.onAction().subscribe(() => {
+      window.location.reload(true);
+    });
   }
 
   ngAfterViewInit() {

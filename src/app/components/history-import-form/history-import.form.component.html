@@ -1,0 +1,72 @@
+<mat-dialog-content>
+
+  <form *ngIf="formGroup" [formGroup]="formGroup">
+
+    <app-shade [isActive]="isLoading"></app-shade>
+
+    <section>
+      <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
+      <p style="margin-top: 0;">Import your history</p>
+    </section>
+
+    <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
+
+      <mat-step formGroupName="0" [stepControl]="formArray?.get([0])">
+        <ng-template matStepLabel>Setup the dates</ng-template>
+
+        <!-- Start Date -->
+        <mat-form-field>
+          <input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate">
+          <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
+          <mat-datepicker #startDate></mat-datepicker>
+          <mat-hint>The start date</mat-hint>
+          <mat-error *ngIf="hasError(0, 'startDate')">
+            invalid date
+          </mat-error>
+        </mat-form-field>
+
+        <!-- End Date -->
+        <mat-form-field>
+          <input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate">
+          <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
+          <mat-datepicker #endDate></mat-datepicker>
+          <mat-hint>The end date</mat-hint>
+          <mat-error *ngIf="hasError(0, 'startDate')">
+            invalid date
+          </mat-error>
+        </mat-form-field>
+
+        <p><b>Note</b>: Please consider <a href="https://paypal.me/DKanellopoulos" target="_blank">donating</a> as history import is a costly operation.</p>
+
+        <button mat-stroked-button (click)="close($event)" type="button">Cancel</button>
+        <button mat-stroked-button color="primary" matStepperNext>Next</button>
+      </mat-step>
+
+      <mat-step formGroupName="1" [stepControl]="formArray?.get([1])">
+        <ng-template matStepLabel>Confirm</ng-template>
+        <p><b>Start date</b>: {{ formGroup.get('formArray')['controls'][0].get('startDate').value | date: 'medium' }}</p>
+        <p><b>End date</b>: {{ formGroup.get('formArray')['controls'][0].get('endDate').value | date: 'medium' }}</p>
+
+        <p *ngIf="userMetaForService && userMetaForService.didLastHistoryImport">
+          <b>Status</b>: <span class="smaller">Your last history import was at <b>{{ userMetaForService.didLastHistoryImport | date: 'medium'}}</b>
+          and queued <b>{{ userMetaForService.processedActivities }}</b> activities. You can run the next import after <b>{{ nextImportAvailableDate | date: 'medium'}}</b></span>
+        </p>
+
+        <mat-checkbox formControlName="accepted" [disabled]="!isAllowedToDoHistoryImport">
+          <mat-hint>
+            <p>
+              <b>I understand that</b>: <span class="smaller">History import can take up to days depending on how many activities you have. Your activities will start appearing at your dashboard.</span><br/>
+            </p>
+          </mat-hint>
+        </mat-checkbox>
+
+        <mat-error *ngIf="!isAllowedToDoHistoryImport">You cannot import your history at this moment</mat-error>
+        <button mat-stroked-button matStepperPrevious>Back</button>
+        <button mat-flat-button color="primary" (click)="onSubmit()" [disabled]="!this.formGroup.valid">Import</button>
+      </mat-step>
+
+    </mat-horizontal-stepper>
+  </form>
+
+
+</mat-dialog-content>

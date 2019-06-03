@@ -4,7 +4,7 @@ import {ActivatedRoute, Params, Router} from '@angular/router';
 import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {AppAuthService} from '../../authentication/app.auth.service';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {SideNavService} from "../../services/side-nav/side-nav.service";
 
 declare function require(moduleName: string): any;
@@ -30,7 +30,6 @@ export class SideNavComponent implements OnInit {
 
   async logout() {
     await this.authService.signOut();
-    localStorage.clear();
     this.router.navigate(['/home']).then(() => {
       this.snackBar.open('Signed out', null, {
         duration: 2000,

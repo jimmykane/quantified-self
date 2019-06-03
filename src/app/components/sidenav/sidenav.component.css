@@ -5,8 +5,11 @@ mat-icon{
 .active{
   font-weight: bold;
 }
-mat-toolbar-row.title{
-  margin-bottom: 1em;
+mat-toolbar-row{
+  /*margin-bottom: 1em;*/
+  outline: none;
+  font-size: 0.95em;
+  font-weight: 400;
 }
 .mat-toolbar{
   background: inherit;

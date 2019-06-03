@@ -9,19 +9,38 @@ service cloud.firestore {
       allow create: if request.auth.uid != null;
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
-          allow read, write, create, update, delete: if request.auth.uid == userID;
+          allow read, write: if request.auth.uid == userID;
           function eventData() {
             return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
           }
           match /activities/{activityID} {
             allow read: if eventData().privacy == 'public'
-            allow read, write, create, update, delete: if request.auth.uid == userID;
+            allow read, write: if request.auth.uid == userID;
             match /streams/{streamID} {
               allow read: if eventData().privacy == 'public'
-              allow read, write, create, update, delete: if request.auth.uid == userID;
+              allow read, write: if request.auth.uid == userID;
             }
           }
         }
+        match /meta/{document=**} {
+          allow read: if request.auth.uid == userID;
+        }
     }
+
+ 		match /suuntoAppAccessTokens/{userID} {
+      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+       match /tokens/{document=**} {
+            allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+       }
+    }
+    match /suuntoAppWorkoutQueue/{userID} {
+      allow read, write: if false;
+    }
+
+    match /appInfo/{document=**} {
+      allow write: if false;
+      allow read: if true;
+    }
+
   }
 }

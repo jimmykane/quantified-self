@@ -7,12 +7,13 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
-import {MatSnackBar} from '@angular/material';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
+import {ChartThemes, XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
+import {ThemeService} from "../../../services/app.theme.service";
 
 
 @Component({
@@ -34,11 +35,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showAllData: boolean;
   public useDistanceAxis: boolean;
   public useDurationAxis: boolean;
-  public dataSmoothingLevel: number = 3;
+  public dataSmoothingLevel = 3;
+  public chartTheme: ChartThemes;
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
   private eventSubscription: Subscription;
+  private chartThemeSubscription: Subscription;
 
   private logger = Log.create('EventCardComponent');
 
@@ -49,6 +52,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private eventService: EventService,
     private userSettingsService: UserSettingsService,
     private snackBar: MatSnackBar,
+    private themeService: ThemeService,
     public eventColorService: EventColorService) {
   }
 
@@ -79,6 +83,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.currentUser = user;
     });
 
+    // Subscribe to the chartTheme changes
+    this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
+      this.chartTheme = chartTheme;
+    });
+
     // Subscribe to the actual subject our event
     this.eventSubscription = this.eventService.getEventAndActivities(this.targetUser, eventID).subscribe((event) => {
       if (!event) {
@@ -106,6 +115,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.userSubscription.unsubscribe();
     this.parametersSubscription.unsubscribe();
     this.eventSubscription.unsubscribe();
+    this.chartThemeSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {

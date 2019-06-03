@@ -1,7 +1,8 @@
 import {Component, Input, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import {MatDialog, MatSnackBar} from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';

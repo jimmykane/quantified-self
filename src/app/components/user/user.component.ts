@@ -5,7 +5,8 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {of, Subscription} from 'rxjs';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
-import {MatDialog, MatDialogRef, MatSnackBar} from '@angular/material';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {catchError, map, switchMap} from 'rxjs/operators';
 import {UserFormComponent} from '../user-forms/user.form.component';
 

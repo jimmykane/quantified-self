@@ -10,34 +10,36 @@ import {HomeComponent} from './components/home/home.component';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
-import {
-  MatButtonModule,
-  MatButtonToggleModule,
-  MatCardModule,
-  MatChipsModule,
-  MatCommonModule,
-  MatExpansionModule,
-  MatGridListModule,
-  MatIconModule,
-  MatMenuModule,
-  MatProgressBarModule,
-  MatSidenavModule,
-  MatTableModule,
-  MatTabsModule,
-  MatToolbarModule,
-  MatCheckboxModule,
-  MatSliderModule,
-  MatSnackBarModule,
-  MatInputModule,
-  MatListModule,
-  MatSortModule,
-  MatTooltipModule,
-  MatDialogModule,
-  MatSlideToggleModule,
-  MatDatepickerModule,
-  MatNativeDateModule,
-  MatRadioModule, MatPaginatorModule, MatProgressSpinnerModule, MatSelectModule, MatPaginatorIntl, MatBadgeModule,
-} from '@angular/material';
+import { MatBadgeModule } from '@angular/material/badge';
+import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCardModule } from '@angular/material/card';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatCommonModule, MatNativeDateModule } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatDialogModule } from '@angular/material/dialog';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatGridListModule } from '@angular/material/grid-list';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatPaginatorModule, MatPaginatorIntl } from '@angular/material/paginator';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatRadioModule } from '@angular/material/radio';
+import { MatSelectModule } from '@angular/material/select';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatSliderModule } from '@angular/material/slider';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSortModule } from '@angular/material/sort';
+import { MatStepperModule } from '@angular/material/stepper';
+import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
@@ -84,13 +86,16 @@ import {UserService} from './services/app.user.service';
 import {UserActionsComponent} from './components/user-actions/user.actions.component';
 import {UserFormComponent} from './components/user-forms/user.form.component';
 import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
-import {ShadeComponent} from "./components/loading/shade.component";
-import {SideNavService} from "./services/side-nav/side-nav.service";
-import {UserSettingsComponent} from "./components/user-settings/user-settings.component";
-import {EventSearchComponent} from "./components/event-search/event-search.component";
-import {EventCardDevicesComponent} from "./components/cards/event/devices/event.card.devices.component";
-import {ServicesComponent} from "./components/services/services.component";
-import {AngularFireFunctionsModule, FunctionsRegionToken} from "@angular/fire/functions";
+import {ShadeComponent} from './components/loading/shade.component';
+import {SideNavService} from './services/side-nav/side-nav.service';
+import {UserSettingsComponent} from './components/user-settings/user-settings.component';
+import {EventSearchComponent} from './components/event-search/event-search.component';
+import {EventCardDevicesComponent} from './components/cards/event/devices/event.card.devices.component';
+import {ServicesComponent} from './components/services/services.component';
+import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
+import {HistoryImportFormComponent} from './components/history-import-form/history-import.form.component';
+import {ThemeService} from './services/app.theme.service';
+import {AppInfoService} from './services/app.info.service';
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -163,6 +168,7 @@ export class RavenErrorHandler implements ErrorHandler {
     MatProgressSpinnerModule,
     MatSelectModule,
     MatBadgeModule,
+    MatStepperModule,
   ],
   declarations: [
     AppComponent,
@@ -201,6 +207,7 @@ export class RavenErrorHandler implements ErrorHandler {
     EventSearchComponent,
     EventCardDevicesComponent,
     ServicesComponent,
+    HistoryImportFormComponent,
   ],
   entryComponents: [
     EventFormComponent,
@@ -208,6 +215,7 @@ export class RavenErrorHandler implements ErrorHandler {
     UserAgreementFormComponent,
     ActivityFormComponent,
     UploadErrorComponent,
+    HistoryImportFormComponent
   ],
   providers: [
     AppAuthService,
@@ -223,6 +231,8 @@ export class RavenErrorHandler implements ErrorHandler {
     FileService,
     UserService,
     SideNavService,
+    ThemeService,
+    AppInfoService,
     // {provide: ErrorHandler, useClass: RavenErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},

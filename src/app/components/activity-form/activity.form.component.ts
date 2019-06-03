@@ -11,7 +11,9 @@ import {
   ValidatorFn,
   Validators,
 } from '@angular/forms';
-import {ErrorStateMatcher, MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import { ErrorStateMatcher } from '@angular/material/core';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
@@ -59,7 +61,7 @@ export class ActivityFormComponent implements OnInit {
 
   async ngOnInit() {
     if (!this.user || !this.event) {
-      throw 'Component needs event and user'
+      throw new Error('Component needs event and user')
     }
 
     // Set this to loading

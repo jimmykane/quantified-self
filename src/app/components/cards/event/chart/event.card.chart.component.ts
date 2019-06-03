@@ -26,31 +26,30 @@ import {map} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
-import {DataPace, DataPaceMinutesPerMile} from "quantified-self-lib/lib/data/data.pace";
-import {UserChartSettingsInterface, XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
-
-
-import animated from "@amcharts/amcharts4/themes/animated";
-
-import material from "@amcharts/amcharts4/themes/material";
-import frozen from "@amcharts/amcharts4/themes/frozen";
-import dataviz from "@amcharts/amcharts4/themes/dataviz";
-import dark from "@amcharts/amcharts4/themes/dark";
-import amcharts from "@amcharts/amcharts4/themes/amcharts";
-import amchartsdark from "@amcharts/amcharts4/themes/amchartsdark";
-import moonrisekingdom from "@amcharts/amcharts4/themes/moonrisekingdom";
-import spiritedaway from "@amcharts/amcharts4/themes/spiritedaway";
-import kelly from "@amcharts/amcharts4/themes/kelly";
-import {DataGPSAltitude} from "quantified-self-lib/lib/data/data.altitude-gps";
-import {DataEHPE} from "quantified-self-lib/lib/data/data.ehpe";
-import {DataEVPE} from "quantified-self-lib/lib/data/data.evpe";
-import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-pressure";
-import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
-import {UserUnitSettingsInterface} from "quantified-self-lib/lib/users/user.unit.settings.interface";
-import {DataSpeed} from "quantified-self-lib/lib/data/data.speed";
-import {DataVerticalSpeed} from "quantified-self-lib/lib/data/data.vertical-speed";
-import {UserSettingsService} from "../../../../services/app.user.settings.service";
+import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
+import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+// Chart Themes
+import animated from '@amcharts/amcharts4/themes/animated';
+import material from '@amcharts/amcharts4/themes/material';
+import frozen from '@amcharts/amcharts4/themes/frozen';
+import dataviz from '@amcharts/amcharts4/themes/dataviz';
+import dark from '@amcharts/amcharts4/themes/dark';
+import amcharts from '@amcharts/amcharts4/themes/amcharts';
+import amchartsdark from '@amcharts/amcharts4/themes/amchartsdark';
+import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
+import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
+import kelly from '@amcharts/amcharts4/themes/kelly';
+import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
+import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
+import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
+import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
+import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
+import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
+import {UserSettingsService} from '../../../../services/app.user.settings.service';
+import {ThemeService} from '../../../../services/app.theme.service';
+import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.utilities";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -60,8 +59,8 @@ import {UserSettingsService} from "../../../../services/app.user.settings.servic
 })
 export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
-  @ViewChild('chartDiv') chartDiv: ElementRef;
-  @ViewChild('legendDiv') legendDiv: ElementRef;
+  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
+  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() userChartSettings: UserChartSettingsInterface;
@@ -71,6 +70,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   @Input() showAllData: boolean;
   @Input() useDurationAxis: boolean;
   @Input() dataSmoothingLevel: number;
+  @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
   public isLoading: boolean;
@@ -95,6 +95,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
               private zone: NgZone,
               private eventService: EventService,
               private userSettingsService: UserSettingsService,
+              private themeService: ThemeService,
               private eventColorService: EventColorService) {
   }
 
@@ -103,7 +104,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   async ngOnInit() {
     if (!this.user || !this.event) {
-      throw 'Component needs events and users';
+      throw new Error('Component needs events and users');
     }
   }
 
@@ -115,6 +116,10 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       return;
     }
 
+    if (simpleChanges.chartTheme) {
+      this.destroyChart();
+    }
+
     // 1. If there is no chart create
     if (!this.chart) {
       this.chart = this.createChart();
@@ -123,7 +128,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.useDurationAxis || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel) {
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.useDurationAxis || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel || simpleChanges.chartTheme) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -142,14 +147,19 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.loading();
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
-        this.determineDataToUse(),
+        this.getDataTypesToRequest(), //
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
           return [];
         }
+        // @todo create whitelist for unitstreams and not generate all and then remove ...
+        // We get the unit streams and we filter on them based on the user pref
+        const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
+          return this.getUnitBasedDataTypesToUseFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
+        });
         // debugger;
-        return streams.map((stream) => {
+        return unitStreams.concat(streams).map((stream) => {
           return this.createOrUpdateChartSeries(activity, stream, selectedDataTypes);
         });
       }))
@@ -157,11 +167,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? "Time" : 'Duration';
+      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
       this.logger.info(`Rendering chart data per series`);
-      series.forEach((series) => this.addDataToSeries(series, series.dummyData));
+      series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
-      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? "Time" : 'Duration';
+      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
     });
   }
 
@@ -179,7 +189,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Create a date axis
       const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
       // dateAxis.skipEmptyPeriods= true;
-      dateAxis.title.text = this.useTimeXAxis() ? "Time" : 'Duration';
+      dateAxis.title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
       // dateAxis.baseInterval = {
       //   timeUnit: "second",
       //   count: 1
@@ -198,15 +208,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.legend.parent.width = am4core.percent(100);
       chart.legend.parent.height = am4core.percent(100);
 
-      // chart.legend.useDefaultMarker = true;
-      // const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-      // marker.cornerRadius(12, 12, 12, 12);
-      // marker.strokeWidth = 2;
-      // marker.strokeOpacity = 1;
-      // marker.stroke = am4core.color("#ccc");
+      chart.legend.useDefaultMarker = true;
+      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
+      marker.cornerRadius(12, 12, 12, 12);
+      marker.strokeWidth = 2;
+      marker.strokeOpacity = 1;
+      marker.stroke = am4core.color('#ccc');
 
 
-      chart.legend.itemContainers.template.events.on("toggled", (ev) => {
+      chart.legend.itemContainers.template.events.on('toggled', (ev) => {
         const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
         // Getting visible...
         if (!ev.target.readerChecked === true) {
@@ -224,11 +234,11 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
       // Add watermark
       const watermark = new am4core.Label();
-      watermark.text = "Quantified-Self.io";
+      watermark.text = 'Quantified-Self.io';
       chart.plotContainer.children.push(watermark);
-      watermark.align = "right";
-      watermark.valign = "bottom";
-      watermark.fontSize = '2em';
+      watermark.align = 'right';
+      watermark.valign = 'bottom';
+      watermark.fontSize = '2.1em';
       watermark.opacity = 0.7;
       watermark.marginRight = 10;
       watermark.marginBottom = 5;
@@ -245,20 +255,20 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       chart.exporting.menu.verticalAlign = 'bottom';
       chart.exporting.useWebFonts = true;
       chart.exporting.menu.items = [{
-        label: "...️",
+        label: '...️',
         menu: [
-          {"type": "png", "label": "PNG", options: {useRetina: true}},
-          {"type": "json", "label": "JSON"},
-          {"type": "csv", "label": "CSV"},
-          {"type": "xlsx", "label": "XLSX"},
+          {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
+          {'type': 'json', 'label': 'JSON'},
+          {'type': 'csv', 'label': 'CSV'},
+          {'type': 'xlsx', 'label': 'XLSX'},
           // {"label": "Print", "type": "print"},
         ],
       }];
 
       chart.exporting.extraSprites.push({
-        "sprite": chart.legend.parent,
-        "position": "bottom",
-        "marginTop": 20
+        'sprite': chart.legend.parent,
+        'position': 'bottom',
+        'marginTop': 20
       });
 
       // Disable the preloader
@@ -304,7 +314,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
       chart.events.on('maxsizechanged', (ev) => {
         this.logger.info('maxsizechanged');
-        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
+        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       });
 
       chart.events.on('visibilitychanged', (ev) => {
@@ -350,10 +360,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     series.simplifiedProcessing = true;
 
     this.chart.series.sort((left, right) => {
-      if (left.name < right.name)
+      if (left.name < right.name) {
         return -1;
-      if (left.name > right.name)
+      }
+      if (left.name > right.name) {
         return 1;
+      }
       return 0;
     });
 
@@ -398,7 +410,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
-    series.dataFields.dateX = "time";
+    series.dataFields.dateX = 'time';
 
 
     series.interactionsEnabled = false;
@@ -419,7 +431,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       this.logger.info(`Series ${ev.target.id} validated`);
       // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
       // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
-      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + "px"; // @todo test
+      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       this.loaded();
       // }
     });
@@ -471,7 +483,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   }
 
   private getDataFromSeriesDummyData(series: am4charts.LineSeries[]): any {
-    let data = series.reduce((data, series) => {
+    const data = series.reduce((data, series) => {
       // debugger;
       series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
         // debugger;
@@ -487,13 +499,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     })
   }
 
-  private determineDataToUse(): string[] {
+  private getDataTypesToRequest(): string[] {
+    return this.getNonUnitBasedDataTypes();
+  }
+
+  /**
+   * This get's the basic data types for the charts depending or not on the user datatype settings
+   * There are no unit specific datatypes here so if the user has selected pace it implies metric
+   */
+  private getNonUnitBasedDataTypes(): string[] {
     let dataTypes = DynamicDataLoader.basicDataTypes;
     // Set the datatypes to show if all is selected
     if (this.showAllData) {
       dataTypes = DynamicDataLoader.allDataTypes;
     }
-    // If there is a change in the chart settings and its valid update settings
+    // If there is a change in the user chart settings and its valid update settings
     if (this.userChartSettings && !this.showAllData) {
       // Set the datatypes to use
       dataTypes = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
@@ -503,20 +523,26 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
         return dataTypesToUse;
       }, []);
     }
-    // If there is pace selected for the data to show on the chart then show the units selected
-    if (this.userUnitSettings) {
-      // If there is pace remove and only add the settings
-      if (dataTypes.indexOf(DataPace.type) !== -1) {
-        dataTypes = dataTypes.filter(dataType => dataType !== DataPace.type).concat(this.userUnitSettings.paceUnits)
-      }
-      if (dataTypes.indexOf(DataSpeed.type) !== -1) {
-        dataTypes = dataTypes.filter(dataType => dataType !== DataSpeed.type).concat(this.userUnitSettings.speedUnits)
-      }
-      if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
-        dataTypes = dataTypes.filter(dataType => dataType !== DataVerticalSpeed.type).concat(this.userUnitSettings.verticalSpeedUnits)
-      }
+    return dataTypes;
+  }
+
+  /**
+   * This gets the base and extended unit datatypes from a datatype array depending on the user settings
+   * @param dataTypes
+   * @param userSettings
+   */
+  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userSettings: UserUnitSettingsInterface): string[] {
+    let unitBasedDataTypes = [];
+    if (dataTypes.indexOf(DataPace.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.paceUnits);
     }
-    return dataTypes
+    if (dataTypes.indexOf(DataSpeed.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.speedUnits);
+    }
+    if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.verticalSpeedUnits);
+    }
+    return unitBasedDataTypes;
   }
 
   private useTimeXAxis() {
@@ -544,14 +570,8 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   private applyChartStylesFromUserSettings() {
     this.zone.runOutsideAngular(() => {
       am4core.unuseAllThemes();
-      // If no default settings then go on an apply ze defaults
-      if (!this.userChartSettings) {
-        am4core.useTheme(material);
-        return;
-      }
-
-      am4core.useTheme(this.themes[this.userChartSettings.theme]);
-      if (this.userChartSettings.useAnimations) {
+      am4core.useTheme(this.themes[this.chartTheme]);
+      if (this.userChartSettings && this.userChartSettings.useAnimations) {
         am4core.useTheme(animated);
       }
     });

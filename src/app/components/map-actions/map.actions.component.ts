@@ -11,7 +11,8 @@ import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {EventFormComponent} from '../event-form/event.form.component';
-import {MatDialog, MatSnackBar} from '@angular/material';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {UserSettingsService} from '../../services/app.user.settings.service';
 
