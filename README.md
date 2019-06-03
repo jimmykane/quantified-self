@@ -1,4 +1,4 @@
-Quantified Self 2.0.47-MFF73
+Quantified Self 3.0.0-Matt
 ==============
 
 Master
@@ -29,26 +29,6 @@ Contribution and assistance is very much welcome
 
 How to run this project
 -----------------------
-
-- Clone this project
-
-  `git clone https://github.com/jimmykane/quantified-self.git`
-  
-
-- Install the dependencies
-
-  `npm install`
-  
-- Start the Angular Server
-  
-  `npm start`
-  
-- Open it on your browser
- 
-  `http://localhost:4200/`
-  
-Alternative to run this project
--------------------------------
 
 - Clone this project
 
