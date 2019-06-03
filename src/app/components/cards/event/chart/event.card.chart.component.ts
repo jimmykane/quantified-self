@@ -571,7 +571,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.zone.runOutsideAngular(() => {
       am4core.unuseAllThemes();
       am4core.useTheme(this.themes[this.chartTheme]);
-      if (this.userChartSettings.useAnimations) {
+      if (this.userChartSettings && this.userChartSettings.useAnimations) {
         am4core.useTheme(animated);
       }
     });

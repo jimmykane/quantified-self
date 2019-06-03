@@ -1,7 +1,7 @@
 import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {HttpClient} from '@angular/common/http';
 import {FileService} from '../../services/app.file.service';
@@ -18,8 +18,6 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
 import {environment} from "../../../environments/environment";
-
-
 
 
 @Component({
@@ -150,7 +148,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
   connectWithSuuntoApp(event) {
     this.isLoading = true;
     const wnd = window.open('assets/authPopup.html?signInWithService=false', 'name', 'height=585,width=400');
+    if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
+      this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
+        duration: 5000,
+      });
+      Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
+    }
     wnd.onunload = () => this.isLoading = false;
+
   }
 
   async deauthorizeSuuntoApp(event) {
