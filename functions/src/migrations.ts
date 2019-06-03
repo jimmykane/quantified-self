@@ -5,10 +5,10 @@ import {generateIDFromParts} from "./utils";
 export const migrateDates = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
   // @todo delete indexes
   const querySnapshot = await admin.firestore()
-    .collectionGroup(`activities`)
+    .collectionGroup(`events`)
     .where("startDate", "<=", (new Date().toJSON()))
     .where("startDate", ">=", (new Date(0).toJSON()))
-    .limit(400)
+    .limit(500)
     .get();
   console.log(`Found ${querySnapshot.size} auth tokens to process`);
   let count = 0;
@@ -19,7 +19,7 @@ export const migrateDates = functions.region('europe-west2').runWith({timeoutSec
       endDate: (new Date(doc.data().endDate)).getTime()
     });
     // await getTokenData(eventDoc, true);
-    console.log(`Parsed ${doc.id} for ${doc.ref.parent.parent.id} and ${doc.ref.parent.parent.parent.id}`);
+    console.log(`Parsed ${doc.id} for ${doc.ref.parent.parent.id} and ${doc.ref.parent.parent.parent.id}  ${doc.ref.parent.parent.parent.parent.id}`);
 
     count++;
   }
