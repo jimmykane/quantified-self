@@ -81,9 +81,13 @@ export class LoginComponent {
   async suuntoAppLogin() {
     this.isLoggingIn = true;
     // Open the popup that will start the auth flow.
-    // this.isLoggingIn = true;
-    // const wnd = window.open('http://localhost:5001/quantified-self-io/us-central1/authRedirect', 'name', 'height=585,width=400');
     const wnd = window.open('assets/authPopup.html?signInWithService=true', 'name', 'height=585,width=400');
+    if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
+      this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
+        duration: 5000,
+      });
+      Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
+    }
     wnd.onunload = () => this.isLoggingIn = false;
   }
 
