@@ -1,6 +1,5 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import {generateIDFromParts} from "./utils";
 //
 export const migrateDates = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
   // @todo delete indexes
@@ -19,7 +18,7 @@ export const migrateDates = functions.region('europe-west2').runWith({timeoutSec
       endDate: (new Date(doc.data().endDate)).getTime()
     });
     // await getTokenData(eventDoc, true);
-    console.log(`Parsed ${doc.id} for ${doc.ref.parent.parent.id} and ${doc.ref.parent.parent.parent.id}  ${doc.ref.parent.parent.parent.parent.id}`);
+    // console.log(`Parsed ${doc.id} for ${doc.ref.parent.parent.id} and ${doc.ref.parent.parent.parent.id}  ${doc.ref.parent.parent.parent.parent.id}`);
 
     count++;
   }
