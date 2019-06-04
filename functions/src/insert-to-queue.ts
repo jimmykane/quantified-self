@@ -17,13 +17,13 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
   const workoutID = req.query.workoutid ||  req.body.workoutid;
 
   try {
-    console.log(`Inserting to queue ${userName} ${workoutID}`);
     // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
     // @todo ask about this
     const queueItemDocumentReference = await addToQueue(userName, workoutID);
     await processQueueItem(await queueItemDocumentReference.get());
   }catch (e) {
-    throw e; // @todo better handling
+    console.log(e);
+    res.status(500);
   }
   res.send();
 });
