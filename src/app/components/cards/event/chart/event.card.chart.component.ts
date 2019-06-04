@@ -529,18 +529,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   /**
    * This gets the base and extended unit datatypes from a datatype array depending on the user settings
    * @param dataTypes
-   * @param userSettings
+   * @param userUnitSettings
    */
-  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userSettings: UserUnitSettingsInterface): string[] {
+  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
     let unitBasedDataTypes = [];
+    if (!userUnitSettings){
+      return unitBasedDataTypes
+    }
     if (dataTypes.indexOf(DataPace.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.paceUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
     }
     if (dataTypes.indexOf(DataSpeed.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.speedUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.speedUnits);
     }
     if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.verticalSpeedUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.verticalSpeedUnits);
     }
     return unitBasedDataTypes;
   }

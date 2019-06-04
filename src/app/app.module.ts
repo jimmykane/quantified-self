@@ -43,7 +43,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
-import {Angular2FontawesomeModule} from 'angular2-fontawesome';
 import {CdkTableModule} from '@angular/cdk/table';
 import {EventTableComponent, MatPaginatorIntlFireStore} from './components/event-table/event.table.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
@@ -154,7 +153,6 @@ export class RavenErrorHandler implements ErrorHandler {
     MatInputModule,
     MatListModule,
     FormsModule,
-    Angular2FontawesomeModule,
     MatProgressBarModule,
     MatTableModule,
     MatSortModule,

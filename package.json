@@ -36,7 +36,6 @@
     "@angular/router": "8.0.0",
     "@types/pako": "^1.0.1",
     "@types/uuid": "^3.4.4",
-    "angular2-fontawesome": "^5.2.1",
     "buffer": "^5.2.1",
     "firebase": "^6.1.0",
     "font-awesome": "^4.7.0",
