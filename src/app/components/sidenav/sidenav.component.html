@@ -42,7 +42,6 @@
     routerLink="/login" (click)="sideNav.close();">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>
-    <span class="example-spacer"></span>
   </mat-list-item>
 
   <mat-list-item
@@ -50,44 +49,37 @@
     routerLink="/services" (click)="sideNav.close();">
     <mat-icon>change_history</mat-icon>
     <span>Services</span>
-    <span class="example-spacer"></span>
   </mat-list-item>
 
   <mat-list-item (click)="logout()"
                  *ngIf="authService.authenticated()">
     <mat-icon>power_settings_new</mat-icon>
     <span>Logout</span>
-    <span class="example-spacer"></span>
   </mat-list-item>
 
   <mat-list-item>
     <mat-icon>info</mat-icon>
     <span>{{appVersion}}</span>
-    <span class="example-spacer"></span>
   </mat-list-item>
 
   <mat-list-item onclick="window.open('https://www.facebook.com/groups/361026511083969/')">
     <mat-icon>forum</mat-icon>
-    <span>Community <mat-icon>open_in_new</mat-icon></span>
-    <span class="example-spacer"></span>
+    <span>Community </span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
   <mat-list-item onclick="window.open('mailto:jimmykane9@gmail.com')">
     <mat-icon>email</mat-icon>
-    <span>Contact <mat-icon>open_in_new</mat-icon></span>
-    <span class="example-spacer"></span>
+    <span>Contact</span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
   <mat-list-item onclick="window.open('https://paypal.me/DKanellopoulos')">
     <mat-icon>monetization_on</mat-icon>
-    <span>Donate via PayPal <mat-icon>open_in_new</mat-icon></span>
-    <span class="example-spacer"></span>
+    <span>Donate via PayPal </span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
   <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
     <mat-icon>bug_report </mat-icon>
-    <span>File a bug <mat-icon>open_in_new</mat-icon></span>
-    <span class="example-spacer"></span>
+    <span>File a bug</span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
 </mat-nav-list>
