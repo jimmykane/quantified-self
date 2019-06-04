@@ -152,7 +152,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
         console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
 
       } catch (e) {
-        console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, result.error);
+        console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, e);
         processedBatchesCount--;
         totalProcessedWorkoutsCount -= processedWorkoutsCount;
         continue; // Unnecessary but clear to the user that it will continue
