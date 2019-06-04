@@ -213,7 +213,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       marker.cornerRadius(12, 12, 12, 12);
       marker.strokeWidth = 2;
       marker.strokeOpacity = 1;
-      marker.stroke = am4core.color('#ccc');
+      marker.stroke = am4core.color('#0a97ee');
 
 
       chart.legend.itemContainers.template.events.on('toggled', (ev) => {

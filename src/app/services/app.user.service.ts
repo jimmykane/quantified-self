@@ -157,6 +157,8 @@ export class UserService implements OnDestroy {
     return AppThemes.Normal;
   }
 
+  // @todo move other calls to this
+
   private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
       dataTypeSettings[dataTypeToUse] = {enabled: true};
