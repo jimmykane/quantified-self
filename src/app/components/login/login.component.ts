@@ -53,7 +53,6 @@ export class LoginComponent {
     }
   }
 
-
   async googleLogin() {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.googleLogin());
