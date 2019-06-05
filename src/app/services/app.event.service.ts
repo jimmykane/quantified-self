@@ -286,6 +286,10 @@ export class EventService implements OnDestroy {
     }
   }
 
+  public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
+    return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON());
+  }
+
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
     return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).update(propertiesToUpdate);

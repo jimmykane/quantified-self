@@ -8,6 +8,14 @@
     <span class="mat-headline">Editing activity</span>
     <span class="mat-subheader">internal id {{ activity.getID() }}</span>
 
+    <mat-form-field>
+      <input matInput placeholder="Device name" type="text" [min]="3" [max]="20" formControlName="creatorName">
+      <mat-hint>How would you label/name this device that the activity was made with</mat-hint>
+      <mat-error *ngIf="hasError('creatorName')">
+        invalid name
+      </mat-error>
+    </mat-form-field>
+
     <!-- Start Date -->
     <!--<mat-form-field>-->
     <!--<input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate"-->
@@ -33,24 +41,29 @@
     <!--</mat-form-field>-->
 
     <!-- Start Distance -->
-    <mat-form-field>
-      <input matInput placeholder="Starting distance" type="number" [min]="activityStartDistance" [max]="activityEndDistance" formControlName="startDistance">
-      <span matSuffix="">m &nbsp;</span>
-      <mat-hint>The starting distance of the activity</mat-hint>
-      <mat-error *ngIf="hasError('startDistance')">
-        invalid distance
-      </mat-error>
-    </mat-form-field>
 
-    <!-- End Distance -->
-    <mat-form-field>
-      <input matInput placeholder="End distance" type="number" [min]="activityStartDistance" [max]="activityEndDistance" formControlName="endDistance">
-      <span matSuffix="">m &nbsp;</span>
-      <mat-hint>The ending distance of the activity</mat-hint>
-      <mat-error *ngIf="hasError('endDistance')">
-        invalid distance
-      </mat-error>
-    </mat-form-field>
+    <section *ngIf="this.activity.hasStreamData('Distance')">
+      <mat-form-field>
+        <input matInput placeholder="Starting distance" type="number"  formControlName="startDistance">
+        <span matSuffix="">m &nbsp;</span>
+        <mat-hint>The starting distance of the activity</mat-hint>
+        <mat-error *ngIf="hasError('startDistance')">
+          invalid distance
+        </mat-error>
+      </mat-form-field>
+
+      <!-- End Distance -->
+      <mat-form-field>
+        <input matInput placeholder="End distance" type="number" formControlName="endDistance">
+        <span matSuffix="">m &nbsp;</span>
+        <mat-hint>The ending distance of the activity</mat-hint>
+        <mat-error *ngIf="hasError('endDistance')">
+          invalid distance
+        </mat-error>
+      </mat-form-field>
+    </section>
+
+
 
     <mat-hint><b>Note</b>: Changing any of the above will recreate all statistics for the selected activity</mat-hint>
 

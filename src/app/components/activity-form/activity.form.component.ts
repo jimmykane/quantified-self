@@ -11,9 +11,9 @@ import {
   ValidatorFn,
   Validators,
 } from '@angular/forms';
-import { ErrorStateMatcher } from '@angular/material/core';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {ErrorStateMatcher} from '@angular/material/core';
+import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Raven from 'raven-js';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
@@ -41,10 +41,6 @@ export class ActivityFormComponent implements OnInit {
 
   public activityFormGroup: FormGroup;
 
-  public activityStartDistance: number;
-  public activityEndDistance: number;
-
-
   public isLoading: boolean;
 
   constructor(
@@ -71,32 +67,33 @@ export class ActivityFormComponent implements OnInit {
     this.activity.clearStreams();
     this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
 
-    // Find the starting distance for this activity
-    this.activityStartDistance = this.activity.getSquashedStreamData(DataDistance.type)[0];
-    this.activityEndDistance = this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1];
-
     // Now build the controls
     this.activityFormGroup = new FormGroup({
         activity: new FormControl(this.activity),
-        startDate: new FormControl(this.activity.startDate, [
+        creatorName: new FormControl(this.activity.creator.name, [
           Validators.required,
         ]),
-        endDate: new FormControl(this.activity.endDate, [
-          Validators.required,
-        ]),
-        startDistance: new FormControl(this.activityStartDistance, [
-          Validators.required,
-          Validators.min(this.activityStartDistance),
-          Validators.max(this.activityEndDistance),
-        ]),
-        endDistance: new FormControl(this.activityEndDistance, [
-          Validators.required,
-          Validators.min(this.activityStartDistance),
-          Validators.max(this.activityEndDistance),
-        ]),
-      },
-      {validators: activityDistanceValidator});
+      }
+    );
 
+    // Find the starting distance for this activity
+    if (this.activity.hasStreamData(DataDistance.type)) {
+      debugger;
+      this.activityFormGroup.addControl('startDistance', new FormControl(0, [
+        Validators.required,
+        Validators.min(0),
+        Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
+      ]));
+      this.activityFormGroup.addControl('endDistance', new FormControl(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1], [
+        Validators.required,
+        Validators.min(0),
+        Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
+      ]));
+
+      this.activityFormGroup.validator = activityDistanceValidator;
+      // this.activityStartDistance = this.activity.getSquashedStreamData(DataDistance.type)[0];
+      // this.activityEndDistance = this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1];
+    }
     // Set this to done loading
     this.isLoading = false;
   }
@@ -123,13 +120,18 @@ export class ActivityFormComponent implements OnInit {
       this.event.endDate = this.activity.endDate;
     }
 
+    this.activity.creator.name = this.activityFormGroup.get('creatorName').value;
+
     try {
-      debugger;
-      EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
-      this.activity.clearStats();
-      EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
-      EventUtilities.reGenerateStatsForEvent(this.event);
-      await this.eventService.setEvent(this.user, this.event);
+      if (this.activity.hasStreamData(DataDistance.type) && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
+        EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
+        this.activity.clearStats();
+        EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
+        EventUtilities.reGenerateStatsForEvent(this.event);
+        await this.eventService.setEvent(this.user, this.event);
+      } else {
+        await this.eventService.setActivity(this.user, this.event, this.activity);
+      }
       this.snackBar.open('Activity saved', null, {
         duration: 2000,
       });
