@@ -30,7 +30,8 @@ import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
-import {DataEnergy} from "quantified-self-lib/lib/data/data.energy"; // @todo investigate if this import is ok
+import {DataEnergy} from "quantified-self-lib/lib/data/data.energy";
+import {DataHeartRateAvg} from "quantified-self-lib/lib/data/data.heart-rate-avg"; // @todo investigate if this import is ok
 
 
 
@@ -234,15 +235,17 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             const ascent = event.getStat(DataAscent.type);
             const descent = event.getStat(DataDescent.type);
             const energy = event.getStat(DataEnergy.type);
+            const heartRateAverage = event.getStat(DataHeartRateAvg.type);
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
             dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'd MMM yy HH:mm') : 'None?';
             dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
-            dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
-            dataObject['stats.Ascent'] = ascent ? ascent.getDisplayValue() + ascent.getDisplayUnit() : '';
-            dataObject['stats.Descent'] = descent ? descent.getDisplayValue() + descent.getDisplayUnit() : '';
-            dataObject['stats.Energy'] = energy ? energy.getDisplayValue() + energy.getDisplayUnit() : '';
+            dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
+            dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
+            dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
+            dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
+            dataObject['stats.HeartRateAverage'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
             // dataObject.event = event;
@@ -282,7 +285,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         }
 
         // Stayed on the same page but data came in
-        if (this.currentPageIndex == this.paginator.pageIndex) {
+        if (this.currentPageIndex === this.paginator.pageIndex) {
           // If we have no data (eg this pages event's were deleted) go to prev page
           if (!this.data.data.length && this.paginator.pageIndex !== 0) {
             this.goToPageNumber(this.currentPageIndex - 1);
@@ -423,19 +426,33 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'stats.Distance',
       'stats.Ascent',
       'stats.Descent',
+      'stats.Energy',
+      'stats.HeartRateAverage',
       'stats.Duration',
       'device',
     ]);
 
-    if (window.innerWidth < 800) {
-      columns = columns.filter(column => ['name', 'stats.Descent' ].indexOf(column) === -1)
+    if (window.innerWidth < 1000) {
+      columns = columns.filter(column => [ 'stats.Energy' ].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 700) {
+    if (window.innerWidth < 920) {
+      columns = columns.filter(column => [ 'stats.HeartRateAverage' ].indexOf(column) === -1)
+    }
+
+    if (window.innerWidth < 860) {
+      columns = columns.filter(column => [ 'stats.Descent' ].indexOf(column) === -1)
+    }
+
+    if (window.innerWidth < 760) {
+      columns = columns.filter(column => ['name'].indexOf(column) === -1)
+    }
+
+    if (window.innerWidth < 660) {
       columns = columns.filter(column => ['activities', 'stats.Ascent'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 600) {
+    if (window.innerWidth < 560) {
       columns = columns.filter(column => ['privacy'].indexOf(column) === -1)
     }
 

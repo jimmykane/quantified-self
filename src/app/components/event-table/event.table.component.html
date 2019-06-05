@@ -38,6 +38,9 @@
           <mat-header-cell *matHeaderCellDef >
         <span>
             <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
+            <span *ngIf="!getColumnHeaderIcon(column)">
+              {{ column }}
+            </span>
         </span>
           </mat-header-cell>
         </ng-container>
