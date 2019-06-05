@@ -101,6 +101,7 @@ export async function processQueueItem(queueItem: any) {
   if (processedCount !== tokenQuerySnapshots.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`);
     // return increaseRetryCountForQueueItem(queueItem, new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
+    return;
   }
 
   // For each ended so we can set it to processed
