@@ -641,11 +641,6 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.14.8.tgz#fe444203ecef1162348cd6deb76c62477b2cc6e9"
   integrity sha512-I4+DbJEhLEg4/vIy/2gkWDvXBOOtPKV9EnLhYjMoqxcRW+TTZtUftkHktz/a8suoD5mUL7m6ReLrkPvSsCQQmw==
 
-"@types/node@^11.13.6":
-  version "11.13.13"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-11.13.13.tgz#a3d2a8a908ce322f24f0f8c88160b44c7dd5c452"
-  integrity sha512-GFWH7e4Q/OGLAO545bupVju+nE1YtLSwYAdLfSzAXnTPqoqKoXCOEtB7Cluvg9B/h2nGLhyzCDyCInYvrOE2nw==
-
 "@types/pako@^1.0.1":
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/@types/pako/-/pako-1.0.1.tgz#33b237f3c9aff44d0f82fe63acffa4a365ef4a61"
@@ -3196,10 +3191,10 @@ firebase@^6.1.0:
     "@firebase/storage" "0.3.0"
     "@firebase/util" "0.2.17"
 
-fit-file-parser@^1.6.2:
-  version "1.6.3"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.3.tgz#0ac81cadaf6383e57076eaaffbbacba82aac0a03"
-  integrity sha512-2QY1moVmu2DIjqyqPDLvX/cz+z1gEZG4OD2NFwJ9cEVKPVuGdMviFI54+QH7qGz182HLD+hS/z0t9yeeN7kA4w==
+fit-file-parser@^1.6.4:
+  version "1.6.4"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.4.tgz#878ddf18c5afc37aafbc327ea373c2f550a60246"
+  integrity sha512-x89j55LAkAoWMlngcs8KAKz9xqlIBiuETjiRjZdEbAtKO2ljmXwRXFBC422S26qKmn+TwFA6bGATMj7+D+WtZg==
   dependencies:
     buffer "^5.1.0"
 
@@ -3381,10 +3376,10 @@ genfun@^5.0.0:
   resolved "https://registry.yarnpkg.com/genfun/-/genfun-5.0.0.tgz#9dd9710a06900a5c4a5bf57aca5da4e52fe76537"
   integrity sha512-KGDOARWVga7+rnB3z9Sd2Letx515owfk0hSxHGuqjANb1M+x2bGZGqHLiozPsYMdM2OubeMni/Hpwmjq6qIUhA==
 
-geolib@^2.0.24:
-  version "2.0.24"
-  resolved "https://registry.yarnpkg.com/geolib/-/geolib-2.0.24.tgz#eb3d7fbc65f5ea3354a5af6054563ebe9f33e5f4"
-  integrity sha512-NR0AyYyEnGrFS9JvSFmmotQDxVCORJgDHdvBwSatxl5aHarOLMh3KuGI83bCvCfObjfoEiDe8Ung8GGLGAtthw==
+geolib@^3.0.3:
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.0.3.tgz#cc1d3818cd961cdb4a4f9af3b34a68169e6ffde5"
+  integrity sha512-cBYgFS0bfMOCEXEvf2RbxWOo602B878aOGNtAARoBNHHC++4CNZICfp8+4g2/uol1VHXaKhrrPpnUA/ixO2Hbg==
 
 get-caller-file@^1.0.1:
   version "1.0.3"
@@ -6011,12 +6006,12 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/1d2e9114647a1eb9a39351575e767652fa5f248d"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/25e91585b1eed69fec381f7322e2fb95c6f13f78"
   dependencies:
-    "@types/node" "^11.13.6"
+    "@types/node" "^12.0.4"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.2"
-    geolib "^2.0.24"
+    fit-file-parser "^1.6.4"
+    geolib "^3.0.3"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
