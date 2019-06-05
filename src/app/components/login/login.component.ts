@@ -1,6 +1,6 @@
 import {Component, HostListener} from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {Router} from '@angular/router';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
@@ -27,7 +27,7 @@ export class LoginComponent {
   async tokensReceived(event) {
     this.isLoading = true;
     const loggedInUser = await this.afAuth.auth.signInWithCustomToken(event.detail.firebaseAuthToken);
-    this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName,  event.detail.serviceAuthResponse);
+    this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
   }
 
 
@@ -88,14 +88,7 @@ export class LoginComponent {
       });
       Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
     }
-    try {
-      wnd.onunload = () => this.isLoading = false;
-    } catch (e) {
-      this.isLoading = false;
-      this.snackBar.open(`Popup could not send data by your browser settings. Please enable popups for this site to connect`, null, {
-        duration: 5000,
-      });
-    }
+    wnd.onunload = () => this.isLoading = false;
   }
 
   async twitterLogin() {
