@@ -53,3 +53,7 @@ quantified-self-io-firebase-adminsdk.json
 
 functions/src/service-account.json
 functions/lib/*
+
+
+# Fonts
+src/assets/fonts/

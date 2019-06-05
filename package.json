@@ -44,7 +44,6 @@
     "ng2-logger": "2.0.48",
     "quantified-self-lib": "github:jimmykane/quantified-self-lib#feature/streams-pub",
     "raven-js": "^3.27.2",
-    "roboto-fontface": "^0.10.0",
     "rxjs": "^6.5.2",
     "yarn": "^1.16.0",
     "zone.js": "^0.9.1"
