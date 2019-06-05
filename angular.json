@@ -21,7 +21,6 @@
               "src/assets/popup.html"
             ],
             "styles": [
-              "node_modules/font-awesome/css/font-awesome.css",
               "node_modules/roboto-fontface/css/roboto/roboto-fontface.css",
               "node_modules/material-design-icons/iconfont/material-icons.css",
               "src/styles.scss"
@@ -84,7 +83,6 @@
             "scripts": [
             ],
             "styles": [
-              "node_modules/font-awesome/css/font-awesome.css",
               "node_modules/roboto-fontface/css/roboto/roboto-fontface.css",
               "node_modules/material-design-icons/iconfont/material-icons.css",
               "src/styles.scss"
