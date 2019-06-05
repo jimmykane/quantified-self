@@ -100,7 +100,7 @@ export async function processQueueItem(queueItem: any) {
   // @todo I think this retry count increase is redundunt
   if (processedCount !== tokenQuerySnapshots.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`);
-    return increaseRetryCountForQueueItem(queueItem, new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
+    // return increaseRetryCountForQueueItem(queueItem, new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
   }
 
   // For each ended so we can set it to processed
