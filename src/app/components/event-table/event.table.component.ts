@@ -29,7 +29,8 @@ import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import WhereFilterOp = firebase.firestore.WhereFilterOp; // @todo investigate if this import is ok
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import {DataEnergy} from "quantified-self-lib/lib/data/data.energy"; // @todo investigate if this import is ok
 
 
 
@@ -232,6 +233,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
             const ascent = event.getStat(DataAscent.type);
             const descent = event.getStat(DataDescent.type);
+            const energy = event.getStat(DataEnergy.type);
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
@@ -240,6 +242,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Distance'] = event.getDistance().getDisplayValue() + event.getDistance().getDisplayUnit();
             dataObject['stats.Ascent'] = ascent ? ascent.getDisplayValue() + ascent.getDisplayUnit() : '';
             dataObject['stats.Descent'] = descent ? descent.getDisplayValue() + descent.getDisplayUnit() : '';
+            dataObject['stats.Energy'] = energy ? energy.getDisplayValue() + energy.getDisplayUnit() : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
             // dataObject.event = event;
@@ -419,7 +422,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'activities',
       'stats.Distance',
       'stats.Ascent',
-      // 'stats.Descent',
+      'stats.Descent',
       'stats.Duration',
       'device',
     ]);
