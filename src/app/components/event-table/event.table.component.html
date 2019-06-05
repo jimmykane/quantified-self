@@ -55,7 +55,7 @@
           <app-event-actions *ngIf="user" [user]="user" [event]="row[column]"></app-event-actions>
         </span>
         <span *ngIf="column === 'name'" matTooltip="{{ row[column] }}">
-          {{ row[column] | slice:0:10 }}
+          {{ row[column] | slice:0:15 }}...
         </span>
         <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'name' && column!=='privacy'">
           {{ row[column] }}
