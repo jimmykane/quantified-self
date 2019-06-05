@@ -19,13 +19,13 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
 })
 export class LoginComponent {
 
-  isLoggingIn: boolean;
+  isLoading: boolean;
 
   private logger = Log.create('LoginComponent');
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
-    this.isLoggingIn = true;
+    this.isLoading = true;
     const loggedInUser = await this.afAuth.auth.signInWithCustomToken(event.detail.firebaseAuthToken);
     this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName,  event.detail.serviceAuthResponse);
   }
@@ -79,7 +79,7 @@ export class LoginComponent {
   }
 
   async suuntoAppLogin() {
-    this.isLoggingIn = true;
+    this.isLoading = true;
     // Open the popup that will start the auth flow.
     const wnd = window.open('assets/authPopup.html?signInWithService=true', 'name', 'height=585,width=400');
     if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
@@ -88,7 +88,14 @@ export class LoginComponent {
       });
       Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
     }
-    wnd.onunload = () => this.isLoggingIn = false;
+    try {
+      wnd.onunload = () => this.isLoading = false;
+    } catch (e) {
+      this.isLoading = false;
+      this.snackBar.open(`Popup could not send data by your browser settings. Please enable popups for this site to connect`, null, {
+        duration: 5000,
+      });
+    }
   }
 
   async twitterLogin() {
@@ -105,7 +112,7 @@ export class LoginComponent {
 
 
   private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: ServiceTokenInterface) {
-    this.isLoggingIn = true;
+    this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
@@ -121,7 +128,7 @@ export class LoginComponent {
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), serviceName, serviceToken)
     } catch (e) {
       Raven.captureException(e);
-      this.isLoggingIn = false;
+      this.isLoading = false;
     }
   }
 
@@ -137,7 +144,7 @@ export class LoginComponent {
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      this.isLoggingIn = false;
+      this.isLoading = false;
     });
   }
 

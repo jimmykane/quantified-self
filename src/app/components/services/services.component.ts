@@ -154,7 +154,15 @@ export class ServicesComponent implements OnInit, OnDestroy {
       });
       Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
     }
-    wnd.onunload = () => this.isLoading = false;
+    try {
+      wnd.onunload = () => this.isLoading = false;
+    } catch (e) {
+      Raven.captureException(new Error(`Could not execute window unload`));
+      this.isLoading = false;
+      this.snackBar.open(`Popup could not send data by your browser settings. Please enable popups for this site to connect`, null, {
+        duration: 5000,
+      });
+    }
 
   }
 
