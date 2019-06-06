@@ -7,6 +7,8 @@ mat-card{
 }
 
 .mat-tab-link{
+  min-width: 10%;
+  padding-right: 1em;
   font-size: 1.3em;
   //font-weight: 400;
 }
@@ -44,7 +46,6 @@ mat-icon.app-icon{
 }
 
 .mat-tab-link{
-  min-width: 10%;
 }
 
 .fabButtonsVertical {
