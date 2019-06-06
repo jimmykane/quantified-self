@@ -317,10 +317,10 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.14.8.tgz#fe444203ecef1162348cd6deb76c62477b2cc6e9"
   integrity sha512-I4+DbJEhLEg4/vIy/2gkWDvXBOOtPKV9EnLhYjMoqxcRW+TTZtUftkHktz/a8suoD5mUL7m6ReLrkPvSsCQQmw==
 
-"@types/node@^12.0.5":
-  version "12.0.5"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.0.5.tgz#ac14404c33d1a789973c45379a67f7f7e58a01b9"
-  integrity sha512-CFLSALoE+93+Hcb5pFjp0J1uMrrbLRe+L1+gFwerJ776R3TACSF0kTVRQ7AvRa7aFx70nqYHAc7wQPlt9kY2Mg==
+"@types/node@^12.0.6":
+  version "12.0.6"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.0.6.tgz#215fa05292dab13e0ebc066f54d14eb983c5ad78"
+  integrity sha512-3sV/MUw6uYxPaRIoooI/MjO0j1A06JNlbpkGc56F+zikO52qavehD/Qw85so47gWhO82tNzEFoF6adXqIfK+EA==
 
 "@types/node@^8.0.53":
   version "8.10.49"
@@ -1099,10 +1099,10 @@ firebase-functions@^2.3.1:
     jsonwebtoken "^8.2.1"
     lodash "^4.6.1"
 
-fit-file-parser@^1.6.6:
-  version "1.6.6"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.6.tgz#650ab1e421a58cc85bcf49c842e451e82a2e91a7"
-  integrity sha512-O4ap6sPvuG/svNzQkqi5mDMBJsjSnzAtoVMpgHUk2YsmDt0ThmRfI3ejHV1L2s5nKAa1Hun7zmMaqeKy6Oiz3Q==
+fit-file-parser@^1.6.7:
+  version "1.6.7"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.7.tgz#a2772aec8c324a890f7fb7966d825a5512dc1a59"
+  integrity sha512-FyyCmbDh4doj0NY6LEiIwKgMj7Z+awv1hMMgJRrhJvStVUz3piqqL4aCXiq3NDIf5uKXzsxCy4CmHS0iffuYrw==
   dependencies:
     buffer "^5.1.0"
 
@@ -2077,11 +2077,11 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/e9ede51cdab8c00bd2b6198b767ff88e08482a9d"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/b4b3f686a75b3e8de0cd2fdd9ddc958a4eef04d9"
   dependencies:
-    "@types/node" "^12.0.5"
+    "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.6"
+    fit-file-parser "^1.6.7"
     geolib "^3.0.3"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
