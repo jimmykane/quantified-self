@@ -11,6 +11,8 @@ import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interfac
 import {UserServiceMetaInterface} from "quantified-self-lib/lib/users/user.service.meta.interface";
 
 
+const BATCH_SIZE = 450;
+
 /**
  * Add to the workout queue the workouts of a user for a selected date range
  */
@@ -114,11 +116,11 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
     console.log(`Found ${result.metadata.workoutcount} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
 
-    const batchCount = Math.ceil(result.metadata.workoutcount / 500);
+    const batchCount = Math.ceil(result.metadata.workoutcount / BATCH_SIZE);
     const batchesToProcess: any[] = [];
     (Array(batchCount)).fill(null).forEach((justNull, index) => {
-      const start = index * 500;
-      const end = (index + 1) * 500;
+      const start = index * BATCH_SIZE;
+      const end = (index + 1) * BATCH_SIZE;
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
