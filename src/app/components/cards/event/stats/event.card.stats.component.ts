@@ -1,10 +1,14 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import { MatTableDataSource } from '@angular/material/table';
+import {MatTableDataSource} from '@angular/material/table';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {AppColors} from '../../../../services/color/app.colors';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {UserUnitSettingsInterface} from "quantified-self-lib/lib/users/user.unit.settings.interface";
+import {DataSpeed} from "quantified-self-lib/lib/data/data.speed";
+import {DataPace} from "quantified-self-lib/lib/data/data.pace";
+import {DataVerticalSpeed} from "quantified-self-lib/lib/data/data.vertical-speed";
 
 @Component({
   selector: 'app-event-card-stats',
@@ -15,6 +19,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 
 export class EventCardStatsComponent implements OnChanges {
   @Input() event: EventInterface;
+  @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
@@ -35,9 +40,31 @@ export class EventCardStatsComponent implements OnChanges {
       }));
 
     // Collect all the stat types from all the activities
+    // @todo refactor and extract to service
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
-        statsMap.set(stat.getType(), stat);
+        // If its not derived set it
+        if (!DynamicDataLoader.isUnitDerivedDataType(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType())) {
+          statsMap.set(stat.getType(), stat);
+          return
+        }
+        // IF it's derived and there are no user uni settings noop
+        if (!this.userUnitSettings){
+          return
+        }
+        // If the user has preference
+        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1){
+          statsMap.set(stat.getType(), stat);
+          return;
+        }
+        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSpeed.type && this.userUnitSettings.speedUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1){
+          statsMap.set(stat.getType(), stat);
+          return;
+        }
+        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataVerticalSpeed.type && this.userUnitSettings.verticalSpeedUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1){
+          statsMap.set(stat.getType(), stat);
+          return;
+        }
       });
       return statsMap;
     }, new Map<string, DataInterface>());
@@ -55,7 +82,7 @@ export class EventCardStatsComponent implements OnChanges {
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
           return rowObj;
-        }, {Name: `${stat.getDisplayType()}` }),
+        }, {Name: `${stat.getDisplayType()}`}),
       );
       return array;
     }, []);
@@ -98,6 +125,29 @@ export class EventCardStatsComponent implements OnChanges {
 
     // Set the data
     this.data = new MatTableDataSource(data);
+  }
+
+
+  /**
+   * This gets the base and extended unit datatypes from a datatype array depending on the user settings
+   * @param dataTypes
+   * @param userUnitSettings
+   */
+  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
+    let unitBasedDataTypes = [];
+    if (!userUnitSettings) {
+      return unitBasedDataTypes
+    }
+    if (dataTypes.indexOf(DataPace.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
+    }
+    if (dataTypes.indexOf(DataSpeed.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.speedUnits);
+    }
+    if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.verticalSpeedUnits);
+    }
+    return unitBasedDataTypes;
   }
 
   applyFilter(filterValue: string) {
