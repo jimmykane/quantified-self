@@ -3223,11 +3223,6 @@ follow-redirects@^1.0.0:
   dependencies:
     debug "^3.2.6"
 
-font-awesome@^4.7.0:
-  version "4.7.0"
-  resolved "https://registry.yarnpkg.com/font-awesome/-/font-awesome-4.7.0.tgz#8fa8cf0411a1a31afd07b06d2902bb9fc815a133"
-  integrity sha1-j6jPBBGhoxr9B7BtKQK7n8gVoTM=
-
 fontkit@^1.0.0:
   version "1.8.0"
   resolved "https://registry.yarnpkg.com/fontkit/-/fontkit-1.8.0.tgz#deb9351619e90ddc91707b6156a9f14c8ab11554"
@@ -6013,10 +6008,10 @@ qs@~6.5.2:
   version "2.2.5"
   resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/b4b3f686a75b3e8de0cd2fdd9ddc958a4eef04d9"
   dependencies:
-    "@types/node" "^12.0.6"
+    "@types/node" "^11.13.0"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.7"
-    geolib "^3.0.3"
+    fit-file-parser "^1.5.10"
+    geolib "^2.0.24"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
