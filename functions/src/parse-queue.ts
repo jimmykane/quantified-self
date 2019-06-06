@@ -56,6 +56,9 @@ export async function processQueueItem(queueItem: any) {
       throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
     }
     const parentID = parent1.parent!.id;
+
+    console.log(`Found user id ${parentID} for queue item ${queueItem.id} and username ${queueItem.data().userName}`);
+
     let result;
     try {
       console.time('DownloadFit');
@@ -83,7 +86,7 @@ export async function processQueueItem(queueItem: any) {
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       // @todo move metadata to its own document for firestore read/write rules
       await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id}, user ${parentID} and token user ${serviceToken.userName}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id}, user id ${parentID} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
