@@ -62,6 +62,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'suunto',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto_logo.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'heart_rate',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'energy',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/energy.svg')
+    );
   }
 
   async ngOnInit() {

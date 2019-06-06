@@ -138,8 +138,19 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
   }
 
+  getColumnHeaderSVGIcon(columnName): string {
+    switch (columnName) {
+      case 'stats.Average Heart Rate':
+        return 'heart_rate';
+      case 'stats.Energy':
+        return 'energy';
+      default:
+        return null;
+    }
+  }
+
   isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'name', 'stats.Distance', 'stats.Duration', 'stats.Ascent', 'stats.Descent'].indexOf(columnName) !== -1;
+    return ['startDate', 'name', 'stats.Distance', 'stats.Duration', 'stats.Ascent', 'stats.Descent', 'stats.Average Heart Rate', 'stats.Energy'].indexOf(columnName) !== -1;
   }
 
 
@@ -245,7 +256,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
             dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
             dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
-            dataObject['stats.HeartRateAverage'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
+            dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
             // dataObject.event = event;
@@ -427,7 +438,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'stats.Ascent',
       'stats.Descent',
       'stats.Energy',
-      'stats.HeartRateAverage',
+      'stats.Average Heart Rate',
       'stats.Duration',
       'device',
     ]);
@@ -437,7 +448,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
 
     if (window.innerWidth < 920) {
-      columns = columns.filter(column => [ 'stats.HeartRateAverage' ].indexOf(column) === -1)
+      columns = columns.filter(column => [ 'stats.Average Heart Rate' ].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 860) {
