@@ -641,6 +641,11 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.14.8.tgz#fe444203ecef1162348cd6deb76c62477b2cc6e9"
   integrity sha512-I4+DbJEhLEg4/vIy/2gkWDvXBOOtPKV9EnLhYjMoqxcRW+TTZtUftkHktz/a8suoD5mUL7m6ReLrkPvSsCQQmw==
 
+"@types/node@^12.0.5":
+  version "12.0.5"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.0.5.tgz#ac14404c33d1a789973c45379a67f7f7e58a01b9"
+  integrity sha512-CFLSALoE+93+Hcb5pFjp0J1uMrrbLRe+L1+gFwerJ776R3TACSF0kTVRQ7AvRa7aFx70nqYHAc7wQPlt9kY2Mg==
+
 "@types/pako@^1.0.1":
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/@types/pako/-/pako-1.0.1.tgz#33b237f3c9aff44d0f82fe63acffa4a365ef4a61"
@@ -3191,10 +3196,10 @@ firebase@^6.1.0:
     "@firebase/storage" "0.3.0"
     "@firebase/util" "0.2.17"
 
-fit-file-parser@^1.6.4:
-  version "1.6.4"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.4.tgz#878ddf18c5afc37aafbc327ea373c2f550a60246"
-  integrity sha512-x89j55LAkAoWMlngcs8KAKz9xqlIBiuETjiRjZdEbAtKO2ljmXwRXFBC422S26qKmn+TwFA6bGATMj7+D+WtZg==
+fit-file-parser@^1.6.6:
+  version "1.6.6"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.6.tgz#650ab1e421a58cc85bcf49c842e451e82a2e91a7"
+  integrity sha512-O4ap6sPvuG/svNzQkqi5mDMBJsjSnzAtoVMpgHUk2YsmDt0ThmRfI3ejHV1L2s5nKAa1Hun7zmMaqeKy6Oiz3Q==
   dependencies:
     buffer "^5.1.0"
 
@@ -6006,11 +6011,11 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/2f6f99fb5e7f339bef7e39ee52845441817ce697"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/e9ede51cdab8c00bd2b6198b767ff88e08482a9d"
   dependencies:
-    "@types/node" "^12.0.4"
+    "@types/node" "^12.0.5"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.4"
+    fit-file-parser "^1.6.6"
     geolib "^3.0.3"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
