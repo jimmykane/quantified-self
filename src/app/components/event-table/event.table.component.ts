@@ -30,8 +30,10 @@ import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
-import {DataEnergy} from "quantified-self-lib/lib/data/data.energy";
-import {DataHeartRateAvg} from "quantified-self-lib/lib/data/data.heart-rate-avg"; // @todo investigate if this import is ok
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
+import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
+import {rowsAnimation} from '../../animations/animations';
+
 
 
 
@@ -39,6 +41,7 @@ import {DataHeartRateAvg} from "quantified-self-lib/lib/data/data.heart-rate-avg
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
+  animations: [rowsAnimation],
   providers: [DatePipe],
   // changeDetection: ChangeDetectionStrategy.OnPush,
 })
