@@ -70,6 +70,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'energy',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/energy.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'arrow_up_right',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-up-right.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'arrow_down_right',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-down-right.svg')
+    );
   }
 
   async ngOnInit() {

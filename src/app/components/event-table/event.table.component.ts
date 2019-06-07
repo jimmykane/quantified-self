@@ -117,10 +117,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     switch (columnName) {
       case 'stats.Distance':
         return 'trending_flat';
-      case 'stats.Ascent':
-        return 'trending_up';
-      case 'stats.Descent':
-        return 'trending_down';
       case 'stats.Duration':
         return 'timer';
       case 'startDate':
@@ -140,6 +136,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
   getColumnHeaderSVGIcon(columnName): string {
     switch (columnName) {
+      case 'stats.Ascent':
+        return 'arrow_up_right';
+      case 'stats.Descent':
+        return 'arrow_down_right';
       case 'stats.Average Heart Rate':
         return 'heart_rate';
       case 'stats.Energy':
