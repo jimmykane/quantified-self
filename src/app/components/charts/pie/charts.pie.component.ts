@@ -35,7 +35,7 @@ import {EventColorService} from '../../../services/color/app.event.color.service
 import {EventService} from '../../../services/app.event.service';
 
 @Component({
-  selector: 'app-event-card-chart',
+  selector: 'app-pie-chart',
   templateUrl: './charts.pie.component.html',
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
