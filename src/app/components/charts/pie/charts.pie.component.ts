@@ -43,14 +43,13 @@ import {EventService} from '../../../services/app.event.service';
 export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
-  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
   @Input() data: any;
-  @Input() user: User;
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
   public isLoading: boolean;
+  private dataSelected: any;
 
   private chart: am4charts.PieChart;
   private logger = Log.create('EventCardChartComponent');
@@ -76,37 +75,10 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
   }
 
   async ngAfterViewInit() {
-    this.data =  [{
-      type: 'Fossil Energy',
-      percent: 70,
-      subs: [{
-        type: 'Oil',
-        percent: 15
-      }, {
-        type: 'Coal',
-        percent: 35
-      }, {
-        type: 'Nuclear',
-        percent: 20
-      }]
-    }, {
-      type: 'Green Energy',
-      percent: 30,
-      subs: [{
-        type: 'Hydro',
-        percent: 15
-      }, {
-        type: 'Wind',
-        percent: 10
-      }, {
-        type: 'Other',
-        percent: 5
-      }]
-    }];
   }
 
   async ngOnInit() {
-    if (!this.user || !this.data) {
+    if (!this.data) {
       throw new Error('Component needs events and users');
     }
   }
@@ -139,25 +111,44 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
       // Create a chart
       const  chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
 
-
-      // Add exporting options
-      chart.exporting.menu = new am4core.ExportMenu();
-      chart.exporting.menu.align = 'right';
-      chart.exporting.menu.verticalAlign = 'bottom';
-      chart.exporting.useWebFonts = true;
-      chart.exporting.menu.items = [{
-        label: '...️',
-        menu: [
-          {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
-          {'type': 'json', 'label': 'JSON'},
-          {'type': 'csv', 'label': 'CSV'},
-          {'type': 'xlsx', 'label': 'XLSX'},
-          // {"label": "Print", "type": "print"},
-        ],
-      }];
+      const pieSeries = chart.series.push(new am4charts.PieSeries());
+      pieSeries.dataFields.value = "percent";
+      pieSeries.dataFields.category = "type";
+      // pieSeries.slices.template.propertyFields.fill = "color";
+      pieSeries.slices.template.propertyFields.isActive = "pulled";
+      pieSeries.slices.template.strokeWidth = 0;
 
 
+      //
 
+      pieSeries.slices.template.events.on('hit', (event) => {
+        if (event.target.dataItem.dataContext['id'] !== undefined) {
+          this.dataSelected = event.target.dataItem.dataContext['id'];
+        } else {
+          this.dataSelected  = null;
+        }
+        this.chart.data = this.generateChartData(this.data);
+      });
+
+
+      chart.data = this.generateChartData(this.data);
+      // chart.exporting.menu = new am4core.ExportMenu();
+      // chart.exporting.menu.align = 'right';
+      // chart.exporting.menu.verticalAlign = 'bottom';
+      // chart.exporting.useWebFonts = true;
+      // chart.exporting.menu.items = [{
+      //   label: '...️',
+      //   menu: [
+      //     {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
+      //     {'type': 'json', 'label': 'JSON'},
+      //     {'type': 'csv', 'label': 'CSV'},
+      //     {'type': 'xlsx', 'label': 'XLSX'},
+      //     // {"label": "Print", "type": "print"},
+      //   ],
+      // }];
+
+
+      //
       // Disable the preloader
       chart.preloader.disabled = true;
 
@@ -201,7 +192,7 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
 
       chart.events.on('maxsizechanged', (ev) => {
         this.logger.info('maxsizechanged');
-        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
+        // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       });
 
       chart.events.on('visibilitychanged', (ev) => {
@@ -221,6 +212,30 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
 
       return chart;
     });
+  }
+
+  private generateChartData(data) {
+    const chartData = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i === this.dataSelected) {
+        for (let x = 0; x < data[i].subs.length; x++) {
+          chartData.push({
+            type: data[i].subs[x].type,
+            percent: data[i].subs[x].percent,
+            color: data[i].color,
+            pulled: true
+          });
+        }
+      } else {
+        chartData.push({
+          type: data[i].type,
+          percent: data[i].percent,
+          color: data[i].color,
+          id: i
+        });
+      }
+    }
+    return chartData;
   }
 
 
