@@ -1,5 +1,5 @@
 import {
-  Component, OnChanges, OnDestroy,
+  Component, Input, OnChanges, OnDestroy,
   OnInit,
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
@@ -18,6 +18,10 @@ import {User} from 'quantified-self-lib/lib/users/user';
 })
 
 export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
+  @Input() searchTerm: string;
+  @Input() searchStartDate: Date;
+  @Input() searchEndDate: Date;
+
   user: User;
   events: EventInterface[];
   userSubscription: Subscription;
@@ -29,7 +33,6 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   ngOnInit() {
 
 
-    // Subscribe to a weekly events
 
   }
 
