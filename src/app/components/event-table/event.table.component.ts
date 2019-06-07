@@ -15,7 +15,7 @@ import {Router} from '@angular/router';
 import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatSort, MatSortable } from '@angular/material/sort';
+import { MatSort } from '@angular/material/sort';
 import { MatTable, MatTableDataSource } from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
@@ -51,6 +51,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @Input() privacyFilter?: Privacy;
   @Input() eventsPerPage ? = 10;
   @Input() hasActions?: boolean;
+  @Input() searchTerm: string;
+  @Input() searchStartDate: Date;
+  @Input() searchEndDate: Date;
   @ViewChild(MatSort, { static: true }) sort: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
   @ViewChild(MatCard, { static: true }) table: MatCard;
@@ -60,9 +63,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   resultsLength = 0;
   isLoadingResults = true;
   errorLoading;
-  searchTerm: string;
-  searchStartDate: Date;
-  searchEndDate: Date;
+
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
   private currentPageIndex = 0;
@@ -78,13 +79,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnInit() {
-    this.subscribeToAll();
   }
 
   ngAfterViewInit() {
   }
 
   ngOnChanges(): void {
+    this.subscribeToAll();
   }
 
   checkBoxClick(row) {
@@ -106,14 +107,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.selection.clear() :
       this.data.data.forEach(row => this.selection.select(row));
     this.updateActionButtonService();
-  }
-
-
-  search(search: {searchTerm: string, startDate: Date, endDate: Date}) {
-    this.searchTerm = search.searchTerm;
-    this.searchStartDate = search.startDate;
-    this.searchEndDate = search.endDate;
-    this.subscribeToAll();
   }
 
   getColumnHeaderIcon(columnName): string {

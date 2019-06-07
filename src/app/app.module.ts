@@ -96,6 +96,7 @@ import {HistoryImportFormComponent} from './components/history-import-form/histo
 import {ThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
 import {ChartsPieComponent} from './components/charts/pie/charts.pie.component';
+import {SummariesComponent} from "./components/summaries/summaries.component";
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../package.json');
@@ -208,6 +209,7 @@ export class RavenErrorHandler implements ErrorHandler {
     ServicesComponent,
     HistoryImportFormComponent,
     ChartsPieComponent,
+    SummariesComponent,
   ],
   entryComponents: [
     EventFormComponent,
