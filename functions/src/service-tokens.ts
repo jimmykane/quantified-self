@@ -58,7 +58,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSa
     responseToken = await token.refresh();
     console.log(`Successfully refreshed token ${doc.id}`);
   } catch (e) {
-    console.log(`Could not refresh token for user ${doc.id}`);
+    console.log(`Could not refresh token for user ${doc.id}` ,e);
     // if (e.code === 1) {
     //   console.log(`Error with code 1 deleting token ${doc.id}`);
     //   try {
