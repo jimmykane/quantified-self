@@ -78,7 +78,6 @@ export class ActivityFormComponent implements OnInit {
 
     // Find the starting distance for this activity
     if (this.activity.hasStreamData(DataDistance.type)) {
-      debugger;
       this.activityFormGroup.addControl('startDistance', new FormControl(0, [
         Validators.required,
         Validators.min(0),
@@ -120,17 +119,17 @@ export class ActivityFormComponent implements OnInit {
       this.event.endDate = this.activity.endDate;
     }
 
-    this.activity.creator.name = this.activityFormGroup.get('creatorName').value;
 
     try {
+      if (this.activityFormGroup.get('creatorName').dirty) {
+        await this.eventService.changeActivityCreatorName(this.user, this.event, this.activity, this.activityFormGroup.get('creatorName').value);
+      }
       if (this.activity.hasStreamData(DataDistance.type) && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
         EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
         this.activity.clearStats();
         EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
         EventUtilities.reGenerateStatsForEvent(this.event);
         await this.eventService.setEvent(this.user, this.event);
-      } else {
-        await this.eventService.setActivity(this.user, this.event, this.activity);
       }
       this.snackBar.open('Activity saved', null, {
         duration: 2000,

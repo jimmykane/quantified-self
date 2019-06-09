@@ -25,6 +25,8 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {getSize} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {Buffer} from 'buffer';
+import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
+import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -311,6 +313,14 @@ export class EventService implements OnDestroy {
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
     return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON());
+  }
+
+  public async changeActivityCreatorName(user: User, event: EventInterface, activity: ActivityInterface, creatorName: string) {
+    debugger;
+    activity.creator.name = creatorName;
+    await this.setActivity(user, event, activity);
+    event.addStat(new DataDeviceNames(event.getActivities().map(eventActivities => eventActivities.creator.name)));
+    await this.setEvent(user, event);
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
