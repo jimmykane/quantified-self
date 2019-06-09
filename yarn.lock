@@ -6012,12 +6012,12 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/35b2754ba9ca981b1bc6079d772dbd6f9b8d8867"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/03148dbe0447519321852900fe090efad8a8c7fc"
   dependencies:
-    "@types/node" "^11.13.0"
+    "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
     fit-file-parser "^1.6.7"
-    geolib "^2.0.24"
+    geolib "^3.0.3"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
