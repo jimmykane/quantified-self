@@ -1,6 +1,6 @@
 import {Component, Input} from '@angular/core';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 
 @Component({
   selector: 'app-activity-icon',
@@ -13,7 +13,7 @@ export class ActivityIconComponent {
 
   getActivityIcon() {
     if (!this.activity.type) {
-      Raven.captureException(new Error('Activity type is not set'));
+      Sentry.captureException(new Error('Activity type is not set'));
       return 'beenhere';
     }
     if (this.activity.type.toLocaleLowerCase().includes('run')) {

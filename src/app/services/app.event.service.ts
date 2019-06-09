@@ -18,15 +18,13 @@ import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {Log} from 'ng2-logger/browser';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {getSize} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {Buffer} from 'buffer';
-import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
-import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
+import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -55,7 +53,7 @@ export class EventService implements OnDestroy {
       if (error.code && error.code === 'permission-denied') {
         return of([null, null])
       }
-      Raven.captureException(error);
+      Sentry.captureException(error);
       this.logger.error(error);
       return of([null, null]) // @todo fix this
     })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
@@ -67,7 +65,7 @@ export class EventService implements OnDestroy {
       return event;
     })).pipe(catchError((error) => {
       // debugger;
-      Raven.captureException(error);
+      Sentry.captureException(error);
       this.logger.error(error);
       return of(null); // @todo is this the best we can do?
     }))
@@ -296,15 +294,6 @@ export class EventService implements OnDestroy {
       return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
     } catch (e) {
       this.logger.error(e);
-      Raven.captureException(e, {
-        extra: {
-          event: event.toJSON(),
-          activities: event.getActivities().reduce((array, activity) => {
-            array.push(activity.toJSON());
-            return array;
-          }, [])
-        }
-      });
       // Try to delete the parent entity and all subdata
       await this.deleteAllEventData(user, event.getID());
       throw new Error('Could not parse event');

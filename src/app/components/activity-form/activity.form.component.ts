@@ -14,7 +14,7 @@ import {
 import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {activityDistanceValidator} from './activity.form.distance.validator';
@@ -136,12 +136,12 @@ export class ActivityFormComponent implements OnInit {
       });
     } catch (e) {
       // debugger;
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open('Could not save activity', null, {
         duration: 2000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
     } finally {
       this.isLoading = false;
       this.dialogRef.close();

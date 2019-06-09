@@ -34,6 +34,7 @@
     "@angular/platform-browser-dynamic": "8.0.0",
     "@angular/platform-server": "8.0.0",
     "@angular/router": "8.0.0",
+    "@sentry/browser": "^5.4.0",
     "@types/pako": "^1.0.1",
     "@types/uuid": "^3.4.4",
     "buffer": "^5.2.1",
@@ -42,7 +43,6 @@
     "material-design-icons": "^3.0.1",
     "ng2-logger": "2.0.48",
     "quantified-self-lib": "github:jimmykane/quantified-self-lib#feature/streams-pub",
-    "raven-js": "^3.27.2",
     "rxjs": "^6.5.2",
     "yarn": "^1.16.0",
     "zone.js": "^0.9.1"

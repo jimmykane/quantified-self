@@ -11,7 +11,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {MatTableDataSource} from '@angular/material';
-import * as Raven from '../event-table/event.table.component';
+import * as Sentry from '../event-table/event.table.component';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {ChartThemes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
 import {ThemeService} from "../../services/app.theme.service";

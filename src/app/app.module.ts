@@ -1,4 +1,4 @@
-import {ErrorHandler, NgModule} from '@angular/core';
+import {ErrorHandler, Injectable, NgModule} from '@angular/core';
 import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
 import {AppRoutingModule} from './app-routing.module';
@@ -10,36 +10,36 @@ import {HomeComponent} from './components/home/home.component';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
-import { MatBadgeModule } from '@angular/material/badge';
-import { MatButtonModule } from '@angular/material/button';
-import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatCardModule } from '@angular/material/card';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatChipsModule } from '@angular/material/chips';
-import { MatCommonModule, MatNativeDateModule } from '@angular/material/core';
-import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatDialogModule } from '@angular/material/dialog';
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatGridListModule } from '@angular/material/grid-list';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatListModule } from '@angular/material/list';
-import { MatMenuModule } from '@angular/material/menu';
-import { MatPaginatorModule, MatPaginatorIntl } from '@angular/material/paginator';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatRadioModule } from '@angular/material/radio';
-import { MatSelectModule } from '@angular/material/select';
-import { MatSidenavModule } from '@angular/material/sidenav';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { MatSliderModule } from '@angular/material/slider';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatSortModule } from '@angular/material/sort';
-import { MatStepperModule } from '@angular/material/stepper';
-import { MatTableModule } from '@angular/material/table';
-import { MatTabsModule } from '@angular/material/tabs';
-import { MatToolbarModule } from '@angular/material/toolbar';
-import { MatTooltipModule } from '@angular/material/tooltip';
+import {MatBadgeModule} from '@angular/material/badge';
+import {MatButtonModule} from '@angular/material/button';
+import {MatButtonToggleModule} from '@angular/material/button-toggle';
+import {MatCardModule} from '@angular/material/card';
+import {MatCheckboxModule} from '@angular/material/checkbox';
+import {MatChipsModule} from '@angular/material/chips';
+import {MatCommonModule, MatNativeDateModule} from '@angular/material/core';
+import {MatDatepickerModule} from '@angular/material/datepicker';
+import {MatDialogModule} from '@angular/material/dialog';
+import {MatExpansionModule} from '@angular/material/expansion';
+import {MatGridListModule} from '@angular/material/grid-list';
+import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
+import {MatListModule} from '@angular/material/list';
+import {MatMenuModule} from '@angular/material/menu';
+import {MatPaginatorModule, MatPaginatorIntl} from '@angular/material/paginator';
+import {MatProgressBarModule} from '@angular/material/progress-bar';
+import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
+import {MatRadioModule} from '@angular/material/radio';
+import {MatSelectModule} from '@angular/material/select';
+import {MatSidenavModule} from '@angular/material/sidenav';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle';
+import {MatSliderModule} from '@angular/material/slider';
+import {MatSnackBarModule} from '@angular/material/snack-bar';
+import {MatSortModule} from '@angular/material/sort';
+import {MatStepperModule} from '@angular/material/stepper';
+import {MatTableModule} from '@angular/material/table';
+import {MatTabsModule} from '@angular/material/tabs';
+import {MatToolbarModule} from '@angular/material/toolbar';
+import {MatTooltipModule} from '@angular/material/tooltip';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
@@ -55,7 +55,6 @@ import {EventColorService} from './services/color/app.event.color.service';
 import {UploadInfoComponent} from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
 import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
-import * as Raven from 'raven-js';
 import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
 import {EventFormComponent} from './components/event-form/event.form.component';
@@ -96,27 +95,33 @@ import {HistoryImportFormComponent} from './components/history-import-form/histo
 import {ThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
 import {ChartsPieComponent} from './components/charts/pie/charts.pie.component';
-import {SummariesComponent} from "./components/summaries/summaries.component";
+import {SummariesComponent} from './components/summaries/summaries.component';
+import * as Sentry from '@sentry/browser';
 
 declare function require(moduleName: string): any;
-const { version: appVersion } = require('../../package.json');
 
-Raven
-  .config('https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244', {
-    environment: environment.production ? 'Production' : 'Development',
-    release: appVersion,
-    // shouldSendCallback: function () {
-    //   // return environment.production;
-    //   return true;
-    // },
-  })
-  .install();
+const {version: appVersion} = require('../../package.json');
 
-export class RavenErrorHandler implements ErrorHandler {
-  handleError(err: any): void {
-    Raven.captureException(err);
+Sentry.init({
+  dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
+  environment: environment.production ? 'Production' : 'Development',
+  release: appVersion,
+});
+
+
+@Injectable()
+export class SentryErrorHandler implements ErrorHandler {
+  constructor() {
+  }
+
+  handleError(error) {
+    // Sentry.showReportDialog({ eventId });
+    // const eventId = Sentry.captureException(error.originalError || error);
+    console.log(error);
+    Sentry.captureException(error)
   }
 }
+
 
 @NgModule({
   imports: [
@@ -235,10 +240,10 @@ export class RavenErrorHandler implements ErrorHandler {
     SideNavService,
     ThemeService,
     AppInfoService,
-    // {provide: ErrorHandler, useClass: RavenErrorHandler}
-    {provide: ErrorHandler, useClass: environment.production ? RavenErrorHandler : ErrorHandler},
+    // {provide: ErrorHandler, useClass: SentryErrorHandler}
+    {provide: ErrorHandler, useClass: environment.production ? SentryErrorHandler : ErrorHandler},
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
-    { provide: FunctionsRegionToken, useValue: 'europe-west2' }
+    {provide: FunctionsRegionToken, useValue: 'europe-west2'}
   ],
   bootstrap: [AppComponent],
 })

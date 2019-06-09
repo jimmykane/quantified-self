@@ -602,6 +602,58 @@
     semver "6.0.0"
     semver-intersect "1.4.0"
 
+"@sentry/browser@^5.4.0":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@sentry/browser/-/browser-5.4.0.tgz#4c553e4769555e09a34f8f86c6af27ebec74c715"
+  integrity sha512-lsGJqryHXrnWRkdahnep0m+m65zyMJGCmB2T8pGS+SFcSXdx94TaK4PiPaCl6XUCT5ejuQUHoXsEBmK/3S6beA==
+  dependencies:
+    "@sentry/core" "5.4.0"
+    "@sentry/types" "5.4.0"
+    "@sentry/utils" "5.4.0"
+    tslib "^1.9.3"
+
+"@sentry/core@5.4.0":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@sentry/core/-/core-5.4.0.tgz#c40969ace80d637195bcc0ae6e5819f0c5e8ae46"
+  integrity sha512-luIJPftVnrW0ZKqs9W6YCpzKZVbOgQv8Ae7KB0Acsvqeoqjtx4zHHfVfu5VPkfhrOYN3NsM1IpApXtSdMiJCfg==
+  dependencies:
+    "@sentry/hub" "5.4.0"
+    "@sentry/minimal" "5.4.0"
+    "@sentry/types" "5.4.0"
+    "@sentry/utils" "5.4.0"
+    tslib "^1.9.3"
+
+"@sentry/hub@5.4.0":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@sentry/hub/-/hub-5.4.0.tgz#03ab154bf2e2c33cb80d951b464de84ad2a6fbf9"
+  integrity sha512-X0iLNcouXcLWzuOJz2YjTn1E11b7pzcG98/iFTHW3AKPjnJNt92XRpjsDI2iT8+ODUDiFqaFmACSn2oZK80WGQ==
+  dependencies:
+    "@sentry/types" "5.4.0"
+    "@sentry/utils" "5.4.0"
+    tslib "^1.9.3"
+
+"@sentry/minimal@5.4.0":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@sentry/minimal/-/minimal-5.4.0.tgz#e3c569c68d6c09aad533832b2c713ad94bb2a511"
+  integrity sha512-MuOLavHHTXXWKyfTcwqpjhkdYlJDyOfjfcf+b/d38+8cs064rpNScxTZyYj2KKxNGcCqDgUsY175fNp/D1fyMw==
+  dependencies:
+    "@sentry/hub" "5.4.0"
+    "@sentry/types" "5.4.0"
+    tslib "^1.9.3"
+
+"@sentry/types@5.4.0":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@sentry/types/-/types-5.4.0.tgz#340854be18618e4435f9c168adfa2c9e407fbcb3"
+  integrity sha512-R8IFM77rzp0ngR/XQFLsXUK2uE7jLf21MsU9mpUwLtxcJp8rs7I77HgzA5MEerdG9Sbxw5RaLq9wO7noHGfUmQ==
+
+"@sentry/utils@5.4.0":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@sentry/utils/-/utils-5.4.0.tgz#32882f16cd516f341ba1dafeb020614aaf6d4b5c"
+  integrity sha512-NlYMAyiI9iIItLDxJ17tLMtuu7261t93tcOGSMdDQZlmryR6ZAMenbCKTf5MrpA2iHfX84gyfmr67lh8uSHkPg==
+  dependencies:
+    "@sentry/types" "5.4.0"
+    tslib "^1.9.3"
+
 "@types/events@*":
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/@types/events/-/events-3.0.0.tgz#2862f3f58a9a7f7c3e78d79f130dd4d71c25c2a7"
@@ -631,7 +683,7 @@
   resolved "https://registry.yarnpkg.com/@types/minimatch/-/minimatch-3.0.3.tgz#3dca0e3f33b200fc7d1139c0cd96c1268cadfd9d"
   integrity sha512-tHq6qdbT9U1IRSGf14CL0pUlULksvY9OZ+5eEgl1N7t+OA3tGvNpxJCzuKQlsNgCVwbAs670L1vcVQi8j9HjnA==
 
-"@types/node@*", "@types/node@^12.0.6", "@types/node@^12.0.7":
+"@types/node@*", "@types/node@^12.0.7":
   version "12.0.7"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-12.0.7.tgz#4f2563bad652b2acb1722d7e7aae2b0ff62d192c"
   integrity sha512-1YKeT4JitGgE4SOzyB9eMwO0nGVNkNEsm9qlIt1Lqm/tG2QEiSMTD4kS3aO6L+w5SClLVxALmIBESK6Mk5wX0A==
@@ -640,6 +692,11 @@
   version "10.14.8"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.14.8.tgz#fe444203ecef1162348cd6deb76c62477b2cc6e9"
   integrity sha512-I4+DbJEhLEg4/vIy/2gkWDvXBOOtPKV9EnLhYjMoqxcRW+TTZtUftkHktz/a8suoD5mUL7m6ReLrkPvSsCQQmw==
+
+"@types/node@^11.13.0":
+  version "11.13.13"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-11.13.13.tgz#a3d2a8a908ce322f24f0f8c88160b44c7dd5c452"
+  integrity sha512-GFWH7e4Q/OGLAO545bupVju+nE1YtLSwYAdLfSzAXnTPqoqKoXCOEtB7Cluvg9B/h2nGLhyzCDyCInYvrOE2nw==
 
 "@types/pako@^1.0.1":
   version "1.0.1"
@@ -3198,7 +3255,7 @@ firebase@^6.1.1:
     "@firebase/storage" "0.3.1"
     "@firebase/util" "0.2.18"
 
-fit-file-parser@^1.6.7:
+fit-file-parser@^1.5.10:
   version "1.6.7"
   resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.7.tgz#a2772aec8c324a890f7fb7966d825a5512dc1a59"
   integrity sha512-FyyCmbDh4doj0NY6LEiIwKgMj7Z+awv1hMMgJRrhJvStVUz3piqqL4aCXiq3NDIf5uKXzsxCy4CmHS0iffuYrw==
@@ -3378,10 +3435,10 @@ genfun@^5.0.0:
   resolved "https://registry.yarnpkg.com/genfun/-/genfun-5.0.0.tgz#9dd9710a06900a5c4a5bf57aca5da4e52fe76537"
   integrity sha512-KGDOARWVga7+rnB3z9Sd2Letx515owfk0hSxHGuqjANb1M+x2bGZGqHLiozPsYMdM2OubeMni/Hpwmjq6qIUhA==
 
-geolib@^3.0.3:
-  version "3.0.3"
-  resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.0.3.tgz#cc1d3818cd961cdb4a4f9af3b34a68169e6ffde5"
-  integrity sha512-cBYgFS0bfMOCEXEvf2RbxWOo602B878aOGNtAARoBNHHC++4CNZICfp8+4g2/uol1VHXaKhrrPpnUA/ixO2Hbg==
+geolib@^2.0.24:
+  version "2.0.24"
+  resolved "https://registry.yarnpkg.com/geolib/-/geolib-2.0.24.tgz#eb3d7fbc65f5ea3354a5af6054563ebe9f33e5f4"
+  integrity sha512-NR0AyYyEnGrFS9JvSFmmotQDxVCORJgDHdvBwSatxl5aHarOLMh3KuGI83bCvCfObjfoEiDe8Ung8GGLGAtthw==
 
 get-caller-file@^1.0.1:
   version "1.0.3"
@@ -6014,10 +6071,10 @@ qs@~6.5.2:
   version "2.2.5"
   resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/03148dbe0447519321852900fe090efad8a8c7fc"
   dependencies:
-    "@types/node" "^12.0.6"
+    "@types/node" "^11.13.0"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.7"
-    geolib "^3.0.3"
+    fit-file-parser "^1.5.10"
+    geolib "^2.0.24"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
@@ -6079,11 +6136,6 @@ range-parser@^1.0.3, range-parser@^1.2.0, range-parser@^1.2.1, range-parser@~1.2
   version "1.2.1"
   resolved "https://registry.yarnpkg.com/range-parser/-/range-parser-1.2.1.tgz#3cf37023d199e1c24d1a55b84800c2f3e6468031"
   integrity sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==
-
-raven-js@^3.27.2:
-  version "3.27.2"
-  resolved "https://registry.yarnpkg.com/raven-js/-/raven-js-3.27.2.tgz#6c33df952026cd73820aa999122b7b7737a66775"
-  integrity sha512-mFWQcXnhRFEQe5HeFroPaEghlnqy7F5E2J3Fsab189ondqUzcjwSVi7el7F36cr6PvQYXoZ1P2F5CSF2/azeMQ==
 
 raw-body@2.4.0:
   version "2.4.0"

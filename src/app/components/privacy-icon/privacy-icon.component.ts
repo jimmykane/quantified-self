@@ -1,6 +1,4 @@
 import {Component, Input} from '@angular/core';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import * as Raven from 'raven-js';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 @Component({

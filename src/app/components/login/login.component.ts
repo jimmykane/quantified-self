@@ -7,7 +7,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {take} from 'rxjs/operators';
 import {UserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
@@ -45,7 +45,7 @@ export class LoginComponent {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -57,7 +57,7 @@ export class LoginComponent {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.googleLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -69,7 +69,7 @@ export class LoginComponent {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.facebookLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -85,7 +85,7 @@ export class LoginComponent {
       this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
         duration: 5000,
       });
-      Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
+      Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
     }
     wnd.onunload = () => this.isLoading = false;
   }
@@ -94,7 +94,7 @@ export class LoginComponent {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.twitterLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -119,7 +119,7 @@ export class LoginComponent {
       }
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), serviceName, serviceToken)
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.isLoading = false;
     }
   }

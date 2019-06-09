@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
@@ -665,7 +665,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     } catch (e) {
       this.logger.error('Could not destroy chart');
       // Log to Sentry
-      Raven.captureException(e);
+      Sentry.captureException(e);
     }
   }
 

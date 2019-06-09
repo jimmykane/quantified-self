@@ -24,7 +24,7 @@ import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.uti
 import {catchError, first, map, startWith, switchMap, take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {merge, of, Subscription} from 'rxjs';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
@@ -33,8 +33,8 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {rowsAnimation} from '../../animations/animations';
-import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
-import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
+import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
+import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 
 
 @Component({
@@ -281,7 +281,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.isLoadingResults = false;
           // Catch
           this.errorLoading = error; // @todo maybe reset on ok
-          Raven.captureException(error);
+          Sentry.captureException(error);
           this.logger.error(error);
           return of(new MatTableDataSource([])); // @todo should reject or so
         })
@@ -356,14 +356,25 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.selection.clear();
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
-          await this.eventService.setEvent(this.user, mergedEvent);
+          try {
+            await this.eventService.setEvent(this.user, mergedEvent);
+            await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
+            this.snackBar.open('Events merged', null, {
+              duration: 2000,
+            });
+          } catch (e) {
+            Sentry.withScope(scope => {
+              scope.setExtra('data_event', mergedEvent.toJSON());
+              mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
+              // will be tagged with my-tag="my value"
+              Sentry.captureException(e);
+            });
+            this.snackBar.open('Could not merge events', null, {
+              duration: 5000,
+            });
+          }
           // debugger;
           this.isLoadingResults = false;
-
-          await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
-          this.snackBar.open('Events merged', null, {
-            duration: 2000,
-          });
         },
         'material',
       ));

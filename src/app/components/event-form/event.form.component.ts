@@ -5,7 +5,7 @@ import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validat
 import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
 
@@ -80,7 +80,7 @@ export class EventFormComponent implements OnInit {
       this.snackBar.open('Could not save event', null, {
         duration: 2000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
     } finally {
       this.dialogRef.close()
     }

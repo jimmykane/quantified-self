@@ -6,7 +6,7 @@ import {UserService} from '../../services/app.user.service';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {FormControl, FormGroup, Validators} from "@angular/forms";
-import * as Raven from "raven-js";
+import * as Sentry from '@sentry/browser';
 import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
 import {
   ChartThemes,
@@ -155,7 +155,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
       // @todo add logging
     } finally {
       this.isSaving = false;
