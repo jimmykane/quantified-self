@@ -7,8 +7,10 @@ mat-card{
 }
 
 .mat-tab-link{
-  font-size: 1.1em;
-  font-weight: 400;
+  min-width: 10%;
+  padding-right: 1em;
+  font-size: 1.3em;
+  //font-weight: 400;
 }
 
 mat-sidenav{
@@ -20,6 +22,10 @@ mat-sidenav{
 mat-icon{
   vertical-align: middle;
 
+}
+
+.icon-theme{
+  font-size: 1.3em;
 }
 
 .fill-space {
@@ -35,7 +41,7 @@ mat-icon{
 }
 
 mat-icon.app-icon{
-  margin-right: 0.5em;
+  margin-right: 1em;
 }
 
 .theme{
@@ -44,7 +50,6 @@ mat-icon.app-icon{
 }
 
 .mat-tab-link{
-  min-width: 10%;
 }
 
 .fabButtonsVertical {

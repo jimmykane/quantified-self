@@ -2,10 +2,10 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, On
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import { ErrorStateMatcher } from '@angular/material/core';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import {ErrorStateMatcher} from '@angular/material/core';
+import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import * as Sentry from '@sentry/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
 
@@ -40,7 +40,7 @@ export class EventFormComponent implements OnInit {
     this.event = data.event;
     this.user = data.user; // Perhaps move to service?
     if (!this.user || !this.event) {
-      throw  'Component needs event and user'
+      throw new Error('Component needs event and user')
     }
     this.originalValues = {name: this.event.name};
   }
@@ -49,6 +49,10 @@ export class EventFormComponent implements OnInit {
     this.eventFormGroup = new FormGroup({
       name: new FormControl(this.event.name, [
         Validators.required,
+        // Validators.minLength(4),
+      ]),
+      description: new FormControl(this.event.description, [
+        // Validators.required,
         // Validators.minLength(4),
       ]),
       privacy: new FormControl(this.event.privacy, [
@@ -72,6 +76,7 @@ export class EventFormComponent implements OnInit {
       await this.eventService.updateEventProperties(this.user, this.event.getID(), {
         name: this.eventFormGroup.get('name').value,
         privacy: this.eventFormGroup.get('privacy').value,
+        description: this.eventFormGroup.get('description').value,
       });
       this.snackBar.open('Event saved', null, {
         duration: 2000,
@@ -80,7 +85,7 @@ export class EventFormComponent implements OnInit {
       this.snackBar.open('Could not save event', null, {
         duration: 2000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
     } finally {
       this.dialogRef.close()
     }
@@ -98,7 +103,8 @@ export class EventFormComponent implements OnInit {
   }
 
   close(event) {
-    event.stopPropagation(); event.preventDefault();
+    event.stopPropagation();
+    event.preventDefault();
     this.restoreOriginalValues();
     this.dialogRef.close();
   }

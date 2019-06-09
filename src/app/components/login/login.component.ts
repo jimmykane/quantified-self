@@ -1,13 +1,13 @@
 import {Component, HostListener} from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {Router} from '@angular/router';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {take} from 'rxjs/operators';
 import {UserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
@@ -19,15 +19,15 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
 })
 export class LoginComponent {
 
-  isLoggingIn: boolean;
+  isLoading: boolean;
 
   private logger = Log.create('LoginComponent');
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
-    this.isLoggingIn = true;
+    this.isLoading = true;
     const loggedInUser = await this.afAuth.auth.signInWithCustomToken(event.detail.firebaseAuthToken);
-    this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName,  event.detail.serviceAuthResponse);
+    this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
   }
 
 
@@ -45,7 +45,7 @@ export class LoginComponent {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -53,12 +53,11 @@ export class LoginComponent {
     }
   }
 
-
   async googleLogin() {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.googleLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -70,7 +69,7 @@ export class LoginComponent {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.facebookLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -79,23 +78,23 @@ export class LoginComponent {
   }
 
   async suuntoAppLogin() {
-    this.isLoggingIn = true;
+    this.isLoading = true;
     // Open the popup that will start the auth flow.
     const wnd = window.open('assets/authPopup.html?signInWithService=true', 'name', 'height=585,width=400');
     if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
       this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
         duration: 5000,
       });
-      Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
+      Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
     }
-    wnd.onunload = () => this.isLoggingIn = false;
+    wnd.onunload = () => this.isLoading = false;
   }
 
   async twitterLogin() {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.twitterLogin());
     } catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
@@ -105,7 +104,7 @@ export class LoginComponent {
 
 
   private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: ServiceTokenInterface) {
-    this.isLoggingIn = true;
+    this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
@@ -114,14 +113,14 @@ export class LoginComponent {
         }
         await this.router.navigate(['/dashboard']);
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
-          duration: 2000,
+          duration: 5000,
         });
         return;
       }
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), serviceName, serviceToken)
     } catch (e) {
-      Raven.captureException(e);
-      this.isLoggingIn = false;
+      Sentry.captureException(e);
+      this.isLoading = false;
     }
   }
 
@@ -137,7 +136,7 @@ export class LoginComponent {
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      this.isLoggingIn = false;
+      this.isLoading = false;
     });
   }
 

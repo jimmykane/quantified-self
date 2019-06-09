@@ -25,7 +25,7 @@ import {AngularFireAuth} from '@angular/fire/auth';
 import {HttpClient} from '@angular/common/http';
 import {environment} from '../../environments/environment';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 
@@ -123,7 +123,7 @@ export class UserService implements OnDestroy {
 
 
   public async deleteAllUserData(user: User) {
-    const events = await this.eventService.getEventsForUser(user, [], 'startDate', false, 0).pipe(take(1)).toPromise();
+    const events = await this.eventService.getEventsAndActivitiesForUserBy(user, [], 'startDate', false, 0).pipe(take(1)).toPromise();
     const promises = [];
     events.forEach((event) => {
       promises.push(this.eventService.deleteAllEventData(user, event.getID()));
@@ -134,7 +134,7 @@ export class UserService implements OnDestroy {
       try {
         await this.deauthorizeSuuntoAppService();
       } catch (e) {
-        Raven.captureException(e);
+        Sentry.captureException(e);
         console.error(`Could not deauthorize Suunto app`)
       }
       try {
@@ -143,7 +143,7 @@ export class UserService implements OnDestroy {
         await this.afs.collection('users').doc(user.uid).delete();
         return this.afAuth.auth.currentUser.delete();
       } catch (e) {
-        Raven.captureException(e);
+        Sentry.captureException(e);
         throw e;
       }
     }
@@ -156,6 +156,8 @@ export class UserService implements OnDestroy {
   public getDefaultAppTheme(): AppThemes {
     return AppThemes.Normal;
   }
+
+  // @todo move other calls to this
 
   private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {

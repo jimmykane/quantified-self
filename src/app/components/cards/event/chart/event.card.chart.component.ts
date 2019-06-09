@@ -13,7 +13,7 @@ import {
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
@@ -213,7 +213,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       marker.cornerRadius(12, 12, 12, 12);
       marker.strokeWidth = 2;
       marker.strokeOpacity = 1;
-      marker.stroke = am4core.color('#ccc');
+      marker.stroke = am4core.color('#0a97ee');
 
 
       chart.legend.itemContainers.template.events.on('toggled', (ev) => {
@@ -529,18 +529,21 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   /**
    * This gets the base and extended unit datatypes from a datatype array depending on the user settings
    * @param dataTypes
-   * @param userSettings
+   * @param userUnitSettings
    */
-  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userSettings: UserUnitSettingsInterface): string[] {
+  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
     let unitBasedDataTypes = [];
+    if (!userUnitSettings){
+      return unitBasedDataTypes
+    }
     if (dataTypes.indexOf(DataPace.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.paceUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
     }
     if (dataTypes.indexOf(DataSpeed.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.speedUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.speedUnits);
     }
     if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userSettings.verticalSpeedUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.verticalSpeedUnits);
     }
     return unitBasedDataTypes;
   }
@@ -662,7 +665,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     } catch (e) {
       this.logger.error('Could not destroy chart');
       // Log to Sentry
-      Raven.captureException(e);
+      Sentry.captureException(e);
     }
   }
 

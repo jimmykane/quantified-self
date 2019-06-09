@@ -5,6 +5,7 @@ mat-card{
 
 mat-grid-list{
   min-height: calc(100vh - 48px);
+  margin: 2em;
 }
 
 mat-icon{

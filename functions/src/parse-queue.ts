@@ -14,7 +14,7 @@ import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.
 
 
 const TIMEOUT_IN_SECONDS = 240;
-const RETRY_COUNT = 10;
+const RETRY_COUNT = 20;
 const LIMIT = 60;
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
@@ -56,6 +56,9 @@ export async function processQueueItem(queueItem: any) {
       throw new Error(`No parent found for ${tokenQueryDocumentSnapshot.id}`);
     }
     const parentID = parent1.parent!.id;
+
+    console.log(`Found user id ${parentID} for queue item ${queueItem.id} and username ${queueItem.data().userName}`);
+
     let result;
     try {
       console.time('DownloadFit');
@@ -70,7 +73,8 @@ export async function processQueueItem(queueItem: any) {
       console.timeEnd('DownloadFit');
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
-      console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1}`, e);
+
+      console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.error.toString('utf8')}`, e);
       await increaseRetryCountForQueueItem(queueItem, e);
       continue;
     }
@@ -83,7 +87,7 @@ export async function processQueueItem(queueItem: any) {
       event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       // @todo move metadata to its own document for firestore read/write rules
       await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id}, user ${parentID} and token user ${serviceToken.userName}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id}, user id ${parentID} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
@@ -100,7 +104,8 @@ export async function processQueueItem(queueItem: any) {
   // @todo I think this retry count increase is redundunt
   if (processedCount !== tokenQuerySnapshots.size) {
     console.error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`);
-    return increaseRetryCountForQueueItem(queueItem, new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
+    // return increaseRetryCountForQueueItem(queueItem, new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
+    return;
   }
 
   // For each ended so we can set it to processed

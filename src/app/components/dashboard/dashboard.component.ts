@@ -21,6 +21,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   user: User;
   events: EventInterface[];
   userSubscription: Subscription;
+  searchTerm: string;
+  searchStartDate: Date;
+  searchEndDate: Date;
 
   constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private snackBar: MatSnackBar) {
 
@@ -36,6 +39,15 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
       this.user = user;
     });
+
+    // Subscribe to a weekly events
+
+  }
+
+  search(search: {searchTerm: string, startDate: Date, endDate: Date}) {
+    this.searchTerm = search.searchTerm;
+    this.searchStartDate = search.startDate;
+    this.searchEndDate = search.endDate;
   }
 
   ngOnChanges() {

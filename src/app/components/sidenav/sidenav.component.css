@@ -19,3 +19,6 @@ mat-toolbar-row{
   outline: none;
 }
 
+.fill-space {
+  flex: 1 1 auto;
+}

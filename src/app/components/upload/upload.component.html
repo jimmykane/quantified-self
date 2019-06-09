@@ -6,7 +6,7 @@
   <button mat-stroked-button  color="primary" (click)="inputFile.click()">
 
     <span>Select or drag files<span class="mat-small"></span></span><br/>
-    <span class="mat-small">GPX, TCX, FIT, JSON and SML files or drag and drop</span>
+    <span class="mat-small">GPX, TCX, FIT, JSON, SML</span>
   </button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx, .sml" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>

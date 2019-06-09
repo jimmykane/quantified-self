@@ -12,8 +12,8 @@ import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {ChartThemes, XAxisTypes} from "quantified-self-lib/lib/users/user.chart.settings.interface";
-import {ThemeService} from "../../../services/app.theme.service";
+import {ChartThemes, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {ThemeService} from '../../../services/app.theme.service';
 
 
 @Component({

@@ -1,11 +1,8 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {EventService} from '../../services/app.event.service';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
@@ -88,7 +85,7 @@ export class UserFormComponent implements OnInit {
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
     } finally {
       this.dialogRef.close()
     }
@@ -118,7 +115,7 @@ export class UserFormComponent implements OnInit {
       });
       this.dialogRef.close();
     }catch (e) {
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.errorDeleting = e;
       this.dialogRef.disableClose = false;
       this.isDeleting = false;

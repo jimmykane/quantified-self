@@ -2,7 +2,7 @@ import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {HttpClient} from '@angular/common/http';
 import {FileService} from '../../services/app.file.service';
 import {AngularFireFunctions} from '@angular/fire/functions';
@@ -128,7 +128,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', null, {
         duration: 5000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
     } finally {
       this.isLoading = false;
     }
@@ -152,10 +152,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
         duration: 5000,
       });
-      Raven.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
+      Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
+      return
     }
     wnd.onunload = () => this.isLoading = false;
-
   }
 
   async deauthorizeSuuntoApp(event) {

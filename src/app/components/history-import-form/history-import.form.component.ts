@@ -8,13 +8,13 @@ import {
 } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';
 import {UserService} from '../../services/app.user.service';
-import {MetaDataInterface, ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
+import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
 
 
 @Component({
@@ -133,12 +133,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       this.dialogRef.close();
     } catch (e) {
       // debugger;
-      Raven.captureException(e);
+      Sentry.captureException(e);
       this.logger.error(e);
       this.snackBar.open(`Could import history due to ${e.error}`, null, {
         duration: 2000,
       });
-      Raven.captureException(e);
+      Sentry.captureException(e);
     } finally {
       this.isLoading = false;
     }

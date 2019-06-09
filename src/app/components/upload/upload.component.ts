@@ -3,7 +3,7 @@ import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Raven from 'raven-js';
+import * as Sentry from '@sentry/browser';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
 import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
@@ -11,9 +11,9 @@ import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importer
 import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {UPLOAD_STATUS} from "./upload.status";
-import {Log} from "ng2-logger/browser";
-import {EventImporterSuuntoSML} from "quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.sml";
+import {UPLOAD_STATUS} from './upload.status';
+import {Log} from 'ng2-logger/browser';
+import {EventImporterSuuntoSML} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 
 @Component({
   selector: 'app-upload',
@@ -41,7 +41,7 @@ export class UploadComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.user) {
-      throw "This component can only be used with a user"
+      throw new Error('This component can only be used with a user')
     }
   }
 
@@ -61,7 +61,7 @@ export class UploadComponent implements OnInit {
           if ((typeof fileReaderResult === 'string') && metaData.extension === 'json') {
             try {
               newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
-            }catch (e) {
+            } catch (e) {
               this.logger.info(`Could not read via JSON trying via SML JSON`);
               newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
             }
@@ -77,7 +77,7 @@ export class UploadComponent implements OnInit {
           newEvent.name = metaData.filename;
         } catch (e) {
           metaData.status = UPLOAD_STATUS.ERROR;
-          Raven.captureException(e);
+          Sentry.captureException(e);
           this.logger.error(`Could not load event from file  ${metaData.file.name}`, e);
           resolve(); // no-op here!
           return;
@@ -88,7 +88,7 @@ export class UploadComponent implements OnInit {
         } catch (e) {
           // debugger;
           console.error(e);
-          Raven.captureException(e);
+          Sentry.captureException(e);
           metaData.status = UPLOAD_STATUS.ERROR;
           resolve();
           return;
@@ -135,7 +135,7 @@ export class UploadComponent implements OnInit {
         await this.processFile(this.activitiesMetaData[index]);
       } catch (e) {
         this.logger.error(e);
-        Raven.captureException(e);
+        Sentry.captureException(e);
       }
     }
 

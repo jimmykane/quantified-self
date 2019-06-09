@@ -317,10 +317,10 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.14.8.tgz#fe444203ecef1162348cd6deb76c62477b2cc6e9"
   integrity sha512-I4+DbJEhLEg4/vIy/2gkWDvXBOOtPKV9EnLhYjMoqxcRW+TTZtUftkHktz/a8suoD5mUL7m6ReLrkPvSsCQQmw==
 
-"@types/node@^11.13.6":
-  version "11.13.13"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-11.13.13.tgz#a3d2a8a908ce322f24f0f8c88160b44c7dd5c452"
-  integrity sha512-GFWH7e4Q/OGLAO545bupVju+nE1YtLSwYAdLfSzAXnTPqoqKoXCOEtB7Cluvg9B/h2nGLhyzCDyCInYvrOE2nw==
+"@types/node@^12.0.6":
+  version "12.0.6"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.0.6.tgz#215fa05292dab13e0ebc066f54d14eb983c5ad78"
+  integrity sha512-3sV/MUw6uYxPaRIoooI/MjO0j1A06JNlbpkGc56F+zikO52qavehD/Qw85so47gWhO82tNzEFoF6adXqIfK+EA==
 
 "@types/node@^8.0.53":
   version "8.10.49"
@@ -1099,10 +1099,10 @@ firebase-functions@^2.3.1:
     jsonwebtoken "^8.2.1"
     lodash "^4.6.1"
 
-fit-file-parser@^1.6.2:
-  version "1.6.2"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.2.tgz#bafad981a9a7d7daab1ac69b66a96a79921d1928"
-  integrity sha512-I6jv8n3c4NK/TGbn9JuUzZiLu3oF/VeeP0HHpLR/eE4I0DxNEQ1vuYExHDSzxHritLbrVvekxMuvBN9xAdiJtw==
+fit-file-parser@^1.6.7:
+  version "1.6.7"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.7.tgz#a2772aec8c324a890f7fb7966d825a5512dc1a59"
+  integrity sha512-FyyCmbDh4doj0NY6LEiIwKgMj7Z+awv1hMMgJRrhJvStVUz3piqqL4aCXiq3NDIf5uKXzsxCy4CmHS0iffuYrw==
   dependencies:
     buffer "^5.1.0"
 
@@ -1191,10 +1191,10 @@ gcs-resumable-upload@^1.0.0:
     pumpify "^1.5.1"
     stream-events "^1.0.4"
 
-geolib@^2.0.24:
-  version "2.0.24"
-  resolved "https://registry.yarnpkg.com/geolib/-/geolib-2.0.24.tgz#eb3d7fbc65f5ea3354a5af6054563ebe9f33e5f4"
-  integrity sha512-NR0AyYyEnGrFS9JvSFmmotQDxVCORJgDHdvBwSatxl5aHarOLMh3KuGI83bCvCfObjfoEiDe8Ung8GGLGAtthw==
+geolib@^3.0.3:
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.0.3.tgz#cc1d3818cd961cdb4a4f9af3b34a68169e6ffde5"
+  integrity sha512-cBYgFS0bfMOCEXEvf2RbxWOo602B878aOGNtAARoBNHHC++4CNZICfp8+4g2/uol1VHXaKhrrPpnUA/ixO2Hbg==
 
 getpass@^0.1.1:
   version "0.1.7"
@@ -2077,12 +2077,12 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/1b854f57706fff0e25e2247bf122dde97b9f11f3"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/444ab18aff4dcc260a882ba7a7e732a9a953c5cb"
   dependencies:
-    "@types/node" "^11.13.6"
+    "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
-    fit-file-parser "^1.6.2"
-    geolib "^2.0.24"
+    fit-file-parser "^1.6.7"
+    geolib "^3.0.3"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"

@@ -1,6 +1,6 @@
 import {Injectable, NgZone} from '@angular/core';
-import * as Raven from "raven-js";
 import {Log} from "ng2-logger/browser";
+import * as Sentry from '@sentry/browser';
 
 
 @Injectable()
@@ -23,7 +23,7 @@ export class ClipboardService {
     } catch (e) {
       this.logger.error(`Could not copy ${text}`);
       // Log to Sentry
-      Raven.captureException(e);
+      Sentry.captureException(e);
     }
 
   }

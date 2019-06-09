@@ -1,5 +1,3 @@
-<app-event-search (searchChange)="search($event)"></app-event-search>
-
 <mat-card class="mat-elevation-z0">
 
   <app-shade [isActive]="isLoadingResults" [hasError]="errorLoading" [errorMessage]="errorLoading"></app-shade>
@@ -29,7 +27,8 @@
         <ng-container *ngIf="isColumnHeaderSortable(column)">
           <mat-header-cell *matHeaderCellDef mat-sort-header>
         <span>
-            <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
+             <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
+            <mat-icon *ngIf="getColumnHeaderSVGIcon(column)" svgIcon="{{ getColumnHeaderSVGIcon(column) }}"></mat-icon>
         </span>
           </mat-header-cell>
         </ng-container>
@@ -38,6 +37,8 @@
           <mat-header-cell *matHeaderCellDef >
         <span>
             <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
+            <mat-icon *ngIf="getColumnHeaderSVGIcon(column)" svgIcon="{{ getColumnHeaderSVGIcon(column) }}"></mat-icon>
+          {{ getColumnHeaderSVGIcon(column) }}
         </span>
           </mat-header-cell>
         </ng-container>
@@ -55,7 +56,7 @@
           <app-event-actions *ngIf="user" [user]="user" [event]="row[column]"></app-event-actions>
         </span>
         <span *ngIf="column === 'name'" matTooltip="{{ row[column] }}">
-          {{ row[column] | slice:0:10 }}
+          {{ row[column] | slice:0:15 }}...
         </span>
         <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'name' && column!=='privacy'">
           {{ row[column] }}
@@ -63,7 +64,7 @@
       </mat-cell>
     </ng-container>
     <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();"
+    <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
              [routerLink]="['/user', user.uid, 'event', row['id']]"></mat-row>
   </mat-table>
   <mat-paginator [hidePageSize]="true" [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>

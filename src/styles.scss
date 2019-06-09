@@ -4,12 +4,15 @@
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
 // **Be sure that you only ever include this mixin once!**
-@include mat-core();
-
+$custom-typography: mat-typography-config(
+  $font-family: '"ProximaNova-Regular", Roboto, sans-serif;'
+  //$body-1:        mat-typography-level(14px, 20px, 400)
+);
+@include mat-core($custom-typography);
 // Define the default theme (same as the example above).
 $candy-app-primary: mat-palette($mat-indigo);
-$candy-app-accent:  mat-palette($mat-pink, A200, A100, A400);
-$candy-app-theme:   mat-light-theme($candy-app-primary, $candy-app-accent);
+$candy-app-accent: mat-palette($mat-pink, A200, A100, A400);
+$candy-app-theme: mat-light-theme($candy-app-primary, $candy-app-accent);
 
 // Include the default theme styles.
 @include angular-material-theme($candy-app-theme);
@@ -17,9 +20,9 @@ $candy-app-theme:   mat-light-theme($candy-app-primary, $candy-app-accent);
 
 // Define an alternate dark theme.
 $dark-primary: mat-palette($mat-light-blue);
-$dark-accent:  mat-palette($mat-pink, A200, A100, A400);
-$dark-warn:    mat-palette($mat-deep-orange);
-$dark-theme:   mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
+$dark-accent: mat-palette($mat-pink, A200, A100, A400);
+$dark-warn: mat-palette($mat-deep-orange);
+$dark-theme: mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 
 // Include the alternative theme styles inside of a block with a CSS class. You can make this
 // CSS class whatever you want. In this example, any component inside of an element with
@@ -29,9 +32,16 @@ $dark-theme:   mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 }
 
 
+@font-face {
+  font-family: 'ProximaNova-Regular';
+  src: url('assets/fonts/proxima-nova-regular.woff2') format('woff2'),
+  url('assets/fonts/proxima-nova-regular.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
 body {
   margin: 0;
-  font-family: Roboto, sans-serif;
 }
 
 @keyframes FadeIn {
@@ -61,7 +71,7 @@ body {
 }
 
 .sk-folding-cube {
-  margin:  auto;
+  margin: auto;
   width: 50px;
   height: 50px;
   position: relative;
@@ -78,6 +88,7 @@ body {
   -ms-transform: scale(1.1);
   transform: scale(1.1);
 }
+
 .sk-folding-cube .sk-cube:before {
   content: '';
   position: absolute;
@@ -92,44 +103,53 @@ body {
   -ms-transform-origin: 100% 100%;
   transform-origin: 100% 100%;
 }
+
 .sk-folding-cube .sk-cube2 {
   -webkit-transform: scale(1.1) rotateZ(90deg);
   transform: scale(1.1) rotateZ(90deg);
 }
+
 .sk-folding-cube .sk-cube3 {
   -webkit-transform: scale(1.1) rotateZ(180deg);
   transform: scale(1.1) rotateZ(180deg);
 }
+
 .sk-folding-cube .sk-cube4 {
   -webkit-transform: scale(1.1) rotateZ(270deg);
   transform: scale(1.1) rotateZ(270deg);
 }
+
 .sk-folding-cube .sk-cube2:before {
   -webkit-animation-delay: 0.3s;
   animation-delay: 0.3s;
 }
+
 .sk-folding-cube .sk-cube3:before {
   -webkit-animation-delay: 0.6s;
   animation-delay: 0.6s;
 }
+
 .sk-folding-cube .sk-cube4:before {
   -webkit-animation-delay: 0.9s;
   animation-delay: 0.9s;
 }
+
 @-webkit-keyframes sk-foldCubeAngle {
   0%, 10% {
     -webkit-transform: perspective(140px) rotateX(-180deg);
     transform: perspective(140px) rotateX(-180deg);
     opacity: 0;
-  } 25%, 75% {
-      -webkit-transform: perspective(140px) rotateX(0deg);
-      transform: perspective(140px) rotateX(0deg);
-      opacity: 1;
-    } 90%, 100% {
-        -webkit-transform: perspective(140px) rotateY(180deg);
-        transform: perspective(140px) rotateY(180deg);
-        opacity: 0;
-      }
+  }
+  25%, 75% {
+    -webkit-transform: perspective(140px) rotateX(0deg);
+    transform: perspective(140px) rotateX(0deg);
+    opacity: 1;
+  }
+  90%, 100% {
+    -webkit-transform: perspective(140px) rotateY(180deg);
+    transform: perspective(140px) rotateY(180deg);
+    opacity: 0;
+  }
 }
 
 @keyframes sk-foldCubeAngle {
@@ -137,13 +157,15 @@ body {
     -webkit-transform: perspective(140px) rotateX(-180deg);
     transform: perspective(140px) rotateX(-180deg);
     opacity: 0;
-  } 25%, 75% {
-      -webkit-transform: perspective(140px) rotateX(0deg);
-      transform: perspective(140px) rotateX(0deg);
-      opacity: 1;
-    } 90%, 100% {
-        -webkit-transform: perspective(140px) rotateY(180deg);
-        transform: perspective(140px) rotateY(180deg);
-        opacity: 0;
-      }
+  }
+  25%, 75% {
+    -webkit-transform: perspective(140px) rotateX(0deg);
+    transform: perspective(140px) rotateX(0deg);
+    opacity: 1;
+  }
+  90%, 100% {
+    -webkit-transform: perspective(140px) rotateY(180deg);
+    transform: perspective(140px) rotateY(180deg);
+    opacity: 0;
+  }
 }
