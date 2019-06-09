@@ -25,6 +25,8 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {getSize} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {Buffer} from 'buffer';
+import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
+import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -46,7 +48,7 @@ export class EventService implements OnDestroy {
         .doc(user.uid)
         .collection('events').doc(eventID).snapshotChanges().pipe(
         map(eventSnapshot => {
-          return eventSnapshot.payload.exists ?  EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
+          return eventSnapshot.payload.exists ? EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
         })),
       this.getActivities(user, eventID),
     ).pipe(catchError((error) => {
@@ -71,14 +73,21 @@ export class EventService implements OnDestroy {
     }))
   }
 
-  public getEventsForUser(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsForUserBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
-      return this.getEventsForUserStartingAfterOrEndingBefore(user, where, orderBy, asc, limit, startAfter, endBefore);
+      return this.getEventsForUserStartingAfterOrEndingBefore(user, false, where, orderBy, asc, limit, startAfter, endBefore);
     }
     return this.getEventsForUserInternal(user, where, orderBy, asc, limit);
   }
 
-  private getEventsForUserStartingAfterOrEndingBefore(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsAndActivitiesForUserBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+    if (startAfter || endBefore) {
+      return this.getEventsForUserStartingAfterOrEndingBefore(user, true, where, orderBy, asc, limit, startAfter, endBefore);
+    }
+    return this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit);
+  }
+
+  private getEventsForUserStartingAfterOrEndingBefore(user: User, getActivities: boolean, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     const observables: Observable<firestore.DocumentSnapshot>[] = [];
     if (startAfter) {
       observables.push(this.afs
@@ -98,18 +107,47 @@ export class EventService implements OnDestroy {
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
       if (startAfter && endBefore) {
-        return this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA, resultB);
+        return getActivities ? this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit, resultA, resultB) : this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA, resultB);
       }
       // If only start after
       if (startAfter) {
-        return this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA);
+        return getActivities ? this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit, resultA) : this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA);
       }
       // If only endAt
-      return this.getEventsForUserInternal(user, where, orderBy, asc, limit, null, resultA);
+      return getActivities ? this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit, null, resultA) : this.getEventsForUserInternal(user, where, orderBy, asc, limit, null, resultA);
     }));
   }
 
-  private getEventsForUserInternal(user: User, where: {fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
+
+  private getEventsForUserInternal(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
+    return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
+      .snapshotChanges().pipe(map((eventSnapshots) => {
+        return eventSnapshots.map((eventSnapshot) => {
+          return eventSnapshot.payload.doc.exists ? EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.doc.data()).setID(eventSnapshot.payload.doc.id) : null;
+        })
+      }))
+  }
+
+  private getEventsAndActivitiesForUserInternal(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
+    const eventObservable = this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
+      .snapshotChanges().pipe(map((eventSnapshots) => {
+        return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
+          eventIDS.push(eventSnapshot.payload.doc.id);
+          return eventIDS;
+        }, []);
+      })).pipe(switchMap((eventIDS) => {
+        // debugger;
+        if (!eventIDS.length) {
+          return of([]);
+        }
+        return combineLatest(eventIDS.map((eventID) => {
+          return this.getEventAndActivities(user, eventID);
+        }))
+      }));
+    return eventObservable;
+  }
+
+  private getEventCollectionForUser(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot) {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection('events', ((ref) => {
@@ -129,21 +167,6 @@ export class EventService implements OnDestroy {
           query = query.endBefore(endBefore);
         }
         return query;
-      }))
-      .snapshotChanges()
-      .pipe(map((eventSnapshots) => {
-        return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
-          eventIDS.push(eventSnapshot.payload.doc.id);
-          return eventIDS;
-        }, []);
-      })).pipe(switchMap((eventIDS) => {
-        // debugger;
-        if (!eventIDS.length) {
-          return of([]);
-        }
-        return combineLatest(eventIDS.map((eventID) => {
-          return this.getEventAndActivities(user, eventID);
-        }))
       }))
   }
 
@@ -212,7 +235,7 @@ export class EventService implements OnDestroy {
         .doc(type)
         .snapshotChanges()
         .pipe(map((documentSnapshot) => { // @todo should be reduce
-          return documentSnapshot.payload.exists ?   this.processStreamDocumentSnapshots(documentSnapshot) : null;
+          return documentSnapshot.payload.exists ? this.processStreamDocumentSnapshots(documentSnapshot) : null;
         }))                                                      // since the return with equality on the query should only fetch one afaik in my model
     })).pipe(map((streams: StreamInterface[]) => {
       return streams.filter((stream) => !!stream)
@@ -220,17 +243,17 @@ export class EventService implements OnDestroy {
   }
 
   private processStreamDocumentSnapshots(streamSnapshot: Action<firestore.DocumentSnapshot>): StreamInterface {
-      return EventImporterJSON.getStreamFromJSON({
-        type: <string>streamSnapshot.payload.data().type,
-        data: this.getStreamDataFromBlob(streamSnapshot.payload.data().data),
-      });
+    return EventImporterJSON.getStreamFromJSON({
+      type: <string>streamSnapshot.payload.data().type,
+      data: this.getStreamDataFromBlob(streamSnapshot.payload.data().data),
+    });
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
-      return EventImporterJSON.getStreamFromJSON({
-        type: <string>queryDocumentSnapshot.data().type,
-        data: this.getStreamDataFromBlob(queryDocumentSnapshot.data().data),
-      });
+    return EventImporterJSON.getStreamFromJSON({
+      type: <string>queryDocumentSnapshot.data().type,
+      data: this.getStreamDataFromBlob(queryDocumentSnapshot.data().data),
+    });
   }
 
   public async setEvent(user: User, event: EventInterface) {
@@ -272,14 +295,16 @@ export class EventService implements OnDestroy {
       await Promise.all(writePromises);
       return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
     } catch (e) {
-      Raven.captureException(e, {extra: {
-        event: event.toJSON(),
-        activities: event.getActivities().reduce((array, activity) => {
-          array.push(activity.toJSON());
-          return array;
-        }, [])
-        }});
-      debugger;
+      this.logger.error(e);
+      Raven.captureException(e, {
+        extra: {
+          event: event.toJSON(),
+          activities: event.getActivities().reduce((array, activity) => {
+            array.push(activity.toJSON());
+            return array;
+          }, [])
+        }
+      });
       // Try to delete the parent entity and all subdata
       await this.deleteAllEventData(user, event.getID());
       throw new Error('Could not parse event');
@@ -288,6 +313,14 @@ export class EventService implements OnDestroy {
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
     return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON());
+  }
+
+  public async changeActivityCreatorName(user: User, event: EventInterface, activity: ActivityInterface, creatorName: string) {
+    debugger;
+    activity.creator.name = creatorName;
+    await this.setActivity(user, event, activity);
+    event.addStat(new DataDeviceNames(event.getActivities().map(eventActivities => eventActivities.creator.name)));
+    await this.setEvent(user, event);
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
@@ -305,13 +338,13 @@ export class EventService implements OnDestroy {
     queryDocumentSnapshots.docs.forEach((queryDocumentSnapshot) => {
       activityDeletePromises.push(this.deleteAllActivityData(user, eventID, queryDocumentSnapshot.id))
     });
-    await Promise.all(activityDeletePromises);
     await this.afs
       .collection('users')
       .doc(user.uid)
       .collection('events')
       .doc(eventID).delete();
     this.logger.info(`Deleted event ${eventID}`);
+    await Promise.all(activityDeletePromises);
     return true;
   }
 

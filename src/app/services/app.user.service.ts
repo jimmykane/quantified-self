@@ -123,7 +123,7 @@ export class UserService implements OnDestroy {
 
 
   public async deleteAllUserData(user: User) {
-    const events = await this.eventService.getEventsForUser(user, [], 'startDate', false, 0).pipe(take(1)).toPromise();
+    const events = await this.eventService.getEventsAndActivitiesForUserBy(user, [], 'startDate', false, 0).pipe(take(1)).toPromise();
     const promises = [];
     events.forEach((event) => {
       promises.push(this.eventService.deleteAllEventData(user, event.getID()));

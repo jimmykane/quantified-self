@@ -43,16 +43,15 @@ import {EventService} from '../../../services/app.event.service';
 export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
-  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
-  @Input() events: EventInterface[];
-  @Input() user: User;
+  @Input() data: any;
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
   public isLoading: boolean;
+  private dataSelected: any;
 
-  private chart: am4charts.XYChart;
+  private chart: am4charts.PieChart;
   private logger = Log.create('EventCardChartComponent');
 
   private themes = {
@@ -79,7 +78,7 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
   }
 
   async ngOnInit() {
-    if (!this.user || !this.events) {
+    if (!this.data) {
       throw new Error('Component needs events and users');
     }
   }
@@ -98,103 +97,58 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.events || simpleChanges.chartTheme) {
-      if (!this.events) {
+    if (simpleChanges.data || simpleChanges.chartTheme) {
+      if (!this.data) {
         return;
       }
     }
   }
 
-  private createChart(): am4charts.XYChart {
+  private createChart(): am4charts.PieChart {
     return this.zone.runOutsideAngular(() => {
       this.applyChartStylesFromUserSettings();
 
       // Create a chart
-      const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
-      chart.pixelPerfect = false;
-      chart.fontSize = '0.8em';
-      chart.padding(15, 15, 15, 0);
-      // chart.resizable = false;
+      const  chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
 
-      // Create a date axis
-      const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
-      // dateAxis.skipEmptyPeriods= true;
-      // dateAxis.baseInterval = {
-      //   timeUnit: "second",
-      //   count: 1
-      // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
-      // };
-      // dateAxis.skipEmptyPeriods= true;
-
-      // Create a value axis
-      // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-      // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
-
-      // Create a Legend
-      chart.legend = new am4charts.Legend();
-      chart.legend.fontSize = '0.9em';
-      chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-      chart.legend.parent.width = am4core.percent(100);
-      chart.legend.parent.height = am4core.percent(100);
-
-      chart.legend.useDefaultMarker = true;
-      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-      marker.cornerRadius(12, 12, 12, 12);
-      marker.strokeWidth = 2;
-      marker.strokeOpacity = 1;
-      marker.stroke = am4core.color('#0a97ee');
+      const pieSeries = chart.series.push(new am4charts.PieSeries());
+      pieSeries.dataFields.value = "percent";
+      pieSeries.dataFields.category = "type";
+      // pieSeries.slices.template.propertyFields.fill = "color";
+      pieSeries.slices.template.propertyFields.isActive = "pulled";
+      pieSeries.slices.template.strokeWidth = 0;
 
 
-      chart.legend.itemContainers.template.events.on('toggled', (ev) => {
-        const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-        // Getting visible...
+      //
+
+      pieSeries.slices.template.events.on('hit', (event) => {
+        if (event.target.dataItem.dataContext['id'] !== undefined) {
+          this.dataSelected = event.target.dataItem.dataContext['id'];
+        } else {
+          this.dataSelected  = null;
+        }
+        this.chart.data = this.generateChartData(this.data);
       });
 
-      // Create a cursor
-      chart.cursor = new am4charts.XYCursor();
-      // chart.cursor.fullWidthLineX = true;
-      // chart.cursor.fullWidthLineY = true;
-      // chart.cursor.behavior = 'zoomY';
 
-      // Add watermark
-      const watermark = new am4core.Label();
-      watermark.text = 'Quantified-Self.io';
-      chart.plotContainer.children.push(watermark);
-      watermark.align = 'right';
-      watermark.valign = 'bottom';
-      watermark.fontSize = '2.1em';
-      watermark.opacity = 0.7;
-      watermark.marginRight = 10;
-      watermark.marginBottom = 5;
-      watermark.zIndex = 100;
-      // watermark.fontWeight = 'bold';
+      chart.data = this.generateChartData(this.data);
+      // chart.exporting.menu = new am4core.ExportMenu();
+      // chart.exporting.menu.align = 'right';
+      // chart.exporting.menu.verticalAlign = 'bottom';
+      // chart.exporting.useWebFonts = true;
+      // chart.exporting.menu.items = [{
+      //   label: '...️',
+      //   menu: [
+      //     {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
+      //     {'type': 'json', 'label': 'JSON'},
+      //     {'type': 'csv', 'label': 'CSV'},
+      //     {'type': 'xlsx', 'label': 'XLSX'},
+      //     // {"label": "Print", "type": "print"},
+      //   ],
+      // }];
 
 
-      // Scrollbar
-      // chart.scrollbarX = new am4charts.XYChartScrollbar();
-
-      // Add exporting options
-      chart.exporting.menu = new am4core.ExportMenu();
-      chart.exporting.menu.align = 'right';
-      chart.exporting.menu.verticalAlign = 'bottom';
-      chart.exporting.useWebFonts = true;
-      chart.exporting.menu.items = [{
-        label: '...️',
-        menu: [
-          {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
-          {'type': 'json', 'label': 'JSON'},
-          {'type': 'csv', 'label': 'CSV'},
-          {'type': 'xlsx', 'label': 'XLSX'},
-          // {"label": "Print", "type": "print"},
-        ],
-      }];
-
-      chart.exporting.extraSprites.push({
-        'sprite': chart.legend.parent,
-        'position': 'bottom',
-        'marginTop': 20
-      });
-
+      //
       // Disable the preloader
       chart.preloader.disabled = true;
 
@@ -238,7 +192,7 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
 
       chart.events.on('maxsizechanged', (ev) => {
         this.logger.info('maxsizechanged');
-        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
+        // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       });
 
       chart.events.on('visibilitychanged', (ev) => {
@@ -258,6 +212,30 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
 
       return chart;
     });
+  }
+
+  private generateChartData(data) {
+    const chartData = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i === this.dataSelected) {
+        for (let x = 0; x < data[i].subs.length; x++) {
+          chartData.push({
+            type: data[i].subs[x].type,
+            percent: data[i].subs[x].percent,
+            color: data[i].color,
+            pulled: true
+          });
+        }
+      } else {
+        chartData.push({
+          type: data[i].type,
+          percent: data[i].percent,
+          color: data[i].color,
+          id: i
+        });
+      }
+    }
+    return chartData;
   }
 
 
@@ -286,7 +264,6 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
 
   private unsubscribeAndClearChart() {
     this.unSubscribeFromAll();
-    this.chart.yAxes.clear();
     this.chart.series.clear();
     this.chart.colors.reset();
   }

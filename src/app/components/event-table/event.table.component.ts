@@ -12,11 +12,11 @@ import {ActionButtonService} from '../../services/action-buttons/app.action-butt
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import { MatCard } from '@angular/material/card';
-import { MatPaginator, MatPaginatorIntl } from '@angular/material/paginator';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatSort, MatSortable } from '@angular/material/sort';
-import { MatTable, MatTableDataSource } from '@angular/material/table';
+import {MatCard} from '@angular/material/card';
+import {MatPaginator, MatPaginatorIntl} from '@angular/material/paginator';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {MatSort} from '@angular/material/sort';
+import {MatTable, MatTableDataSource} from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -33,8 +33,8 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {rowsAnimation} from '../../animations/animations';
-
-
+import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
+import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
 
 
 @Component({
@@ -51,18 +51,19 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @Input() privacyFilter?: Privacy;
   @Input() eventsPerPage ? = 10;
   @Input() hasActions?: boolean;
-  @ViewChild(MatSort, { static: true }) sort: MatSort;
-  @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
-  @ViewChild(MatCard, { static: true }) table: MatCard;
+  @Input() searchTerm: string;
+  @Input() searchStartDate: Date;
+  @Input() searchEndDate: Date;
+  @ViewChild(MatSort, {static: true}) sort: MatSort;
+  @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
+  @ViewChild(MatCard, {static: true}) table: MatCard;
   events: EventInterface[];
   data: MatTableDataSource<any>;
   selection = new SelectionModel(true, []);
   resultsLength = 0;
   isLoadingResults = true;
   errorLoading;
-  searchTerm: string;
-  searchStartDate: Date;
-  searchEndDate: Date;
+
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
   private currentPageIndex = 0;
@@ -78,13 +79,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   ngOnInit() {
-    this.subscribeToAll();
   }
 
   ngAfterViewInit() {
   }
 
   ngOnChanges(): void {
+    this.subscribeToAll();
   }
 
   checkBoxClick(row) {
@@ -108,14 +109,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.updateActionButtonService();
   }
 
-
-  search(search: {searchTerm: string, startDate: Date, endDate: Date}) {
-    this.searchTerm = search.searchTerm;
-    this.searchStartDate = search.startDate;
-    this.searchEndDate = search.endDate;
-    this.subscribeToAll();
-  }
-
   getColumnHeaderIcon(columnName): string {
     switch (columnName) {
       case 'stats.Distance':
@@ -124,11 +117,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'timer';
       case 'startDate':
         return 'date_range';
-      case 'device':
+      case 'stats.Device Names':
         return 'watch';
       case 'name':
         return 'font_download';
-      case 'activities':
+      case 'stats.Activity Types':
         return 'filter_none';
       case 'privacy':
         return 'visibility';
@@ -153,7 +146,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'name', 'stats.Distance', 'stats.Duration', 'stats.Ascent', 'stats.Descent', 'stats.Average Heart Rate', 'stats.Energy'].indexOf(columnName) !== -1;
+    return ['startDate', 'name', 'stats.Distance', 'stats.Activity Types', 'stats.Duration', 'stats.Ascent', 'stats.Descent', 'stats.Average Heart Rate', 'stats.Energy', 'stats.Device Names'].indexOf(columnName) !== -1;
   }
 
 
@@ -181,7 +174,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.searchStartDate) {
-            this.searchStartDate.setHours(0, 0, 0, 0) ;
+            this.searchStartDate.setHours(0, 0, 0, 0);
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'>=',
@@ -189,7 +182,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.searchEndDate) {
-            this.searchEndDate.setHours(24, 0, 0, 0) ;
+            this.searchEndDate.setHours(24, 0, 0, 0);
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'<=', // Should remove mins from date
@@ -204,18 +197,18 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.currentPageIndex === this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
+            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
           }
 
           // Going to next page
           if (this.currentPageIndex < this.paginator.pageIndex) {
             // Increase the results length
-            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
+            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
+            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
           }
 
           // return this.exampleDatabase!.getRepoIssues(
@@ -254,14 +247,20 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
             dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'd MMM yy HH:mm') : 'None?';
-            dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
+
+            const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
+            dataObject['stats.Activity Types'] = this.getUniqueStringWithMultiplier(<string[]>activityTypes.getValue());
+
             dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
             dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
             dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
             dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
             dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
-            dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
+
+            const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
+
+            dataObject['stats.Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
             // dataObject.event = event;
             if (this.hasActions) {
               dataObject.actions = event;
@@ -436,26 +435,26 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'privacy',
       'name',
       'startDate',
-      'activities',
+      'stats.Activity Types',
       'stats.Distance',
       'stats.Ascent',
       'stats.Descent',
       'stats.Energy',
       'stats.Average Heart Rate',
       'stats.Duration',
-      'device',
+      'stats.Device Names',
     ]);
 
     if (window.innerWidth < 1000) {
-      columns = columns.filter(column => [ 'stats.Energy' ].indexOf(column) === -1)
+      columns = columns.filter(column => ['stats.Energy'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 920) {
-      columns = columns.filter(column => [ 'stats.Average Heart Rate' ].indexOf(column) === -1)
+      columns = columns.filter(column => ['stats.Average Heart Rate'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 860) {
-      columns = columns.filter(column => [ 'stats.Descent' ].indexOf(column) === -1)
+      columns = columns.filter(column => ['stats.Descent'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 760) {
@@ -463,7 +462,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
 
     if (window.innerWidth < 660) {
-      columns = columns.filter(column => ['activities', 'stats.Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['stats.Activity Types', 'stats.Ascent'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 560) {

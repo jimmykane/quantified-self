@@ -113,7 +113,7 @@ export class LoginComponent {
         }
         await this.router.navigate(['/dashboard']);
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
-          duration: 2000,
+          duration: 5000,
         });
         return;
       }
