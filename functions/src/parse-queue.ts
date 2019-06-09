@@ -14,7 +14,7 @@ import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.
 
 
 const TIMEOUT_IN_SECONDS = 240;
-const RETRY_COUNT = 10;
+const RETRY_COUNT = 20;
 const LIMIT = 60;
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
