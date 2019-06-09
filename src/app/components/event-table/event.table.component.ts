@@ -33,6 +33,8 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {rowsAnimation} from '../../animations/animations';
+import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
+import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
 
 
 
@@ -117,11 +119,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         return 'timer';
       case 'startDate':
         return 'date_range';
-      case 'device':
+      case 'deviceNames':
         return 'watch';
       case 'name':
         return 'font_download';
-      case 'activities':
+      case 'activityTypes':
         return 'filter_none';
       case 'privacy':
         return 'visibility';
@@ -197,18 +199,18 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.currentPageIndex === this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
+            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
           }
 
           // Going to next page
           if (this.currentPageIndex < this.paginator.pageIndex) {
             // Increase the results length
-            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
+            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
           }
 
           // Going to previous page
           if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUser(this.user, where, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
+            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
           }
 
           // return this.exampleDatabase!.getRepoIssues(
@@ -247,14 +249,20 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
             dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'd MMM yy HH:mm') : 'None?';
-            dataObject.activities = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.type));
+
+            const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
+            dataObject.activityTypes = this.getUniqueStringWithMultiplier(<string[]>activityTypes.getValue());
+
             dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
             dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
             dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
             dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
             dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
-            dataObject.device = this.getUniqueStringWithMultiplier(event.getActivities().map((activity) => activity.creator.name));
+
+            const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
+
+            dataObject.deviceNames = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
             // dataObject.event = event;
             if (this.hasActions) {
               dataObject.actions = event;
@@ -429,14 +437,14 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'privacy',
       'name',
       'startDate',
-      'activities',
+      'activityTypes',
       'stats.Distance',
       'stats.Ascent',
       'stats.Descent',
       'stats.Energy',
       'stats.Average Heart Rate',
       'stats.Duration',
-      'device',
+      'deviceNames',
     ]);
 
     if (window.innerWidth < 1000) {
@@ -456,7 +464,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
 
     if (window.innerWidth < 660) {
-      columns = columns.filter(column => ['activities', 'stats.Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['activityTypes', 'stats.Ascent'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 560) {

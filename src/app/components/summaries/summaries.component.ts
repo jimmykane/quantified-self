@@ -81,7 +81,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
         value: this.searchEndDate.getTime()
       })
     }
-    this.eventsSubscription = this.eventService.getEventsForUser(this.user, where, 'startDate', false).subscribe(events => {
+    this.eventsSubscription = this.eventService.getEventsAndActivitiesForUserBy(this.user, where, 'startDate', false).subscribe(events => {
       this.pieChartData = this.getPieChartData(events);
     });
   }
