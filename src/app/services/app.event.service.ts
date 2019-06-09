@@ -149,10 +149,25 @@ export class EventService implements OnDestroy {
     return this.afs.collection('users')
       .doc(user.uid)
       .collection('events', ((ref) => {
-        let query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+        let query;
         if (where.length) {
-          where.forEach(whereClause => query = query.where(whereClause.fieldPath, whereClause.opStr, whereClause.value));
+          where.forEach(whereClause => {
+            if (whereClause.fieldPath === 'startDate' && (orderBy !== 'startDate')) {
+              query = ref.orderBy('startDate', 'asc')
+            }
+          });
+          if (!query) {
+            query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+          } else {
+            query = query.orderBy(orderBy, asc ? 'asc' : 'desc');
+          }
+          where.forEach(whereClause => {
+            query = query.where(whereClause.fieldPath, whereClause.opStr, whereClause.value);
+          });
+        } else {
+          query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
         }
+
         if (limit > 0) {
           query = query.limit(limit)
         }

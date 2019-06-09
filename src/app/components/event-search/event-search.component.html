@@ -10,9 +10,8 @@
 
 
   <mat-form-field>
-    <input matInput [matDatepicker]="startDatepicker" placeholder="From" formControlName="startDate">
+    <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From" formControlName="startDate">
     <mat-datepicker-toggle matSuffix [for]="startDatepicker">
-      <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
     </mat-datepicker-toggle>
     <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
 <!--    <mat-hint>The start date</mat-hint>-->
@@ -22,9 +21,8 @@
   </mat-form-field>
 
   <mat-form-field>
-    <input matInput [matDatepicker]="endDatepicker" placeholder="To" formControlName="endDate">
+    <input matInput [matDatepicker]="endDatepicker"  (focus)="endDatepicker.open()" placeholder="To" formControlName="endDate">
     <mat-datepicker-toggle matSuffix [for]="endDatepicker">
-      <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
     </mat-datepicker-toggle>
     <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
 <!--    <mat-hint>The end date</mat-hint>-->
