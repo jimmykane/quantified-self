@@ -73,7 +73,7 @@ export async function processQueueItem(queueItem: any) {
       console.timeEnd('DownloadFit');
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
-
+      // @todo -> Update to max retry if 403 not found that happens quite often.
       console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.error.toString('utf8')}`, e);
       await increaseRetryCountForQueueItem(queueItem, e);
       continue;

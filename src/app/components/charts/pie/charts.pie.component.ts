@@ -12,27 +12,14 @@ import {
   ViewChild,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
-import * as Sentry from '@sentry/browser';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {User} from 'quantified-self-lib/lib/users/user';
 import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 // Chart Themes
 import animated from '@amcharts/amcharts4/themes/animated';
-import material from '@amcharts/amcharts4/themes/material';
-import frozen from '@amcharts/amcharts4/themes/frozen';
-import dataviz from '@amcharts/amcharts4/themes/dataviz';
-import dark from '@amcharts/amcharts4/themes/dark';
-import amcharts from '@amcharts/amcharts4/themes/amcharts';
-import amchartsdark from '@amcharts/amcharts4/themes/amchartsdark';
-import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
-import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
-import kelly from '@amcharts/amcharts4/themes/kelly';
-import {UserSettingsService} from '../../../services/app.user.settings.service';
-import {ThemeService} from '../../../services/app.theme.service';
-import {EventColorService} from '../../../services/color/app.event.color.service';
-import {EventService} from '../../../services/app.event.service';
+
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {ChartAbstract} from '../chart.abstract';
 
 @Component({
   selector: 'app-pie-chart',
@@ -40,38 +27,22 @@ import {EventService} from '../../../services/app.event.service';
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @Input() data: any;
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() chartValueType: string;
 
 
-  public isLoading: boolean;
   private dataSelected: any;
 
-  private chart: am4charts.PieChart;
-  private logger = Log.create('EventCardChartComponent');
+  protected chart: am4charts.PieChart;
+  protected logger = Log.create('ChartPieComponent');
 
-  private themes = {
-    'material': material,
-    'frozen': frozen,
-    'dataviz': dataviz,
-    'dark': dark,
-    'amcharts': amcharts,
-    'amchartsdark': amchartsdark,
-    'moonrisekingdom': moonrisekingdom,
-    'spiritedaway': spiritedaway,
-    'kelly': kelly,
-  };
-
-  constructor(private  changeDetector: ChangeDetectorRef,
-              private zone: NgZone,
-              private eventService: EventService,
-              private userSettingsService: UserSettingsService,
-              private themeService: ThemeService,
-              private eventColorService: EventColorService) {
+  constructor(protected zone: NgZone) {
+    super(zone);
   }
 
   async ngAfterViewInit() {
@@ -79,7 +50,7 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
 
   async ngOnInit() {
     if (!this.data) {
-      throw new Error('Component needs events and users');
+      throw new Error('Component needs data');
     }
   }
 
@@ -92,16 +63,54 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
     // 1. If there is no chart create
     if (!this.chart) {
       this.chart = this.createChart();
+      this.chart.data = [];
     }
 
-    // Beyond here component is visible and data is not bound //
 
-    // 3. If something changed then do the needed
-    if (simpleChanges.data || simpleChanges.chartTheme) {
-      if (!this.data) {
-        return;
-      }
+    if (!simpleChanges.data && !simpleChanges.chartTheme) {
+      return;
     }
+
+    if (!this.data) {
+      return;
+    }
+    // To create an animation here it has to update the values of the data items
+    const generatedData = this.generateChartData(this.data);
+    // if (!this.chart.data.length) {
+    this.chart.data = generatedData;
+    return;
+    // }
+
+
+    // // Take out all data from the chart that do not exist on the new set
+    // let removedSomeData = false;
+    // for (let i = this.chart.data.length - 1; i >= 0; i--) {
+    //   if (!generatedData.find(data => data.type === this.chart.data[i].type)) {
+    //     this.chart.data.splice(i, 1);
+    //     removedSomeData = true;
+    //   }
+    // }
+    // // Go over all the new data
+    // for (const data of generatedData) {
+    //   const existingDataItem = this.chart.data.find(dataItem => data.type === dataItem.type);
+    //   if (!existingDataItem) {
+    //     this.chart.addData(data);
+    //   } else {
+    //     existingDataItem.value = data.value;
+    //   }
+    // }
+    //
+    // console.log(this.chart.data);
+    // removedSomeData ? this.chart.invalidateData() : this.chart.invalidateRawData();
+    // this.chart.series.each(series => {
+    //   series.invalidateLayout()
+    //   series.invalidateRawData()
+    //   series.invalidateData();
+    //   series.appear();
+    // })
+
+    // this.chart.invalidate()
+    // this.generateChartData(this.data).forEach(data => this.chart.addData(data))
   }
 
   private createChart(): am4charts.PieChart {
@@ -109,106 +118,65 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
       this.applyChartStylesFromUserSettings();
 
       // Create a chart
-      const  chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
+      // Remove Amcharts logo
+      // @todo move this to a db setting ?
+      am4core.options.commercialLicense = true;
+      const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
+      chart.hiddenState.properties.opacity = 0;
+
+      chart.paddingTop = 10;
+      // chart.logo.valign = "top";
+      chart.innerRadius = am4core.percent(60);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
-      pieSeries.dataFields.value = "percent";
-      pieSeries.dataFields.category = "type";
-      // pieSeries.slices.template.propertyFields.fill = "color";
-      pieSeries.slices.template.propertyFields.isActive = "pulled";
-      pieSeries.slices.template.strokeWidth = 0;
+      pieSeries.dataFields.value = 'value';
+      pieSeries.dataFields.category = 'type';
+
+      pieSeries.slices.template.propertyFields.isActive = 'pulled';
+      pieSeries.slices.template.strokeWidth = 1;
+      pieSeries.interpolationDuration = 500;
+      pieSeries.rangeChangeDuration = 500;
+      pieSeries.sequencedInterpolation = true;
 
 
-      //
-
-      pieSeries.slices.template.events.on('hit', (event) => {
-        if (event.target.dataItem.dataContext['id'] !== undefined) {
-          this.dataSelected = event.target.dataItem.dataContext['id'];
-        } else {
-          this.dataSelected  = null;
-        }
-        this.chart.data = this.generateChartData(this.data);
+      const label = pieSeries.createChild(am4core.Label);
+      label.horizontalCenter = 'middle';
+      label.verticalCenter = 'middle';
+      label.fontSize = 12;
+      label.html = `{values.value.sum.formatNumber('#')}`;
+      label.adapter.add('htmlOutput', (text, target, key) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
+        return `<p style="text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
       });
 
 
-      chart.data = this.generateChartData(this.data);
-      // chart.exporting.menu = new am4core.ExportMenu();
-      // chart.exporting.menu.align = 'right';
-      // chart.exporting.menu.verticalAlign = 'bottom';
-      // chart.exporting.useWebFonts = true;
-      // chart.exporting.menu.items = [{
-      //   label: '...️',
-      //   menu: [
-      //     {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
-      //     {'type': 'json', 'label': 'JSON'},
-      //     {'type': 'csv', 'label': 'CSV'},
-      //     {'type': 'xlsx', 'label': 'XLSX'},
-      //     // {"label": "Print", "type": "print"},
-      //   ],
-      // }];
+      pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.dataItem.dataContext['value']);
+        return `{category} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+      });
 
+
+      pieSeries.slices.template.events.on('hit', (event) => {
+        // const a = this.chart.data.find(dataItem => dataItem.type === 'Running');
+        // debugger;
+        // a.value = 100000;
+        // this.chart.invalidateRawData()
+        // if (event.target.dataItem.dataContext['id'] !== undefined) {
+        //   this.dataSelected = event.target.dataItem.dataContext['id'];
+        // } else {
+        //   this.dataSelected  = null;
+        // }
+        // this.chart.data = this.generateChartData(this.data);
+      });
+
+      chart.exporting.menu = this.getExportingMenu();
 
       //
       // Disable the preloader
       chart.preloader.disabled = true;
 
       // Attach events
-      chart.events.on('validated', (ev) => {
-        this.logger.info('validated');
-        if (ev.target.data.length) {
-          this.loaded();
-        }
-      });
-
-      chart.events.on('globalscalechanged', (ev) => {
-        this.logger.info('globalscalechanged');
-      });
-
-      chart.events.on('dataitemsvalidated', (ev) => {
-        this.logger.info('dataitemsvalidated');
-      });
-
-
-      chart.events.on('datavalidated', (ev) => {
-        this.logger.info('datavalidated');
-      });
-
-      chart.events.on('datarangechanged', (ev) => {
-        this.logger.info('datarangechanged');
-      });
-
-      chart.events.on('ready', (ev) => {
-        this.logger.info('ready');
-      });
-
-
-      chart.events.on('shown', (ev) => {
-        this.logger.info('shown');
-      });
-
-      chart.events.on('transformed', (ev) => {
-        this.logger.info('transformed');
-      });
-
-      chart.events.on('maxsizechanged', (ev) => {
-        this.logger.info('maxsizechanged');
-        // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
-      });
-
-      chart.events.on('visibilitychanged', (ev) => {
-        this.logger.info('visibilitychanged');
-      });
-
-      chart.events.on('hidden', (ev) => {
-        this.logger.info('hidden');
-      });
-      chart.events.on('shown', (ev) => {
-        this.logger.info('shown');
-      });
-
-      chart.events.on('inited', (ev) => {
-        this.logger.info('inited');
-      });
+      this.attachEventListenersOnChart(chart);
 
       return chart;
     });
@@ -221,23 +189,20 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
         for (let x = 0; x < data[i].subs.length; x++) {
           chartData.push({
             type: data[i].subs[x].type,
-            percent: data[i].subs[x].percent,
-            color: data[i].color,
+            value: data[i].subs[x].value,
             pulled: true
           });
         }
       } else {
         chartData.push({
           type: data[i].type,
-          percent: data[i].percent,
-          color: data[i].color,
+          value: data[i].value,
           id: i
         });
       }
     }
     return chartData;
   }
-
 
 
   private applyChartStylesFromUserSettings() {
@@ -248,46 +213,5 @@ export class ChartsPieComponent implements OnChanges, OnInit, OnDestroy, AfterVi
         am4core.useTheme(animated);
       }
     });
-  }
-
-
-
-  private loading() {
-    this.isLoading = true;
-    this.changeDetector.detectChanges();
-  }
-
-  private loaded() {
-    this.isLoading = false;
-    this.changeDetector.detectChanges();
-  }
-
-  private unsubscribeAndClearChart() {
-    this.unSubscribeFromAll();
-    this.chart.series.clear();
-    this.chart.colors.reset();
-  }
-
-  private unSubscribeFromAll() {
-  }
-
-  private destroyChart() {
-    try {
-      this.zone.runOutsideAngular(() => {
-        if (this.chart) {
-          this.chart.dispose();
-          delete this.chart
-        }
-      });
-    } catch (e) {
-      this.logger.error('Could not destroy chart');
-      // Log to Sentry
-      Sentry.captureException(e);
-    }
-  }
-
-  ngOnDestroy() {
-    this.destroyChart();
-    this.unSubscribeFromAll();
   }
 }
