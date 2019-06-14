@@ -13,7 +13,6 @@ import {
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
-import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
@@ -30,15 +29,7 @@ import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/dat
 import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 // Chart Themes
 import animated from '@amcharts/amcharts4/themes/animated';
-import material from '@amcharts/amcharts4/themes/material';
-import frozen from '@amcharts/amcharts4/themes/frozen';
-import dataviz from '@amcharts/amcharts4/themes/dataviz';
-import dark from '@amcharts/amcharts4/themes/dark';
-import amcharts from '@amcharts/amcharts4/themes/amcharts';
-import amchartsdark from '@amcharts/amcharts4/themes/amchartsdark';
-import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
-import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
-import kelly from '@amcharts/amcharts4/themes/kelly';
+
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
@@ -49,7 +40,8 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {UserSettingsService} from '../../../../services/app.user.settings.service';
 import {ThemeService} from '../../../../services/app.theme.service';
-import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.utilities";
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {ChartAbstract} from '../../../charts/chart.abstract';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -57,7 +49,7 @@ import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.uti
   styleUrls: ['./event.card.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardChartComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
@@ -76,27 +68,17 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
   public isLoading: boolean;
 
   private streamsSubscription: Subscription;
-  private chart: am4charts.XYChart;
-  private logger = Log.create('EventCardChartComponent');
+  protected chart: am4charts.XYChart;
+  protected logger = Log.create('EventCardChartComponent');
 
-  private themes = {
-    'material': material,
-    'frozen': frozen,
-    'dataviz': dataviz,
-    'dark': dark,
-    'amcharts': amcharts,
-    'amchartsdark': amchartsdark,
-    'moonrisekingdom': moonrisekingdom,
-    'spiritedaway': spiritedaway,
-    'kelly': kelly,
-  };
 
   constructor(private  changeDetector: ChangeDetectorRef,
-              private zone: NgZone,
+              protected zone: NgZone,
               private eventService: EventService,
               private userSettingsService: UserSettingsService,
               private themeService: ThemeService,
               private eventColorService: EventColorService) {
+    super(zone);
   }
 
   async ngAfterViewInit() {
@@ -180,10 +162,13 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       this.applyChartStylesFromUserSettings();
 
       // Create a chart
+      // Remove Amcharts logo
+      // @todo move this to a db setting ?
+      am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
       chart.fontSize = '0.8em';
-      chart.padding(15, 15, 15, 0);
+      chart.padding(0, 0, 0, 0);
       // chart.resizable = false;
 
       // Create a date axis
@@ -250,20 +235,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // chart.scrollbarX = new am4charts.XYChartScrollbar();
 
       // Add exporting options
-      chart.exporting.menu = new am4core.ExportMenu();
-      chart.exporting.menu.align = 'right';
-      chart.exporting.menu.verticalAlign = 'bottom';
-      chart.exporting.useWebFonts = true;
-      chart.exporting.menu.items = [{
-        label: '...️',
-        menu: [
-          {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
-          {'type': 'json', 'label': 'JSON'},
-          {'type': 'csv', 'label': 'CSV'},
-          {'type': 'xlsx', 'label': 'XLSX'},
-          // {"label": "Print", "type": "print"},
-        ],
-      }];
+      chart.exporting.menu = this.getExportingMenu();
 
       chart.exporting.extraSprites.push({
         'sprite': chart.legend.parent,
@@ -354,6 +326,15 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
       // Share
       yAxis = sameTypeSeries.yAxis;
     }
+
+    yAxis.tooltip.disabled = true;
+    yAxis.interpolationDuration = 500;
+    yAxis.rangeChangeDuration = 500;
+    // yAxis.renderer.inside = true;
+    yAxis.renderer.minLabelPosition = 0.05;
+    yAxis.renderer.maxLabelPosition = 0.95;
+    yAxis.renderer.axisFills.template.disabled = true;
+    yAxis.renderer.ticks.template.disabled = true;
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
@@ -533,7 +514,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
    */
   private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
     let unitBasedDataTypes = [];
-    if (!userUnitSettings){
+    if (!userUnitSettings) {
       return unitBasedDataTypes
     }
     if (dataTypes.indexOf(DataPace.type) !== -1) {
@@ -592,12 +573,12 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
 
   private hideSeriesYAxis(series: am4charts.XYSeries) {
     series.yAxis.disabled = true;
-    series.yAxis.renderer.grid.template.disabled = true;
+    // series.yAxis.renderer.grid.template.disabled = true;
   }
 
   private showSeriesYAxis(series: am4charts.XYSeries) {
     series.yAxis.disabled = false;
-    series.yAxis.renderer.grid.template.disabled = false;
+    // series.yAxis.renderer.grid.template.disabled = false;
   }
 
   private getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
@@ -641,36 +622,7 @@ export class EventCardChartComponent implements OnChanges, OnInit, OnDestroy, Af
     this.changeDetector.detectChanges();
   }
 
-  private unsubscribeAndClearChart() {
-    this.unSubscribeFromAll();
-    this.chart.yAxes.clear();
-    this.chart.series.clear();
-    this.chart.colors.reset();
-  }
-
-  private unSubscribeFromAll() {
-    if (this.streamsSubscription) {
-      this.streamsSubscription.unsubscribe();
-    }
-  }
-
-  private destroyChart() {
-    try {
-      this.zone.runOutsideAngular(() => {
-        if (this.chart) {
-          this.chart.dispose();
-          delete this.chart
-        }
-      });
-    } catch (e) {
-      this.logger.error('Could not destroy chart');
-      // Log to Sentry
-      Sentry.captureException(e);
-    }
-  }
-
-  ngOnDestroy() {
-    this.destroyChart();
-    this.unSubscribeFromAll();
+  protected getSubscriptions(): Subscription[] {
+    return this.streamsSubscription ? [this.streamsSubscription] : [];
   }
 }

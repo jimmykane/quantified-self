@@ -1,6 +1,5 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy,
   Component, HostListener,
   Input,
   OnChanges,
@@ -35,6 +34,7 @@ import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg
 import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
+import {ActivityTypes} from "quantified-self-lib/lib/activities/activity.types";
 
 
 @Component({
@@ -174,7 +174,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.searchStartDate) {
-            this.searchStartDate.setHours(0, 0, 0, 0);
+            // @todo move to search component the commented out code
+            // this.searchStartDate.setHours(0, 0, 0, 0);
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'>=',
@@ -182,7 +183,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             })
           }
           if (this.searchEndDate) {
-            this.searchEndDate.setHours(24, 0, 0, 0);
+            // this.searchEndDate.setHours(24, 0, 0, 0);
             where.push({
               fieldPath: 'startDate',
               opStr: <WhereFilterOp>'<=', // Should remove mins from date
@@ -246,10 +247,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
-            dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'd MMM yy HH:mm') : 'None?';
+            dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
 
             const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-            dataObject['stats.Activity Types'] = this.getUniqueStringWithMultiplier(<string[]>activityTypes.getValue());
+            dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
+              `${ActivityTypes.Multisport}: ${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
+              : ActivityTypes[<string>activityTypes.getDisplayValue()] ;
 
             dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
             dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
@@ -342,7 +345,10 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.addActionButton('mergeEvents', new ActionButton(
         'compare_arrows',
         async () => {
+          // Show loading
           this.isLoadingResults = true;
+          // Remove all subscriptions
+          this.unsubscribeFromAll();
           // Clear all selections
           this.actionButtonService.removeActionButton('mergeEvents');
           this.actionButtonService.removeActionButton('deleteEvents');
@@ -373,7 +379,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               duration: 5000,
             });
           }
-          // debugger;
+          this.subscribeToAll();
           this.isLoadingResults = false;
         },
         'material',
@@ -415,11 +421,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   private getUniqueStringWithMultiplier(arrayOfStrings: string[]) {
-    const uniqueObject = arrayOfStrings.reduce((uniqueObj, activityType, index) => {
-      if (!uniqueObj[activityType]) {
-        uniqueObj[activityType] = 1;
+    const uniqueObject = arrayOfStrings.reduce((uniqueObj, type, index) => {
+      if (!uniqueObj[type]) {
+        uniqueObj[type] = 1;
       } else {
-        uniqueObj[activityType] += 1;
+        uniqueObj[type] += 1;
       }
       return uniqueObj;
     }, {});
@@ -456,27 +462,27 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       'stats.Device Names',
     ]);
 
-    if (window.innerWidth < 1000) {
+    if (window.innerWidth < 1120) {
       columns = columns.filter(column => ['stats.Energy'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 920) {
+    if (window.innerWidth < 1060) {
       columns = columns.filter(column => ['stats.Average Heart Rate'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 860) {
+    if (window.innerWidth < 960) {
       columns = columns.filter(column => ['stats.Descent'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 760) {
+    if (window.innerWidth < 850) {
       columns = columns.filter(column => ['name'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 650) {
+    if (window.innerWidth < 740) {
       columns = columns.filter(column => ['stats.Activity Types', 'stats.Ascent'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 540) {
+    if (window.innerWidth < 640) {
       columns = columns.filter(column => ['privacy'].indexOf(column) === -1)
     }
 

@@ -117,7 +117,7 @@ export class AppAuthService implements OnDestroy {
       .catch(error => this.handleError(error));
   }
 
-  signOut(): Promise<void> {
+  async signOut(): Promise<void> {
     return this.afAuth.auth.signOut();
   }
 

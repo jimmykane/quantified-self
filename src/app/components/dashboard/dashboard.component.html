@@ -1,6 +1,11 @@
 <mat-card>
   <app-upload *ngIf="user" [user]="user"></app-upload>
-  <app-event-search (searchChange)="search($event)"></app-event-search>
-<!--  <app-summaries *ngIf="user" [user]="user" [searchEndDate]="searchEndDate" [searchTerm]="searchTerm" [searchStartDate]="searchStartDate"></app-summaries>-->
+  <app-event-search *ngIf="user" [selectedDateRange]="user.settings.dashboardSettings.dateRange" [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" (searchChange)="search($event)"></app-event-search>
+  <app-summaries  *ngIf="user && (searchStartDate || searchEndDate)" [user]="user"
+                  [searchEndDate]="searchEndDate"
+                  [searchTerm]="searchTerm"
+                  [searchStartDate]="searchStartDate"
+                  [@removeAnimation]=""></app-summaries>
+
   <app-event-table [hasActions]="true" *ngIf="user" [user]="user" [searchEndDate]="searchEndDate" [searchTerm]="searchTerm" [searchStartDate]="searchStartDate"></app-event-table>
 </mat-card>

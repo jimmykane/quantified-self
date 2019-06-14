@@ -1,3 +1,29 @@
-<mat-card>
-  <app-pie-chart *ngIf="pieChartData" [data]="pieChartData"></app-pie-chart>
-</mat-card>
+<section class="pie">
+    <app-shade [isActive]="isLoading"></app-shade>
+  <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" rowHeight="fit">
+    <mat-grid-tile colspan="1">
+      <app-pie-chart *ngIf="pieChartDataByDuration && pieChartDataByDuration.length"
+                     [data]="pieChartDataByDuration"
+                     [chartTheme]="chartTheme"
+                     [chartValueType]="pieChartValueTypeDuration"
+                     [userChartSettings]="user.settings.chartSettings">
+      </app-pie-chart>
+    </mat-grid-tile>
+    <mat-grid-tile colspan="1">
+      <app-pie-chart *ngIf="pieChartDataByDistance && pieChartDataByDistance.length"
+                     [data]="pieChartDataByDistance"
+                     [chartValueType]="pieChartValueTypeDistance"
+                     [chartTheme]="chartTheme"
+                     [userChartSettings]="user.settings.chartSettings">
+      </app-pie-chart>
+    </mat-grid-tile>
+    <mat-grid-tile [colspan]="getColumnsToDisplayDependingOnScreenSize()">
+      <app-column-chart *ngIf="pieChartDataByAscent && pieChartDataByAscent.length"
+                     [data]="pieChartDataByAscent"
+                     [chartValueType]="pieChartValueTypeAscent"
+                     [chartTheme]="chartTheme"
+                     [userChartSettings]="user.settings.chartSettings">
+      </app-column-chart>
+    </mat-grid-tile>
+  </mat-grid-list>
+</section>

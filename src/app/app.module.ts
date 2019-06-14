@@ -97,6 +97,7 @@ import {AppInfoService} from './services/app.info.service';
 import {ChartsPieComponent} from './components/charts/pie/charts.pie.component';
 import {SummariesComponent} from './components/summaries/summaries.component';
 import * as Sentry from '@sentry/browser';
+import {ChartsColumnComponent} from './components/charts/column/charts.column.component';
 
 declare function require(moduleName: string): any;
 
@@ -214,6 +215,7 @@ export class SentryErrorHandler implements ErrorHandler {
     ServicesComponent,
     HistoryImportFormComponent,
     ChartsPieComponent,
+    ChartsColumnComponent,
     SummariesComponent,
   ],
   entryComponents: [

@@ -1,1 +1,18 @@
+.pie{
+  /*max-height: 40%;*/
+  /*min-height: 40%;*/
+  /*height: 40%;*/
+  font-size: 0.8em;
+  position: relative;
+}
+mat-grid-list{
+  min-height: calc(60vh - 48px);
+}
 
+app-pie-chart{
+  width: 100%
+}
+
+app-column-chart{
+  width: 100%;
+}

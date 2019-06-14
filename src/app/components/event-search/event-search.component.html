@@ -1,36 +1,71 @@
 <form [formGroup]="searchFormGroup" (submit)="onSubmit()" autocomplete="off">
-  <!--  <mat-form-field>-->
-  <!--    <input matInput placeholder="Name" formControlName="search">-->
-  <!--    <button mat-button *ngIf="this.searchFormGroup.get('search').value" matSuffix mat-icon-button aria-label="Clear"-->
-  <!--            (click)="clear('search')">-->
-  <!--      <mat-icon>close</mat-icon>-->
-  <!--    </button>-->
-  <!--    <mat-hint>Absolute name</mat-hint>-->
-  <!--  </mat-form-field>-->
+    <!--  <mat-form-field>-->
+    <!--    <input matInput placeholder="Name" formControlName="search">-->
+    <!--    <button mat-button *ngIf="this.searchFormGroup.get('search').value" matSuffix mat-icon-button aria-label="Clear"-->
+    <!--            (click)="clear('search')">-->
+    <!--      <mat-icon>close</mat-icon>-->
+    <!--    </button>-->
+    <!--    <mat-hint>Absolute name</mat-hint>-->
+    <!--  </mat-form-field>-->
+
+    <section>
+        <mat-form-field style="margin-right: 1em;">
+            <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From"
+                   (dateChange)="onDateChange()"
+                   formControlName="startDate">
+            <mat-datepicker-toggle matSuffix [for]="startDatepicker">
+            </mat-datepicker-toggle>
+            <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
+            <!--    <mat-hint>The start date</mat-hint>-->
+            <mat-error *ngIf="hasError('startDate')">
+                invalid date
+            </mat-error>
+        </mat-form-field>
+
+        <mat-form-field>
+            <input matInput [matDatepicker]="endDatepicker" (focus)="endDatepicker.open()" placeholder="To"
+                   (dateChange)="onDateChange()"
+                   formControlName="endDate">
+            <mat-datepicker-toggle matSuffix [for]="endDatepicker">
+            </mat-datepicker-toggle>
+            <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
+            <!--    <mat-hint>The end date</mat-hint>-->
+            <mat-error *ngIf="hasError('endDate')">
+                invalid date
+            </mat-error>
+        </mat-form-field>
+
+        <mat-error *ngIf="hasError() && searchFormGroup.errors.endDateSmallerThanStartDate">There is something wrong with the date range
+        </mat-error>
+        <mat-error *ngIf="hasError() && searchFormGroup.errors.moreThan3Months">You can select a range up to 3 months
+        </mat-error>
 
 
-  <mat-form-field style="margin-right: 1em;">
-    <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From" formControlName="startDate">
-    <mat-datepicker-toggle matSuffix [for]="startDatepicker">
-    </mat-datepicker-toggle>
-    <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
-<!--    <mat-hint>The start date</mat-hint>-->
-    <mat-error *ngIf="hasError('startDate')">
-      invalid date
-    </mat-error>
-  </mat-form-field>
+    </section>
 
-  <mat-form-field >
-    <input matInput [matDatepicker]="endDatepicker"  (focus)="endDatepicker.open()" placeholder="To" formControlName="endDate" >
-    <mat-datepicker-toggle matSuffix [for]="endDatepicker">
-    </mat-datepicker-toggle>
-    <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
-<!--    <mat-hint>The end date</mat-hint>-->
-    <mat-error *ngIf="hasError('endDate')">
-      invalid date
-    </mat-error>
-  </mat-form-field>
+    <mat-button-toggle-group #group="matButtonToggleGroup" [value]="selectedDateRange"
+                             (change)="dateToggleChange($event)">
+        <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
+            This week
+        </mat-button-toggle>
+        <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
+            Last week
+        </mat-button-toggle>
+        <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="Last month">
+            This month
+        </mat-button-toggle>
+        <mat-button-toggle [value]="dateRanges.custom" aria-label="Custom">
+            Custom
+        </mat-button-toggle>
 
-  <button mat-button *ngIf="searchFormGroup.touched" (click)="reset()">reset</button>
-  <button *ngIf="!hasError() && searchFormGroup.touched" mat-button color="primary" (click)="onSubmit()">search</button>
+        <mat-button-toggle aria-label="All" [value]="dateRanges.all">
+            All
+        </mat-button-toggle>
+
+    </mat-button-toggle-group>
+    <!--  <div class="example-selected-value">Selected value: {{group.value}}</div>-->
+
+    <button *ngIf="!hasError() && searchFormGroup.touched && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
+            mat-button color="primary" (click)="onSubmit()">search
+    </button>
 </form>

@@ -28,6 +28,10 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
 import * as Sentry from '@sentry/browser';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
+import {
+  DateRanges,
+  UserDashboardSettingsInterface
+} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
 
 
 @Injectable()
@@ -179,6 +183,10 @@ export class UserService implements OnDestroy {
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
     settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || [VerticalSpeedUnits.MetersPerSecond];
+    settings.dashboardSettings = settings.dashboardSettings|| <UserDashboardSettingsInterface>{};
+    settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || DateRanges.thisWeek;
+    settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
+    settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
     return settings;
   }
 
