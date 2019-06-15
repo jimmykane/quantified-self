@@ -56,7 +56,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     if (window.innerWidth < 600) {
       return 1;
     }
-    if (window.innerWidth < 1200) {
+    if (window.innerWidth < 1500) {
       return 2;
     }
     return 4;

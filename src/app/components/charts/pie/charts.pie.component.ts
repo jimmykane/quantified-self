@@ -124,8 +124,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(70);
-      chart.innerRadius = am4core.percent(50);
+      chart.radius = am4core.percent(80);
+      chart.innerRadius = am4core.percent(60);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
       pieSeries.dataFields.value = 'value';
