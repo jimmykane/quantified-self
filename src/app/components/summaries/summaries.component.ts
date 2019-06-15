@@ -20,7 +20,7 @@ import * as Sentry from '@sentry/browser';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {ActivityInterface} from "quantified-self-lib/lib/activities/activity.interface";
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 
 @Component({
   selector: 'app-summaries',
@@ -39,9 +39,13 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   pieChartDataByDuration: any[];
   pieChartDataByDistance: any[];
   pieChartDataByAscent: any[];
+  pieChartDataByEnergy: any[];
+
   pieChartValueTypeDistance = DataDistance.type;
   pieChartValueTypeDuration = DataDuration.type;
   pieChartValueTypeAscent = DataAscent.type;
+  pieChartValueTypeEnergy = DataEnergy.type;
+
   private eventsSubscription: Subscription;
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
@@ -71,7 +75,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
-    const limit = 100;
+    const limit = 100; // @todo double check this how it relates
     const where = [];
     if (this.searchTerm) {
       where.push({
@@ -102,6 +106,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       this.pieChartDataByDuration = this.getPieChartDataForDataType(events, DataDuration.type);
       this.pieChartDataByDistance = this.getPieChartDataForDataType(events, DataDistance.type);
       this.pieChartDataByAscent = this.getPieChartDataForDataType(events, DataAscent.type);
+      this.pieChartDataByEnergy = this.getPieChartDataForDataType(events, DataEnergy.type);
       this.isLoading = false;
     });
   }

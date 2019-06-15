@@ -33,9 +33,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
   @Input() chartValueType: string;
-
-
-  private dataSelected: any;
+  @Input() vertical = true;
 
   protected chart: am4charts.XYChart;
   protected logger = Log.create('ChartColumnComponent');
@@ -65,7 +63,6 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       this.chart.data = [];
     }
 
-
     if (!simpleChanges.data && !simpleChanges.chartTheme) {
       return;
     }
@@ -88,15 +85,39 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.hiddenState.properties.opacity = 0;
+      chart.paddingTop = 10;
+
+      // top container for labels
+      const topContainer = chart.chartContainer.createChild(am4core.Container);
+      topContainer.layout = 'absolute';
+      topContainer.toBack();
+      topContainer.paddingBottom = 15;
+      topContainer.width = am4core.percent(100);
+
+      const dateTitle = topContainer.createChild(am4core.Label);
+      dateTitle.align = 'center';
+      dateTitle.adapter.add('text', (text, target, key) => {
+        return `[font-size: 1.3em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+          sum += data.value;
+          return sum;
+        }, 0)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
+      });
+
 
       // Disable the preloader
       chart.preloader.disabled = true;
       chart.exporting.menu = this.getExportingMenu();
 
-      const categoryAxis = chart.xAxes.push(new am4charts.CategoryAxis());
+      const categoryAxis = this.vertical ? chart.xAxes.push(new am4charts.CategoryAxis()) : chart.yAxes.push(new am4charts.CategoryAxis());
       categoryAxis.dataFields.category = 'type';
       categoryAxis.renderer.grid.template.location = 0;
-      categoryAxis.renderer.minGridDistance = 40;
+      categoryAxis.renderer.minGridDistance = 5;
+
+      if (this.vertical) {
+        categoryAxis.renderer.minGridDistance = 40;
+        categoryAxis.renderer.cellStartLocation = 0.1;
+        categoryAxis.renderer.cellEndLocation = 0.90;
+      }
 
       // categoryAxis.renderer.labels.template.adapter.add("dy", function(dy, target) {
       //   if (target.dataItem && target.dataItem.index & 2 == 2) {
@@ -105,22 +126,43 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       //   return dy;
       // });
 
-      const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-      valueAxis.title.text = `${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type} ${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
+      const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
+      if (this.vertical) {
+        valueAxis.renderer.opposite = true;
+      }
+      // valueAxis.title.text = `${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type} ${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
+      valueAxis.numberFormatter = new am4core.NumberFormatter();
+      valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
+      // chart.events.on('ready', function(ev) {
+      //   // debugger;
+      //   // valueAxis.min = valueAxis.minZoomed;
+      //   valueAxis.max = Math.max(...ev.target.data.map(o => o.value), 0) + 500;
+      //   valueAxis.strictMinMax = true;
+      // });
 
+      let series;
 
-      const series = chart.series.push(new am4charts.CurvedColumnSeries());
-      series.dataFields.valueY = 'value';
-      series.dataFields.categoryX = 'type';
-      series.name = this.chartValueType;
+      if (this.vertical) {
+        series = chart.series.push(new am4charts.CurvedColumnSeries());
+        series.dataFields.valueY = 'value';
+        series.dataFields.categoryX = 'type';
+      } else {
+        series = chart.series.push(new am4charts.ColumnSeries());
+        series.dataFields.valueX = 'value';
+        series.dataFields.categoryY = 'type';
+      }
+
+      series.name = DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type;
       series.columns.template.strokeOpacity = 1;
       series.columns.template.strokeWidth = 1;
-      series.columns.template.tension = 1;
+      if (this.vertical) {
+        series.columns.template.tension = 1;
+      }
       series.columns.template.fillOpacity = 0.75;
-      series.columns.template.tooltipText = '{valueY}';
+      series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
       series.columns.template.adapter.add('tooltipText', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.dataItem.dataContext['value']);
-        return `{categoryX} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+        return `${this.vertical ? '{categoryX}' : '{categoryY}'} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       });
 
       // Add distinctive colors for each column using adapter

@@ -9,9 +9,9 @@
     <!--  </mat-form-field>-->
 
     <section>
-        <mat-form-field style="margin-right: 1em;">
+        <mat-form-field style=" margin-right: 1em;">
             <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From"
-                   (dateChange)="onDateChange()"
+                   (dateChange)="onDateChange($event)"
                    formControlName="startDate">
             <mat-datepicker-toggle matSuffix [for]="startDatepicker">
             </mat-datepicker-toggle>
@@ -22,9 +22,9 @@
             </mat-error>
         </mat-form-field>
 
-        <mat-form-field>
+        <mat-form-field >
             <input matInput [matDatepicker]="endDatepicker" (focus)="endDatepicker.open()" placeholder="To"
-                   (dateChange)="onDateChange()"
+                   (dateChange)="onDateChange($event)"
                    formControlName="endDate">
             <mat-datepicker-toggle matSuffix [for]="endDatepicker">
             </mat-datepicker-toggle>

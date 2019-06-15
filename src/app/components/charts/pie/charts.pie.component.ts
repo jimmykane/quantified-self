@@ -128,34 +128,23 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       // chart.logo.valign = "top";
       chart.innerRadius = am4core.percent(60);
 
+
+
       const pieSeries = chart.series.push(new am4charts.PieSeries());
       pieSeries.dataFields.value = 'value';
       pieSeries.dataFields.category = 'type';
-
-      pieSeries.slices.template.propertyFields.isActive = 'pulled';
-      pieSeries.slices.template.strokeWidth = 1;
       pieSeries.interpolationDuration = 500;
       pieSeries.rangeChangeDuration = 500;
       pieSeries.sequencedInterpolation = true;
 
-
-      const label = pieSeries.createChild(am4core.Label);
-      label.horizontalCenter = 'middle';
-      label.verticalCenter = 'middle';
-      label.fontSize = 12;
-      label.html = `{values.value.sum.formatNumber('#')}`;
-      label.adapter.add('htmlOutput', (text, target, key) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
-        return `<p style="text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
-      });
-
-
+      pieSeries.slices.template.propertyFields.isActive = 'pulled';
+      pieSeries.slices.template.strokeWidth = 0.5;
+      pieSeries.slices.template.strokeOpacity = 1;
+      pieSeries.slices.template.stroke = am4core.color('#4a2abb');
       pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.dataItem.dataContext['value']);
         return `{category} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       });
-
-
       pieSeries.slices.template.events.on('hit', (event) => {
         // const a = this.chart.data.find(dataItem => dataItem.type === 'Running');
         // debugger;
@@ -167,6 +156,18 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
         //   this.dataSelected  = null;
         // }
         // this.chart.data = this.generateChartData(this.data);
+      });
+
+      pieSeries.labels.template.text = `{category}: [bold]{value.percent.formatNumber('#.0')}%[/]`;
+
+      const label = pieSeries.createChild(am4core.Label);
+      label.horizontalCenter = 'middle';
+      label.verticalCenter = 'middle';
+      label.fontSize = 12;
+      label.html = `{values.value.sum.formatNumber('#')}`;
+      label.adapter.add('htmlOutput', (text, target, key) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
+        return `<p style="text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
       });
 
       chart.exporting.menu = this.getExportingMenu();
