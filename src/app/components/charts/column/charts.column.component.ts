@@ -85,19 +85,19 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.hiddenState.properties.opacity = 0;
-      chart.paddingTop = 10;
+      chart.padding(0,0,0,20)
 
       // top container for labels
       const topContainer = chart.chartContainer.createChild(am4core.Container);
       topContainer.layout = 'absolute';
       topContainer.toBack();
-      topContainer.paddingBottom = 15;
+      topContainer.paddingBottom = 5;
       topContainer.width = am4core.percent(100);
 
       const dateTitle = topContainer.createChild(am4core.Label);
-      dateTitle.align = 'center';
+      dateTitle.align = 'left';
       dateTitle.adapter.add('text', (text, target, key) => {
-        return `[font-size: 1.3em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+        return `[font-size: 1.1em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.2em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
           sum += data.value;
           return sum;
         }, 0)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
@@ -114,9 +114,11 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       categoryAxis.renderer.minGridDistance = 5;
 
       if (this.vertical) {
-        categoryAxis.renderer.minGridDistance = 40;
+        categoryAxis.renderer.minGridDistance = 30;
         categoryAxis.renderer.cellStartLocation = 0.1;
         categoryAxis.renderer.cellEndLocation = 0.90;
+      } else {
+        categoryAxis.renderer.opposite = true;
       }
 
       // categoryAxis.renderer.labels.template.adapter.add("dy", function(dy, target) {
@@ -154,7 +156,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
       series.name = DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type;
       series.columns.template.strokeOpacity = 1;
-      series.columns.template.strokeWidth = 1;
+      series.columns.template.strokeWidth = 0.5;
       if (this.vertical) {
         series.columns.template.tension = 1;
       }

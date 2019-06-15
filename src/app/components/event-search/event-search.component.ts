@@ -69,6 +69,10 @@ export class EventSearchComponent implements OnInit, OnChanges {
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
+    // if (event.source.value === DateRanges.custom){
+    //   this.selectedDateRange = event.source.value;
+    //   return;
+    // }
     this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value).startDate);
     this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value).endDate);
     this.selectedDateRange = event.source.value;

@@ -123,12 +123,9 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
-
-      chart.paddingTop = 10;
-      // chart.logo.valign = "top";
-      chart.innerRadius = am4core.percent(60);
-
-
+      chart.padding(0, 0, 0, 0)
+      chart.radius = am4core.percent(70);
+      chart.innerRadius = am4core.percent(50);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
       pieSeries.dataFields.value = 'value';
@@ -136,6 +133,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       pieSeries.interpolationDuration = 500;
       pieSeries.rangeChangeDuration = 500;
       pieSeries.sequencedInterpolation = true;
+      // const a = pieSeries.;
 
       pieSeries.slices.template.propertyFields.isActive = 'pulled';
       pieSeries.slices.template.strokeWidth = 0.5;
@@ -158,16 +156,16 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
         // this.chart.data = this.generateChartData(this.data);
       });
 
-      pieSeries.labels.template.text = `{category}: [bold]{value.percent.formatNumber('#.0')}%[/]`;
+      pieSeries.labels.template.text = `{category} [bold]{value.percent.formatNumber('#.')}%[/]`;
 
       const label = pieSeries.createChild(am4core.Label);
       label.horizontalCenter = 'middle';
       label.verticalCenter = 'middle';
-      label.fontSize = 12;
+      // label.fontSize = 12;
       label.html = `{values.value.sum.formatNumber('#')}`;
       label.adapter.add('htmlOutput', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
-        return `<p style="text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
+        return `<p style="font-size: 1.0em; text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
       });
 
       chart.exporting.menu = this.getExportingMenu();

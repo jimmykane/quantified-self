@@ -6,13 +6,25 @@
   position: relative;
 }
 mat-grid-list{
-  min-height: calc(60vh - 48px);
+  /*height: calc(40vh - 48px);*/
+  /*p*/
+  padding-top: 1em;
+}
+mat-grid-tile{
 }
 
 app-pie-chart{
   width: 100%;
+  height: 100%;
 }
 
 app-column-chart{
   width: 100%;
+  height: 100%;
 }
+
+/*@media only screen and (min-width: 800px)  {*/
+/*  mat-grid-list {*/
+/*    max-height: 30vh;*/
+/*  }*/
+/*}*/

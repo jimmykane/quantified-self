@@ -54,7 +54,7 @@
         <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="Last month">
             This month
         </mat-button-toggle>
-        <mat-button-toggle [value]="dateRanges.custom" aria-label="Custom">
+        <mat-button-toggle disabled [value]="dateRanges.custom" aria-label="Custom">
             Custom
         </mat-button-toggle>
 
@@ -64,8 +64,7 @@
 
     </mat-button-toggle-group>
     <!--  <div class="example-selected-value">Selected value: {{group.value}}</div>-->
-
-    <button *ngIf="!hasError() && searchFormGroup.touched && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
+    <button *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
             mat-button color="primary" (click)="onSubmit()">search
     </button>
 </form>
