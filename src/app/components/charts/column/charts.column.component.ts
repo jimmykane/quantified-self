@@ -73,6 +73,8 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
     // To create an animation here it has to update the values of the data items
     this.chart.data = this.data;
+    this.chart.invalidateLabels()
+
   }
 
   private createChart(): am4charts.XYChart {
@@ -135,11 +137,9 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       // valueAxis.title.text = `${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type} ${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
       valueAxis.numberFormatter = new am4core.NumberFormatter();
       valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
-      // chart.events.on('ready', function(ev) {
-      //   // debugger;
-      //   // valueAxis.min = valueAxis.minZoomed;
-      //   valueAxis.max = Math.max(...ev.target.data.map(o => o.value), 0) + 500;
-      //   valueAxis.strictMinMax = true;
+      // chart.events.on('validated', function(ev) {
+      //   valueAxis.max = Math.max(...ev.target.data.map(o => o.value), 0);
+      //   // valueAxis.strictMinMax = true;
       // });
 
       let series;
@@ -173,7 +173,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       });
 
       // Attach events
-      this.attachEventListenersOnChart(chart);
+      // this.attachEventListenersOnChart(chart);
 
       return chart;
     });
