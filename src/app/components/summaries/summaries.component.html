@@ -1,4 +1,4 @@
-<section class="pie">
+<section class="pie" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">
     <app-shade [isActive]="isLoading"></app-shade>
     <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" rowHeight="20vh">
         <mat-grid-tile colspan="1">

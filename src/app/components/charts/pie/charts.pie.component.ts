@@ -165,7 +165,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       label.html = `{values.value.sum.formatNumber('#')}`;
       label.adapter.add('htmlOutput', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
-        return `<p style="font-size: 1.1em; text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
+        return `<p style="font-size: 1.1em; text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.0em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
       });
 
       chart.exporting.menu = this.getExportingMenu();

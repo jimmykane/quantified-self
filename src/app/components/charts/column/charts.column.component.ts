@@ -100,7 +100,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         return `[font-size: 1.2em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.3em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
           sum += data.value;
           return sum;
-        }, 0)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
+        }, 0).toFixed(1)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
       });
 
 
@@ -114,7 +114,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       categoryAxis.renderer.minGridDistance = 5;
 
       if (this.vertical) {
-        categoryAxis.renderer.minGridDistance = 30;
+        categoryAxis.renderer.minGridDistance = 10;
         categoryAxis.renderer.cellStartLocation = 0.1;
         categoryAxis.renderer.cellEndLocation = 0.90;
       } else {
