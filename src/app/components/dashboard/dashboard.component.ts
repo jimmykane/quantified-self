@@ -27,7 +27,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   searchEndDate: Date;
 
   constructor(private router: Router,
-              public authService: AppAuthService,
+              private authService: AppAuthService,
               private eventService: EventService,
               private userService: UserService,
               private snackBar: MatSnackBar) {
