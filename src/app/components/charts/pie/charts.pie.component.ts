@@ -136,9 +136,9 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       // const a = pieSeries.;
 
       pieSeries.slices.template.propertyFields.isActive = 'pulled';
-      pieSeries.slices.template.strokeWidth = 0.5;
+      pieSeries.slices.template.strokeWidth = 0.3;
       pieSeries.slices.template.strokeOpacity = 1;
-      pieSeries.slices.template.stroke = am4core.color('#4a2abb');
+      // pieSeries.slices.template.stroke = am4core.color('#0c96ff');
       pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.dataItem.dataContext['value']);
         return `{category} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
@@ -156,7 +156,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
         // this.chart.data = this.generateChartData(this.data);
       });
 
-      pieSeries.labels.template.text = `{category} [bold]{value.percent.formatNumber('#.')}%[/]`;
+      pieSeries.labels.template.text = `[font-size: 1.1em]{category}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`;
 
       const label = pieSeries.createChild(am4core.Label);
       label.horizontalCenter = 'middle';
@@ -165,7 +165,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       label.html = `{values.value.sum.formatNumber('#')}`;
       label.adapter.add('htmlOutput', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
-        return `<p style="font-size: 1.0em; text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
+        return `<p style="font-size: 1.1em; text-align: center"><span>${data.getDisplayType()}</span><br/><span style="font-size: 1.1em; font-weight: bold;">${data.getDisplayValue()}${data.getDisplayUnit()}</span></p>`
       });
 
       chart.exporting.menu = this.getExportingMenu();

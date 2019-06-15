@@ -53,7 +53,13 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
 
   @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {
-    return window.innerWidth < 600 ? 1 : 2;
+    if (window.innerWidth < 600) {
+      return 1;
+    }
+    if (window.innerWidth < 1200) {
+      return 2;
+    }
+    return 4;
   }
 
 

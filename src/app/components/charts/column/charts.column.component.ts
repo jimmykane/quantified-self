@@ -94,10 +94,10 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       topContainer.paddingBottom = 5;
       topContainer.width = am4core.percent(100);
 
-      const dateTitle = topContainer.createChild(am4core.Label);
-      dateTitle.align = 'left';
-      dateTitle.adapter.add('text', (text, target, key) => {
-        return `[font-size: 1.1em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.2em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+      const chartTitle = topContainer.createChild(am4core.Label);
+      chartTitle.align = 'left';
+      chartTitle.adapter.add('text', (text, target, key) => {
+        return `[font-size: 1.2em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.3em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
           sum += data.value;
           return sum;
         }, 0)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
