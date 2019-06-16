@@ -3,23 +3,24 @@ import {ActivatedRoute, Router} from '@angular/router';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import {FormControl, FormGroup, Validators} from "@angular/forms";
+import {MatDialog, MatDialogRef} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {FormControl, FormGroup, Validators} from '@angular/forms';
 import * as Sentry from '@sentry/browser';
-import {UserSettingsInterface} from "quantified-self-lib/lib/users/user.settings.interface";
+import {UserSettingsInterface} from 'quantified-self-lib/lib/users/user.settings.interface';
 import {
   ChartThemes,
   UserChartSettingsInterface, XAxisTypes,
-} from "quantified-self-lib/lib/users/user.chart.settings.interface";
-import {Log} from "ng2-logger/browser";
-import {AppThemes, UserAppSettingsInterface} from "quantified-self-lib/lib/users/user.app.settings.interface";
-import {DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
+} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {Log} from 'ng2-logger/browser';
+import {AppThemes, UserAppSettingsInterface} from 'quantified-self-lib/lib/users/user.app.settings.interface';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {
+  DaysOfTheWeek,
   PaceUnits,
   SpeedUnits,
   UserUnitSettingsInterface, VerticalSpeedUnits
-} from "quantified-self-lib/lib/users/user.unit.settings.interface";
+} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 
 @Component({
   selector: 'app-user-settings',
@@ -52,9 +53,6 @@ export class UserSettingsComponent implements OnChanges {
   public speedUnits = SpeedUnits;
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
-
-  public xAxisTypes = XAxisTypes;
-
   public userSettingsFormGroup: FormGroup;
 
   constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog) {
@@ -89,6 +87,11 @@ export class UserSettingsComponent implements OnChanges {
 
       useAnimations: new FormControl(this.user.settings.chartSettings.useAnimations, [
         // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      startOfTheWeek: new FormControl(this.user.settings.unitSettings.startOfTheWeek, [
+        Validators.required,
         // Validators.minLength(1),
       ]),
 
@@ -131,7 +134,7 @@ export class UserSettingsComponent implements OnChanges {
         return userChartSettings
       }, {
         dataTypeSettings: {},
-        theme: this.userSettingsFormGroup.get('chartTheme').value ,
+        theme: this.userSettingsFormGroup.get('chartTheme').value,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value
       });
@@ -144,6 +147,7 @@ export class UserSettingsComponent implements OnChanges {
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
+            startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           }
         }
       });

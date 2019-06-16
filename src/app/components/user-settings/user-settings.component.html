@@ -93,6 +93,33 @@
       </mat-card-header>
 
       <mat-card-content>
+        <mat-form-field>
+
+          <mat-select placeholder="Start of the week" formControlName="startOfTheWeek">
+            <mat-option [value]="0">
+              Sunaday
+            </mat-option>
+            <mat-option [value]="1">
+              Monday
+            </mat-option>
+            <mat-option [value]="2">
+              Tuesday
+            </mat-option>
+            <mat-option [value]="3">
+              Wednesday
+            </mat-option>
+            <mat-option [value]="4">
+              Thursday
+            </mat-option>
+            <mat-option [value]="5">
+              Friday
+            </mat-option>
+            <mat-option [value]="6">
+              Saturday
+            </mat-option>
+          </mat-select>
+          <mat-hint><b>Tip:</b> on this day the dashboard adjusts to</mat-hint>
+        </mat-form-field>
 
         <mat-form-field>
           <mat-select placeholder="Units for speed" formControlName="speedUnitsToUse" multiple>

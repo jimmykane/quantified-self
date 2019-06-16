@@ -107,6 +107,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: this.searchEndDate.getTime()
     });
+
     this.eventsSubscription = this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit).subscribe(events => {
       this.events = events;
       this.pieChartDataByDuration = this.getPieChartDataForDataType(events, DataDuration.type);
@@ -155,9 +156,6 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       if (!eventTypeDisplay || !stat) {
         return valueByTypeMap;
       }
-
-      console.log(eventTypeDisplay)
-      console.log(eventTypeDisplay.getDisplayValue())
 
       const activityTypeValue = valueByTypeMap.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
