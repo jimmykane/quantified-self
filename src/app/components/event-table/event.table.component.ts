@@ -511,7 +511,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
-  itemsPerPageLabel = 'Items par page';
+  itemsPerPageLabel = 'Items per page';
   nextPageLabel = 'Load more...';
   previousPageLabel = 'go to previous set';
 
