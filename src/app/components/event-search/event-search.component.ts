@@ -104,7 +104,7 @@ export function getDatesForDateRange(dateRange: DateRanges): DateRangeStartDateA
   switch (dateRange) {
     case DateRanges.thisWeek: {
       return {
-        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay(), 24),
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay() - 1, 24),
         endDate: new Date(new Date().setHours(24, 0, 0, 0))
       };
     }
@@ -122,7 +122,7 @@ export function getDatesForDateRange(dateRange: DateRanges): DateRangeStartDateA
     }
     case DateRanges.custom: {
       return {
-        startDate:  null,
+        startDate: null,
         endDate: null
       }
     }
