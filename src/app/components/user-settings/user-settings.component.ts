@@ -139,6 +139,7 @@ export class UserSettingsComponent implements OnChanges {
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value
       });
 
+      debugger;
       await this.userService.updateUserProperties(this.user, {
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,

@@ -10,6 +10,7 @@ import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.
 import {getDatesForDateRange} from '../event-search/event-search.component';
 import {UserService} from '../../services/app.user.service';
 import {removeAnimation} from '../../animations/animations';
+import {DaysOfTheWeek} from "quantified-self-lib/lib/users/user.unit.settings.interface";
 
 @Component({
   selector: 'app-dashboard',
@@ -25,6 +26,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   searchTerm: string;
   searchStartDate: Date;
   searchEndDate: Date;
+  startOfTheWeek: DaysOfTheWeek;
 
   constructor(private router: Router,
               public authService: AppAuthService,
@@ -48,8 +50,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.searchEndDate = new Date(this.user.settings.dashboardSettings.endDate);
         return;
       }
-      this.searchStartDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange).startDate;
-      this.searchEndDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange).endDate;
+      this.searchStartDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).startDate;
+      this.searchEndDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).endDate;
+      this.startOfTheWeek = this.user.settings.unitSettings.startOfTheWeek;
     });
   }
 

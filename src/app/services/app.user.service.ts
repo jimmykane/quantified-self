@@ -188,7 +188,8 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || DateRanges.thisWeek;
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
-    settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Monday;
+    settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Sunday
+    // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;
   }
 

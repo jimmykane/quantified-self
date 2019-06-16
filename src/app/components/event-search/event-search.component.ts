@@ -2,6 +2,7 @@ import {Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges
 import {FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators} from '@angular/forms';
 import {MatButtonToggleChange} from '@angular/material';
 import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
+import {DaysOfTheWeek} from "quantified-self-lib/lib/users/user.unit.settings.interface";
 
 @Component({
   selector: 'app-event-search',
@@ -13,6 +14,7 @@ export class EventSearchComponent implements OnInit, OnChanges {
   @Input() selectedDateRange: DateRanges;
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;
+  @Input() startOfTheWeek: DaysOfTheWeek;
   @Output() searchChange: EventEmitter<{ searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }> = new EventEmitter<{ searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }>();
 
   public searchFormGroup: FormGroup;
@@ -27,10 +29,10 @@ export class EventSearchComponent implements OnInit, OnChanges {
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      startDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange).startDate, [
+      startDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate, [
         // Validators.required,
       ]),
-      endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange).endDate, [
+      endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ]),
     }, [startDateToEndDateValidator, max3MonthsValidator]);
@@ -73,8 +75,8 @@ export class EventSearchComponent implements OnInit, OnChanges {
     //   this.selectedDateRange = event.source.value;
     //   return;
     // }
-    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value).startDate);
-    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value).endDate);
+    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
+    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
     this.selectedDateRange = event.source.value;
     this.search();
   }
@@ -100,18 +102,18 @@ export interface DateRangeStartDateAndEndDate {
   endDate: Date;
 }
 
-export function getDatesForDateRange(dateRange: DateRanges): DateRangeStartDateAndEndDate {
+export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): DateRangeStartDateAndEndDate {
   switch (dateRange) {
     case DateRanges.thisWeek: {
       return {
-        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay() + 1, 0),
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay() + (startOfTheWeek ? (startOfTheWeek - 7) : 0), 0),
         endDate: new Date(new Date().setHours(24, 0, 0, 0))
       };
     }
     case DateRanges.lastWeek: {
       return {
-        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay() - 7, 24),
-        endDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay(), 23, 59, 59)
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay() + (startOfTheWeek ? (startOfTheWeek - 7) : 0) - 7, 0),
+        endDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - new Date().getDay() + (startOfTheWeek ? (startOfTheWeek - 7) : 0), 0)
       }
     }
     case DateRanges.thisMonth: {
