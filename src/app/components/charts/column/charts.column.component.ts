@@ -137,10 +137,12 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       // valueAxis.title.text = `${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type} ${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
       valueAxis.numberFormatter = new am4core.NumberFormatter();
       valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
+      valueAxis.min = 0;
       // chart.events.on('dataitemsvalidated', function(ev) {
-      //   valueAxis.max = Math.max(...ev.target.data.map(o => o.value), 0) + (Math.max(...ev.target.data.map(o => o.value), 0)* 0.05);
+      //   // valueAxis.max = Math.max(...ev.target.data.map(o => o.value), 0) + (Math.max(...ev.target.data.map(o => o.value), 0)* 0.05);
       //   // valueAxis.strictMinMax = true;
       //   // chart.invalidateLayout()
+      //   // valueAxis.min =0 ;
       // });
 
 
