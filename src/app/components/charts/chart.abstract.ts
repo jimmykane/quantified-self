@@ -52,7 +52,6 @@ export abstract class ChartAbstract implements OnDestroy {
 
     chart.events.on('datavalidated', (ev) => {
       this.logger.info('datavalidated');
-
     });
 
     chart.events.on('datarangechanged', (ev) => {
