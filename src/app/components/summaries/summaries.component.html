@@ -1,34 +1,32 @@
 <section class="pie" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">
+    {{rowHeight}}
+    {{numberOfCols}}
     <app-shade [isActive]="isLoading"></app-shade>
-    <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" rowHeight="25vh">
-        <mat-grid-tile colspan="1">
-            <app-pie-chart *ngIf="pieChartDataByDuration && pieChartDataByDuration.length"
-                           [data]="pieChartDataByDuration"
+    <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
+        <mat-grid-tile colspan="1" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">
+            <app-pie-chart [data]="pieChartDataByDuration"
                            [chartTheme]="chartTheme"
                            [chartValueType]="pieChartValueTypeDuration"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
         </mat-grid-tile>
-        <mat-grid-tile colspan="1">
-            <app-pie-chart *ngIf="pieChartDataByDistance && pieChartDataByDistance.length"
-                           [data]="pieChartDataByDistance"
+        <mat-grid-tile colspan="1" *ngIf="pieChartDataByDistance && pieChartDataByDistance.length">
+            <app-pie-chart [data]="pieChartDataByDistance"
                            [chartValueType]="pieChartValueTypeDistance"
                            [chartTheme]="chartTheme"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
         </mat-grid-tile>
-        <mat-grid-tile colspan="1">
-            <app-column-chart *ngIf="pieChartDataByEnergy && pieChartDataByEnergy.length"
-                              [data]="pieChartDataByEnergy"
+        <mat-grid-tile colspan="1" *ngIf="pieChartDataByEnergy && pieChartDataByEnergy.length">
+            <app-column-chart [data]="pieChartDataByEnergy"
                               [chartValueType]="pieChartValueTypeEnergy"
                               [chartTheme]="chartTheme"
                               [vertical]="false"
                               [userChartSettings]="user.settings.chartSettings">
             </app-column-chart>
         </mat-grid-tile>
-        <mat-grid-tile colspan="1">
-            <app-column-chart *ngIf="pieChartDataByAscent && pieChartDataByAscent.length"
-                              [data]="pieChartDataByAscent"
+        <mat-grid-tile colspan="1" *ngIf="pieChartDataByAscent && pieChartDataByAscent.length">
+            <app-column-chart [data]="pieChartDataByAscent"
                               [chartValueType]="pieChartValueTypeAscent"
                               [chartTheme]="chartTheme"
                               [userChartSettings]="user.settings.chartSettings">

@@ -1,4 +1,5 @@
 import {
+  ChangeDetectionStrategy,
   Component, HostListener, Input, OnChanges, OnDestroy,
   OnInit,
 } from '@angular/core';
@@ -26,6 +27,7 @@ import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
   selector: 'app-summaries',
   templateUrl: './summaries.component.html',
   styleUrls: ['./summaries.component.css'],
+  // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
@@ -33,6 +35,9 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   @Input() searchStartDate: Date;
   @Input() searchEndDate: Date;
   @Input() user: User;
+
+  public rowHeight;
+  public numberOfCols;
 
   isLoading = true;
   events: EventInterface[];
@@ -52,25 +57,23 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
 
 
   @HostListener('window:resize', ['$event'])
-  getColumnsToDisplayDependingOnScreenSize(event?) {
-    if (window.innerWidth < 600) {
-      return 1;
-    }
-    if (window.innerWidth < 1500) {
-      return 2;
-    }
-    return 4;
+  @HostListener('window:orientationchange', ['$event'])
+  resizeOROrientationChange(event?) {
+    this.numberOfCols = this.getNumberOfColumns();
+    this.rowHeight = this.getRowHeight();
   }
-
 
   constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private themeService: ThemeService, private snackBar: MatSnackBar) {
 
   }
 
+
   ngOnInit() {
   }
 
   ngOnChanges() {
+    this.rowHeight = this.getRowHeight();
+    this.numberOfCols = this.getNumberOfColumns();
     this.subscribeToAll()
   }
 
@@ -169,32 +172,18 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       return dataItemA.value - dataItemB.value;
     });
   }
-}
 
-// return [{
-//   type: 'Fossil Energy',
-//   percent: 70,
-//   subs: [{
-//     type: 'Oil',
-//     percent: 15
-//   }, {
-//     type: 'Coal',
-//     percent: 35
-//   }, {
-//     type: 'Nuclear',
-//     percent: 20
-//   }]
-// }, {
-//   type: 'Green Energy',
-//   percent: 30,
-//   subs: [{
-//     type: 'Hydro',
-//     percent: 15
-//   }, {
-//     type: 'Wind',
-//     percent: 10
-//   }, {
-//     type: 'Other',
-//     percent: 5
-//   }]
-// }];
+  private getRowHeight() {
+    return (window.screen.orientation.angle === 90 || window.screen.orientation.angle === -90) ? '25vw' : '25vh';
+  }
+
+  private getNumberOfColumns() {
+    if (window.innerWidth < 600) {
+      return 1;
+    }
+    if (window.innerWidth < 1500) {
+      return 2;
+    }
+    return 4;
+  }
+}
