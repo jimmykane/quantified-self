@@ -10,7 +10,7 @@ import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.in
   styleUrls: ['./event-search.component.css'],
 })
 
-export class EventSearchComponent implements  OnChanges {
+export class EventSearchComponent implements OnChanges {
   @Input() selectedDateRange: DateRanges;
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;
@@ -166,7 +166,7 @@ export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): Va
 export const max3MonthsValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
-  if ((endDate.value - startDate.value > new Date(0).setMonth(3))) { // @todo improve this
+  if (endDate.value - startDate.value > new Date(90 * 24 * 3600 * 1000).getTime()) { // @todo improve this
     return {'moreThan3Months': true};
   }
   return null;
