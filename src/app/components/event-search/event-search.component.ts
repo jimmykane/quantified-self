@@ -2,7 +2,7 @@ import {Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges
 import {FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators} from '@angular/forms';
 import {MatButtonToggleChange} from '@angular/material';
 import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
-import {DaysOfTheWeek} from "quantified-self-lib/lib/users/user.unit.settings.interface";
+import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 
 @Component({
   selector: 'app-event-search',
@@ -10,7 +10,7 @@ import {DaysOfTheWeek} from "quantified-self-lib/lib/users/user.unit.settings.in
   styleUrls: ['./event-search.component.css'],
 })
 
-export class EventSearchComponent implements OnInit, OnChanges {
+export class EventSearchComponent implements  OnChanges {
   @Input() selectedDateRange: DateRanges;
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;
@@ -21,9 +21,6 @@ export class EventSearchComponent implements OnInit, OnChanges {
   public dateRanges = DateRanges;
 
   constructor() {
-  }
-
-  ngOnInit(): void {
     this.searchFormGroup = new FormGroup({
       search: new FormControl(null, [
         // Validators.required,
