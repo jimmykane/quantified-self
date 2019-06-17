@@ -216,7 +216,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           //   this.sort.active, this.sort.direction, this.paginator.pageIndex);
         }),
         map(events => {
-          // debugger;
           // Flip flag to show that loading has finished.
           this.isLoadingResults = false;
           this.errorLoading = false;
