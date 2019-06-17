@@ -64,7 +64,8 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private themeService: ThemeService, private snackBar: MatSnackBar) {
-
+    this.rowHeight = this.getRowHeight();
+    this.numberOfCols = this.getNumberOfColumns();
   }
 
 
@@ -72,8 +73,6 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges() {
-    this.rowHeight = this.getRowHeight();
-    this.numberOfCols = this.getNumberOfColumns();
     this.subscribeToAll()
   }
 
