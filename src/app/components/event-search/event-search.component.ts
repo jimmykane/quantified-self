@@ -115,7 +115,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
   lastDayOfTheWeekDate.setHours(23, 59, 59);
 
   const firstDayOfLastWeekDate = new Date(dateNow.setDate(firstDayOfTheWeek - 7 - daysBack));
-  firstDayOfLastWeekDate.setHours(0, 0, 0)
+  firstDayOfLastWeekDate.setHours(0, 0, 0);
 
   const lastDayOfLastWeekDate = new Date(dateNow.setDate(lastDayOfTheWeek - 7 - daysBack));
   lastDayOfLastWeekDate.setHours(23, 59, 59);

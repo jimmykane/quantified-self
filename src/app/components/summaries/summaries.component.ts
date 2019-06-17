@@ -81,7 +81,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
-    const limit = 100; // @todo double check this how it relates
+    const limit = 1200; // @todo double check this how it relates
     const where = [];
     if (this.searchTerm) {
       where.push({
