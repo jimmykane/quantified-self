@@ -1,6 +1,4 @@
 <section class="pie" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">
-    {{rowHeight}}
-    {{numberOfCols}}
     <app-shade [isActive]="isLoading"></app-shade>
     <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
         <mat-grid-tile colspan="1" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">

@@ -124,8 +124,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(80);
-      chart.innerRadius = am4core.percent(60);
+      chart.radius = am4core.percent(70);
+      chart.innerRadius = am4core.percent(50);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
       pieSeries.dataFields.value = 'value';
@@ -156,7 +156,9 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
         // this.chart.data = this.generateChartData(this.data);
       });
 
-      pieSeries.labels.template.text = `[font-size: 1.1em]{category}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`;
+      pieSeries.labels.template.adapter.add('text', (text, target, key) => {
+        return `[font-size: 1.1em]${target.dataItem.dataContext.type.split(' ').join('\n')}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+      });
 
       const label = pieSeries.createChild(am4core.Label);
       label.horizontalCenter = 'middle';

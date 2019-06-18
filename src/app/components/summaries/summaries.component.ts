@@ -173,7 +173,8 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private getRowHeight() {
-    return (window.screen.orientation.angle === 90 || window.screen.orientation.angle === -90) ? '25vw' : '25vh';
+    const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
+    return (angle === 90 || angle === -90) ? '25vw' : '25vh';
   }
 
   private getNumberOfColumns() {
