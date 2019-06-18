@@ -123,8 +123,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
-      chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(70);
+      // chart.padding(0, 0, 0, 0)
+      chart.radius = am4core.percent(80);
       chart.innerRadius = am4core.percent(50);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
@@ -157,7 +157,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       });
 
       pieSeries.labels.template.adapter.add('text', (text, target, key) => {
-        return `[font-size: 1.1em]${target.dataItem.dataContext.type.split(' ').join('\n')}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+        return `[font-size: 1em]${target.dataItem.dataContext.type.split(' ').join('\n')}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
       });
 
       const label = pieSeries.createChild(am4core.Label);
@@ -167,8 +167,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       label.html = `{values.value.sum.formatNumber('#')}`;
       label.adapter.add('htmlOutput', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
-        return `<p style="text-align: center; font-size: 1.1em">${data.getDisplayType()}</p>
-                <p style="text-align: center; font-size: 1.2em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</p>`
+        return `<p style="text-align: center; font-size: 1.3em">${data.getDisplayType()}</p>
+                <p style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</p>`
       });
 
       chart.exporting.menu = this.getExportingMenu();

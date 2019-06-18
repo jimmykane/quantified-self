@@ -1,5 +1,5 @@
 <mat-card>
-  <app-upload *ngIf="user" [user]="user"></app-upload>
+  <app-upload *ngIf="user && showUpload" [user]="user"></app-upload>
   <app-event-search *ngIf="user"
                     [selectedDateRange]="user.settings.dashboardSettings.dateRange"
                     [selectedStartDate]="searchStartDate"

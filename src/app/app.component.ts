@@ -90,13 +90,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       })).subscribe(title => {
         this.title = title;
       });
-    this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
-      this.actionButtons = Array.from(actionButtons.values());
-    });
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
       this.sideNav.toggle();
     }, 'material'));
-
+    this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
+      this.actionButtons = Array.from(actionButtons.values());
+      this.changeDetectorRef.detectChanges()
+    });
     this.authService.user.subscribe((user) => {
       this.user = user;
       if (!user) {

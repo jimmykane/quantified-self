@@ -87,7 +87,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.hiddenState.properties.opacity = 0;
-      chart.padding(0,0,0,20)
+      chart.padding(0, 0, 20, 20);
 
       // top container for labels
       const topContainer = chart.chartContainer.createChild(am4core.Container);
@@ -99,7 +99,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       const chartTitle = topContainer.createChild(am4core.Label);
       chartTitle.align = 'left';
       chartTitle.adapter.add('text', (text, target, key) => {
-        return `[font-size: 1.2em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.3em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+        return `[font-size: 1.3em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.4em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
           sum += data.value;
           return sum;
         }, 0).toFixed(1)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
@@ -113,28 +113,31 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       const categoryAxis = this.vertical ? chart.xAxes.push(new am4charts.CategoryAxis()) : chart.yAxes.push(new am4charts.CategoryAxis());
       categoryAxis.dataFields.category = 'type';
       categoryAxis.renderer.grid.template.location = 0;
-      categoryAxis.renderer.minGridDistance = 5;
-
+      categoryAxis.renderer.cellStartLocation = 0.1;
+      categoryAxis.renderer.cellEndLocation = 0.9;
       if (this.vertical) {
-        categoryAxis.renderer.minGridDistance = 10;
-        categoryAxis.renderer.cellStartLocation = 0.1;
-        categoryAxis.renderer.cellEndLocation = 0.90;
+        categoryAxis.renderer.minGridDistance = 1;
       } else {
+        categoryAxis.renderer.minGridDistance = 1;
         categoryAxis.renderer.opposite = true;
       }
 
-      // categoryAxis.renderer.labels.template.adapter.add("dy", function(dy, target) {
-      //   if (target.dataItem && target.dataItem.index & 2 == 2) {
-      //     return dy + 25;
-      //   }
-      //   return dy;
-      // });
+      // if(this.vertical) {
+      //   categoryAxis.renderer.labels.template.adapter.add("dy", function (dy, target) {
+      //     if (target.dataItem && target.dataItem.index & true) {
+      //       return dy + 25;
+      //     }
+      //     return dy;
+      //   });
+      // }
 
       const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
+      valueAxis.extraMax = 0.20;
+
       if (this.vertical) {
         valueAxis.renderer.opposite = true;
+        valueAxis.extraMax = 0.1;
       }
-      // valueAxis.title.text = `${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type} ${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
       valueAxis.numberFormatter = new am4core.NumberFormatter();
       valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
       valueAxis.min = 0;
@@ -152,10 +155,32 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         series = chart.series.push(new am4charts.CurvedColumnSeries());
         series.dataFields.valueY = 'value';
         series.dataFields.categoryX = 'type';
+        const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+        categoryLabel.label.adapter.add('text', (text, target) => {
+          const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
+          return `${data.getDisplayValue()}${data.getDisplayUnit()}`
+        });
+        categoryLabel.dy = -20;
+        categoryLabel.label.hideOversized = false;
+        categoryLabel.label.truncate = false;
+        categoryLabel.label.adapter.add('fill', (fill, target) => {
+          return chart.colors.getIndex(target.dataItem.index);
+        });
       } else {
         series = chart.series.push(new am4charts.ColumnSeries());
         series.dataFields.valueX = 'value';
         series.dataFields.categoryY = 'type';
+        const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+        categoryLabel.label.adapter.add('text', (text, target) => {
+          const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
+          return `${data.getDisplayValue()}${data.getDisplayUnit()}`
+        });
+        categoryLabel.label.dx = +30;
+        categoryLabel.label.hideOversized = false;
+        categoryLabel.label.truncate = false;
+        categoryLabel.label.adapter.add('fill', (fill, target) => {
+          return chart.colors.getIndex(target.dataItem.index);
+        });
       }
 
       series.name = DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type;

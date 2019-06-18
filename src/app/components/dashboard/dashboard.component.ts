@@ -1,4 +1,4 @@
-import {Component, OnChanges, OnDestroy, OnInit, } from '@angular/core';
+import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit,} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {of, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -11,6 +11,8 @@ import {getDatesForDateRange} from '../event-search/event-search.component';
 import {UserService} from '../../services/app.user.service';
 import {removeAnimation} from '../../animations/animations';
 import {DaysOfTheWeek} from "quantified-self-lib/lib/users/user.unit.settings.interface";
+import {ActionButtonService} from "../../services/action-buttons/app.action-button.service";
+import {ActionButton} from "../../services/action-buttons/app.action-button";
 
 @Component({
   selector: 'app-dashboard',
@@ -27,11 +29,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   searchStartDate: Date;
   searchEndDate: Date;
   startOfTheWeek: DaysOfTheWeek;
+  showUpload: boolean;
 
   constructor(private router: Router,
               public authService: AppAuthService,
               private eventService: EventService,
               private userService: UserService,
+              private actionButtonService: ActionButtonService,
+              private  changeDetector: ChangeDetectorRef,
               private snackBar: MatSnackBar) {
 
   }
@@ -54,6 +59,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.searchEndDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).endDate;
       this.startOfTheWeek = this.user.settings.unitSettings.startOfTheWeek;
     });
+    this.actionButtonService.addActionButton('turnOnUpload', new ActionButton('cloud_upload', () => {
+      this.showUpload = !this.showUpload;
+    }));
   }
 
   search(search: {searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges}) {
@@ -71,5 +79,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnDestroy(): void {
     this.userSubscription.unsubscribe();
+    this.actionButtonService.removeActionButton('turnOnUpload');
   }
 }
