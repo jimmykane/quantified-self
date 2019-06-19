@@ -352,10 +352,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Set the axis
     series.yAxis = yAxis;
-    // Add the tooltips
-    // yAxis.adapter.add("getTooltipText", function (text, target, key) {
-    //   return `${text} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit} `;
-    // });
 
     // Setup the series
     series.id = `${activity.getID()}${stream.type}`;
@@ -363,10 +359,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Name is acting like a type so get them grouped
     series.name = this.getSeriesName(stream.type);
 
-    // series.adapter.add("tooltipText", function (text, target, key) {
-    //   debugger;
-    //   return ">>> " + text + " <<<";
-    // });
     if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
       series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
@@ -387,12 +379,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
 
     series.strokeWidth = 1;
-    series.fillOpacity = 0.15;
+    series.fillOpacity = 0.2;
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
     series.dataFields.dateX = 'time';
-
 
     series.interactionsEnabled = false;
 
