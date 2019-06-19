@@ -57,12 +57,12 @@
             <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="Last 7 days">
                 Last 7 days
             </mat-button-toggle>
-            <mat-button-toggle [value]="dateRanges.lastThiryDays" aria-label="Last 30 days">
-                Last 30 days
-            </mat-button-toggle>
         </mat-button-toggle-group>
         <mat-button-toggle-group [value]="selectedDateRange"
                                  (change)="dateToggleChange($event)">
+            <mat-button-toggle [value]="dateRanges.lastThiryDays" aria-label="Last 30 days">
+                Last 30 days
+            </mat-button-toggle>
             <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
                 This month
             </mat-button-toggle>
