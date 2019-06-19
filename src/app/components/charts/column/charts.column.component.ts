@@ -87,7 +87,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.hiddenState.properties.opacity = 0;
-      chart.padding(0, 0, 20, 20);
+      chart.padding(0, 0, 0, 20);
 
       // top container for labels
       const topContainer = chart.chartContainer.createChild(am4core.Container);

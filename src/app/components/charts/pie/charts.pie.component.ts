@@ -124,7 +124,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       // chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(80);
+      chart.radius = am4core.percent(70);
       chart.innerRadius = am4core.percent(50);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
@@ -133,7 +133,6 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       pieSeries.interpolationDuration = 500;
       pieSeries.rangeChangeDuration = 500;
       pieSeries.sequencedInterpolation = true;
-      // const a = pieSeries.;
 
       pieSeries.slices.template.propertyFields.isActive = 'pulled';
       pieSeries.slices.template.strokeWidth = 0.3;
