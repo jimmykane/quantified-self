@@ -66,7 +66,7 @@ export class EventFormComponent implements OnInit {
     return !(this.eventFormGroup.get(field).valid && this.eventFormGroup.get(field).touched);
   }
 
-  async onSubmit() {
+  async onSubmit(event) {
     event.preventDefault();
     if (!this.eventFormGroup.valid) {
       this.validateAllFormFields(this.eventFormGroup);

@@ -60,7 +60,7 @@ export class EventSearchComponent implements OnChanges {
     });
   }
 
-  onSubmit() {
+  onSubmit(event) {
     event.preventDefault();
     this.selectedDateRange = this.dateRanges.custom;
     this.search();

@@ -1,7 +1,7 @@
 <mat-dialog-content>
 
 
-  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit()">
+  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit($event)">
 
     <app-shade [isActive]="isLoading"></app-shade>
 
@@ -71,7 +71,7 @@
 
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button mat-flat-button color="primary" (click)="onSubmit()" *ngIf="!hasError()">Save</button>
+    <button mat-flat-button color="primary" (click)="onSubmit($event)" *ngIf="!hasError()">Save</button>
   </form>
 
 

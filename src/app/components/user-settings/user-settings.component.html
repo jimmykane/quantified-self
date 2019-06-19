@@ -1,6 +1,6 @@
 <mat-card class="mat-elevation-z0">
   <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-  <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit()">
+  <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)">
 
     <mat-card>
       <mat-card-header>
@@ -152,7 +152,7 @@
 
     </mat-card>
 
-    <button mat-flat-button *ngIf="!hasError()" [disabled]="isSaving" color="primary" (click)="onSubmit()">
+    <button mat-flat-button *ngIf="!hasError()" [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
       Save
     </button>
   </form>

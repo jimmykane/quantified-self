@@ -1,4 +1,4 @@
-<form [formGroup]="searchFormGroup" (submit)="onSubmit()" autocomplete="off">
+<form [formGroup]="searchFormGroup" (submit)="onSubmit($event)" autocomplete="off">
     <!--  <mat-form-field>-->
     <!--    <input matInput placeholder="Name" formControlName="search">-->
     <!--    <button mat-button *ngIf="this.searchFormGroup.get('search').value" matSuffix mat-icon-button aria-label="Clear"-->
@@ -61,6 +61,6 @@
     </mat-button-toggle-group>
     <!--  <div class="example-selected-value">Selected value: {{group.value}}</div>-->
     <button *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
-            mat-button color="primary" (click)="onSubmit()">search
+            mat-button color="primary" (click)="onSubmit($event)">search
     </button>
 </form>

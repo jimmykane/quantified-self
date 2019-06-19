@@ -1,5 +1,5 @@
 <mat-dialog-content>
-  <form [formGroup]="eventFormGroup" (submit)="onSubmit()">
+  <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)">
 
     <span class="mat-headline">Editing event</span>
     <span class="mat-subheader">internal id {{ event.getID() }}</span>
@@ -34,7 +34,7 @@
 
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
+    <button mat-flat-button color="primary" (click)="onSubmit($event)">Save</button>
 
   </form>
 </mat-dialog-content>

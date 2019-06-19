@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
@@ -102,7 +102,7 @@ export class UserFormComponent implements OnInit {
     });
   }
 
-  public async deleteUser() {
+  public async deleteUser(event) {
     event.preventDefault();
     this.dialogRef.disableClose = true;
     this.isDeleting = true;
@@ -114,7 +114,7 @@ export class UserFormComponent implements OnInit {
         duration: 5000,
       });
       this.dialogRef.close();
-    }catch (e) {
+    } catch (e) {
       Sentry.captureException(e);
       this.errorDeleting = e;
       this.dialogRef.disableClose = false;

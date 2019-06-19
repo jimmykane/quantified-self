@@ -1,5 +1,5 @@
 <mat-dialog-content>
-  <form [formGroup]="userFormGroup" (submit)="onSubmit()">
+  <form [formGroup]="userFormGroup" (submit)="onSubmit($event)">
     <span class="mat-headline">Hi there {{ user.displayName || 'Mr. Anonymous🧐'  }},</span>
     <span class="mat-subheader">Let's agree an a few things before we proceed</span>
     <mat-checkbox formControlName="acceptPrivacyPolicy" >
@@ -35,7 +35,7 @@
     </mat-error>
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit()">Create My Account
+    <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My Account
     </button>
 
   </form>

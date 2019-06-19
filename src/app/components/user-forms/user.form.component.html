@@ -53,7 +53,7 @@
       <button class="full" *ngIf="!consentToDelete" mat-flat-button color="warn" (click)="consentToDelete = true">
         DELETE MY ACCOUNT
       </button>
-      <button class="full" *ngIf="consentToDelete" mat-flat-button color="warn" (click)="deleteUser()">I am sure, Yes
+      <button class="full" *ngIf="consentToDelete" mat-flat-button color="warn" (click)="deleteUser($event)">I am sure, Yes
         delete it
       </button>
     </div>

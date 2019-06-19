@@ -105,7 +105,7 @@ export class ActivityFormComponent implements OnInit {
     return !(this.activityFormGroup.get(field).valid && this.activityFormGroup.get(field).touched);
   }
 
-  async onSubmit() {
+  async onSubmit(event) {
     event.preventDefault();
     if (!this.activityFormGroup.valid) {
       this.validateAllFormFields(this.activityFormGroup);

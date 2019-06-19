@@ -120,7 +120,7 @@ export class UserSettingsComponent implements OnChanges {
     return !(this.userSettingsFormGroup.get(field).valid && this.userSettingsFormGroup.get(field).touched);
   }
 
-  async onSubmit() {
+  async onSubmit(event) {
     event.preventDefault();
     if (!this.userSettingsFormGroup.valid) {
       this.validateAllFormFields(this.userSettingsFormGroup);
