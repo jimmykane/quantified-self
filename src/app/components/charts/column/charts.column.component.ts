@@ -136,7 +136,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
       if (this.vertical) {
         valueAxis.renderer.opposite = true;
-        valueAxis.extraMax = 0.1;
+        valueAxis.extraMax = 0.15;
       }
       valueAxis.numberFormatter = new am4core.NumberFormatter();
       valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
@@ -158,7 +158,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
         categoryLabel.label.adapter.add('text', (text, target) => {
           const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
-          return `${data.getDisplayValue()}${data.getDisplayUnit()}`
+          return `[bold font-size: 1.3em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
         categoryLabel.dy = -20;
         categoryLabel.label.hideOversized = false;
@@ -173,7 +173,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
         categoryLabel.label.adapter.add('text', (text, target) => {
           const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
-          return `${data.getDisplayValue()}${data.getDisplayUnit()}`
+          return `[bold font-size: 1.3em ]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
         categoryLabel.label.dx = +30;
         categoryLabel.label.hideOversized = false;

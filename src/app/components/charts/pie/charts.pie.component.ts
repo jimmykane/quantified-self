@@ -20,6 +20,7 @@ import animated from '@amcharts/amcharts4/themes/animated';
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {ChartAbstract} from '../chart.abstract';
+import * as Sentry from '@sentry/browser';
 
 @Component({
   selector: 'app-pie-chart',
@@ -156,8 +157,14 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       });
 
       pieSeries.labels.template.adapter.add('text', (text, target, key) => {
-        return `[font-size: 1em]${target.dataItem.dataContext.type.split(' ').join('\n')}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+        try {
+          // return `[font-size: 1em]${target.dataItem.dataContext.type.split(' ').join('\n')}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+          return `[font-size: 1em]${target.dataItem.dataContext.type.slice(0, 70)}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+        } catch (e) {
+          Sentry.captureException(e);
+        }
       });
+
 
       const label = pieSeries.createChild(am4core.Label);
       label.horizontalCenter = 'middle';
