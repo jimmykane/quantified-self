@@ -83,7 +83,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
-    const limit = 1200; // @todo double check this how it relates
+    const limit = 0; // @todo double check this how it relates
     const where = [];
     if (this.searchTerm) {
       where.push({
@@ -178,7 +178,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private getNumberOfColumns() {
-    if (window.innerWidth < 600) {
+    if (window.innerWidth < 900) {
       return 1;
     }
     if (window.innerWidth < 1500) {

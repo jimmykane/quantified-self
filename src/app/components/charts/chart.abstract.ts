@@ -36,7 +36,7 @@ export abstract class ChartAbstract implements OnDestroy {
   }
 
 
-  protected attachEventListenersOnChart(chart: am4charts.PieChart | am4charts.XYChart){
+  protected attachEventListenersOnChart(chart: am4charts.PieChart | am4charts.XYChart) {
     chart.events.on('validated', (ev) => {
       this.logger.info('validated');
     });
@@ -96,7 +96,7 @@ export abstract class ChartAbstract implements OnDestroy {
     if (this.chart) {
       this.chart.series.clear();
       this.chart.colors.reset();
-      if (this.chart instanceof am4charts.XYChart)  {
+      if (this.chart instanceof am4charts.XYChart) {
         this.chart.yAxes.clear();
       }
     }
@@ -107,7 +107,7 @@ export abstract class ChartAbstract implements OnDestroy {
     this.logger.info(`Unsubscribed from ${this.getSubscriptions().length} subscriptions`);
   }
 
-  protected getSubscriptions(): Subscription[]{
+  protected getSubscriptions(): Subscription[] {
     return this.subscriptions;
   }
 
@@ -140,6 +140,16 @@ export abstract class ChartAbstract implements OnDestroy {
       this.logger.error('Could not destroy chart');
       // Log to Sentry
       Sentry.captureException(e);
+    }
+  }
+
+  getTextInitials(text: string) {
+    return `${text.split(' ').map(x => x.slice(0, 1).toUpperCase()).join('. ')}.`
+  }
+
+  getTextDependingOnSizeToSaveHorizontalSpace(text: string) {
+    if (text.length > 15) {
+      return `${text.slice(0, 15)}...`
     }
   }
 

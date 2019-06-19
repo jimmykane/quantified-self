@@ -88,6 +88,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.hiddenState.properties.opacity = 0;
       chart.padding(0, 0, 0, 20);
+      chart.fontSize = '1.1em';
 
       // top container for labels
       const topContainer = chart.chartContainer.createChild(am4core.Container);
@@ -116,7 +117,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       categoryAxis.renderer.cellStartLocation = 0.1;
       categoryAxis.renderer.cellEndLocation = 0.9;
       if (this.vertical) {
-        categoryAxis.renderer.minGridDistance = 1;
+        categoryAxis.renderer.minGridDistance = 20;
       } else {
         categoryAxis.renderer.minGridDistance = 1;
         categoryAxis.renderer.opposite = true;
@@ -160,7 +161,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
           const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
           return `[bold font-size: 1.3em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
-        categoryLabel.dy = -20;
+        categoryLabel.dy = -15;
         categoryLabel.label.hideOversized = false;
         categoryLabel.label.truncate = false;
         categoryLabel.label.adapter.add('fill', (fill, target) => {
@@ -175,7 +176,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
           const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
           return `[bold font-size: 1.3em ]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
-        categoryLabel.label.dx = +30;
+        categoryLabel.label.dx = 50;
         categoryLabel.label.hideOversized = false;
         categoryLabel.label.truncate = false;
         categoryLabel.label.adapter.add('fill', (fill, target) => {
@@ -189,7 +190,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       if (this.vertical) {
         series.columns.template.tension = 1;
       }
-      series.columns.template.fillOpacity = 0.75;
+      series.columns.template.fillOpacity = 0.95;
       series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
       series.columns.template.adapter.add('tooltipText', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.dataItem.dataContext['value']);

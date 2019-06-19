@@ -146,6 +146,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   isColumnHeaderSortable(columnName): boolean {
+    if (this.searchEndDate || this.searchEndDate) {
+      return columnName === 'startDate';
+    }
     return ['startDate', 'name', 'stats.Distance', 'stats.Activity Types', 'stats.Duration', 'stats.Ascent', 'stats.Descent', 'stats.Average Heart Rate', 'stats.Energy', 'stats.Device Names'].indexOf(columnName) !== -1;
   }
 
@@ -248,7 +251,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
             dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
               `${ActivityTypes.Multisport}: ${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
-              : ActivityTypes[<string>activityTypes.getDisplayValue()] ;
+              : ActivityTypes[<string>activityTypes.getDisplayValue()];
 
             dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
             dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';

@@ -26,20 +26,15 @@
 
         <ng-container *ngIf="isColumnHeaderSortable(column)">
           <mat-header-cell *matHeaderCellDef mat-sort-header>
-        <span>
              <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
             <mat-icon *ngIf="getColumnHeaderSVGIcon(column)" svgIcon="{{ getColumnHeaderSVGIcon(column) }}"></mat-icon>
-        </span>
           </mat-header-cell>
         </ng-container>
 
         <ng-container *ngIf="!isColumnHeaderSortable(column)">
           <mat-header-cell *matHeaderCellDef >
-        <span>
             <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
             <mat-icon *ngIf="getColumnHeaderSVGIcon(column)" svgIcon="{{ getColumnHeaderSVGIcon(column) }}"></mat-icon>
-          {{ getColumnHeaderSVGIcon(column) }}
-        </span>
           </mat-header-cell>
         </ng-container>
 

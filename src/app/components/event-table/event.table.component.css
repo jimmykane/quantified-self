@@ -40,8 +40,10 @@ mat-icon {
 
 mat-card{
   /*min-height: 90vh;*/
-  margin-bottom: 1vh;
-  padding: 0.5em;
+  /*margin-bottom: 1vh;*/
+  /*padding: 0.5em;*/
+  margin: 0;
+  padding: 0;
 }
 
 .mat-column-Checkbox{

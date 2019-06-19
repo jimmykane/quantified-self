@@ -165,7 +165,6 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
         }
       });
 
-
       const label = pieSeries.createChild(am4core.Label);
       label.horizontalCenter = 'middle';
       label.verticalCenter = 'middle';

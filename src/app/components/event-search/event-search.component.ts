@@ -19,6 +19,7 @@ export class EventSearchComponent implements OnChanges {
 
   public searchFormGroup: FormGroup;
   public dateRanges = DateRanges;
+  public currentYear = new Date().getFullYear();
 
   constructor() {
     this.searchFormGroup = new FormGroup({
@@ -32,7 +33,7 @@ export class EventSearchComponent implements OnChanges {
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ]),
-    }, [startDateToEndDateValidator, max3MonthsValidator]);
+    }, [startDateToEndDateValidator, max1YearValidator]);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -125,17 +126,39 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
       };
     }
     case DateRanges.lastWeek: {
-
-
       return {
         startDate: firstDayOfLastWeekDate,
         endDate: lastDayOfLastWeekDate
+      }
+    }
+    case DateRanges.lastSevenDays: {
+      return {
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 6),
+        endDate: new Date(new Date().setHours(24, 0, 0, 0))
       }
     }
     case DateRanges.thisMonth: {
       return {
         startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
         endDate: new Date(new Date().setHours(24, 0, 0, 0))
+      }
+    }
+    case DateRanges.lastMonth: {
+      return {
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1),
+        endDate: new Date(new Date(new Date().getFullYear(), new Date().getMonth(), 0).setHours(23, 59, 59))
+      }
+    }
+    case DateRanges.thisYear: {
+      return {
+        startDate: new Date(new Date().getFullYear(), 0, 1),
+        endDate: new Date(new Date().setHours(24, 0, 0, 0))
+      }
+    }
+    case DateRanges.lastYear: {
+      return {
+        startDate: new Date(new Date().getFullYear() - 1, 0, 1),
+        endDate: new Date(new Date(new Date().getFullYear(), 0, 0).setHours(23, 59, 59))
       }
     }
     case DateRanges.custom: {
@@ -163,10 +186,10 @@ export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): Va
   return null;
 };
 
-export const max3MonthsValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const max1YearValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
-  if (endDate.value - startDate.value > new Date(90 * 24 * 3600 * 1000).getTime()) { // @todo improve this
+  if (endDate.value - startDate.value > new Date(365 * 24 * 3600 * 1000).getTime()) { // @todo improve this
     return {'moreThan3Months': true};
   }
   return null;

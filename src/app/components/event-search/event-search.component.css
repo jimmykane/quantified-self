@@ -8,3 +8,8 @@ mat-form-field{
 form{
   margin-bottom: 1em;
 }
+
+mat-button-toggle-group{
+  margin-right: 1em;
+  /*margin-bottom: 1em;*/
+}

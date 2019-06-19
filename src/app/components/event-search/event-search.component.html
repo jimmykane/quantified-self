@@ -22,7 +22,7 @@
             </mat-error>
         </mat-form-field>
 
-        <mat-form-field >
+        <mat-form-field>
             <input matInput [matDatepicker]="endDatepicker" (focus)="endDatepicker.open()" placeholder="To"
                    (dateChange)="onDateChange($event)"
                    formControlName="endDate">
@@ -35,31 +35,55 @@
             </mat-error>
         </mat-form-field>
 
-        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">There is something wrong with the date range
+        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">
+            There is something wrong with the date range
         </mat-error>
-        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.moreThan3Months">You can select a range up to 3 months
+        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.moreThan3Months">You can select
+            a range up to 3 months
         </mat-error>
 
 
     </section>
 
-    <mat-button-toggle-group #group="matButtonToggleGroup" [value]="selectedDateRange"
-                             (change)="dateToggleChange($event)">
-        <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
-            This week
-        </mat-button-toggle>
-        <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
-            Last week
-        </mat-button-toggle>
-        <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="Last month">
-            This month
-        </mat-button-toggle>
-        <mat-button-toggle aria-label="All" [value]="dateRanges.all">
-            All
-        </mat-button-toggle>
+    <section>
+        <mat-button-toggle-group [value]="selectedDateRange"
+                                 (change)="dateToggleChange($event)">
+            <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
+                This week
+            </mat-button-toggle>
+            <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
+                Last week
+            </mat-button-toggle>
+            <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="Last 7 days">
+                Last 7 days
+            </mat-button-toggle>
 
-    </mat-button-toggle-group>
-    <!--  <div class="example-selected-value">Selected value: {{group.value}}</div>-->
+
+        </mat-button-toggle-group>
+        <mat-button-toggle-group [value]="selectedDateRange"
+                                 (change)="dateToggleChange($event)">
+            <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
+                This month
+            </mat-button-toggle>
+            <mat-button-toggle [value]="dateRanges.lastMonth" aria-label="Last month">
+                Last month
+            </mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <mat-button-toggle-group [value]="selectedDateRange"
+                                 (change)="dateToggleChange($event)">
+            <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
+                {{currentYear}}
+            </mat-button-toggle>
+            <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
+                {{currentYear - 1}}
+            </mat-button-toggle>
+            <mat-button-toggle aria-label="All" [value]="dateRanges.all">
+                All
+            </mat-button-toggle>
+        </mat-button-toggle-group>
+    </section>
+
     <button *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
             mat-button color="primary" (click)="onSubmit($event)">search
     </button>
