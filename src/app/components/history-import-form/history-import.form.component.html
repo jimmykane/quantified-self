@@ -62,7 +62,7 @@
 
         <mat-error *ngIf="!isAllowedToDoHistoryImport">You cannot import your history at this moment</mat-error>
         <button mat-stroked-button matStepperPrevious>Back</button>
-        <button mat-flat-button color="primary" (click)="onSubmit()" [disabled]="!this.formGroup.valid">Import</button>
+        <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!this.formGroup.valid">Import</button>
       </mat-step>
 
     </mat-horizontal-stepper>

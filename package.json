@@ -20,7 +20,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.6",
-    "@amcharts/amcharts4": "4.5.2",
+    "@amcharts/amcharts4": "4.5.3",
     "@angular/animations": "8.0.1",
     "@angular/cdk": "^8.0.1",
     "@angular/common": "8.0.1",

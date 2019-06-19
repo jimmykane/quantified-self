@@ -111,7 +111,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     return !(formArray.controls[formGroupIndex].get(field).valid && formArray.controls[formGroupIndex].get(field).touched);
   }
 
-  async onSubmit() {
+  async onSubmit(event) {
     event.preventDefault();
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
