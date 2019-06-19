@@ -38,7 +38,7 @@
         <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">
             There is something wrong with the date range
         </mat-error>
-        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.moreThan3Months">You can select
+        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select
             a range up to 3 months
         </mat-error>
 

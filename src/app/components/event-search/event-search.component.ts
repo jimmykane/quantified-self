@@ -33,7 +33,7 @@ export class EventSearchComponent implements OnChanges {
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ]),
-    }, [startDateToEndDateValidator, max1YearValidator]);
+    }, [startDateToEndDateValidator, maxDateDistanceValidator]);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -192,11 +192,11 @@ export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): Va
   return null;
 };
 
-export const max1YearValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const maxDateDistanceValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
-  if (endDate.value - startDate.value > new Date(365 * 24 * 3600 * 1000).getTime()) { // @todo improve this
-    return {'moreThan3Months': true};
+  if (endDate.value - startDate.value > new Date(365 * 5 * 24 * 3600 * 1000).getTime()) { // @todo improve this
+    return {'dateRange': true};
   }
   return null;
 };
