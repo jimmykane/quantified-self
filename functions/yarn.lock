@@ -1733,9 +1733,9 @@ pify@^4.0.0, pify@^4.0.1:
   integrity sha512-uB80kBFb/tfd68bVleG9T5GGsGPjJrLAUpR5PZIrhBnIaRTQRjqdJSsIKkOP6OAIFbj7GOrcudc5pNjZ+geV2g==
 
 process-nextick-args@~2.0.0:
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/process-nextick-args/-/process-nextick-args-2.0.0.tgz#a37d732f4271b4ab1ad070d35508e8290788ffaa"
-  integrity sha512-MtEC1TqN0EU5nephaJ4rAtThHtC86dNN9qCuEhtshvpVBkAW5ZO7BASN9REnF9eoXGcRub+pFuKEpOHE+HbEMw==
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/process-nextick-args/-/process-nextick-args-2.0.1.tgz#7820d9b16120cc55ca9ae7792680ae7dba6d7fe2"
+  integrity sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==
 
 protobufjs@^6.8.6, protobufjs@^6.8.8:
   version "6.8.8"
@@ -1765,9 +1765,9 @@ proxy-addr@~2.0.5:
     ipaddr.js "1.9.0"
 
 psl@^1.1.24, psl@^1.1.28:
-  version "1.1.32"
-  resolved "https://registry.yarnpkg.com/psl/-/psl-1.1.32.tgz#3f132717cf2f9c169724b2b6caf373cf694198db"
-  integrity sha512-MHACAkHpihU/REGGPLj4sEfc/XKW2bheigvHO1dUqjaKigMp1C8+WLQYRGgeKFMsw5PMfegZcaN8IDXK/cD0+g==
+  version "1.1.33"
+  resolved "https://registry.yarnpkg.com/psl/-/psl-1.1.33.tgz#5533d9384ca7aab86425198e10e8053ebfeab661"
+  integrity sha512-LTDP2uSrsc7XCb5lO7A8BI1qYxRe/8EqlRvMeEl6rsnYAqDOl8xHR+8lSAIVfrNaSAlTPTNOCgNjWcoUL3AZsw==
 
 pump@^2.0.0:
   version "2.0.1"
@@ -1808,7 +1808,7 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/b56a782f76e1623cee4b63195833f0206a252417"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/6b88cb0492f9a91ec287717336fd8ad4615ae11e"
   dependencies:
     "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
