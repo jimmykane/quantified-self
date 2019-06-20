@@ -154,12 +154,12 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     // Create the map
     const valueByType = this.events.reduce((valueByTypeMap: Map<string, number>, event) => {
       const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]){
-        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
-      }
       const stat = event.getStat(dataType);
       if (!eventTypeDisplay || !stat) {
         return valueByTypeMap;
+      }
+      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]){
+        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
       const activityTypeValue = valueByTypeMap.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
