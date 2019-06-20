@@ -10,7 +10,7 @@ import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.in
   styleUrls: ['./event-search.component.css'],
 })
 
-export class EventSearchComponent implements OnChanges {
+export class EventSearchComponent implements OnChanges, OnInit {
   @Input() selectedDateRange: DateRanges;
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;
@@ -22,6 +22,9 @@ export class EventSearchComponent implements OnChanges {
   public currentYear = new Date().getFullYear();
 
   constructor() {
+  }
+
+  ngOnInit(): void {
     this.searchFormGroup = new FormGroup({
       search: new FormControl(null, [
         // Validators.required,
@@ -33,7 +36,7 @@ export class EventSearchComponent implements OnChanges {
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ]),
-    }, [startDateToEndDateValidator, maxDateDistanceValidator]);
+    }, [startDateToEndDateValidator]);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
