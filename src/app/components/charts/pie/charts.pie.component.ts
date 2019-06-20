@@ -159,6 +159,10 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       pieSeries.labels.template.adapter.add('text', (text, target, key) => {
         try {
           // return `[font-size: 1em]${target.dataItem.dataContext.type.split(' ').join('\n')}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+          if (!target.dataItem.dataContext.type) {
+            Sentry.captureException(new Error(`Datatype not found`));
+            return `???`;
+          }
           return `[font-size: 1.1em]${target.dataItem.dataContext.type.slice(0, 40)}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
         } catch (e) {
           Sentry.captureException(e);
