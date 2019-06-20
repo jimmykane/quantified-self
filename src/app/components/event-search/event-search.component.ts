@@ -185,7 +185,6 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
   }
 }
 
-
 export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
