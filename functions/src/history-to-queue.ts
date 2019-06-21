@@ -64,7 +64,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get();
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-    const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivities / 100) * 24 * 60 * 60 * 1000));   // 7 days for  285,7142857143 per day
+    const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivities / 500) * 24 * 60 * 60 * 1000));   // 7 days for  285,7142857143 per day
     if ((nextHistoryImportAvailableDate > new Date()) && data.processedActivities !== 0) {
       console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
       res.status(403);

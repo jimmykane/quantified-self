@@ -123,10 +123,11 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         categoryAxis.renderer.opposite = true;
       }
 
-      // if(this.vertical) {
-      //   categoryAxis.renderer.labels.template.adapter.add("dy", function (dy, target) {
-      //     if (target.dataItem && target.dataItem.index & true) {
+      // if(this.vertical ) {
+      //   categoryAxis.renderer.labels.template.adapter.add("dy",  (dy, target) => {
+      //     if (chart.data.length > 4 && target.dataItem && target.dataItem.index & true) {
       //       return dy + 25;
+      //       chart.paddingBottom = 20;
       //     }
       //     return dy;
       //   });
