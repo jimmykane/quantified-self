@@ -27,7 +27,7 @@ service cloud.firestore {
         }
     }
 
- 		match /suuntoAppAccessTokens/{userID} {
+    match /suuntoAppAccessTokens/{userID} {
       allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
        match /tokens/{document=**} {
             allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
