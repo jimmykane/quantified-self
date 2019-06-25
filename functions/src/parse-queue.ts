@@ -85,9 +85,9 @@ export async function processQueueItem(queueItem: any) {
       event.name = event.startDate.toJSON(); // @todo improve
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
       // Id for the event should be serviceName + workoutID
-      event.metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
+      const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       // @todo move metadata to its own document for firestore read/write rules
-      await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event);
+      await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event, metaData);
       console.log(`Created Event ${event.getID()} for ${queueItem.id}, user id ${parentID} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
@@ -146,7 +146,7 @@ async function updateToProcessed(queueItem: any) {
   }
 }
 
-async function setEvent(userID: string, eventID:string , event: EventInterface) {
+async function setEvent(userID: string, eventID:string , event: EventInterface, metaData: MetaData) {
   const writePromises: Promise<any>[] = [];
   event.setID(eventID);
   event.getActivities()
@@ -179,6 +179,11 @@ async function setEvent(userID: string, eventID:string , event: EventInterface) 
             }))
       });
     });
+  writePromises.push( admin.firestore()
+    .collection('users')
+    .doc(userID)
+    .collection('events')
+    .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData));
   try {
     await Promise.all(writePromises);
     console.log(`Wrote ${writePromises.length+1} documents for event with id ${eventID}`);
