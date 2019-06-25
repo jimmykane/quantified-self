@@ -13,11 +13,12 @@ import {getTokenData} from "./service-tokens";
 import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.interface";
 
 
-const TIMEOUT_IN_SECONDS = 240;
+const TIMEOUT_IN_SECONDS = 540;
 const RETRY_COUNT = 20;
-const LIMIT = 60;
+const LIMIT = 120;
+const MEMORY = "512MB";
 
-export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
+export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 12 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<=", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
