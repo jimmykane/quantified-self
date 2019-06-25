@@ -32,6 +32,17 @@
       </mat-radio-group>
     </div>
 
+    <div class="radio-container">
+      <mat-radio-group formControlName="isMerge">
+        <mat-radio-button [value]="false">
+          Normal event
+        </mat-radio-button>
+        <mat-radio-button [value]="true">
+          Merged event
+        </mat-radio-button>
+      </mat-radio-group>
+    </div>
+
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
     <button mat-flat-button color="primary" (click)="onSubmit($event)">Save</button>

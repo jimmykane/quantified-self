@@ -59,6 +59,10 @@ export class EventFormComponent implements OnInit {
         Validators.required,
         // Validators.minLength(4),
       ]),
+      isMerge: new FormControl(this.event.isMerge, [
+        // Validators.required,
+        // Validators.minLength(4),
+      ]),
     });
   }
 
@@ -77,6 +81,7 @@ export class EventFormComponent implements OnInit {
         name: this.eventFormGroup.get('name').value,
         privacy: this.eventFormGroup.get('privacy').value,
         description: this.eventFormGroup.get('description').value,
+        isMerge: this.eventFormGroup.get('isMerge').value,
       });
       this.snackBar.open('Event saved', null, {
         duration: 2000,
