@@ -88,7 +88,7 @@ export async function processQueueItem(queueItem: any) {
       const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       // @todo move metadata to its own document for firestore read/write rules
       await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event, metaData);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id}, user id ${parentID} and token user ${serviceToken.userName}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
@@ -183,7 +183,7 @@ async function setEvent(userID: string, eventID:string , event: EventInterface, 
     .collection('users')
     .doc(userID)
     .collection('events')
-    .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData));
+    .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData.toJSON()));
   try {
     await Promise.all(writePromises);
     console.log(`Wrote ${writePromises.length+1} documents for event with id ${eventID}`);
