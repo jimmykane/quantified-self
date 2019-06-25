@@ -50,6 +50,11 @@ mat-card{
   padding-left: 0;
 }
 
+.merged {
+  border-top: 1px dotted;
+  border-bottom: 1px dotted;
+}
+
 ::ng-deep .mat-paginator-container{
   justify-content: flex-start !important;
 }

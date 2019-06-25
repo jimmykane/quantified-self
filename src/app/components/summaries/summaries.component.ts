@@ -111,7 +111,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     this.eventsSubscription = this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit).subscribe(events => {
-      this.events = events;
+      this.events = events.filter(event => !event.isMerge );
       this.pieChartDataByDuration = this.getPieChartDataForDataType(events, DataDuration.type);
       this.pieChartDataByDistance = this.getPieChartDataForDataType(events, DataDistance.type);
       this.pieChartDataByAscent = this.getPieChartDataForDataType(events, DataAscent.type);

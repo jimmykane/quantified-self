@@ -60,7 +60,9 @@
     </ng-container>
     <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
     <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
-             [routerLink]="['/user', user.uid, 'event', row['id']]"></mat-row>
+             [routerLink]="['/user', user.uid, 'event', row['id']]"
+             [class.merged]="row['isMerge']">
+    </mat-row>
   </mat-table>
   <mat-paginator [hidePageSize]="true" [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>
 </mat-card>

@@ -259,6 +259,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
             dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
+            dataObject['isMerge'] = event.isMerge;
 
             const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
 
