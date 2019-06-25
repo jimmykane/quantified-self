@@ -102,13 +102,14 @@ export const migrateMerges = functions.region('europe-west2').runWith({timeoutSe
     .collection('users').doc('M8gxUABg0UXQyVlFyhNMBsvl8bm1')
     .collection('events')
     .orderBy("name").where("name", '>=',  'Merged at')
-    .limit(10)
+    // .limit()
     .get();
   console.log(`Found ${querySnapshot.size} to process`);
   let count = 0;
   const batch = admin.firestore().batch();
   for (const doc of querySnapshot.docs) {
     batch.update(doc.ref, {
+      name: 'Merged Event',
       isMerge: true
     });
     // await getTokenData(eventDoc, true);
