@@ -62,6 +62,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() showAllData: boolean;
   @Input() useDurationAxis: boolean;
   @Input() dataSmoothingLevel: number;
+  @Input() waterMark: string;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
@@ -219,7 +220,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
       // Add watermark
       const watermark = new am4core.Label();
-      watermark.text = this.user.brandText || 'Quantified-Self.io';
+      watermark.text = this.waterMark || 'Quantified-Self.io';
       chart.plotContainer.children.push(watermark);
       watermark.align = 'right';
       watermark.valign = 'bottom';
