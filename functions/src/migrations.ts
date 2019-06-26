@@ -1,5 +1,5 @@
-import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
+// import * as functions from "firebase-functions";
+// import * as admin from "firebase-admin";
 // import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
 // import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
 //
