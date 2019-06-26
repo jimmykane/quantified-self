@@ -90,8 +90,6 @@ export class ActivityFormComponent implements OnInit {
       ]));
 
       this.activityFormGroup.validator = activityDistanceValidator;
-      // this.activityStartDistance = this.activity.getSquashedStreamData(DataDistance.type)[0];
-      // this.activityEndDistance = this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1];
     }
     // Set this to done loading
     this.isLoading = false;

@@ -28,6 +28,8 @@ export class UserFormComponent implements OnInit {
   public user: User;
   public isDeleting: boolean;
   public errorDeleting;
+  public isLoading: boolean;
+  public isUserBranded: boolean;
 
   public userFormGroup: FormGroup;
 
@@ -41,11 +43,14 @@ export class UserFormComponent implements OnInit {
   ) {
     this.user = data.user; // Perhaps move to service?
     if (!this.user) {
-      throw  'Component needs user'
+      throw new Error('Component needs user')
     }
   }
 
-  ngOnInit(): void {
+  async ngOnInit() {
+    // Set this to loading
+    this.isLoading = true;
+
     this.userFormGroup = new FormGroup({
       displayName: new FormControl(this.user.displayName, [
         Validators.required,
@@ -59,7 +64,13 @@ export class UserFormComponent implements OnInit {
         // Validators.required,
         // Validators.minLength(4),
       ]),
+      brandText: new FormControl({value: this.user.brandText, disabled: !(await this.userService.isBranded(this.user))}, [
+      ]),
     });
+
+    this.userFormGroup.addControl('brandText', new FormControl(0, []));
+    // Set this to done loading
+    this.isLoading = false;
   }
 
   hasError(field: string) {
@@ -77,6 +88,7 @@ export class UserFormComponent implements OnInit {
         displayName: this.userFormGroup.get('displayName').value,
         privacy: this.userFormGroup.get('privacy').value,
         description: this.userFormGroup.get('description').value,
+        brandText: this.userFormGroup.get('brandText').value,
       });
       this.snackBar.open('User updated', null, {
         duration: 2000,

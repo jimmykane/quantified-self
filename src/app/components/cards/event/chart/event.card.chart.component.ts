@@ -219,7 +219,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
       // Add watermark
       const watermark = new am4core.Label();
-      watermark.text = 'Quantified-Self.io';
+      watermark.text = this.user.brandText || 'Quantified-Self.io';
       chart.plotContainer.children.push(watermark);
       watermark.align = 'right';
       watermark.valign = 'bottom';

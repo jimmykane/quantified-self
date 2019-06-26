@@ -90,10 +90,16 @@ export class UserService implements OnDestroy {
       .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges();
   }
 
-  public getAllUserMeta(user: User) {
+  private getAllUserMeta(user: User) {
     return this.afs
       .collection('users')
       .doc(user.uid).collection('meta');
+  }
+
+  private getAccountPrivileges(user: User) {
+    return this.afs
+      .collection('userAccountPrivileges')
+      .doc(user.uid);
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
@@ -126,6 +132,14 @@ export class UserService implements OnDestroy {
     return this.updateUserProperties(user, {privacy: privacy});
   }
 
+  public async isBranded(user: User): Promise<boolean> {
+    return await this.getAccountPrivileges(user).get().pipe(take(1)).pipe(map((doc) => {
+      if (!doc.exists) {
+        return false;
+      }
+      return doc.data().isBranded;
+    })).toPromise();
+  }
 
   public async deleteAllUserData(user: User) {
     const events = await this.eventService.getEventsAndActivitiesForUserBy(user, [], 'startDate', false, 0).pipe(take(1)).toPromise();

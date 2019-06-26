@@ -1,8 +1,8 @@
 <mat-dialog-content>
 
-  <form [formGroup]="userFormGroup" (submit)="onSubmit()">
+  <form *ngIf="userFormGroup" [formGroup]="userFormGroup" (submit)="onSubmit()">
 
-    <app-shade [isActive]="isDeleting" [hasError]="errorDeleting" [errorMessage]="errorDeleting"></app-shade>
+    <app-shade [isActive]="isDeleting || isLoading" [hasError]="errorDeleting" [errorMessage]="errorDeleting"></app-shade>
 
     <span class="mat-headline">Hi there {{ user.displayName }},</span>
     <span class="mat-subheader">Let's edit your profile!</span>
@@ -35,6 +35,15 @@
       </mat-radio-group>
       <mat-hint></mat-hint>
     </div>
+
+    <mat-form-field>
+      <input matInput placeholder="A brand text that will appear in places that 'quantified-Self.io' appears at the moment"
+             formControlName="brandText">
+      <mat-hint>If you have a branded account you can customize what will be shown instead of the "quantified-self.io" brand text</mat-hint>
+      <mat-error *ngIf="hasError('brandText')">
+        Brand text error
+      </mat-error>
+    </mat-form-field>
 
     <div class="checkbox">
       <mat-checkbox (change)="$event.checked ? showDelete = true : showDelete = false">
