@@ -6,6 +6,7 @@ form {
 
 mat-form-field {
   width: 100%;
+  margin-top: 1em;
 }
 
 .radio-container {
@@ -28,5 +29,6 @@ button{
 
 .checkbox{
   text-align: right;
+  margin-top: 2em;
 }
 
