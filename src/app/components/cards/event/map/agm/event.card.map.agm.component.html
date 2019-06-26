@@ -8,7 +8,9 @@
            [rotateControl]="true"
            [gestureHandling]="'cooperative'"
            [scrollwheel]="null"
-           [mapTypeControlOptions]="mapTypeControlOptions">
+           [mapTypeControlOptions]="mapTypeControlOptions"
+           [zoomControlOptions]="zoomControlOptions"
+           [streetViewControl]="false">
     <ng-container *ngFor="let activityMapData of activitiesMapData">
       <!-- Start Marker -->
       <agm-marker [agmFitBounds]="true"

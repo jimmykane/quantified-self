@@ -5,7 +5,8 @@ import {
   Component,
   HostListener,
   Input,
-  OnChanges, OnDestroy,
+  OnChanges,
+  OnDestroy,
   OnInit,
   ViewChild,
 } from '@angular/core';
@@ -15,14 +16,18 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
-import {ControlPosition, MapTypeControlOptions, MapTypeId} from '@agm/core/services/google-maps-types';
+import {
+  ControlPosition,
+  MapTypeControlOptions,
+  MapTypeControlStyle,
+  ZoomControlOptions
+} from '@agm/core/services/google-maps-types';
 import {Log} from 'ng2-logger/browser';
 import {EventService} from '../../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
-import {combineLatest, forkJoin, Subscription} from 'rxjs';
+import {Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {map} from "rxjs/operators";
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -32,7 +37,7 @@ import {map} from "rxjs/operators";
 })
 
 export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @ViewChild(AgmMap, { static: false }) agmMap;
+  @ViewChild(AgmMap, {static: false}) agmMap;
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
@@ -49,8 +54,14 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
   public clickedPoint: PointInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
-    // mapTypeIds: [MapTypeId],
-    position: ControlPosition.TOP_RIGHT,
+    // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
+    // mapTypeIds: ['hybrid','roadmap', 'satellite', 'terrain'],
+    position: ControlPosition.LEFT_TOP,
+    style: MapTypeControlStyle.HORIZONTAL_BAR
+  };
+
+  public zoomControlOptions: ZoomControlOptions = {
+    position: ControlPosition.RIGHT_TOP
   };
 
   private logger = Log.create('EventCardMapAGMComponent');
@@ -63,8 +74,8 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 
 
   ngOnInit() {
-    if (!this.user || !this.event){
-      throw 'Component needs events and user';
+    if (!this.user || !this.event) {
+      throw new Error('Component needs events and user');
     }
   }
 
@@ -116,7 +127,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
               this.activitiesMapData.splice(index, 1);
             }
             this.isLoading = false;
-            if (!this.activitiesMapData.length){
+            if (!this.activitiesMapData.length) {
               this.noMapData = true;
             }
             this.changeDetectorRef.detectChanges();
@@ -127,9 +138,9 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
           const longData = streams[1].getNumericData();
 
           // If no numeric data for any reason
-          if (!latData.length || !longData.length){
+          if (!latData.length || !longData.length) {
             this.isLoading = false;
-            if (!this.activitiesMapData.length){
+            if (!this.activitiesMapData.length) {
               this.noMapData = true;
             }
             return;
@@ -145,7 +156,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
               return latLongArray
             }, []),
           });
-
 
 
           // debugger;
@@ -293,11 +303,11 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   private resizeMapToBounds() {
-    if (!this.agmMap){
+    if (!this.agmMap) {
       return;
     }
     this.agmMap.triggerResize().then(() => {
-      if (!this.agmMap){
+      if (!this.agmMap) {
         return;
       }
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
