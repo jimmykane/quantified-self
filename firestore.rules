@@ -40,6 +40,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /userAccountPrivileges/{document=**} {
+        allow write: if false;
+        allow read: if true;
+    }
+
     match /appInfo/{document=**} {
       allow write: if false;
       allow read: if true;
