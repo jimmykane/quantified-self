@@ -366,6 +366,10 @@ export class EventService implements OnDestroy {
     return true;
   }
 
+  public deleteStream(user: User, eventID, activityID, streamType: string) {
+    return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams').doc(streamType).delete();
+  }
+
   public async deleteAllStreams(user: User, eventID, activityID): Promise<number> {
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([
       this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
