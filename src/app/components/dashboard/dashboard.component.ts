@@ -22,14 +22,14 @@ import {ActionButton} from "../../services/action-buttons/app.action-button";
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
-  user: User;
-  events: EventInterface[];
-  userSubscription: Subscription;
-  searchTerm: string;
-  searchStartDate: Date;
-  searchEndDate: Date;
-  startOfTheWeek: DaysOfTheWeek;
-  showUpload: boolean;
+  public user: User;
+  public events: EventInterface[];
+  public userSubscription: Subscription;
+  public searchTerm: string;
+  public searchStartDate: Date;
+  public searchEndDate: Date;
+  public startOfTheWeek: DaysOfTheWeek;
+  public showUpload: boolean;
 
   constructor(private router: Router,
               public authService: AppAuthService,
@@ -50,7 +50,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return of(null);
       }
       this.user = user;
-      if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom  && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
+      if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
         this.searchStartDate = new Date(this.user.settings.dashboardSettings.startDate);
         this.searchEndDate = new Date(this.user.settings.dashboardSettings.endDate);
         return;
@@ -64,14 +64,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     }));
   }
 
-  search(search: {searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges}) {
+  search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
     this.searchEndDate = search.endDate;
     this.user.settings.dashboardSettings.dateRange = search.dateRange;
-    this.user.settings.dashboardSettings.startDate = search.startDate  && search.startDate.getTime();
-    this.user.settings.dashboardSettings.endDate = search.endDate &&  search.endDate.getTime();
-    this.userService.updateUserProperties(this.user, {settings: this.user.settings} )
+    this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
+    this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
+    this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   ngOnChanges() {

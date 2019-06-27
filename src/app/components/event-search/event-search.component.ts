@@ -140,7 +140,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
         endDate: new Date(new Date().setHours(24, 0, 0, 0))
       }
     }
-    case DateRanges.lastThiryDays: {
+    case DateRanges.lastThirtyDays: {
       return {
         startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30),
         endDate: new Date(new Date().setHours(24, 0, 0, 0))

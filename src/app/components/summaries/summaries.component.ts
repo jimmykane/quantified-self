@@ -22,6 +22,10 @@ import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
+import {
+  ChartTypes,
+  UserDashboardChartSettingsInterface
+} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 
 @Component({
   selector: 'app-summaries',
@@ -39,17 +43,11 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   public rowHeight;
   public numberOfCols;
 
-  isLoading = true;
-  events: EventInterface[];
-  pieChartDataByDuration: any[];
-  pieChartDataByDistance: any[];
-  pieChartDataByAscent: any[];
-  pieChartDataByEnergy: any[];
+  public isLoading = true;
+  public events: EventInterface[];
 
-  pieChartValueTypeDistance = DataDistance.type;
-  pieChartValueTypeDuration = DataDuration.type;
-  pieChartValueTypeAscent = DataAscent.type;
-  pieChartValueTypeEnergy = DataEnergy.type;
+  public charts: SummariesChartInterface[] = [];
+  public chartTypes  = ChartTypes
 
   private eventsSubscription: Subscription;
   private chartThemeSubscription: Subscription;
@@ -111,13 +109,17 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     this.eventsSubscription = this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit).subscribe(events => {
-      this.events = events.filter(event => !event.isMerge );
-      this.pieChartDataByDuration = this.getPieChartDataForDataType(events, DataDuration.type);
-      this.pieChartDataByDistance = this.getPieChartDataForDataType(events, DataDistance.type);
-      this.pieChartDataByAscent = this.getPieChartDataForDataType(events, DataAscent.type);
-      this.pieChartDataByEnergy = this.getPieChartDataForDataType(events, DataEnergy.type);
+      this.events = events.filter(event => !event.isMerge);
+      this.charts = this.getChartsAndData(this.events, this.user.settings.dashboardSettings.chartsSettings);
       this.isLoading = false;
     });
+  }
+
+  private getChartsAndData(events: EventInterface[], userDashboardChartSettings: UserDashboardChartSettingsInterface[]): SummariesChartInterface[] {
+    return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
+      chartsAndData.push({...chartSettings, ...{data: this.getPieChartDataForDataType(events, chartSettings.dataType)}});
+      return chartsAndData;
+    }, [])
   }
 
   private unsubscribeFromAll() {
@@ -127,11 +129,8 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
-    // this.userSubscription.unsubscribe();
+    this.unsubscribeFromAll();
   }
-
-  // @todo combine the following aka does it scale hehe?
-
 
   private getPieChartDataForDataType(events: EventInterface[], dataType: string) {
     if (!this.events) {
@@ -158,7 +157,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       if (!eventTypeDisplay || !stat) {
         return valueByTypeMap;
       }
-      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]){
+      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
       const activityTypeValue = valueByTypeMap.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
@@ -188,4 +187,8 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     }
     return 4;
   }
+}
+
+export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
+  data: any[]
 }

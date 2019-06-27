@@ -5,8 +5,8 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {ClipboardService} from '../../services/app.clipboard.service';
@@ -38,7 +38,7 @@ export class EventActionsComponent implements OnInit {
 
   ngOnInit(): void {
     if (!this.user) {
-      throw "User is required"
+      throw new Error('User is required')
     }
   }
 

@@ -1,33 +1,23 @@
-<section class="pie" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">
+<section class="pie" *ngIf="charts.length">
     <app-shade [isActive]="isLoading"></app-shade>
     <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
-        <mat-grid-tile colspan="1" *ngIf="pieChartDataByDuration && pieChartDataByDuration.length">
-            <app-pie-chart [data]="pieChartDataByDuration"
+
+        <mat-grid-tile colspan="1" *ngFor="let chart of charts">
+
+            <app-pie-chart *ngIf="chart.type === chartTypes.Pie"
+                           [data]="chart.data"
                            [chartTheme]="chartTheme"
-                           [chartValueType]="pieChartValueTypeDuration"
+                           [chartValueType]="chart.dataType"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
-        </mat-grid-tile>
-        <mat-grid-tile colspan="1" *ngIf="pieChartDataByDistance && pieChartDataByDistance.length">
-            <app-pie-chart [data]="pieChartDataByDistance"
-                           [chartValueType]="pieChartValueTypeDistance"
-                           [chartTheme]="chartTheme"
-                           [userChartSettings]="user.settings.chartSettings">
-            </app-pie-chart>
-        </mat-grid-tile>
-        <mat-grid-tile colspan="1" *ngIf="pieChartDataByEnergy && pieChartDataByEnergy.length">
-            <app-column-chart [data]="pieChartDataByEnergy"
-                              [chartValueType]="pieChartValueTypeEnergy"
-                              [chartTheme]="chartTheme"
-                              [vertical]="false"
-                              [userChartSettings]="user.settings.chartSettings">
-            </app-column-chart>
-        </mat-grid-tile>
-        <mat-grid-tile colspan="1" *ngIf="pieChartDataByAscent && pieChartDataByAscent.length">
-            <app-column-chart [data]="pieChartDataByAscent"
-                              [chartValueType]="pieChartValueTypeAscent"
-                              [chartTheme]="chartTheme"
-                              [userChartSettings]="user.settings.chartSettings">
+
+            <app-column-chart
+                    *ngIf="chart.type === chartTypes.ColumnHorizontal || chart.type === chartTypes.ColumnVertical"
+                    [data]="chart.data"
+                    [chartTheme]="chartTheme"
+                    [vertical]="chart.type === chartTypes.ColumnVertical"
+                    [chartValueType]="chart.dataType"
+                    [userChartSettings]="user.settings.chartSettings">
             </app-column-chart>
         </mat-grid-tile>
     </mat-grid-list>

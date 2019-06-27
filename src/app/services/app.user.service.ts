@@ -33,6 +33,14 @@ import {
   DateRanges,
   UserDashboardSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
+import {
+  ChartTypes,
+  UserDashboardChartSettingsInterface
+} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
+import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
+import {DataEnergy} from "quantified-self-lib/lib/data/data.energy";
+import {DataAscent} from "quantified-self-lib/lib/data/data.ascent";
 
 
 @Injectable()
@@ -133,7 +141,7 @@ export class UserService implements OnDestroy {
   }
 
   public async isBranded(user: User): Promise<boolean> {
-    return await this.getAccountPrivileges(user).get().pipe(take(1)).pipe(map((doc) => {
+    return this.getAccountPrivileges(user).get().pipe(take(1)).pipe(map((doc) => {
       if (!doc.exists) {
         return false;
       }
@@ -185,6 +193,30 @@ export class UserService implements OnDestroy {
     }, {})
   }
 
+  getDefaultUserDashboardChartSettings(): UserDashboardChartSettingsInterface[] {
+    return [{
+      name: 'Duration',
+      order: 0,
+      type: ChartTypes.Pie,
+      dataType: DataDuration.type
+    }, {
+      name: 'Distance',
+      order: 1,
+      type: ChartTypes.Pie,
+      dataType: DataDistance.type
+    }, {
+      name: 'Energy',
+      order: 2,
+      type: ChartTypes.ColumnHorizontal,
+      dataType: DataEnergy.type
+    }, {
+      name: 'Ascent',
+      order: 3,
+      type: ChartTypes.ColumnVertical,
+      dataType: DataAscent.type
+    }]
+  }
+
   private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
@@ -198,11 +230,12 @@ export class UserService implements OnDestroy {
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
     settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || [VerticalSpeedUnits.MetersPerSecond];
+    settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Sunday;
     settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
     settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || DateRanges.thisWeek;
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
-    settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Sunday
+    settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || this.getDefaultUserDashboardChartSettings();
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;
   }
