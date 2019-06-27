@@ -114,7 +114,7 @@ export abstract class ChartAbstract implements OnDestroy {
   protected getExportingMenu(): am4core.ExportMenu {
     const exportingMenu = new am4core.ExportMenu();
     exportingMenu.align = 'right';
-    exportingMenu.verticalAlign = 'bottom';
+    exportingMenu.verticalAlign = 'middle';
     exportingMenu.items = [{
       label: '...️',
       menu: [

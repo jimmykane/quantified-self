@@ -180,7 +180,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
                 <p style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</p>`
       });
 
-      chart.exporting.menu = this.getExportingMenu();
+      // chart.exporting.menu = this.getExportingMenu();
 
       //
       // Disable the preloader

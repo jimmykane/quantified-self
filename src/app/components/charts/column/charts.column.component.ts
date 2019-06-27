@@ -100,16 +100,17 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       const chartTitle = topContainer.createChild(am4core.Label);
       chartTitle.align = 'left';
       chartTitle.adapter.add('text', (text, target, key) => {
-        return `[font-size: 1.3em]${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).type}[/] [bold font-size: 1.4em]${target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+        const dataSum = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.parent.parent.parent.parent['data'].reduce((sum, data) => {
           sum += data.value;
           return sum;
-        }, 0).toFixed(1)}${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}[/]`;
+        }, 0));
+        return `[font-size: 1.3em]${dataSum.getDisplayType()}[/] [bold font-size: 1.4em]${dataSum.getDisplayValue()}${dataSum.getDisplayUnit()}[/]`;
       });
 
 
       // Disable the preloader
       chart.preloader.disabled = true;
-      chart.exporting.menu = this.getExportingMenu();
+      // chart.exporting.menu = this.getExportingMenu();
 
       const categoryAxis = this.vertical ? chart.xAxes.push(new am4charts.CategoryAxis()) : chart.yAxes.push(new am4charts.CategoryAxis());
       categoryAxis.dataFields.category = 'type';
