@@ -141,14 +141,13 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         valueAxis.extraMax = 0.15;
       }
       valueAxis.numberFormatter = new am4core.NumberFormatter();
-      valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
+      valueAxis.numberFormatter.numberFormat = `#`;
+      // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartValueType).unit}`;
+      valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
+        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+      });
       valueAxis.min = 0;
-      // chart.events.on('dataitemsvalidated', function(ev) {
-      //   // valueAxis.max = Math.max(...ev.target.data.map(o => o.value), 0) + (Math.max(...ev.target.data.map(o => o.value), 0)* 0.05);
-      //   // valueAxis.strictMinMax = true;
-      //   // chart.invalidateLayout()
-      //   // valueAxis.min =0 ;
-      // });
 
 
       let series;
@@ -160,7 +159,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
         categoryLabel.label.adapter.add('text', (text, target) => {
           const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
-          return `[bold font-size: 1.3em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+          return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
         categoryLabel.dy = -15;
         categoryLabel.label.hideOversized = false;
@@ -175,7 +174,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
         categoryLabel.label.adapter.add('text', (text, target) => {
           const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(target.dataItem.dataContext.value));
-          return `[bold font-size: 1.3em ]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+          return `[bold font-size: 1.1em ]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
         categoryLabel.label.dx = 50;
         categoryLabel.label.hideOversized = false;

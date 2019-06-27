@@ -1,0 +1,16 @@
+mat-icon.toolTip{
+  font-size: 14px;
+  margin-left: 0.5em;
+}
+
+mat-select{
+  margin: 1em;
+  min-width: 10vw;
+}
+
+::ng-deep  .mat-menu-content{
+  /*overflow: visible !important;*/
+}
+/*/deep/ .mat-option-text.mat-option-text {*/
+/*  white-space: normal;*/
+/*}*/

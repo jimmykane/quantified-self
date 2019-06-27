@@ -49,7 +49,7 @@
         </mat-form-field>
 
         <mat-form-field>
-          <mat-select placeholder="Data Types to show on charts" formControlName="dataTypesToUse" multiple>
+          <mat-select placeholder="" formControlName="dataTypesToUse" multiple>
             <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
                           [disabled]="dataGroup.disabled">
               <mat-option *ngFor="let data of dataGroup.data" [value]="data">

@@ -65,7 +65,6 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {UploadErrorComponent} from './components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from './components/activity-metadata/activity-metadata.component';
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
-import {ChartActionsComponent} from './components/chart-actions/chart.actions.component';
 import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
 import {UserSettingsService} from './services/app.user.settings.service';
 import {AngularFireModule} from '@angular/fire';
@@ -98,6 +97,8 @@ import {ChartsPieComponent} from './components/charts/pie/charts.pie.component';
 import {SummariesComponent} from './components/summaries/summaries.component';
 import * as Sentry from '@sentry/browser';
 import {ChartsColumnComponent} from './components/charts/column/charts.column.component';
+import {ChartActionsComponent} from './components/charts/actions/chart.actions.component';
+import {EventCardChartActionsComponent} from './components/cards/event/chart/actions/event.card.chart.actions.component';
 
 declare function require(moduleName: string): any;
 
@@ -203,7 +204,7 @@ export class SentryErrorHandler implements ErrorHandler {
     EventCardChartComponent,
     UploadErrorComponent,
     ActivityMetadataComponent,
-    ChartActionsComponent,
+    EventCardChartActionsComponent,
     UserComponent,
     UserActionsComponent,
     UserFormComponent,
@@ -217,6 +218,8 @@ export class SentryErrorHandler implements ErrorHandler {
     ChartsPieComponent,
     ChartsColumnComponent,
     SummariesComponent,
+    ChartActionsComponent,
+
   ],
   entryComponents: [
     EventFormComponent,

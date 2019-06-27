@@ -1,5 +1,4 @@
 import {
-  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   EventEmitter,
@@ -8,17 +7,17 @@ import {
   Output,
 } from '@angular/core';
 import {Router} from '@angular/router';
-import {EventService} from '../../services/app.event.service';
-import {UserSettingsService} from '../../services/app.user.settings.service';
+import {EventService} from '../../../../../services/app.event.service';
+import {UserSettingsService} from '../../../../../services/app.user.settings.service';
 
 @Component({
-  selector: 'app-chart-actions',
-  templateUrl: './chart.actions.component.html',
-  styleUrls: ['./chart.actions.component.css'],
+  selector: 'app-event-card-chart-actions',
+  templateUrl: './event.card.chart.actions.component.html',
+  styleUrls: ['./event.card.chart.actions.component.css'],
   providers: [],
 })
 
-export class ChartActionsComponent implements OnChanges {
+export class EventCardChartActionsComponent implements OnChanges {
 
   @Input() useDistanceAxis: boolean;
   @Input() useDurationAxis: boolean;

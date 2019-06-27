@@ -63,13 +63,13 @@
       <mat-tab label="Chart">
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
-          <app-chart-actions
+          <app-event-card-chart-actions
             [(useDistanceAxis)]="useDistanceAxis"
             [(showAllData)]="showAllData"
             [(useDurationAxis)]="useDurationAxis"
             [(dataSmoothingLevel)]="dataSmoothingLevel"
             align="end">
-          </app-chart-actions>
+          </app-event-card-chart-actions>
         </ng-template>
         <app-event-card-chart
           *ngIf="currentUser !== undefined"

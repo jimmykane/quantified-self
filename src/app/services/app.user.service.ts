@@ -207,12 +207,12 @@ export class UserService implements OnDestroy {
     }, {
       name: 'Energy',
       order: 2,
-      type: ChartTypes.ColumnHorizontal,
+      type: ChartTypes.ColumnsHorizontal,
       dataType: DataEnergy.type
     }, {
       name: 'Ascent',
       order: 3,
-      type: ChartTypes.ColumnVertical,
+      type: ChartTypes.PyramidsVertical,
       dataType: DataAscent.type
     }]
   }

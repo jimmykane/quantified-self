@@ -1,24 +1,22 @@
 <section class="pie" *ngIf="charts.length">
     <app-shade [isActive]="isLoading"></app-shade>
     <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
-
         <mat-grid-tile colspan="1" *ngFor="let chart of charts">
-
             <app-pie-chart *ngIf="chart.type === chartTypes.Pie"
                            [data]="chart.data"
                            [chartTheme]="chartTheme"
                            [chartValueType]="chart.dataType"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
-
             <app-column-chart
-                    *ngIf="chart.type === chartTypes.ColumnHorizontal || chart.type === chartTypes.ColumnVertical"
+                    *ngIf="chart.type === chartTypes.ColumnsHorizontal || chart.type === chartTypes.PyramidsVertical"
                     [data]="chart.data"
                     [chartTheme]="chartTheme"
-                    [vertical]="chart.type === chartTypes.ColumnVertical"
+                    [vertical]="chart.type === chartTypes.PyramidsVertical"
                     [chartValueType]="chart.dataType"
                     [userChartSettings]="user.settings.chartSettings">
             </app-column-chart>
+            <app-chart-actions [user]="user" [chartType]="chart.type" [chartDataType]="chart.dataType" [chartOrder]="chart.order"></app-chart-actions>
         </mat-grid-tile>
     </mat-grid-list>
 </section>
