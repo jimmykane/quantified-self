@@ -16,7 +16,7 @@
     "cookie-parser": "^1.4.3",
     "cors": "^2.8.5",
     "firebase-admin": "^8.2.0",
-    "firebase-functions": "^3.0.1",
+    "firebase-functions": "^3.0.2",
     "node-fetch": "^2.5.0",
     "pako": "^1.0.10",
     "quantified-self-lib": "github:jimmykane/quantified-self-lib#feature/streams-pub",
