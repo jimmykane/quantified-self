@@ -166,7 +166,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
         duration: 2000,
       });
     } catch (e) {
-      this.snackBar.open(`Could not disconnect due to ${e}`, null, {
+      Sentry.captureException(e);
+      this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
         duration: 2000,
       });
     }

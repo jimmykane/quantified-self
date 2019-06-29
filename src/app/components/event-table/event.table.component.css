@@ -51,8 +51,7 @@ mat-card{
 }
 
 .merged {
-  border-top: 1px dotted;
-  border-bottom: 1px dotted;
+ opacity: 0.7;
 }
 
 ::ng-deep .mat-paginator-container{
