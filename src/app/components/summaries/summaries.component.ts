@@ -265,7 +265,6 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     valueByType.forEach((value, type) => {
       data.push({type: type, value: value})
     });
-    // @todo this needs min and max to allow other than 0 for not sum
     return data
       .filter(dataItem => isNumber(dataItem.value))
       .sort((dataItemA, dataItemB) => {

@@ -27,6 +27,11 @@ import {DataPowerAvg} from "quantified-self-lib/lib/data/data.power-avg";
 import {DataTemperatureMax} from "quantified-self-lib/lib/data/data.temperature-max";
 import {DataTemperatureAvg} from "quantified-self-lib/lib/data/data.temperature-avg";
 import {DataTemperatureMin} from "quantified-self-lib/lib/data/data.temperature-min";
+import {DataCadenceMax} from "quantified-self-lib/lib/data/data.cadence-max";
+import {DataCadenceAvg} from "quantified-self-lib/lib/data/data.cadence-avg";
+import {DataCadenceMin} from "quantified-self-lib/lib/data/data.cadence-min";
+import {DataVO2Max} from "quantified-self-lib/lib/data/data.vo2-max";
+import {DataPeakEPOC} from "quantified-self-lib/lib/data/data.peak-epoc";
 
 @Component({
   selector: 'app-chart-actions',
@@ -77,6 +82,14 @@ export class ChartActionsComponent implements OnInit {
       ]
     },
     {
+      name: 'Cadence',
+      data: [
+        DataCadenceMax.type,
+        DataCadenceMin.type,
+        DataCadenceAvg.type,
+      ]
+    },
+    {
       name: 'Power',
       data: [
         DataPowerMax.type,
@@ -95,10 +108,12 @@ export class ChartActionsComponent implements OnInit {
     {
       name: 'Body',
       data: [
+        DataVO2Max.type,
         DataRecovery.type,
         DataTotalTrainingEffect.type,
         DataEPOC.type,
-        DataPeakTrainingEffect.type
+        DataPeakTrainingEffect.type,
+        DataPeakEPOC.type,
       ]
     },
   ];
