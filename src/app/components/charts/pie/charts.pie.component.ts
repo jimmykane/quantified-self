@@ -125,8 +125,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       // chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(95);
-      chart.innerRadius = am4core.percent(70);
+      chart.radius = am4core.percent(80);
+      chart.innerRadius = am4core.percent(65);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
       pieSeries.dataFields.value = 'value';
@@ -188,8 +188,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       label.adapter.add('htmlOutput', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
         return `<div style="text-align: center; font-size: 1.3em;">${data.getDisplayType()}</div>
-                <div style="text-align: center; font-size: 1.0em; ">${this.chartDataValueType}</div>
-                <div style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</div>`
+                <div style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</div>
+                <div style="text-align: center; font-size: 1.0em; ">${this.chartDataValueType}</div>`
       });
 
       // chart.exporting.menu = this.getExportingMenu();

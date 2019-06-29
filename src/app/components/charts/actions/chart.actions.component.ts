@@ -1,7 +1,6 @@
 import {MatDialog} from '@angular/material/dialog';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Component, Input, OnInit} from '@angular/core';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
@@ -12,7 +11,7 @@ import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
 import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
-import {ChartTypes, ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {ChartDataValueTypes, ChartTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import {UserService} from '../../../services/app.user.service';
 import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
@@ -120,6 +119,10 @@ export class ChartActionsComponent implements OnInit {
 
   changeChartType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).type = event.value;
+    // If its pie show only totals
+    if (event.value === ChartTypes.Pie){
+      this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = ChartDataValueTypes.Total;
+    }
     this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
