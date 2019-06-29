@@ -24,9 +24,9 @@
   integrity sha512-8erNMHc0V26gA6Nj4W9laVrQrXHsj9K2TEM7eL2IQogGSHLL4vet3UNekYfcGQ2cjfvwUjMzd+BNS/8S7GnfiA==
 
 "@firebase/app@^0.4.4":
-  version "0.4.8"
-  resolved "https://registry.yarnpkg.com/@firebase/app/-/app-0.4.8.tgz#b5815cb25beed4d74adf972fa06420258dd49d55"
-  integrity sha512-z79jALVEOA6TxNXd6DHECwFZsg9njZRoyQoFYDg02FVR1WgJ+ezlPCfECiG5lO5tsXcKuJNyuwc6I0Pb8DKizg==
+  version "0.4.9"
+  resolved "https://registry.yarnpkg.com/@firebase/app/-/app-0.4.9.tgz#fc1ca549c5991b8a25974d114dc14deb633157e5"
+  integrity sha512-M1An/Id2ozNWbEeanLmczqgu7nS7Qq62u8yjdGOuePhJNie61/10zwPNETGKW/M+sYD6JaZYIsIhP2bQF9ZoDQ==
   dependencies:
     "@firebase/app-types" "0.4.0"
     "@firebase/logger" "0.1.17"
@@ -1818,7 +1818,7 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/d9b2b6cba12f591b6462ae97258e4b01f6fde126"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/45ab72989520fb63d00d5a6652b2a56bffade2af"
   dependencies:
     "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
