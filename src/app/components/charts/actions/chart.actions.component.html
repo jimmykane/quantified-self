@@ -15,4 +15,9 @@
       </mat-option>
     </mat-optgroup>
   </mat-select>
+  <mat-select placeholder="Metric value" [value]="chartDataValueType" (selectionChange)="changeChartDataValueType($event)">
+    <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue" [value]="chartValueType.value">
+      {{chartValueType.value}}
+    </mat-option>
+  </mat-select>
 </mat-menu>

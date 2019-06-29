@@ -1,7 +1,6 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
-  ChangeDetectorRef,
   Component,
   ElementRef,
   Input,
@@ -15,12 +14,13 @@ import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-// Chart Themes
-import animated from '@amcharts/amcharts4/themes/animated';
-
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {ChartAbstract} from '../chart.abstract';
 import * as Sentry from '@sentry/browser';
+import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+// Chart Themes
+import animated from '@amcharts/amcharts4/themes/animated';
+
 
 @Component({
   selector: 'app-pie-chart',
@@ -34,8 +34,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
   @Input() data: any;
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
-  @Input() chartValueType: string;
-
+  @Input() chartDataType: string;
+  @Input() chartDataValueType: ChartDataValueTypes;
 
   private dataSelected: any;
 
@@ -125,8 +125,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       // chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(70);
-      chart.innerRadius = am4core.percent(50);
+      chart.radius = am4core.percent(80);
+      chart.innerRadius = am4core.percent(65);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
       pieSeries.dataFields.value = 'value';
@@ -140,8 +140,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       pieSeries.slices.template.strokeOpacity = 1;
       // pieSeries.slices.template.stroke = am4core.color('#0c96ff');
       pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, target.dataItem.dataContext['value']);
-        return `{category} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+        return `{category} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
       pieSeries.slices.template.events.on('hit', (event) => {
         // const a = this.chart.data.find(dataItem => dataItem.type === 'Running');
@@ -173,11 +173,23 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       label.horizontalCenter = 'middle';
       label.verticalCenter = 'middle';
       // label.fontSize = 12;
-      label.html = `{values.value.sum.formatNumber('#')}`;
+      if (this.chartDataValueType === ChartDataValueTypes.Total) {
+        label.html = `{values.value.sum.formatNumber('#')}`;
+      }
+      if (this.chartDataValueType === ChartDataValueTypes.Maximum) {
+        label.html = `{values.value.high.formatNumber('#')}`;
+      }
+      if (this.chartDataValueType === ChartDataValueTypes.Minimum) {
+        label.html = `{values.value.low.formatNumber('#')}`;
+      }
+      if (this.chartDataValueType === ChartDataValueTypes.Average) {
+        label.html = `{values.value.average.formatNumber('#')}`;
+      }
       label.adapter.add('htmlOutput', (text, target, key) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartValueType, Number(text));
-        return `<p style="text-align: center; font-size: 1.3em">${data.getDisplayType()}</p>
-                <p style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</p>`
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
+        return `<div style="text-align: center; font-size: 1.3em;">${data.getDisplayType()}</div>
+                <div style="text-align: center; font-size: 1.0em; ">${this.chartDataValueType}</div>
+                <div style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</div>`
       });
 
       // chart.exporting.menu = this.getExportingMenu();

@@ -12,8 +12,21 @@ import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
 import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
-import {ChartTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import {UserService} from "../../../services/app.user.service";
+import {ChartTypes, ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {UserService} from '../../../services/app.user.service';
+import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
+import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
+import {DataAltitudeAvg} from 'quantified-self-lib/lib/data/data.altitude-avg';
+import {DataAscentTime} from 'quantified-self-lib/lib/data/data.ascent-time';
+import {DataDescentTime} from 'quantified-self-lib/lib/data/data.descent-time';
+import {DataHeartRateMax} from "quantified-self-lib/lib/data/data.heart-rate-max";
+import {DataHeartRateMin} from "quantified-self-lib/lib/data/data.heart-rate-min";
+import {DataPowerMax} from "quantified-self-lib/lib/data/data.power-max";
+import {DataPowerMin} from "quantified-self-lib/lib/data/data.power-min";
+import {DataPowerAvg} from "quantified-self-lib/lib/data/data.power-avg";
+import {DataTemperatureMax} from "quantified-self-lib/lib/data/data.temperature-max";
+import {DataTemperatureAvg} from "quantified-self-lib/lib/data/data.temperature-avg";
+import {DataTemperatureMin} from "quantified-self-lib/lib/data/data.temperature-min";
 
 @Component({
   selector: 'app-chart-actions',
@@ -25,14 +38,16 @@ export class ChartActionsComponent implements OnInit {
   @Input() user: User;
   @Input() chartType: ChartTypes;
   @Input() chartDataType: string;
+  @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartOrder: number;
 
 
   public chartTypes = ChartTypes;
+  public chartValueTypes = ChartDataValueTypes;
 
   public dataGroups = [
     {
-      name: 'Basic Data',
+      name: 'Common',
       data: [
         DataDuration.type,
         DataDistance.type,
@@ -42,7 +57,43 @@ export class ChartActionsComponent implements OnInit {
       ]
     },
     {
-      name: 'Advanced Data',
+      name: 'Altitude',
+      data: [
+        DataAltitudeMax.type,
+        DataAltitudeMin.type,
+        DataAltitudeAvg.type,
+        DataAscent.type,
+        DataAscentTime.type,
+        DataDescent.type,
+        DataDescentTime.type,
+      ]
+    },
+    {
+      name: 'Heart Rate',
+      data: [
+        DataHeartRateMax.type,
+        DataHeartRateMin.type,
+        DataHeartRateAvg.type,
+      ]
+    },
+    {
+      name: 'Power',
+      data: [
+        DataPowerMax.type,
+        DataPowerMin.type,
+        DataPowerAvg.type,
+      ]
+    },
+    {
+      name: 'Temperature',
+      data: [
+        DataTemperatureMax.type,
+        DataTemperatureMin.type,
+        DataTemperatureAvg.type,
+      ]
+    },
+    {
+      name: 'Body',
       data: [
         DataRecovery.type,
         DataTotalTrainingEffect.type,
@@ -59,6 +110,11 @@ export class ChartActionsComponent implements OnInit {
 
   changeChartDataType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataType = event.value;
+    this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  changeChartDataValueType(event) {
+    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = event.value;
     this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 

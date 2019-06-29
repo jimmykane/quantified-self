@@ -34,13 +34,13 @@ import {
   UserDashboardSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {
-  ChartTypes,
+  ChartTypes, ChartDataValueTypes,
   UserDashboardChartSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
-import {DataEnergy} from "quantified-self-lib/lib/data/data.energy";
-import {DataAscent} from "quantified-self-lib/lib/data/data.ascent";
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 
 
 @Injectable()
@@ -198,22 +198,26 @@ export class UserService implements OnDestroy {
       name: 'Duration',
       order: 0,
       type: ChartTypes.Pie,
-      dataType: DataDuration.type
+      dataType: DataDuration.type,
+      dataValueType: ChartDataValueTypes.Total
     }, {
       name: 'Distance',
       order: 1,
       type: ChartTypes.Pie,
-      dataType: DataDistance.type
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total
     }, {
       name: 'Energy',
       order: 2,
       type: ChartTypes.ColumnsHorizontal,
-      dataType: DataEnergy.type
+      dataType: DataEnergy.type,
+      dataValueType: ChartDataValueTypes.Total
     }, {
       name: 'Ascent',
       order: 3,
       type: ChartTypes.PyramidsVertical,
-      dataType: DataAscent.type
+      dataType: DataAscent.type,
+      dataValueType: ChartDataValueTypes.Maximum
     }]
   }
 

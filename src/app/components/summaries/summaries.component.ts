@@ -1,31 +1,23 @@
-import {
-  ChangeDetectionStrategy,
-  Component, HostListener, Input, OnChanges, OnDestroy,
-  OnInit,
-} from '@angular/core';
+import {Component, HostListener, Input, OnChanges, OnDestroy, OnInit,} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
-import {combineLatest, merge, of, Subscription} from 'rxjs';
+import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {catchError, map, startWith, switchMap} from 'rxjs/operators';
 import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {MatTableDataSource} from '@angular/material';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {ChartThemes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {ThemeService} from '../../services/app.theme.service';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import * as Sentry from '@sentry/browser';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {
   ChartTypes,
+  ChartDataValueTypes,
   UserDashboardChartSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-summaries',
@@ -47,7 +39,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   public events: EventInterface[];
 
   public charts: SummariesChartInterface[] = [];
-  public chartTypes  = ChartTypes
+  public chartTypes = ChartTypes
 
   private eventsSubscription: Subscription;
   private chartThemeSubscription: Subscription;
@@ -117,7 +109,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
 
   private getChartsAndData(events: EventInterface[], userDashboardChartSettings: UserDashboardChartSettingsInterface[]): SummariesChartInterface[] {
     return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
-      chartsAndData.push({...chartSettings, ...{data: this.getPieChartDataForDataType(events, chartSettings.dataType)}});
+      chartsAndData.push({...chartSettings, ...{data: this.getChartDataForDataTypeAndDataValueType(events, chartSettings.dataType, chartSettings.dataValueType)}});
       return chartsAndData;
     }, [])
   }
@@ -132,10 +124,64 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     this.unsubscribeFromAll();
   }
 
-  private getPieChartDataForDataType(events: EventInterface[], dataType: string) {
+  getChartDataForDataTypeAndDataValueType(events: EventInterface[], dataType: string, dataValueType: ChartDataValueTypes) {
     if (!this.events) {
       return [];
     }
+    if (dataValueType === ChartDataValueTypes.Total) {
+      return this.getChartDataForDataTypeSum(events, dataType);
+    }
+    if (dataValueType === ChartDataValueTypes.Maximum) {
+      return this.getChartDataForDataTypeMax(events, dataType);
+    }
+    if (dataValueType === ChartDataValueTypes.Minimum) {
+      return this.getChartDataForDataTypeMin(events, dataType);
+    }
+    if (dataValueType === ChartDataValueTypes.Average) {
+      return this.getChartDataForDataTypeAvg(events, dataType);
+    }
+  }
+
+  private getChartDataForDataTypeMax(events: EventInterface[], dataType: string) {
+    return this.getChartDataForDataTypeMinOrMax(events, dataType, false);
+  }
+
+  private getChartDataForDataTypeMin(events: EventInterface[], dataType: string) {
+    return this.getChartDataForDataTypeMinOrMax(events, dataType, true);
+  }
+
+  private getChartDataForDataTypeMinOrMax(events: EventInterface[], dataType: string, min) {
+    const minOrMax = this.events.reduce((minOrMaxBuffer, event) => {
+      const stat = event.getStat(dataType);
+      // if (!stat || typeof !stat.getValue() === 'number'){
+      if (!stat) {
+        return minOrMaxBuffer;
+      }
+      return !min ? (<number>stat.getValue() > minOrMaxBuffer ? <number>stat.getValue() : minOrMaxBuffer) : (<number>stat.getValue() <= minOrMaxBuffer ? <number>stat.getValue() : minOrMaxBuffer)
+    }, !min ? -Infinity : Infinity);
+
+    if (!isNumber(minOrMax)) {
+      return []
+    }
+
+    // Create the map
+    const valueByType = this.events.reduce((valueByTypeMap: Map<string, number>, event) => {
+      const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+      const stat = event.getStat(dataType);
+      if (!eventTypeDisplay || !stat) {
+        return valueByTypeMap;
+      }
+      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
+        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
+      }
+      const activityTypeValue = valueByTypeMap.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]);
+      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], !isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue())); // @todo break the join (not use display value)
+      return valueByTypeMap
+    }, new Map<string, number>());
+    return this.convertToCategories(valueByType);
+  }
+
+  private getChartDataForDataTypeSum(events: EventInterface[], dataType: string) {
     const valueSum = this.events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
@@ -161,16 +207,70 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
       const activityTypeValue = valueByTypeMap.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
+      if (!activityTypeValue && !stat.getValue()) { // delib include 0 to wipe out from sums
+        return valueByTypeMap;
+      }
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, number>());
+    return this.convertToCategories(valueByType);
+  }
+
+  private getChartDataForDataTypeAvg(events: EventInterface[], dataType: string) {
+    let totalAvgCount = 0;
+    const valueSum = this.events.reduce((sum, event) => {
+      const stat = event.getStat(dataType);
+      if (!stat) {
+        return sum;
+      }
+      totalAvgCount++;
+      sum += <number>stat.getValue();
+      return sum;
+    }, 0);
+
+    if (totalAvgCount === 0) {
+      return []
+    }
+
+    const valueAvg = valueSum / totalAvgCount;
+
+
+    // Create the map with the sums and a map with the counts
+    const valueCountByType = new Map<string, number>();
+    const valueSumByType = this.events.reduce((valueByTypeMap: Map<string, number>, event) => {
+      const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+      const stat = event.getStat(dataType);
+      if (!eventTypeDisplay || !stat) {
+        return valueByTypeMap;
+      }
+      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
+        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
+      }
+      const activityTypeValue = valueByTypeMap.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
+      const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
+      valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1)
+      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
+      return valueByTypeMap
+    }, new Map<string, number>());
+
+    valueSumByType.forEach((value, type) => {
+      valueSumByType.set(type, value / valueCountByType.get(type));
+    });
+
+    return this.convertToCategories(valueSumByType);
+  }
+
+  private convertToCategories(valueByType: Map<string, number>): any[] {
     const data = [];
     valueByType.forEach((value, type) => {
       data.push({type: type, value: value})
     });
-    return data.filter(dataItem => dataItem.value !== 0).sort((dataItemA, dataItemB) => {
-      return dataItemA.value - dataItemB.value;
-    });
+    // @todo this needs min and max to allow other than 0 for not sum
+    return data
+      .filter(dataItem => isNumber(dataItem.value))
+      .sort((dataItemA, dataItemB) => {
+        return dataItemA.value - dataItemB.value;
+      });
   }
 
   private getRowHeight() {

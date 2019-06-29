@@ -5,7 +5,8 @@
             <app-pie-chart *ngIf="chart.type === chartTypes.Pie"
                            [data]="chart.data"
                            [chartTheme]="chartTheme"
-                           [chartValueType]="chart.dataType"
+                           [chartDataType]="chart.dataType"
+                           [chartDataValueType]="chart.dataValueType"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
             <app-column-chart
@@ -13,10 +14,16 @@
                     [data]="chart.data"
                     [chartTheme]="chartTheme"
                     [vertical]="chart.type === chartTypes.PyramidsVertical"
-                    [chartValueType]="chart.dataType"
+                    [chartDataType]="chart.dataType"
+                    [chartDataValueType]="chart.dataValueType"
                     [userChartSettings]="user.settings.chartSettings">
             </app-column-chart>
-            <app-chart-actions [user]="user" [chartType]="chart.type" [chartDataType]="chart.dataType" [chartOrder]="chart.order"></app-chart-actions>
+            <app-chart-actions [user]="user"
+                               [chartType]="chart.type"
+                               [chartDataType]="chart.dataType"
+                               [chartOrder]="chart.order"
+                               [chartDataValueType]="chart.dataValueType">
+            </app-chart-actions>
         </mat-grid-tile>
     </mat-grid-list>
 </section>

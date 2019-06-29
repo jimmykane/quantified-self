@@ -13,7 +13,7 @@ import amchartsdark from '@amcharts/amcharts4/themes/amchartsdark';
 import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
 import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
 import kelly from '@amcharts/amcharts4/themes/kelly';
-import * as am4core from "@amcharts/amcharts4/core";
+import * as am4core from '@amcharts/amcharts4/core';
 
 export abstract class ChartAbstract implements OnDestroy {
   protected chart: am4charts.PieChart | am4charts.XYChart;
@@ -35,6 +35,9 @@ export abstract class ChartAbstract implements OnDestroy {
   constructor(protected zone: NgZone) {
   }
 
+  getCategoryAxis(): am4charts.CategoryAxis {
+    return new am4charts.CategoryAxis();
+  }
 
   protected attachEventListenersOnChart(chart: am4charts.PieChart | am4charts.XYChart) {
     chart.events.on('validated', (ev) => {
@@ -157,4 +160,5 @@ export abstract class ChartAbstract implements OnDestroy {
     this.destroyChart();
     this.unSubscribeFromAll();
   }
+
 }
