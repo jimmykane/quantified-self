@@ -225,8 +225,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       watermark.align = 'right';
       watermark.valign = 'bottom';
       watermark.fontSize = '2.1em';
-      watermark.opacity = 0.7;
-      watermark.marginRight = 10;
+      watermark.opacity = 0.8;
+      watermark.marginRight = 25;
       watermark.marginBottom = 5;
       watermark.zIndex = 100;
       // watermark.fontWeight = 'bold';
