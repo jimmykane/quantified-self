@@ -51,7 +51,7 @@
           <app-event-actions *ngIf="user" [user]="user" [event]="row[column]"></app-event-actions>
         </span>
         <span *ngIf="column === 'name'" matTooltip="{{ row[column] }}">
-          {{ row[column] | slice:0:15 }}...
+          <span *ngIf="row['isMerge']"><mat-icon>compare_arrows</mat-icon></span> {{ row[column] | slice:0:15 }}...
         </span>
         <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'name' && column!=='privacy'">
           {{ row[column] }}

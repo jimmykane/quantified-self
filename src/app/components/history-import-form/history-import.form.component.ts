@@ -126,7 +126,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
 
     try {
       await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value);
-
       this.snackBar.open('History import started', null, {
         duration: 2000,
       });
@@ -135,10 +134,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       // debugger;
       Sentry.captureException(e);
       this.logger.error(e);
-      this.snackBar.open(`Could import history due to ${e.error}`, null, {
+      this.snackBar.open(`Could import history due to ${e.message}`, null, {
         duration: 2000,
       });
-      Sentry.captureException(e);
     } finally {
       this.isLoading = false;
     }
