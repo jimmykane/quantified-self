@@ -24,7 +24,10 @@
     <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
   <!--</mat-card>-->
 
-  <router-outlet></router-outlet>
+  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData
+      && routerOutlet.activatedRouteData['animation']">
+    <router-outlet #routerOutlet="outlet"></router-outlet>
+  </div>
 
 </mat-sidenav-container>
 <div class="fabButtonsVertical">

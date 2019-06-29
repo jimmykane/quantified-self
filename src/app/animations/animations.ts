@@ -1,4 +1,4 @@
-import {trigger, sequence, state, animate, transition, style} from '@angular/animations';
+import {trigger, sequence, state, animate, transition, style, query, group} from '@angular/animations';
 
 export const rowsAnimation =
   trigger('rowsAnimation', [
@@ -14,18 +14,34 @@ export const rowsAnimation =
 export const removeAnimation =
   trigger('removeAnimation', [
     transition(':enter', [
-      style({ height: '*', opacity: '0', transform: 'translateX(-100%)', 'box-shadow': 'none' }),
+      style({height: '*', opacity: '0', transform: 'translateX(-100%)', 'box-shadow': 'none'}),
       sequence([
-        animate('.55s ease', style({ height: '*', opacity: '.2', transform: 'translateX(0)', 'box-shadow': 'none'  })),
-        animate('.55s ease', style({ height: '*', opacity: 1, transform: 'translateX(0)' }))
+        animate('.55s ease', style({height: '*', opacity: '.2', transform: 'translateX(0)', 'box-shadow': 'none'})),
+        animate('.55s ease', style({height: '*', opacity: 1, transform: 'translateX(0)'}))
       ])
     ]),
     transition(':leave', [
-      style({ height: '*', opacity: '0', transform: 'translateX(-100%)', 'box-shadow': 'none' }),
+      style({height: '*', opacity: '0', transform: 'translateX(-100%)', 'box-shadow': 'none'}),
       sequence([
-        animate('.55s ease', style({ height: '*', opacity: '.2', transform: 'translateX(0)', 'box-shadow': 'none'  })),
-        animate('.55s ease', style({ height: '*', opacity: 1, transform: 'translateX(0)' }))
+        animate('.55s ease', style({height: '*', opacity: '.2', transform: 'translateX(0)', 'box-shadow': 'none'})),
+        animate('.55s ease', style({height: '*', opacity: 1, transform: 'translateX(0)'}))
       ])
     ])
   ]);
 
+export const slideInAnimation =
+  trigger('routeAnimations', [
+    transition('* <=> *', [
+      query(':enter, :leave', style({position: 'fixed', width: '100%'}), {optional: true}),
+      group([
+        query(':enter', [
+          style({transform: 'translateX(100%)'}),
+          animate('0.5s ease-in-out', style({transform: 'translateX(0%)'}))
+        ], {optional: true}),
+        query(':leave', [
+          style({transform: 'translateX(0%)'}),
+          animate('0.5s ease-in-out', style({transform: 'translateX(-100%)'}))
+        ], {optional: true}),
+      ])
+    ]),
+  ]);

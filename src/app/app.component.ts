@@ -24,6 +24,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
 import {DataStore, DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
+import {removeAnimation, slideInAnimation} from "./animations/animations";
 
 declare function require(moduleName: string): any;
 const {version: appVersion} = require('../../package.json');
@@ -33,6 +34,7 @@ const {version: appVersion} = require('../../package.json');
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
+  animations: [ slideInAnimation, removeAnimation ]
   // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
