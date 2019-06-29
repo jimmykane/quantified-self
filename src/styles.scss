@@ -5,7 +5,7 @@
 // have to load a single css file for Angular Material in your app.
 // **Be sure that you only ever include this mixin once!**
 $custom-typography: mat-typography-config(
-  $font-family: '"ProximaNova-Regular", Roboto, sans-serif;'
+  $font-family: '"QSFont", Roboto, sans-serif;'
   //$body-1:        mat-typography-level(14px, 20px, 400)
 );
 @include mat-core($custom-typography);
@@ -33,7 +33,7 @@ $dark-theme: mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 
 
 @font-face {
-  font-family: 'ProximaNova-Regular';
+  font-family: 'QSFont';
   src: url('assets/fonts/proxima-nova-regular.woff2') format('woff2'),
   url('assets/fonts/proxima-nova-regular.woff') format('woff');
   font-weight: normal;
