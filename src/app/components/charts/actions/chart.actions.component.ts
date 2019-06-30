@@ -120,7 +120,7 @@ export class ChartActionsComponent implements OnInit {
   changeChartType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).type = event.value;
     // If its pie show only totals
-    if (event.value === ChartTypes.Pie){
+    if (event.value === ChartTypes.Pie) {
       this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = ChartDataValueTypes.Total;
     }
     this.userService.updateUserProperties(this.user, {settings: this.user.settings})
