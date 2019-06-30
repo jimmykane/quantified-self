@@ -23,6 +23,12 @@ app-column-chart{
   height: 100%;
 }
 
+app-chart-actions{
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
 /*@media only screen and (min-width: 800px)  {*/
 /*  mat-grid-list {*/
 /*    max-height: 30vh;*/
