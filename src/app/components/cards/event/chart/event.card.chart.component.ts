@@ -375,12 +375,18 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
     // IF there is no other series with the same color then add the activity color
     if (!found) {
-      series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-      series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+      // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+      // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+      series.adapter.add('fill', (fill, target) => {
+        return series.chart.colors.getIndex(series.chart.series.indexOf(target));
+      });
+      series.adapter.add('stroke', (fill, target) => {
+        return series.chart.colors.getIndex(series.chart.series.indexOf(target));
+      });
     }
 
-    series.strokeWidth = 1;
-    series.fillOpacity = 0.2;
+    series.strokeWidth = 1.2;
+    series.fillOpacity = 0.3;
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
