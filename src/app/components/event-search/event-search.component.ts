@@ -109,17 +109,20 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
   const firstDayOfTheWeek = (dateNow.getDate() - dateNow.getDay()) + startOfTheWeek; // Remove + 1 if sunday is first day of the week.
   const lastDayOfTheWeek = firstDayOfTheWeek + 6;
 
+  // First day of this week
   const fistDayOfTheWeekDate = new Date(dateNow.setDate(firstDayOfTheWeek - daysBack));
   fistDayOfTheWeekDate.setHours(0, 0, 0);
 
+  // Last day if this week
   const lastDayOfTheWeekDate = new Date(dateNow.setDate(lastDayOfTheWeek - daysBack));
   lastDayOfTheWeekDate.setHours(23, 59, 59);
 
+  // Take the first day of this week and go back 7 days
   const firstDayOfLastWeekDate = new Date(dateNow.setDate(firstDayOfTheWeek - 7 - daysBack));
   firstDayOfLastWeekDate.setHours(0, 0, 0);
 
-  const lastDayOfLastWeekDate = new Date(dateNow.setDate(lastDayOfTheWeek - 7 - daysBack));
-  lastDayOfLastWeekDate.setHours(23, 59, 59);
+  // Take the first day of this week and go back 1second
+  const lastDayOfLastWeekDate = new Date(fistDayOfTheWeekDate.setHours(0, 0, -1));
 
   switch (dateRange) {
     case DateRanges.thisWeek: {
@@ -131,7 +134,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
     case DateRanges.lastWeek: {
       return {
         startDate: firstDayOfLastWeekDate,
-        endDate: lastDayOfLastWeekDate
+        endDate: lastDayOfLastWeekDate,
       }
     }
     case DateRanges.lastSevenDays: {
