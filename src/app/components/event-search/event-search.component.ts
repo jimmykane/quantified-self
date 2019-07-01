@@ -25,6 +25,10 @@ export class EventSearchComponent implements OnChanges, OnInit {
   }
 
   ngOnInit(): void {
+
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
     this.searchFormGroup = new FormGroup({
       search: new FormControl(null, [
         // Validators.required,
@@ -37,10 +41,6 @@ export class EventSearchComponent implements OnChanges, OnInit {
         // Validators.required,
       ]),
     }, [startDateToEndDateValidator]);
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-
   }
 
 
@@ -104,25 +104,25 @@ export interface DateRangeStartDateAndEndDate {
 }
 
 export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): DateRangeStartDateAndEndDate {
-  const dateNow = new Date();
-  const daysBack = dateNow.getDay() >= startOfTheWeek ? 0 : 7;
-  const firstDayOfTheWeek = (dateNow.getDate() - dateNow.getDay()) + startOfTheWeek; // Remove + 1 if sunday is first day of the week.
+  const daysBack = new Date().getDay() >= startOfTheWeek ? 0 : 7;
+  const firstDayOfTheWeek = (new Date().getDate() - new Date().getDay()) + startOfTheWeek; // Remove + 1 if sunday is first day of the week.
   const lastDayOfTheWeek = firstDayOfTheWeek + 6;
 
   // First day of this week
-  const fistDayOfTheWeekDate = new Date(dateNow.setDate(firstDayOfTheWeek - daysBack));
+
+  const fistDayOfTheWeekDate = new Date(new Date().setDate(firstDayOfTheWeek - daysBack));
   fistDayOfTheWeekDate.setHours(0, 0, 0);
 
   // Last day if this week
-  const lastDayOfTheWeekDate = new Date(dateNow.setDate(lastDayOfTheWeek - daysBack));
+  const lastDayOfTheWeekDate = new Date(new Date().setDate(lastDayOfTheWeek - daysBack));
   lastDayOfTheWeekDate.setHours(23, 59, 59);
 
   // Take the first day of this week and go back 7 days
-  const firstDayOfLastWeekDate = new Date(dateNow.setDate(firstDayOfTheWeek - 7 - daysBack));
+  const firstDayOfLastWeekDate = new Date(new Date(fistDayOfTheWeekDate).setDate(fistDayOfTheWeekDate.getDate() - 7)); // Needs to base on fistDayOfTheWeekDate for new Date()
   firstDayOfLastWeekDate.setHours(0, 0, 0);
 
   // Take the first day of this week and go back 1second
-  const lastDayOfLastWeekDate = new Date(fistDayOfTheWeekDate.setHours(0, 0, -1));
+  const lastDayOfLastWeekDate = new Date(new Date(fistDayOfTheWeekDate.getTime()).setHours(0, 0, -1));
 
   switch (dateRange) {
     case DateRanges.thisWeek: {

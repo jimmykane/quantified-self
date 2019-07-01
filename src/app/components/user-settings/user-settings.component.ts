@@ -139,7 +139,6 @@ export class UserSettingsComponent implements OnChanges {
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value
       });
 
-      debugger;
       await this.userService.updateUserProperties(this.user, {
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
@@ -149,7 +148,8 @@ export class UserSettingsComponent implements OnChanges {
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
-          }
+          },
+          dashboardSettings: this.user.settings.dashboardSettings
         }
       });
       this.snackBar.open('User updated', null, {
