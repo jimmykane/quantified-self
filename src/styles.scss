@@ -34,8 +34,8 @@ $dark-theme: mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 
 @font-face {
   font-family: 'QSFont';
-  src: url('assets/fonts/proxima-nova-regular.woff2') format('woff2'),
-  url('assets/fonts/proxima-nova-regular.woff') format('woff');
+  src: url('/assets/fonts/proxima-nova-regular.woff2') format('woff2'),
+  url('/assets/fonts/proxima-nova-regular.woff') format('woff');
   font-weight: normal;
   font-style: normal;
 }
