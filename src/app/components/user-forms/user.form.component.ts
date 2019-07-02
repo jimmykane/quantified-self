@@ -88,7 +88,7 @@ export class UserFormComponent implements OnInit {
         displayName: this.userFormGroup.get('displayName').value,
         privacy: this.userFormGroup.get('privacy').value,
         description: this.userFormGroup.get('description').value,
-        brandText: this.userFormGroup.get('brandText').value,
+        brandText: this.userFormGroup.get('brandText').value || null,
       });
       this.snackBar.open('User updated', null, {
         duration: 2000,
