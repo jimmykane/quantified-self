@@ -31,7 +31,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public selectedActivities: ActivityInterface[] = [];
 
   public showAllData: boolean;
-  public chartXAxisType: XAxisTypes = XAxisTypes.Duration;
+  public chartXAxisType = XAxisTypes.Duration;
   public dataSmoothingLevel = 3;
   public chartTheme: ChartThemes;
 
@@ -73,6 +73,9 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to authService and set the current user if possible
     this.userSubscription = this.authService.user.subscribe((user) => {
       this.currentUser = user;
+      if (!this.currentUser){
+        return;
+      }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
     });
 
