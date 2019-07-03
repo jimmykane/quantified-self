@@ -123,7 +123,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       // chart.padding(0, 0, 0, 0)
-      chart.radius = am4core.percent(70);
+      chart.radius = am4core.percent(80);
       chart.innerRadius = am4core.percent(55);
 
       const pieSeries = chart.series.push(new am4charts.PieSeries());
@@ -139,7 +139,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       // pieSeries.slices.template.stroke = am4core.color('#0c96ff');
       pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        return `{category} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
+        return `{category} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       });
       pieSeries.slices.template.events.on('hit', (event) => {
         // const a = this.chart.data.find(dataItem => dataItem.type === 'Running');
@@ -156,13 +156,14 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
 
       pieSeries.labels.template.adapter.add('text', (text, target, key) => {
         try {
+          const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
           if (target.dataItem.values.value.percent < 1) {
             return null;
           }
           if (!target.dataItem.dataContext.type) {
             return `???`;
           }
-          return `[font-size: 1.1em]${target.dataItem.dataContext.type.slice(0, 40)}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]`
+          return `[font-size: 1.1em]${target.dataItem.dataContext.type.slice(0, 40)}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
         } catch (e) {
           Sentry.captureException(e);
         }
