@@ -189,15 +189,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
       chart.fontSize = '0.75em';
-      chart.padding(0, 0, 0, 0);
+      chart.padding(0, 10, 0, 0);
       // chart.resizable = false;
 
       let xAxis;
       if (this.xAxisType === XAxisTypes.Distance) {
         xAxis = chart.xAxes.push(new am4charts.ValueAxis());
-        // xAxis.extraMax = -0.05;
-        xAxis.renderer.minGridDistance = 10;
-
+        // xAxis.extraMax = 0.01;
+        xAxis.renderer.minGridDistance = 20;
+        // xAxis.renderer.gridDistance = 1;
 
         xAxis.numberFormatter = new am4core.NumberFormatter();
         xAxis.numberFormatter.numberFormat = `#`;
