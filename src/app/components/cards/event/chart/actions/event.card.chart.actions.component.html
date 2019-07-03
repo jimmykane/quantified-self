@@ -3,12 +3,15 @@
 </button>
 
 <mat-menu #menu="matMenu">
-    <section mat-menu-item>
-        <mat-select placeholder="X Axis type" [(value)]="xAxisType" (selectionChange)="somethingChanged($event)">
-            <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
-                {{xAxisType.key}}
-            </mat-option>
-        </mat-select>
+    <section mat-menu-item class="first">
+        <mat-form-field>
+            <mat-label>X Axis type</mat-label>
+            <mat-select placeholder="X Axis type" [(value)]="xAxisType" (selectionChange)="somethingChanged($event)">
+                <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
+                    {{xAxisType.key}}
+                </mat-option>
+            </mat-select>
+        </mat-form-field>
     </section>
 
     <section mat-menu-item>

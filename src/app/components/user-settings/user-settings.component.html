@@ -1,191 +1,195 @@
 <mat-card class="mat-elevation-z0">
-  <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-  <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)">
+    <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
+    <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)">
 
-    <mat-card>
-      <mat-card-header>
-        <div mat-card-avatar class="avatar">
-          <mat-icon>change_history</mat-icon>
-        </div>
-        <mat-card-title>
-          App
-        </mat-card-title>
-        <mat-card-subtitle>Settings</mat-card-subtitle>
-      </mat-card-header>
+        <mat-card>
+            <mat-card-header>
+                <div mat-card-avatar class="avatar">
+                    <mat-icon>change_history</mat-icon>
+                </div>
+                <mat-card-title>
+                    App
+                </mat-card-title>
+                <mat-card-subtitle>Settings</mat-card-subtitle>
+            </mat-card-header>
 
-      <mat-card-content>
-        <mat-form-field>
-          <mat-select placeholder="Theme that the app should use" formControlName="appTheme">
-            <mat-option *ngFor="let appTheme of appThemes | keyvalue" [value]="appTheme.value">
-              {{appTheme.key}}
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
-        </mat-form-field>
-      </mat-card-content>
-    </mat-card>
+            <mat-card-content>
+                <mat-form-field>
+                    <mat-select placeholder="Theme that the app should use" formControlName="appTheme">
+                        <mat-option *ngFor="let appTheme of appThemes | keyvalue" [value]="appTheme.value">
+                            {{appTheme.key}}
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
+                </mat-form-field>
+            </mat-card-content>
+        </mat-card>
 
-    <mat-card>
-      <mat-card-header>
-        <div mat-card-avatar class="avatar">
-          <mat-icon>dashboard</mat-icon>
-        </div>
-        <mat-card-title>
-          Dashboard
-        </mat-card-title>
-        <mat-card-subtitle>Dashboard settings</mat-card-subtitle>
-      </mat-card-header>
+        <mat-card>
+            <mat-card-header>
+                <div mat-card-avatar class="avatar">
+                    <mat-icon>dashboard</mat-icon>
+                </div>
+                <mat-card-title>
+                    Dashboard
+                </mat-card-title>
+                <mat-card-subtitle>Dashboard settings</mat-card-subtitle>
+            </mat-card-header>
 
-      <mat-card-content>
-        <mat-form-field>
+            <mat-card-content>
+                <mat-form-field>
 
-          <mat-select placeholder="Start of the week" formControlName="startOfTheWeek">
-            <mat-option [value]="0">
-              Sunday
-            </mat-option>
-            <mat-option [value]="1">
-              Monday
-            </mat-option>
-            <mat-option [value]="2">
-              Tuesday
-            </mat-option>
-            <mat-option [value]="3">
-              Wednesday
-            </mat-option>
-            <mat-option [value]="4">
-              Thursday
-            </mat-option>
-            <mat-option [value]="5">
-              Friday
-            </mat-option>
-            <mat-option [value]="6">
-              Saturday
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> on this day the dashboard adjusts to</mat-hint>
-        </mat-form-field>
-      </mat-card-content>
-      <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showSummaries">
+                    <mat-select placeholder="Start of the week" formControlName="startOfTheWeek">
+                        <mat-option [value]="0">
+                            Sunday
+                        </mat-option>
+                        <mat-option [value]="1">
+                            Monday
+                        </mat-option>
+                        <mat-option [value]="2">
+                            Tuesday
+                        </mat-option>
+                        <mat-option [value]="3">
+                            Wednesday
+                        </mat-option>
+                        <mat-option [value]="4">
+                            Thursday
+                        </mat-option>
+                        <mat-option [value]="5">
+                            Friday
+                        </mat-option>
+                        <mat-option [value]="6">
+                            Saturday
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> on this day the dashboard adjusts to</mat-hint>
+                </mat-form-field>
+            </mat-card-content>
+            <mat-slide-toggle
+                    [color]="'accent'"
+                    formControlName="showSummaries">
           <span matTooltip="If you want to see summaries or no">
              Show summaries
           </span>
-      </mat-slide-toggle>
-      <mat-hint class="smaller"><b>Tip:</b> if you don't care about summaries and analysis you might want to turn this off</mat-hint>
-      <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="pinUploadSection">
+            </mat-slide-toggle>
+            <mat-hint class="smaller"><b>Tip:</b> if you don't care about summaries and analysis you might want to turn
+                this off
+            </mat-hint>
+            <mat-slide-toggle
+                    [color]="'accent'"
+                    formControlName="pinUploadSection">
           <span matTooltip="Should the upload section always show?">
              Pin upload button
           </span>
-      </mat-slide-toggle>
-      <mat-hint class="smaller"><b>Tip:</b> if you upload regularly and manually you might want to turn this on to pin the upload button</mat-hint>
+            </mat-slide-toggle>
+            <mat-hint class="smaller"><b>Tip:</b> if you upload regularly and manually you might want to turn this on to
+                pin the upload button
+            </mat-hint>
+        </mat-card>
 
-    </mat-card>
+        <mat-card>
+            <mat-card-header>
+                <div mat-card-avatar class="avatar">
+                    <mat-icon>show_chart</mat-icon>
+                </div>
+                <mat-card-title>
+                    Chart
+                </mat-card-title>
+                <mat-card-subtitle>Settings</mat-card-subtitle>
+            </mat-card-header>
 
+            <mat-card-content>
 
-    <mat-card>
-      <mat-card-header>
-        <div mat-card-avatar class="avatar">
-          <mat-icon>show_chart</mat-icon>
-        </div>
-        <mat-card-title>
-          Chart
-        </mat-card-title>
-        <mat-card-subtitle>Settings</mat-card-subtitle>
-      </mat-card-header>
+                <mat-form-field>
+                    <mat-select placeholder="Theme that the charts should use" formControlName="chartTheme">
+                        <mat-option *ngFor="let chartTheme of chartThemes | keyvalue" [value]="chartTheme.value">
+                            {{chartTheme.key}}
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> material and kelly are one of the best 😉</mat-hint>
+                </mat-form-field>
 
-      <mat-card-content>
+                <mat-form-field>
+                    <mat-select placeholder="" formControlName="dataTypesToUse" multiple>
+                        <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
+                                      [disabled]="dataGroup.disabled">
+                            <mat-option *ngFor="let data of dataGroup.data" [value]="data">
+                                {{data}}
+                            </mat-option>
+                        </mat-optgroup>
+                    </mat-select>
+                    <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
+                </mat-form-field>
 
-        <mat-form-field>
-          <mat-select placeholder="Theme that the charts should use" formControlName="chartTheme">
-            <mat-option *ngFor="let chartTheme of chartThemes | keyvalue" [value]="chartTheme.value">
-              {{chartTheme.key}}
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> material and kelly are one of the best 😉</mat-hint>
-        </mat-form-field>
+                <mat-form-field>
+                    <mat-select placeholder="XAxis chart type" formControlName="xAxisType">
+                        <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
+                            {{xAxisType.key}}
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>
+                </mat-form-field>
 
-        <mat-form-field>
-          <mat-select placeholder="" formControlName="dataTypesToUse" multiple>
-            <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
-                          [disabled]="dataGroup.disabled">
-              <mat-option *ngFor="let data of dataGroup.data" [value]="data">
-                {{data}}
-              </mat-option>
-            </mat-optgroup>
-          </mat-select>
-          <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
-        </mat-form-field>
-
-        <mat-form-field>
-          <mat-select placeholder="XAxis chart type" formControlName="xAxisType">
-            <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
-              {{xAxisType.key}}
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>
-        </mat-form-field>
-
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="useAnimations">
+                <mat-slide-toggle
+                        [color]="'accent'"
+                        formControlName="useAnimations">
           <span matTooltip="Use animations or no">
              Animations
           </span>
-        </mat-slide-toggle>
-        <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
+                </mat-slide-toggle>
+                <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
 
-      </mat-card-content>
-    </mat-card>
+            </mat-card-content>
+        </mat-card>
 
-    <mat-card>
-      <mat-card-header>
-        <div mat-card-avatar class="avatar">
-          <mat-icon>multiline_chart</mat-icon>
-        </div>
-        <mat-card-title>
-          Units
-        </mat-card-title>
-        <mat-card-subtitle>Settings</mat-card-subtitle>
-      </mat-card-header>
+        <mat-card>
+            <mat-card-header>
+                <div mat-card-avatar class="avatar">
+                    <mat-icon>multiline_chart</mat-icon>
+                </div>
+                <mat-card-title>
+                    Units
+                </mat-card-title>
+                <mat-card-subtitle>Settings</mat-card-subtitle>
+            </mat-card-header>
 
-      <mat-card-content>
+            <mat-card-content>
 
-        <mat-form-field>
-          <mat-select placeholder="Units for speed" formControlName="speedUnitsToUse" multiple>
-            <mat-option *ngFor="let speedUnit of speedUnits | keyvalue" [value]="speedUnit.value">
-              {{speedUnit.value}}
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
-        </mat-form-field>
+                <mat-form-field>
+                    <mat-select placeholder="Units for speed" formControlName="speedUnitsToUse" multiple>
+                        <mat-option *ngFor="let speedUnit of speedUnits | keyvalue" [value]="speedUnit.value">
+                            {{speedUnit.value}}
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+                </mat-form-field>
 
-        <mat-form-field>
-          <mat-select placeholder="Units for pace" formControlName="paceUnitsToUse" multiple>
-            <mat-option *ngFor="let paceUnit of paceUnits | keyvalue" [value]="paceUnit.value">
-              {{paceUnit.value}}
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
-        </mat-form-field>
+                <mat-form-field>
+                    <mat-select placeholder="Units for pace" formControlName="paceUnitsToUse" multiple>
+                        <mat-option *ngFor="let paceUnit of paceUnits | keyvalue" [value]="paceUnit.value">
+                            {{paceUnit.value}}
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+                </mat-form-field>
 
-        <mat-form-field>
-          <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse" multiple>
-            <mat-option *ngFor="let verticalSpeedUnit of verticalSpeedUnits | keyvalue" [value]="verticalSpeedUnit.value">
-              {{verticalSpeedUnit.value}}
-            </mat-option>
-          </mat-select>
-          <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
-        </mat-form-field>
+                <mat-form-field>
+                    <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse"
+                                multiple>
+                        <mat-option *ngFor="let verticalSpeedUnit of verticalSpeedUnits | keyvalue"
+                                    [value]="verticalSpeedUnit.value">
+                            {{verticalSpeedUnit.value}}
+                        </mat-option>
+                    </mat-select>
+                    <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+                </mat-form-field>
 
-      </mat-card-content>
+            </mat-card-content>
 
-    </mat-card>
+        </mat-card>
 
-    <button mat-flat-button *ngIf="!hasError()" [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
-      Save
-    </button>
-  </form>
+        <button mat-flat-button *ngIf="!hasError()" [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
+            Save
+        </button>
+    </form>
 </mat-card>
