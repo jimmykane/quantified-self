@@ -81,11 +81,9 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
   private createChart(): am4charts.XYChart {
     return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings();
+      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
 
       // Create a chart
-      // Remove Amcharts logo
-      // @todo move this to a db setting ?
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.hiddenState.properties.opacity = 0;
@@ -232,16 +230,6 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       // this.attachEventListenersOnChart(chart);
 
       return chart;
-    });
-  }
-
-  private applyChartStylesFromUserSettings() {
-    this.zone.runOutsideAngular(() => {
-      am4core.unuseAllThemes();
-      am4core.useTheme(this.themes[this.chartTheme]);
-      if (this.userChartSettings && this.userChartSettings.useAnimations) {
-        am4core.useTheme(animated);
-      }
     });
   }
 }

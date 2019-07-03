@@ -21,20 +21,16 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import {combineLatest, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
-import {map} from 'rxjs/operators';
+import {map, take} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
-import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-// Chart Themes
-import animated from '@amcharts/amcharts4/themes/animated';
-
-import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
-import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
-import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
-import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
-import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
+import {
+  ChartThemes,
+  UserChartSettingsInterface,
+  XAxisTypes
+} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
@@ -42,6 +38,7 @@ import {UserSettingsService} from '../../../../services/app.user.settings.servic
 import {ThemeService} from '../../../../services/app.theme.service';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -60,12 +57,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
-  @Input() useDurationAxis: boolean;
+  @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
   @Input() waterMark: string;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
+  public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
   public isLoading: boolean;
 
   private streamsSubscription: Subscription;
@@ -94,12 +92,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   async ngOnChanges(simpleChanges) {
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
 
-    // 2. If not visible and no data is bound do nothing
+
+    // If not visible and no data is bound do nothing
     if (!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)) {
       return;
     }
 
-    if (simpleChanges.chartTheme) {
+    if (simpleChanges.chartTheme || simpleChanges.xAxisType) {
       this.destroyChart();
     }
 
@@ -111,7 +110,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.showAllData || simpleChanges.useDurationAxis || simpleChanges.userChartSettings || simpleChanges.dataSmoothingLevel || simpleChanges.chartTheme) {
+    if (simpleChanges.event
+      || simpleChanges.selectedActivities
+      || simpleChanges.showAllData
+      || simpleChanges.userChartSettings
+      || simpleChanges.dataSmoothingLevel
+      || simpleChanges.xAxisType
+      || simpleChanges.chartTheme) {
       if (!this.event || !this.selectedActivities.length) {
         this.unsubscribeAndClearChart();
         return;
@@ -126,8 +131,16 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
   }
 
-  private processChanges(selectedDataTypes: string[] | null) {
+  private async processChanges(selectedDataTypes: string[] | null) {
     this.loading();
+    if (this.xAxisType === XAxisTypes.Distance) {
+      for (const selectedActivity of this.selectedActivities) {
+        this.distanceAxesForActivitiesMap.set(
+          selectedActivity.getID(),
+          (await this.eventService.getStreamsByTypes(this.user, this.event.getID(), selectedActivity.getID(), [DataDistance.type]).pipe(take(1)).toPromise())[0]
+        );
+      }
+    }
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
         this.getDataTypesToRequest(), //
@@ -150,32 +163,63 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
+      // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       this.logger.info(`Rendering chart data per series`);
       series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
-      this.chart.xAxes.getIndex(0).title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
+
+      // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
+      // After you have all the info adjust the axis if needed
+      // if (this.xAxisType === XAxisTypes.Distance){
+      //   (<am4charts.ValueAxis>this.chart.xAxes.getIndex(0)).max = this.distanceAxesForActivitiesMap.values(() =>{
+      //   debugger;
+      // })
+      //   this.chart.xAxes.getIndex(0).strictMinMax = true;
+      // }
     });
   }
 
   private createChart(): am4charts.XYChart {
     return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings();
+      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
 
       // Create a chart
-      // Remove Amcharts logo
-      // @todo move this to a db setting ?
       am4core.options.commercialLicense = true;
+
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
       chart.pixelPerfect = false;
-      chart.fontSize = '0.8em';
+      chart.fontSize = '0.75em';
       chart.padding(0, 0, 0, 0);
       // chart.resizable = false;
 
-      // Create a date axis
-      const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
-      // dateAxis.skipEmptyPeriods= true;
-      dateAxis.title.text = this.useTimeXAxis() ? 'Time' : 'Duration';
+      let xAxis;
+      if (this.xAxisType === XAxisTypes.Distance) {
+        xAxis = chart.xAxes.push(new am4charts.ValueAxis());
+        // xAxis.extraMax = -0.05;
+        xAxis.renderer.minGridDistance = 10;
+
+
+        xAxis.numberFormatter = new am4core.NumberFormatter();
+        xAxis.numberFormatter.numberFormat = `#`;
+        // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
+        xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
+          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
+          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+        });
+        // xAxis.tooltipText = '{valueX}'
+        xAxis.adapter.add('getTooltipText', (text, target) => {
+          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
+          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+        });
+        xAxis.renderer.labels.template.marginRight = 10;
+        xAxis.min = 0;
+      } else {
+        // Create a date axis
+        xAxis = chart.xAxes.push(new am4charts.DateAxis());
+        // dateAxis.skipEmptyPeriods= true;
+      }
+      xAxis.title.text = this.xAxisType;
+
       // dateAxis.baseInterval = {
       //   timeUnit: "second",
       //   count: 1
@@ -391,6 +435,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     series.dataFields.valueY = 'value';
     series.dataFields.dateX = 'time';
+    series.dataFields.valueX = 'distance';
+    // series.dataFields.categoryX = 'distance';
 
     series.interactionsEnabled = false;
 
@@ -426,12 +472,29 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
+    let data = [];
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
-    let data = this.useTimeXAxis() ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
+    if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
+      const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
+      stream.data.reduce((dataMap, streamDataItem, index) => { // Can use a data array but needs deduplex after
+        if (distanceStream.data[index]) {
+          // debugger;
+          dataMap.set(distanceStream.data[index], streamDataItem)
+        }
+        return dataMap;
+      }, new Map<number, number>()).forEach((value, distance) => {
+        data.push({
+          distance: String(distance),
+          value: value
+        })
+      });
+    } else {
+      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
+    }
     data = data
       .filter((streamData) => streamData.value !== null)
-      .filter((data, index) => (index % samplingRate) === 0);
+      .filter((streamData, index) => (index % samplingRate) === 0);
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
@@ -527,84 +590,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return unitBasedDataTypes;
   }
 
-  private useTimeXAxis() {
-    return !this.useDurationAxis;
-    // return this.userChartSettings && this.userChartSettings.xAxisType === XAxisTypes.Time;
-  }
-
-  // This helps to goup series vy providing the same name (type) for things that should have the same axis
-  private getSeriesName(name: string) {
-    if ([DataAltitude.type, DataGPSAltitude.type].indexOf(name) !== -1) {
-      return DataAltitude.type;
-    }
-    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
-      return 'Positional Error'
-    }
-    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
-      return 'Pressure'
-    }
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
-      return 'Pace'
-    }
-    return name;
-  }
-
-  private applyChartStylesFromUserSettings() {
-    this.zone.runOutsideAngular(() => {
-      am4core.unuseAllThemes();
-      am4core.useTheme(this.themes[this.chartTheme]);
-      if (this.userChartSettings && this.userChartSettings.useAnimations) {
-        am4core.useTheme(animated);
-      }
-    });
-  }
-
-  private getYAxisForSeries(streamType: string) {
-    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(streamType) !== -1) {
-      yAxis = new am4charts.DurationAxis()
-    } else {
-      yAxis = new am4charts.ValueAxis();
-    }
-    return yAxis;
-  }
-
-  private hideSeriesYAxis(series: am4charts.XYSeries) {
-    series.yAxis.disabled = true;
-    // series.yAxis.renderer.grid.template.disabled = true;
-  }
-
-  private showSeriesYAxis(series: am4charts.XYSeries) {
-    series.yAxis.disabled = false;
-    // series.yAxis.renderer.grid.template.disabled = false;
-  }
-
-  private getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
-    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
-  }
-
-  private getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
-    return chart.series.values
-      .filter(series => !series.hidden);
-  }
-
-  private hideSeries(series: am4charts.XYSeries, save?: boolean) {
-    // series.disabled = true;
-    series.hidden = true;
-    // series.hide();
-    if (!this.getVisibleSeriesWithSameYAxis(series).length) {
-      this.hideSeriesYAxis(series)
-    }
+  protected hideSeries(series: am4charts.XYSeries, save?: boolean) {
+    super.hideSeries(series);
     if (save) {
       this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
     }
   }
 
-  private showSeries(series: am4charts.XYSeries, save?: boolean) {
-    // series.disabled = false;
-    series.hidden = false;
-    // series.show();
-    this.showSeriesYAxis(series);
+  protected showSeries(series: am4charts.XYSeries, save?: boolean) {
+    super.showSeries(series);
     if (save) {
       this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
     }

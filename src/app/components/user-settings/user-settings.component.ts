@@ -33,6 +33,7 @@ export class UserSettingsComponent implements OnChanges {
   public currentUser: User;
   public isSaving: boolean;
   public errorSaving;
+  public xAxisTypes = XAxisTypes;
 
   private logger = Log.create('UserSettingsComponent');
 

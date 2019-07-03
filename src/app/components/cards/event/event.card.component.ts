@@ -7,7 +7,7 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {UserSettingsService} from '../../../services/app.user.settings.service';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
@@ -30,11 +30,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
-  public showMapAutoLaps: boolean;
-  public showMapManualLaps: boolean;
   public showAllData: boolean;
-  public useDistanceAxis: boolean;
-  public useDurationAxis: boolean;
+  public chartXAxisType: XAxisTypes = XAxisTypes.Duration;
   public dataSmoothingLevel = 3;
   public chartTheme: ChartThemes;
 
@@ -52,8 +49,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private eventService: EventService,
     private userSettingsService: UserSettingsService,
     private snackBar: MatSnackBar,
-    private themeService: ThemeService,
-    public eventColorService: EventColorService) {
+    private themeService: ThemeService) {
   }
 
   ngOnChanges() {
@@ -61,10 +57,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   async ngOnInit() {
     // Get the settings
-    this.userSettingsService.showAutoLaps().then(value => this.showMapAutoLaps = value);
-    this.userSettingsService.showManualLaps().then(value => this.showMapManualLaps = value);
-    this.userSettingsService.useDistanceAxis().then(value => this.useDistanceAxis = value);
-    this.userSettingsService.useDurationAxis().then(value => this.useDurationAxis = value);
     this.userSettingsService.showAllData().then(value => this.showAllData = value);
 
     // Get the path params
@@ -81,6 +73,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to authService and set the current user if possible
     this.userSubscription = this.authService.user.subscribe((user) => {
       this.currentUser = user;
+      this.chartXAxisType = user.settings.chartSettings.xAxisType;
     });
 
     // Subscribe to the chartTheme changes

@@ -1,9 +1,14 @@
-import {AfterViewInit, ChangeDetectorRef, NgZone, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {AfterViewInit, ChangeDetectorRef, Input, NgZone, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import * as Sentry from '@sentry/browser';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {Log} from 'ng2-logger/browser';
 import {Subscription} from 'rxjs';
+import {DataPaceMinutesPerMile, DataPace} from 'quantified-self-lib/lib/data/data.pace';
+import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 
+
+// Chart Themes
+import animated from '@amcharts/amcharts4/themes/animated';
 import material from '@amcharts/amcharts4/themes/material';
 import frozen from '@amcharts/amcharts4/themes/frozen';
 import dataviz from '@amcharts/amcharts4/themes/dataviz';
@@ -14,8 +19,16 @@ import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
 import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
 import kelly from '@amcharts/amcharts4/themes/kelly';
 import * as am4core from '@amcharts/amcharts4/core';
+import {DataAltitude} from "quantified-self-lib/lib/data/data.altitude";
+import {DataGPSAltitude} from "quantified-self-lib/lib/data/data.altitude-gps";
+import {DataEHPE} from "quantified-self-lib/lib/data/data.ehpe";
+import {DataEVPE} from "quantified-self-lib/lib/data/data.evpe";
+import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-pressure";
+import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
+import {DataElevation} from "quantified-self-lib/lib/data/data.elevation";
 
 export abstract class ChartAbstract implements OnDestroy {
+
   protected chart: am4charts.PieChart | am4charts.XYChart;
   protected logger = Log.create('ChartAbstract');
   protected subscriptions: Subscription[] = [];
@@ -129,6 +142,78 @@ export abstract class ChartAbstract implements OnDestroy {
       ],
     }];
     return exportingMenu;
+  }
+
+  protected getYAxisForSeries(streamType: string) {
+    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(streamType) !== -1) {
+      yAxis = new am4charts.DurationAxis()
+    } else {
+      yAxis = new am4charts.ValueAxis();
+    }
+    return yAxis;
+  }
+
+  protected hideSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = true;
+    // series.yAxis.renderer.grid.template.disabled = true;
+  }
+
+  protected showSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = false;
+    // series.yAxis.renderer.grid.template.disabled = false;
+  }
+
+  protected getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
+    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
+  }
+
+  protected getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
+    return chart.series.values
+      .filter(series => !series.hidden);
+  }
+
+  protected hideSeries(series: am4charts.XYSeries) {
+    // series.disabled = true;
+    series.hidden = true;
+    // series.hide();
+    if (!this.getVisibleSeriesWithSameYAxis(series).length) {
+      this.hideSeriesYAxis(series)
+    }
+  }
+
+  protected showSeries(series: am4charts.XYSeries) {
+    // series.disabled = false;
+    series.hidden = false;
+    // series.show();
+    this.showSeriesYAxis(series);
+  }
+
+  // This helps to goup series vy providing the same name (type) for things that should have the same axis
+  protected getSeriesName(name: string) {
+    if ([DataAltitude.type, DataGPSAltitude.type, DataElevation.type].indexOf(name) !== -1) {
+      return DataAltitude.type;
+    }
+    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
+      return 'Positional Error'
+    }
+    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
+      return 'Pressure'
+    }
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
+      return 'Pace'
+    }
+    return name;
+  }
+
+  protected applyChartStylesFromUserSettings(userChartSettings: UserChartSettingsInterface, chartTheme: ChartThemes) {
+    this.zone.runOutsideAngular(() => {
+      am4core.unuseAllThemes();
+      am4core.useTheme(this.themes[chartTheme]);
+      if (userChartSettings && userChartSettings.useAnimations) {
+        am4core.useTheme(animated);
+      }
+    });
   }
 
   protected destroyChart() {

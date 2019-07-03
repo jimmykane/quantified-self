@@ -44,8 +44,6 @@
         </ng-template>
         <app-event-card-map-agm
           [isVisible]="tabIndex === 0"
-          [showAutoLaps]="showMapAutoLaps"
-          [showManualLaps]="showMapManualLaps"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"
           [event]="event"></app-event-card-map-agm>
@@ -64,9 +62,8 @@
         <ng-template matTabLabel>
           <mat-icon>show_chart</mat-icon>
           <app-event-card-chart-actions
-            [(useDistanceAxis)]="useDistanceAxis"
+            [(xAxisType)]="chartXAxisType"
             [(showAllData)]="showAllData"
-            [(useDurationAxis)]="useDurationAxis"
             [(dataSmoothingLevel)]="dataSmoothingLevel"
             align="end">
           </app-event-card-chart-actions>
@@ -74,7 +71,7 @@
         <app-event-card-chart
           *ngIf="currentUser !== undefined"
           [showAllData]="showAllData"
-          [useDurationAxis]="useDurationAxis"
+          [xAxisType]="chartXAxisType"
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"

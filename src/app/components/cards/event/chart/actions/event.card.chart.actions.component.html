@@ -1,43 +1,42 @@
 <button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
-  <mat-icon>more_vert</mat-icon>
+    <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu" >
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="somethingChanged($event)"
-      [(ngModel)]="useDurationAxis">
-      <span matTooltip="If you want to use duration instead of time for the X Axis of the chart">
-        Use duration Axis
-      </span>
-    </mat-slide-toggle>
-  </section>
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();"
-      [(ngModel)]="showAllData">
+
+<mat-menu #menu="matMenu">
+    <section mat-menu-item>
+        <mat-select placeholder="X Axis type" [(value)]="xAxisType" (selectionChange)="somethingChanged($event)">
+            <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
+                {{xAxisType.key}}
+            </mat-option>
+        </mat-select>
+    </section>
+
+    <section mat-menu-item>
+        <mat-slide-toggle
+                [color]="'accent'"
+                (change)="somethingChanged($event)"
+                (click)="$event.stopPropagation();"
+                [(ngModel)]="showAllData">
       <span matTooltip="Show everything that was read from the file">
         Show all data
       </span>
-    </mat-slide-toggle>
-  </section>
+        </mat-slide-toggle>
+    </section>
 
-  <section mat-menu-item class="smoothing">
-    <mat-hint matTooltip="Smooth out peaks and other erratic data">
-      Smoothing:  <b>{{formatLabel(dataSmoothingLevel)}}</b>
-    </mat-hint>
-    <mat-slider
-      [max]="20"
-      [min]="1"
-      [step]="0.5"
-      [thumbLabel]="true"
-      [displayWith]="formatLabel"
-      [(ngModel)]="dataSmoothingLevel"
-      (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();"
-      [vertical]="false">
-    </mat-slider>
-  </section>
+    <section mat-menu-item class="smoothing">
+        <mat-hint matTooltip="Smooth out peaks and other erratic data">
+            Smoothing: <b>{{formatLabel(dataSmoothingLevel)}}</b>
+        </mat-hint>
+        <mat-slider
+                [max]="20"
+                [min]="1"
+                [step]="0.5"
+                [thumbLabel]="true"
+                [displayWith]="formatLabel"
+                [(ngModel)]="dataSmoothingLevel"
+                (change)="somethingChanged($event)"
+                (click)="$event.stopPropagation();"
+                [vertical]="false">
+        </mat-slider>
+    </section>
 </mat-menu>

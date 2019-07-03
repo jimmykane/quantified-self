@@ -60,14 +60,14 @@
           <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
         </mat-form-field>
 
-<!--        <mat-form-field>-->
-<!--          <mat-select placeholder="XAxis chart type" formControlName="xAxisType">-->
-<!--            <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">-->
-<!--              {{xAxisType.key}}-->
-<!--            </mat-option>-->
-<!--          </mat-select>-->
-<!--          <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>-->
-<!--        </mat-form-field>-->
+        <mat-form-field>
+          <mat-select placeholder="XAxis chart type" formControlName="xAxisType">
+            <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
+              {{xAxisType.key}}
+            </mat-option>
+          </mat-select>
+          <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>
+        </mat-form-field>
 
         <mat-slide-toggle
           [color]="'accent'"

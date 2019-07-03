@@ -116,11 +116,9 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
 
   private createChart(): am4charts.PieChart {
     return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings();
+      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
 
       // Create a chart
-      // Remove Amcharts logo
-      // @todo move this to a db setting ?
       am4core.options.commercialLicense = true;
       const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
@@ -225,16 +223,5 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       }
     }
     return chartData;
-  }
-
-
-  private applyChartStylesFromUserSettings() {
-    this.zone.runOutsideAngular(() => {
-      am4core.unuseAllThemes();
-      am4core.useTheme(this.themes[this.chartTheme]);
-      if (this.userChartSettings && this.userChartSettings.useAnimations) {
-        am4core.useTheme(animated);
-      }
-    });
   }
 }
