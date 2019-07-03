@@ -29,8 +29,8 @@ export class SideNavComponent implements OnInit {
   }
 
   async logout() {
-    await this.authService.signOut();
-    this.router.navigate(['/home']).then(() => {
+    this.router.navigate(['/home']).then(async () => {
+      await this.authService.signOut();
       this.snackBar.open('Signed out', null, {
         duration: 2000,
       });
