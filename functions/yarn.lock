@@ -1818,7 +1818,7 @@ qs@~6.5.2:
 
 "quantified-self-lib@github:jimmykane/quantified-self-lib#feature/streams-pub":
   version "2.2.5"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/a2f73c9a34f5da5b3b135f8390ffd33f2b9d33db"
+  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/b3e654fc4bae572242a42479873da441b5108d0d"
   dependencies:
     "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
