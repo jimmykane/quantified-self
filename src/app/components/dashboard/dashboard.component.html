@@ -1,5 +1,5 @@
 <mat-card>
-  <app-upload *ngIf="user && showUpload" [user]="user"></app-upload>
+  <app-upload *ngIf="(user && showUpload) || (user && user.settings.dashboardSettings.pinUploadSection)" [user]="user"></app-upload>
   <app-event-search *ngIf="user"
                     [selectedDateRange]="user.settings.dashboardSettings.dateRange"
                     [selectedStartDate]="searchStartDate"
@@ -7,7 +7,7 @@
                     [startOfTheWeek]="startOfTheWeek"
                     (searchChange)="search($event)">
   </app-event-search>
-  <app-summaries  *ngIf="user && !this.authService.isCurrentUserAnonymous() && (searchStartDate || searchEndDate)" [user]="user"
+  <app-summaries  *ngIf="user && !this.authService.isCurrentUserAnonymous() && user.settings.dashboardSettings.showSummaries && (searchStartDate || searchEndDate)" [user]="user"
                   [searchEndDate]="searchEndDate"
                   [searchTerm]="searchTerm"
                   [searchStartDate]="searchStartDate"

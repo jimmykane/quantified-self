@@ -240,6 +240,9 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || this.getDefaultUserDashboardChartSettings();
+    settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
+    settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
+
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;
   }

@@ -19,7 +19,6 @@ import {XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.inte
 })
 
 export class EventCardChartActionsComponent implements OnChanges {
-  @Input() useDistanceAxis: boolean;
   @Input() xAxisType: XAxisTypes;
   @Input() showAllData: boolean;
   @Input() dataSmoothingLevel: number;
@@ -40,7 +39,6 @@ export class EventCardChartActionsComponent implements OnChanges {
     this.xAxisTypeChange.emit(this.xAxisType);
     this.showAllDataChange.emit(this.showAllData);
     this.dataSmoothingLevelChange.emit(this.dataSmoothingLevel);
-    this.userSettingsService.setUseDistanceAxis(this.useDistanceAxis);
     this.userSettingsService.setShowAllData(this.showAllData);
   }
 

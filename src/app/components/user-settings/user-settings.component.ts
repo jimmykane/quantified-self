@@ -21,6 +21,7 @@ import {
   SpeedUnits,
   UserUnitSettingsInterface, VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
 
 @Component({
   selector: 'app-user-settings',
@@ -111,6 +112,16 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showSummaries: new FormControl(this.user.settings.dashboardSettings.showSummaries, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      pinUploadSection: new FormControl(this.user.settings.dashboardSettings.pinUploadSection, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
     });
   }
 
@@ -150,7 +161,14 @@ export class UserSettingsComponent implements OnChanges {
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
-          dashboardSettings: this.user.settings.dashboardSettings
+          dashboardSettings: <UserDashboardSettingsInterface>{
+            chartsSettings: this.user.settings.dashboardSettings.chartsSettings,
+            showSummaries: this.userSettingsFormGroup.get('showSummaries').value,
+            pinUploadSection: this.userSettingsFormGroup.get('pinUploadSection').value,
+            startDate: this.user.settings.dashboardSettings.startDate,
+            endDate: this.user.settings.dashboardSettings.endDate,
+            dateRange: this.user.settings.dashboardSettings.dateRange,
+          }
         }
       });
       this.snackBar.open('User updated', null, {

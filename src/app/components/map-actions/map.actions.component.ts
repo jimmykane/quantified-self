@@ -45,8 +45,6 @@ export class MapActionsComponent implements OnChanges {
     // debugger;
     this.showAutoLapsChange.emit(this.showAutoLaps);
     this.showManualLapsChange.emit(this.showManualLaps);
-    this.mapSettingsService.setShowAutoLaps(this.showAutoLaps);
-    this.mapSettingsService.setShowManualLaps(this.showManualLaps);
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
   }

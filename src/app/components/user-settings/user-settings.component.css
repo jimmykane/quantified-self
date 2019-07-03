@@ -40,3 +40,6 @@ mat-card{
 mat-slide-toggle{
   display: block;
 }
+.smaller{
+  font-size: 75%;
+}

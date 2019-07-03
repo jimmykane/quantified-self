@@ -18,19 +18,19 @@ import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
 import {DataAltitudeAvg} from 'quantified-self-lib/lib/data/data.altitude-avg';
 import {DataAscentTime} from 'quantified-self-lib/lib/data/data.ascent-time';
 import {DataDescentTime} from 'quantified-self-lib/lib/data/data.descent-time';
-import {DataHeartRateMax} from "quantified-self-lib/lib/data/data.heart-rate-max";
-import {DataHeartRateMin} from "quantified-self-lib/lib/data/data.heart-rate-min";
-import {DataPowerMax} from "quantified-self-lib/lib/data/data.power-max";
-import {DataPowerMin} from "quantified-self-lib/lib/data/data.power-min";
-import {DataPowerAvg} from "quantified-self-lib/lib/data/data.power-avg";
-import {DataTemperatureMax} from "quantified-self-lib/lib/data/data.temperature-max";
-import {DataTemperatureAvg} from "quantified-self-lib/lib/data/data.temperature-avg";
-import {DataTemperatureMin} from "quantified-self-lib/lib/data/data.temperature-min";
-import {DataCadenceMax} from "quantified-self-lib/lib/data/data.cadence-max";
-import {DataCadenceAvg} from "quantified-self-lib/lib/data/data.cadence-avg";
-import {DataCadenceMin} from "quantified-self-lib/lib/data/data.cadence-min";
-import {DataVO2Max} from "quantified-self-lib/lib/data/data.vo2-max";
-import {DataPeakEPOC} from "quantified-self-lib/lib/data/data.peak-epoc";
+import {DataHeartRateMax} from 'quantified-self-lib/lib/data/data.heart-rate-max';
+import {DataHeartRateMin} from 'quantified-self-lib/lib/data/data.heart-rate-min';
+import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
+import {DataPowerMin} from 'quantified-self-lib/lib/data/data.power-min';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {DataTemperatureMax} from 'quantified-self-lib/lib/data/data.temperature-max';
+import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
+import {DataTemperatureMin} from 'quantified-self-lib/lib/data/data.temperature-min';
+import {DataCadenceMax} from 'quantified-self-lib/lib/data/data.cadence-max';
+import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
+import {DataCadenceMin} from 'quantified-self-lib/lib/data/data.cadence-min';
+import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
+import {DataPeakEPOC} from 'quantified-self-lib/lib/data/data.peak-epoc';
 
 @Component({
   selector: 'app-chart-actions',
