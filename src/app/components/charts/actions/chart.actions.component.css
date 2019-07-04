@@ -1,10 +1,7 @@
-mat-icon.toolTip{
-  font-size: 14px;
-  margin-left: 0.5em;
-}
 
 mat-select{
 }
 
 ::ng-deep  .mat-menu-content{
+  padding-top: 1em;
 }

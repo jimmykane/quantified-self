@@ -6,3 +6,10 @@ section.smoothing {
   overflow: visible;
 }
 
+::ng-deep .mat-menu-content{
+  padding-top: 1em;
+}
+
+mat-form-field{
+  width: 100%
+}
