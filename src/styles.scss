@@ -42,6 +42,7 @@ $dark-theme: mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 
 body {
   margin: 0;
+  font-family: '"QSFont", Roboto, sans-serif;', sans-serif;
 }
 
 @keyframes FadeIn {
