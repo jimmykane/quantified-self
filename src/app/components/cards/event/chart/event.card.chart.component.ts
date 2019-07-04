@@ -196,8 +196,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (this.xAxisType === XAxisTypes.Distance) {
         xAxis = chart.xAxes.push(new am4charts.ValueAxis());
         // xAxis.extraMax = 0.01;
-        xAxis.renderer.minGridDistance = 20;
-        // xAxis.renderer.gridDistance = 1;
+        xAxis.renderer.minGridDistance = 40;
 
         xAxis.numberFormatter = new am4core.NumberFormatter();
         xAxis.numberFormatter.numberFormat = `#`;
@@ -294,9 +293,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Attach events
       chart.events.on('validated', (ev) => {
         this.logger.info('validated');
-        if (ev.target.data.length) {
-          this.loaded();
-        }
+        // if (ev.target.data.length) {
+        //   this.loaded();
+        // }
       });
 
       chart.events.on('globalscalechanged', (ev) => {
@@ -331,7 +330,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
       chart.events.on('maxsizechanged', (ev) => {
         this.logger.info('maxsizechanged');
-        ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
+        // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
       });
 
       chart.events.on('visibilitychanged', (ev) => {
@@ -454,11 +453,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Attach events
     series.events.on('validated', (ev) => {
       this.logger.info(`Series ${ev.target.id} validated`);
-      // this.legendDiv.nativeElement.style.height = this.chart.legend.contentHeight + "px";
-      // if (this.chart.series.getIndex(0) && this.chart.series.getIndex(0).data && this.chart.series.getIndex(0).dummyData.length) {
-      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
+      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px';
       this.loaded();
-      // }
     });
 
     series.events.on('ready', (ev) => {
