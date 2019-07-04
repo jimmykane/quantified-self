@@ -9,7 +9,6 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {getDatesForDateRange} from '../event-search/event-search.component';
 import {UserService} from '../../services/app.user.service';
-import {removeAnimation} from '../../animations/animations';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
@@ -18,7 +17,6 @@ import {ActionButton} from '../../services/action-buttons/app.action-button';
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css'],
-  animations: [removeAnimation]
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {

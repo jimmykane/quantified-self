@@ -14,17 +14,15 @@ import {MatSidenav} from '@angular/material/sidenav';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subscription} from 'rxjs';
 import {Router, RoutesRecognized} from '@angular/router';
-import {filter, first, map} from 'rxjs/operators';
+import {filter,  map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
-import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {DomSanitizer} from '@angular/platform-browser';
 import {ThemeService} from './services/app.theme.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
-import {DataStore, DynamicDataLoader} from "quantified-self-lib/lib/data/data.store";
-import {removeAnimation, slideInAnimation} from "./animations/animations";
+import {slideInAnimation} from './animations/animations';
 
 declare function require(moduleName: string): any;
 const {version: appVersion} = require('../../package.json');
@@ -34,7 +32,7 @@ const {version: appVersion} = require('../../package.json');
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
-  animations: [ slideInAnimation, removeAnimation ]
+  animations: [ slideInAnimation]
   // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
