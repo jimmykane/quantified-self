@@ -2,6 +2,6 @@
 mat-select{
 }
 
-::ng-deep  .mat-menu-content{
+.first{
   padding-top: 1em;
 }

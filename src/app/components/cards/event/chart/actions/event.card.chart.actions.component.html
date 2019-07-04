@@ -2,7 +2,7 @@
     <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-    <section mat-menu-item>
+    <section mat-menu-item class="first">
         <mat-form-field>
             <mat-label>X Axis type</mat-label>
             <mat-select placeholder="X Axis type" [(value)]="xAxisType" (selectionChange)="somethingChanged($event)">
