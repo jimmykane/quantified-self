@@ -197,6 +197,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         xAxis = chart.xAxes.push(new am4charts.ValueAxis());
         // xAxis.extraMax = 0.01;
         xAxis.renderer.minGridDistance = 40;
+        xAxis.strictMinMax = true;
 
         xAxis.numberFormatter = new am4core.NumberFormatter();
         xAxis.numberFormatter.numberFormat = `#`;
@@ -210,7 +211,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
           return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
         });
-        xAxis.renderer.labels.template.marginRight = 10;
+        // xAxis.renderer.labels.template.marginRight = 10;
         xAxis.min = 0;
       } else {
         // Create a date axis
