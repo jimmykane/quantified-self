@@ -29,11 +29,8 @@ import animated from '@amcharts/amcharts4/themes/animated';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-
-  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @Input() data: any;
-  @Input() userChartSettings: UserChartSettingsInterface;
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
 
@@ -114,13 +111,9 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     // this.generateChartData(this.data).forEach(data => this.chart.addData(data))
   }
 
-  private createChart(): am4charts.PieChart {
-    return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
+  protected createChart(): am4charts.PieChart {
+      const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
 
-      // Create a chart
-      am4core.options.commercialLicense = true;
-      const chart = am4core.create(this.chartDiv.nativeElement, am4charts.PieChart);
       chart.hiddenState.properties.opacity = 0;
       // chart.padding(0, 0, 0, 0)
       chart.radius = am4core.percent(80);
@@ -199,10 +192,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       chart.preloader.disabled = true;
 
       // Attach events
-      this.attachEventListenersOnChart(chart);
-
-      return chart;
-    });
+    this.attachEventListenersOnChart(chart);
+    return chart;
   }
 
   private generateChartData(data) {

@@ -48,11 +48,8 @@ import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 })
 export class EventCardChartComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
-  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
-  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
   @Input() event: EventInterface;
   @Input() user: User;
-  @Input() userChartSettings: UserChartSettingsInterface;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
@@ -60,7 +57,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
   @Input() waterMark: string;
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -179,178 +175,171 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
   }
 
-  private createChart(): am4charts.XYChart {
-    return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
+  protected createChart(): am4charts.XYChart {
+    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
 
-      // Create a chart
-      am4core.options.commercialLicense = true;
+    chart.fontSize = '0.75em';
+    chart.padding(0, 10, 0, 0);
+    // chart.resizable = false;
 
-      const chart = am4core.create(this.chartDiv.nativeElement, am4charts.XYChart);
-      chart.pixelPerfect = false;
-      chart.fontSize = '0.75em';
-      chart.padding(0, 10, 0, 0);
-      // chart.resizable = false;
+    let xAxis;
+    if (this.xAxisType === XAxisTypes.Distance) {
+      xAxis = chart.xAxes.push(new am4charts.ValueAxis());
+      // xAxis.extraMax = 0.01;
+      xAxis.renderer.minGridDistance = 40;
+      xAxis.strictMinMax = true;
 
-      let xAxis;
-      if (this.xAxisType === XAxisTypes.Distance) {
-        xAxis = chart.xAxes.push(new am4charts.ValueAxis());
-        // xAxis.extraMax = 0.01;
-        xAxis.renderer.minGridDistance = 40;
-        xAxis.strictMinMax = true;
-
-        xAxis.numberFormatter = new am4core.NumberFormatter();
-        xAxis.numberFormatter.numberFormat = `#`;
-        // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
-        xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
-        });
-        // xAxis.tooltipText = '{valueX}'
-        xAxis.adapter.add('getTooltipText', (text, target) => {
-          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
-        });
-        // xAxis.renderer.labels.template.marginRight = 10;
-        xAxis.min = 0;
-      } else {
-        // Create a date axis
-        xAxis = chart.xAxes.push(new am4charts.DateAxis());
-        // dateAxis.skipEmptyPeriods= true;
-      }
-      xAxis.title.text = this.xAxisType;
-
-      // dateAxis.baseInterval = {
-      //   timeUnit: "second",
-      //   count: 1
-      // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
-      // };
+      xAxis.numberFormatter = new am4core.NumberFormatter();
+      xAxis.numberFormatter.numberFormat = `#`;
+      // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
+      xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
+        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+      });
+      // xAxis.tooltipText = '{valueX}'
+      xAxis.adapter.add('getTooltipText', (text, target) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
+        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+      });
+      // xAxis.renderer.labels.template.marginRight = 10;
+      xAxis.min = 0;
+    } else {
+      // Create a date axis
+      xAxis = chart.xAxes.push(new am4charts.DateAxis());
       // dateAxis.skipEmptyPeriods= true;
+    }
+    xAxis.title.text = this.xAxisType;
 
-      // Create a value axis
-      // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-      // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
+    // dateAxis.baseInterval = {
+    //   timeUnit: "second",
+    //   count: 1
+    // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
+    // };
+    // dateAxis.skipEmptyPeriods= true;
 
-      // Create a Legend
-      chart.legend = new am4charts.Legend();
-      chart.legend.fontSize = '0.9em';
-      chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-      chart.legend.parent.width = am4core.percent(100);
-      chart.legend.parent.height = am4core.percent(100);
+    // Create a value axis
+    // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+    // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
 
-      chart.legend.useDefaultMarker = true;
-      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-      marker.cornerRadius(12, 12, 12, 12);
-      marker.strokeWidth = 2;
-      marker.strokeOpacity = 1;
-      marker.stroke = am4core.color('#0a97ee');
+    // Create a Legend
+    chart.legend = new am4charts.Legend();
+    chart.legend.fontSize = '0.9em';
+    chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+    chart.legend.parent.width = am4core.percent(100);
+    chart.legend.parent.height = am4core.percent(100);
 
-
-      chart.legend.itemContainers.template.events.on('toggled', (ev) => {
-        const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-        // Getting visible...
-        if (!ev.target.readerChecked === true) {
-          this.showSeries(series, true)
-        } else {
-          this.hideSeries(series, true)
-        }
-      });
-
-      // Create a cursor
-      chart.cursor = new am4charts.XYCursor();
-      // chart.cursor.fullWidthLineX = true;
-      // chart.cursor.fullWidthLineY = true;
-      // chart.cursor.behavior = 'zoomY';
-
-      // Add watermark
-      const watermark = new am4core.Label();
-      watermark.text = this.waterMark || 'Quantified-Self.io';
-      chart.plotContainer.children.push(watermark);
-      watermark.align = 'right';
-      watermark.valign = 'bottom';
-      watermark.fontSize = '2.1em';
-      watermark.opacity = 0.8;
-      watermark.marginRight = 25;
-      watermark.marginBottom = 5;
-      watermark.zIndex = 100;
-      // watermark.fontWeight = 'bold';
+    chart.legend.useDefaultMarker = true;
+    const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
+    marker.cornerRadius(12, 12, 12, 12);
+    marker.strokeWidth = 2;
+    marker.strokeOpacity = 1;
+    marker.stroke = am4core.color('#0a97ee');
 
 
-      // Scrollbar
-      // chart.scrollbarX = new am4charts.XYChartScrollbar();
-
-      // Add exporting options
-      chart.exporting.menu = this.getExportingMenu();
-
-      chart.exporting.extraSprites.push({
-        'sprite': chart.legend.parent,
-        'position': 'bottom',
-        'marginTop': 20
-      });
-
-      // Disable the preloader
-      chart.preloader.disabled = true;
-
-      // Attach events
-      chart.events.on('validated', (ev) => {
-        this.logger.info('validated');
-        // if (ev.target.data.length) {
-        //   this.loaded();
-        // }
-      });
-
-      chart.events.on('globalscalechanged', (ev) => {
-        this.logger.info('globalscalechanged');
-      });
-
-      chart.events.on('dataitemsvalidated', (ev) => {
-        this.logger.info('dataitemsvalidated');
-      });
-
-
-      chart.events.on('datavalidated', (ev) => {
-        this.logger.info('datavalidated');
-      });
-
-      chart.events.on('datarangechanged', (ev) => {
-        this.logger.info('datarangechanged');
-      });
-
-      chart.events.on('ready', (ev) => {
-        this.logger.info('ready');
-      });
-
-
-      chart.events.on('shown', (ev) => {
-        this.logger.info('shown');
-      });
-
-      chart.events.on('transformed', (ev) => {
-        this.logger.info('transformed');
-      });
-
-      chart.events.on('maxsizechanged', (ev) => {
-        this.logger.info('maxsizechanged');
-        // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
-      });
-
-      chart.events.on('visibilitychanged', (ev) => {
-        this.logger.info('visibilitychanged');
-      });
-
-      chart.events.on('hidden', (ev) => {
-        this.logger.info('hidden');
-      });
-      chart.events.on('shown', (ev) => {
-        this.logger.info('shown');
-      });
-
-      chart.events.on('inited', (ev) => {
-        this.logger.info('inited');
-      });
-
-      return chart;
+    chart.legend.itemContainers.template.events.on('toggled', (ev) => {
+      const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
+      // Getting visible...
+      if (!ev.target.readerChecked === true) {
+        this.showSeries(series, true)
+      } else {
+        this.hideSeries(series, true)
+      }
     });
+
+    // Create a cursor
+    chart.cursor = new am4charts.XYCursor();
+    // chart.cursor.fullWidthLineX = true;
+    // chart.cursor.fullWidthLineY = true;
+    // chart.cursor.behavior = 'zoomY';
+
+    // Add watermark
+    const watermark = new am4core.Label();
+    watermark.text = this.waterMark || 'Quantified-Self.io';
+    chart.plotContainer.children.push(watermark);
+    watermark.align = 'right';
+    watermark.valign = 'bottom';
+    watermark.fontSize = '2.1em';
+    watermark.opacity = 0.8;
+    watermark.marginRight = 25;
+    watermark.marginBottom = 5;
+    watermark.zIndex = 100;
+    // watermark.fontWeight = 'bold';
+
+
+    // Scrollbar
+    // chart.scrollbarX = new am4charts.XYChartScrollbar();
+
+    // Add exporting options
+    chart.exporting.menu = this.getExportingMenu();
+
+    chart.exporting.extraSprites.push({
+      'sprite': chart.legend.parent,
+      'position': 'bottom',
+      'marginTop': 20
+    });
+
+    // Disable the preloader
+    chart.preloader.disabled = true;
+
+    // Attach events
+    chart.events.on('validated', (ev) => {
+      this.logger.info('validated');
+      // if (ev.target.data.length) {
+      //   this.loaded();
+      // }
+    });
+
+    chart.events.on('globalscalechanged', (ev) => {
+      this.logger.info('globalscalechanged');
+    });
+
+    chart.events.on('dataitemsvalidated', (ev) => {
+      this.logger.info('dataitemsvalidated');
+    });
+
+
+    chart.events.on('datavalidated', (ev) => {
+      this.logger.info('datavalidated');
+    });
+
+    chart.events.on('datarangechanged', (ev) => {
+      this.logger.info('datarangechanged');
+    });
+
+    chart.events.on('ready', (ev) => {
+      this.logger.info('ready');
+    });
+
+
+    chart.events.on('shown', (ev) => {
+      this.logger.info('shown');
+    });
+
+    chart.events.on('transformed', (ev) => {
+      this.logger.info('transformed');
+    });
+
+    chart.events.on('maxsizechanged', (ev) => {
+      this.logger.info('maxsizechanged');
+      // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
+    });
+
+    chart.events.on('visibilitychanged', (ev) => {
+      this.logger.info('visibilitychanged');
+    });
+
+    chart.events.on('hidden', (ev) => {
+      this.logger.info('hidden');
+    });
+    chart.events.on('shown', (ev) => {
+      this.logger.info('shown');
+    });
+
+    chart.events.on('inited', (ev) => {
+      this.logger.info('inited');
+    });
+
+    return chart;
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface, selectedDataTypes?: string[] | null): am4charts.XYSeries {

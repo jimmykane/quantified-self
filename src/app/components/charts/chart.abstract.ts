@@ -1,4 +1,14 @@
-import {AfterViewInit, ChangeDetectorRef, Input, NgZone, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectorRef,
+  ElementRef,
+  Input,
+  NgZone,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  ViewChild
+} from '@angular/core';
 import * as Sentry from '@sentry/browser';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {Log} from 'ng2-logger/browser';
@@ -19,15 +29,20 @@ import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
 import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
 import kelly from '@amcharts/amcharts4/themes/kelly';
 import * as am4core from '@amcharts/amcharts4/core';
-import {DataAltitude} from "quantified-self-lib/lib/data/data.altitude";
-import {DataGPSAltitude} from "quantified-self-lib/lib/data/data.altitude-gps";
-import {DataEHPE} from "quantified-self-lib/lib/data/data.ehpe";
-import {DataEVPE} from "quantified-self-lib/lib/data/data.evpe";
-import {DataAbsolutePressure} from "quantified-self-lib/lib/data/data.absolute-pressure";
-import {DataSeaLevelPressure} from "quantified-self-lib/lib/data/data.sea-level-pressure";
-import {DataElevation} from "quantified-self-lib/lib/data/data.elevation";
+import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
+import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
+import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
+import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
+import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
+import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
+import {DataElevation} from 'quantified-self-lib/lib/data/data.elevation';
 
 export abstract class ChartAbstract implements OnDestroy {
+  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
+  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
+
+  @Input() userChartSettings: UserChartSettingsInterface;
+  @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
   protected chart: am4charts.PieChart | am4charts.XYChart;
   protected logger = Log.create('ChartAbstract');
@@ -50,6 +65,18 @@ export abstract class ChartAbstract implements OnDestroy {
 
   getCategoryAxis(): am4charts.CategoryAxis {
     return new am4charts.CategoryAxis();
+  }
+
+  protected createChart(chartType: typeof am4charts.Chart): am4charts.Chart {
+    return this.zone.runOutsideAngular(() => {
+      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
+
+      // Create a chart
+      am4core.options.commercialLicense = true;
+      const chart = am4core.create(this.chartDiv.nativeElement, chartType);
+      chart.pixelPerfect = false;
+      return chart;
+    });
   }
 
   protected attachEventListenersOnChart(chart: am4charts.PieChart | am4charts.XYChart) {
