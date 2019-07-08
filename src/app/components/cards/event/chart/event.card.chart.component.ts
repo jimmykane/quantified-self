@@ -39,6 +39,7 @@ import {ThemeService} from '../../../../services/app.theme.service';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
 
 @Component({
   selector: 'app-event-card-chart',
@@ -463,10 +464,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
-      stream.data.reduce((dataMap, streamDataItem, index) => { // Can use a data array but needs deduplex after
-        if (distanceStream.data[index]) {
+      distanceStream.data.reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
+        if (stream.data[index]) {
           // debugger;
-          dataMap.set(distanceStream.data[index], streamDataItem)
+          dataMap.set(distanceStreamDataItem, stream.data[index])
         }
         return dataMap;
       }, new Map<number, number>()).forEach((value, distance) => {
