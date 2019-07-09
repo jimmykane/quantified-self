@@ -9,7 +9,6 @@ import {
   OnChanges,
   OnDestroy,
   OnInit,
-  ViewChild,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
@@ -27,8 +26,6 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
 import {
-  ChartThemes,
-  UserChartSettingsInterface,
   XAxisTypes
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
@@ -39,7 +36,7 @@ import {ThemeService} from '../../../../services/app.theme.service';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {isNumber} from "quantified-self-lib/lib/events/utilities/helpers";
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -465,16 +462,16 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
       distanceStream.data.reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
-        if (stream.data[index]) {
+        if (stream.data[index] && isNumber(distanceStreamDataItem)) {
           // debugger;
           dataMap.set(distanceStreamDataItem, stream.data[index])
         }
         return dataMap;
       }, new Map<number, number>()).forEach((value, distance) => {
         data.push({
-          distance: String(distance),
+          distance: distance,
           value: value
-        })
+        }) // @todo if needed sort here by distance
       });
     } else {
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
