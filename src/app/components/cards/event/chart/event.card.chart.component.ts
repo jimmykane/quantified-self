@@ -455,6 +455,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return series;
   }
 
+  // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     let data = [];
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);

@@ -28,7 +28,7 @@ export class EventCardLapsComponent implements OnChanges {
         '#': index + 1,
         'Type': lap.type,
         'Start Time': lap.startDate.toLocaleTimeString(),
-        'End Time': lap.endDate.toLocaleTimeString(),
+        // 'End Time': lap.endDate.toLocaleTimeString(),
         'Duration': lap.getDuration().getDisplayValue(),
       };
       if (lap.getDistance()) {

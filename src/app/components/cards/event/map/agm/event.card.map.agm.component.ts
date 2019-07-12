@@ -28,6 +28,7 @@ import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-de
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -150,15 +151,25 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
             activity: activity,
             positions: latData.reduce((latLongArray, value, index) => {
               latLongArray[index] = {
-                latitude: latData[index],
-                longitude: longData[index],
+                latitudeDegrees: latData[index],
+                longitudeDegrees: longData[index],
               };
               return latLongArray
             }, []),
+            laps: activity.getLaps().reduce((laps, lap) => {
+              // @todo gives back too big arrays should check the implementation of the activity method
+              const positionData = activity.getSquashedPositionData(lap.startDate, lap.endDate, streams[0], streams[1]);
+              laps.push({
+                lap: lap,
+                lapPosition: {
+                  latitudeDegrees: positionData[0].latitudeDegrees,
+                  longitudeDegrees: positionData[1].longitudeDegrees
+                }
+              });
+              return laps;
+            }, [])
           });
 
-
-          // debugger;
           this.isLoading = false;
           this.changeDetectorRef.detectChanges();
           this.resizeMapToBounds();
@@ -237,26 +248,26 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
         south: 0,
       };
     }
-    const mostEast = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
-      return (acc.longitude < latLongPair.longitude) ? latLongPair : acc;
+    const mostEast = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+      return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
     });
-    const mostWest = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
-      return (acc.longitude > latLongPair.longitude) ? latLongPair : acc;
-    });
-
-    const mostNorth = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
-      return (acc.latitude < latLongPair.latitude) ? latLongPair : acc;
+    const mostWest = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+      return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
     });
 
-    const mostSouth = pointsWithPosition.reduce((acc: { latitude: number, longitude: number }, latLongPair: { latitude: number, longitude: number }) => {
-      return (acc.latitude > latLongPair.latitude) ? latLongPair : acc;
+    const mostNorth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+      return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
+    });
+
+    const mostSouth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+      return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
     return <LatLngBoundsLiteral>{
-      east: mostEast.longitude,
-      west: mostWest.longitude,
-      north: mostNorth.latitude,
-      south: mostSouth.latitude,
+      east: mostEast.longitudeDegrees,
+      west: mostWest.longitudeDegrees,
+      north: mostNorth.latitudeDegrees,
+      south: mostSouth.latitudeDegrees,
     };
   }
 
@@ -317,8 +328,13 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
 }
 
 export interface MapData {
-  activity: ActivityInterface,
-  positions: PointInterface[],
+  activity: ActivityInterface;
+  positions: DataPositionInterface[];
+  laps: {
+    lap: LapInterface,
+    lapPosition: DataPositionInterface,
+    symbol: any,
+  }[]
   // lowNumberOfSatellitesPoints: PointInterface[],
   // activityStartPoint: PointInterface,
   // lapsWithPosition: {
