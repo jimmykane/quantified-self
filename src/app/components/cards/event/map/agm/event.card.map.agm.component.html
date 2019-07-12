@@ -10,11 +10,13 @@
            [scrollwheel]="null"
            [mapTypeControlOptions]="mapTypeControlOptions"
            [zoomControlOptions]="zoomControlOptions"
+           [styles]="getStyles(theme)"
            [streetViewControl]="false">
     <ng-container *ngFor="let activityMapData of activitiesMapData">
       <!-- Start Marker -->
-      <agm-marker [agmFitBounds]="true"
-        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"
+      <agm-marker
+        [iconUrl]="getHomeMarkerIcon(activityMapData.activity)"
+        [zIndex]="99999"
         [latitude]="activityMapData.positions[0].latitudeDegrees"
         [longitude]="activityMapData.positions[0].longitudeDegrees">
       </agm-marker>
@@ -31,15 +33,18 @@
       </agm-polyline>
       <!-- End marker -->
       <agm-marker
-        [iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=flag|'+ eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"
+        [iconUrl]="getFlagMarkerIcon(activityMapData.activity)"
+        [zIndex]="1"
         [latitude]="activityMapData.positions[activityMapData.positions.length -1].latitudeDegrees"
         [longitude]="activityMapData.positions[activityMapData.positions.length -1].longitudeDegrees">
       </agm-marker>
-
+<!--      [iconUrl]="'https://chart.googleapis.com/chart?chst=' +  'd_map_pin_letter&chld=' + (i+1) + '|' + eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"-->
       <!-- Laps -->
       <agm-marker
       *ngFor="let lap of activityMapData.laps; let i = index; last as isLast"
-      [iconUrl]="'https://chart.googleapis.com/chart?chst=' + ( isLast ? 'd_map_pin_icon&chld=flag|' : 'd_map_pin_letter&chld=' + (i+1) + '|') + eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"
+      [iconUrl]="getMarkerIcon(activityMapData.activity)"
+      [zIndex]="i+1"
+      [label]="getLabel((i+1).toString())"
       [latitude]="lap.lapPosition.latitudeDegrees"
       [longitude]="lap.lapPosition.longitudeDegrees">
       </agm-marker>

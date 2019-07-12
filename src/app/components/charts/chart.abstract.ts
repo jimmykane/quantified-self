@@ -73,8 +73,10 @@ export abstract class ChartAbstract implements OnDestroy {
 
       // Create a chart
       am4core.options.commercialLicense = true;
+      // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType);
       chart.pixelPerfect = false;
+      // chart.dataSource.updateCurrentData = true
       return chart;
     });
   }

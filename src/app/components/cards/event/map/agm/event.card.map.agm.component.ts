@@ -29,6 +29,8 @@ import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-
 import {Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
+import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
+import {MapStyles} from './MapThemes';
 
 @Component({
   selector: 'app-event-card-map-agm',
@@ -45,6 +47,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   @Input() isVisible: boolean;
   @Input() showAutoLaps: boolean;
   @Input() showManualLaps: boolean;
+  @Input() theme: AppThemes;
 
 
   private streamsSubscriptions: Subscription[] = [];
@@ -56,7 +59,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   public clickedPoint: PointInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
     // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
-    // mapTypeIds: ['hybrid','roadmap', 'satellite', 'terrain'],
+    // mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
     position: ControlPosition.LEFT_TOP,
     style: MapTypeControlStyle.HORIZONTAL_BAR
   };
@@ -134,6 +137,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
             this.changeDetectorRef.detectChanges();
             return;
           }
+
           // Start building map data
           const latData = streams[0].getNumericData();
           const longData = streams[1].getNumericData();
@@ -159,11 +163,14 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
             laps: activity.getLaps().reduce((laps, lap) => {
               // @todo gives back too big arrays should check the implementation of the activity method
               const positionData = activity.getSquashedPositionData(lap.startDate, lap.endDate, streams[0], streams[1]);
+              if (!positionData.length) {
+                return laps;
+              }
               laps.push({
                 lap: lap,
                 lapPosition: {
-                  latitudeDegrees: positionData[0].latitudeDegrees,
-                  longitudeDegrees: positionData[1].longitudeDegrees
+                  latitudeDegrees: positionData[positionData.length - 1].latitudeDegrees,
+                  longitudeDegrees: positionData[positionData.length - 1].longitudeDegrees
                 }
               });
               return laps;
@@ -281,6 +288,62 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
     this.openedLapMarkerInfoWindow = void 0;
   }
 
+  getMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M22-48h-44v43h16l6 5 6-5h16z',
+      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillOpacity: 1,
+      strokeColor: '#000',
+      strokeWeight: 0,
+      scale: 0.5,
+      labelOrigin: {
+        x: 0,
+        y: -24
+      }
+    }
+  }
+
+  //
+  getHomeMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillOpacity: 1,
+      strokeColor: '#000',
+      strokeWeight: 0,
+      scale: 1,
+      anchor: {x: 12, y: 12}
+    }
+  }
+
+  getFlagMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
+      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillOpacity: 1,
+      strokeColor: '#000',
+      strokeWeight: 0,
+      scale: 1.5,
+      anchor: {x: 6, y: 24}
+    }
+  }
+
+  // @todo make prop
+  getLabel(text) {
+    return {
+      color: 'white',
+      fontSize: '14px',
+      text: text
+    }
+  }
+
+  getStyles(appTheme: AppThemes) {
+    if (appTheme === AppThemes.Dark) {
+      return MapStyles.qsDark
+    }
+    return [];
+  }
+
   lineClick(event: PolyMouseEvent, points: PointInterface[]) {
     // const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
     //   latitudeDegrees: event.latLng.lat(),
@@ -326,6 +389,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
 }
+
 
 export interface MapData {
   activity: ActivityInterface;

@@ -14,6 +14,7 @@ import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {ChartThemes, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {ThemeService} from '../../../services/app.theme.service';
+import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
 
 
 @Component({
@@ -34,11 +35,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartXAxisType = XAxisTypes.Duration;
   public dataSmoothingLevel = 3;
   public chartTheme: ChartThemes;
+  public appTheme: AppThemes;
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
   private eventSubscription: Subscription;
   private chartThemeSubscription: Subscription;
+  private appThemeSubscription: Subscription;
 
   private logger = Log.create('EventCardComponent');
 
@@ -84,6 +87,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.chartTheme = chartTheme;
     });
 
+    // Subscribe to the appTheme changes
+    this.appThemeSubscription = this.themeService.getAppTheme().subscribe((appTheme) => {
+      this.appTheme = appTheme;
+    });
+
     // Subscribe to the actual subject our event
     this.eventSubscription = this.eventService.getEventAndActivities(this.targetUser, eventID).subscribe((event) => {
       if (!event) {
@@ -112,6 +120,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.parametersSubscription.unsubscribe();
     this.eventSubscription.unsubscribe();
     this.chartThemeSubscription.unsubscribe();
+    this.appThemeSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {
