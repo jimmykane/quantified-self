@@ -30,6 +30,8 @@ import {Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
+import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 
 declare function require(moduleName: string): any;
 const mapStyles = require('./map-styles.json');
@@ -47,9 +49,9 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
-  @Input() showAutoLaps: boolean;
-  @Input() showManualLaps: boolean;
-  @Input() theme: AppThemes;
+  @Input() theme: MapThemes;
+  @Input() showLaps: boolean;
+  @Input() lapTypes: LapTypes[] = [];
 
 
   private streamsSubscriptions: Subscription[] = [];
@@ -93,7 +95,9 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     // debugger
     // // If no operational changes return
     if ((simpleChanges.event
-      || simpleChanges.selectedActivities)) {
+      || simpleChanges.selectedActivities
+      || simpleChanges.lapTypes
+      || simpleChanges.showLaps)) {
       this.bindToNewData();
     }
 
@@ -165,7 +169,10 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
             laps: activity.getLaps().reduce((laps, lap) => {
               // @todo gives back too big arrays should check the implementation of the activity method
               const positionData = activity.getSquashedPositionData(lap.startDate, lap.endDate, streams[0], streams[1]);
-              if (!positionData.length) {
+              if (!positionData.length || !this.showLaps) {
+                return laps;
+              }
+              if (this.lapTypes.indexOf(lap.type) === -1){
                 return laps;
               }
               laps.push({
@@ -214,7 +221,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   //     // Check for laps with position
   //     const lapsWithPosition = activity.getLaps()
   //       .filter((lap) => {
-  //         if (this.showAutoLaps && (lap.type === LapTypes.AutoLap || lap.type === LapTypes.Distance)) {
+  //         if (this.showLaps && (lap.type === LapTypes.AutoLap || lap.type === LapTypes.Distance)) {
   //           return true;
   //         }
   //         if (this.showManualLaps && lap.type === LapTypes.Manual) {

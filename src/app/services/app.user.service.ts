@@ -43,6 +43,7 @@ import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {MapThemes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
+import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 
 @Injectable()
@@ -136,6 +137,14 @@ export class UserService implements OnDestroy {
 
   public async updateUserProperties(user: User, propertiesToUpdate: any) {
     return this.afs.collection('users').doc(user.uid).update(propertiesToUpdate);
+  }
+
+  public async updateUser(user: User) {
+    debugger;
+    const a  = user.toJSON();
+    debugger;
+
+    return this.afs.collection('users').doc(user.uid).update(user.toJSON());
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
@@ -251,6 +260,8 @@ export class UserService implements OnDestroy {
 
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || this.getDefaultMapTheme();
+    settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
+    settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || [LapTypes.AutoLap, LapTypes.Distance];
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;

@@ -45,7 +45,23 @@
             </mat-select>
             <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
           </mat-form-field>
+
+          <mat-form-field>
+            <mat-select placeholder="Lap types to show on the map" formControlName="mapLapTypes" multiple>
+                <mat-option *ngFor="let lapType of lapTypes | keyvalue" [value]="lapType.value">
+                  {{lapType.key}}
+                </mat-option>
+            </mat-select>
+            <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
+          </mat-form-field>
         </mat-card-content>
+
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="showMapLaps">
+          <span matTooltip="Show laps on map?">Show laps</span>
+        </mat-slide-toggle>
+        <mat-hint><b>Tip:</b> laps can help in the route analysis</mat-hint>
       </mat-card>
 
         <mat-card>
@@ -156,9 +172,7 @@
                 <mat-slide-toggle
                         [color]="'accent'"
                         formControlName="useAnimations">
-          <span matTooltip="Use animations or no">
-             Animations
-          </span>
+                         <span matTooltip="Use animations or no">Animations</span>
                 </mat-slide-toggle>
                 <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
 

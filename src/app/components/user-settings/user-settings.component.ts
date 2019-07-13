@@ -23,6 +23,7 @@ import {
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
 import {MapThemes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
+import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 @Component({
   selector: 'app-user-settings',
@@ -53,6 +54,13 @@ export class UserSettingsComponent implements OnChanges {
   public appThemes = AppThemes;
   public chartThemes = ChartThemes;
   public mapThemes = MapThemes;
+  public lapTypes = {
+    'AutoLap': LapTypes.AutoLap,
+    'Distance': LapTypes.Distance,
+    'Manual': LapTypes.Manual,
+    'Interval': LapTypes.Interval,
+    'Fitness Equipment': LapTypes.FitnessEquipment,
+  };
 
   public speedUnits = SpeedUnits;
   public verticalSpeedUnits = VerticalSpeedUnits;
@@ -129,6 +137,16 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showMapLaps: new FormControl(this.user.settings.mapSettings.showLaps, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      mapLapTypes: new FormControl(this.user.settings.mapSettings.lapTypes, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
     });
   }
 
@@ -162,7 +180,11 @@ export class UserSettingsComponent implements OnChanges {
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{theme: this.userSettingsFormGroup.get('appTheme').value},
-          mapSettings: <UserMapSettingsInterface>{theme: this.userSettingsFormGroup.get('mapTheme').value},
+          mapSettings: <UserMapSettingsInterface>{
+            theme: this.userSettingsFormGroup.get('mapTheme').value,
+            showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
+            lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value
+          },
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,

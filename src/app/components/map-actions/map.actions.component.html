@@ -6,20 +6,11 @@
     <mat-slide-toggle
       [color]="'accent'"
       (change)="checkBoxChanged($event)"
-      [(ngModel)]="showAutoLaps">
+      [(ngModel)]="showLaps">
       <span matTooltip="When enabled auto lap markers will be added to the map">
-        Auto Laps
+        Show laps
       </span>
     </mat-slide-toggle>
   </section>
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="checkBoxChanged($event)"
-      [(ngModel)]="showManualLaps">
-      <span matTooltip="When enabled manual lap markers will be added to the map">
-        Manual Laps
-      </span>
-    </mat-slide-toggle>
-  </section>
+
 </mat-menu>

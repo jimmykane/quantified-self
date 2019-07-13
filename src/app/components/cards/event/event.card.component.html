@@ -36,17 +36,19 @@
       <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
-          <!--<app-map-actions-->
-            <!--[(showAutoLaps)]="showMapAutoLaps"-->
-            <!--[(showManualLaps)]="showMapManualLaps"-->
-            <!--align="end">-->
-          <!--</app-map-actions>-->
+          <app-map-actions
+            [(showLaps)]="showMapLaps"
+            [user]="currentUser"
+            align="end">
+          </app-map-actions>
         </ng-template>
         <app-event-card-map-agm
           [isVisible]="tabIndex === 0"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"
           [event]="event"
+          [showLaps]="showMapLaps"
+          [lapTypes]="currentUser ? currentUser.settings.mapSettings.lapTypes : null"
           [theme]="mapTheme">
         </app-event-card-map-agm>
       </mat-tab>

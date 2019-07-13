@@ -15,6 +15,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {UserSettingsService} from '../../services/app.user.settings.service';
+import {User} from 'quantified-self-lib/lib/users/user';
+import {UserService} from '../../services/app.user.service';
 
 @Component({
   selector: 'app-map-actions',
@@ -25,26 +27,23 @@ import {UserSettingsService} from '../../services/app.user.settings.service';
 
 export class MapActionsComponent implements OnChanges {
 
-  @Input() showAutoLaps: boolean;
-  @Input() showManualLaps: boolean;
-
-  @Output() showAutoLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
-  @Output() showManualLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Input() showLaps: boolean;
+  @Input() user: User;
+  @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
 
   constructor(
-    private eventService: EventService,
-    private changeDetectorRef: ChangeDetectorRef,
-    private router: Router,
-    private mapSettingsService: UserSettingsService,
-    private snackBar: MatSnackBar,
-    public dialog: MatDialog) {
+    private userService: UserService) {
   }
 
-  checkBoxChanged(event) {
+  async checkBoxChanged(event) {
     // debugger;
-    this.showAutoLapsChange.emit(this.showAutoLaps);
-    this.showManualLapsChange.emit(this.showManualLaps);
+    if (this.user) {
+      this.user.settings.mapSettings.showLaps = this.showLaps;
+      await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    }
+    this.showLapsChange.emit(this.showLaps);
+
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()
   }

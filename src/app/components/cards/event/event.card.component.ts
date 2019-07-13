@@ -34,6 +34,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   public showAllData: boolean;
   public chartXAxisType = XAxisTypes.Duration;
+  public showMapLaps;
   public dataSmoothingLevel = 3;
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
@@ -83,6 +84,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
+      this.showMapLaps = user.settings.mapSettings.showLaps;
     });
 
     // Subscribe to the chartTheme changes
