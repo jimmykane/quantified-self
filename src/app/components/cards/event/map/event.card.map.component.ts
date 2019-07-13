@@ -302,8 +302,8 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
       path: 'M22-48h-44v43h16l6 5 6-5h16z',
       fillColor: this.eventColorService.getActivityColor(this.event, activity),
       fillOpacity: 1,
-      strokeColor: '#000',
-      strokeWeight: 0,
+      strokeColor: '#FFF',
+      strokeWeight: 0.5,
       scale: 0.5,
       labelOrigin: {
         x: 0,
@@ -318,9 +318,9 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
       path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
       fillColor: this.eventColorService.getActivityColor(this.event, activity),
       fillOpacity: 1,
-      strokeColor: '#000',
-      strokeWeight: 0,
-      scale: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
+      scale: 1.2,
       anchor: {x: 12, y: 12}
     }
   }
@@ -330,8 +330,8 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
       path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
       fillColor: this.eventColorService.getActivityColor(this.event, activity),
       fillOpacity: 1,
-      strokeColor: '#000',
-      strokeWeight: 0,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
       scale: 1.5,
       anchor: {x: 6, y: 24}
     }

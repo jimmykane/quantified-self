@@ -960,19 +960,10 @@
       "elementType": "geometry",
       "stylers": [
         {
-          "color": "#000000"
+          "color": "#574f3f"
         },
         {
-          "lightness": 16
-        }
-      ]
-    },
-    {
-      "featureType": "road.local",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#999999"
+          "lightness": 2
         }
       ]
     },
