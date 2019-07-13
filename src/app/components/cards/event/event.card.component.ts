@@ -14,7 +14,8 @@ import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {ChartThemes, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {ThemeService} from '../../../services/app.theme.service';
-import {AppThemes} from "quantified-self-lib/lib/users/user.app.settings.interface";
+import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
+import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 
 
 @Component({
@@ -36,12 +37,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public dataSmoothingLevel = 3;
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
+  public mapTheme: MapThemes;
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
   private eventSubscription: Subscription;
   private chartThemeSubscription: Subscription;
   private appThemeSubscription: Subscription;
+  private mapThemeSubscription: Subscription;
 
   private logger = Log.create('EventCardComponent');
 
@@ -76,7 +79,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to authService and set the current user if possible
     this.userSubscription = this.authService.user.subscribe((user) => {
       this.currentUser = user;
-      if (!this.currentUser){
+      if (!this.currentUser) {
         return;
       }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
@@ -90,6 +93,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to the appTheme changes
     this.appThemeSubscription = this.themeService.getAppTheme().subscribe((appTheme) => {
       this.appTheme = appTheme;
+    });
+
+    // Subscribe to the appTheme changes
+    this.mapThemeSubscription = this.themeService.getMapTheme().subscribe((mapTheme) => {
+      this.mapTheme = mapTheme;
     });
 
     // Subscribe to the actual subject our event
@@ -121,6 +129,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.eventSubscription.unsubscribe();
     this.chartThemeSubscription.unsubscribe();
     this.appThemeSubscription.unsubscribe();
+    this.mapThemeSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {

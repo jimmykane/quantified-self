@@ -11,7 +11,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
-import {EventColorService} from '../../../../../services/color/app.event.color.service';
+import {EventColorService} from '../../../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
@@ -23,23 +23,25 @@ import {
   ZoomControlOptions
 } from '@agm/core/services/google-maps-types';
 import {Log} from 'ng2-logger/browser';
-import {EventService} from '../../../../../services/app.event.service';
+import {EventService} from '../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
-import {MapStyles} from './MapThemes';
+
+declare function require(moduleName: string): any;
+const mapStyles = require('./map-styles.json');
 
 @Component({
   selector: 'app-event-card-map-agm',
-  templateUrl: './event.card.map.agm.component.html',
-  styleUrls: ['./event.card.map.agm.component.css'],
+  templateUrl: './event.card.map.component.html',
+  styleUrls: ['./event.card.map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap, {static: false}) agmMap;
   @Input() event: EventInterface;
   @Input() user: User;
@@ -338,10 +340,7 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
   }
 
   getStyles(appTheme: AppThemes) {
-    if (appTheme === AppThemes.Dark) {
-      return MapStyles.qsDark
-    }
-    return [];
+    return mapStyles[appTheme]
   }
 
   lineClick(event: PolyMouseEvent, points: PointInterface[]) {
@@ -387,7 +386,6 @@ export class EventCardMapAGMComponent implements OnChanges, OnInit, OnDestroy, A
       this.agmMap._mapsWrapper.fitBounds(this.getBounds())
     });
   }
-
 }
 
 
@@ -399,11 +397,4 @@ export interface MapData {
     lapPosition: DataPositionInterface,
     symbol: any,
   }[]
-  // lowNumberOfSatellitesPoints: PointInterface[],
-  // activityStartPoint: PointInterface,
-  // lapsWithPosition: {
-  //   lap: LapInterface,
-  //   lapPoints: PointInterface[],
-  //   lapEndPoint: PointInterface
-  // }[]
 }

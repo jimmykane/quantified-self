@@ -22,6 +22,7 @@ import {
   UserUnitSettingsInterface, VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
+import {MapThemes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 
 @Component({
   selector: 'app-user-settings',
@@ -51,6 +52,7 @@ export class UserSettingsComponent implements OnChanges {
 
   public appThemes = AppThemes;
   public chartThemes = ChartThemes;
+  public mapThemes = MapThemes;
 
   public speedUnits = SpeedUnits;
   public verticalSpeedUnits = VerticalSpeedUnits;
@@ -122,6 +124,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      mapTheme: new FormControl(this.user.settings.mapSettings.theme, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
     });
   }
 
@@ -155,6 +162,7 @@ export class UserSettingsComponent implements OnChanges {
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{theme: this.userSettingsFormGroup.get('appTheme').value},
+          mapSettings: <UserMapSettingsInterface>{theme: this.userSettingsFormGroup.get('mapTheme').value},
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,

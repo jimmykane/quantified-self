@@ -34,13 +34,15 @@ import {
   UserDashboardSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {
-  ChartTypes, ChartDataValueTypes,
+  ChartDataValueTypes,
+  ChartTypes,
   UserDashboardChartSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {MapThemes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 
 
 @Injectable()
@@ -184,6 +186,10 @@ export class UserService implements OnDestroy {
     return AppThemes.Normal;
   }
 
+  public getDefaultMapTheme(): MapThemes {
+    return MapThemes.Normal;
+  }
+
   // @todo move other calls to this
 
   private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
@@ -242,6 +248,9 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || this.getDefaultUserDashboardChartSettings();
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
+
+    settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
+    settings.mapSettings.theme = settings.mapSettings.theme || this.getDefaultMapTheme();
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;

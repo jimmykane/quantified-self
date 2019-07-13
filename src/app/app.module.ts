@@ -46,7 +46,6 @@ import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {CdkTableModule} from '@angular/cdk/table';
 import {EventTableComponent, MatPaginatorIntlFireStore} from './components/event-table/event.table.component';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
-import {EventCardMapAGMComponent} from './components/cards/event/map/agm/event.card.map.agm.component';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
@@ -99,6 +98,7 @@ import * as Sentry from '@sentry/browser';
 import {ChartsColumnComponent} from './components/charts/column/charts.column.component';
 import {ChartActionsComponent} from './components/charts/actions/chart.actions.component';
 import {EventCardChartActionsComponent} from './components/cards/event/chart/actions/event.card.chart.actions.component';
+import {EventCardMapComponent} from "./components/cards/event/map/event.card.map.component";
 
 declare function require(moduleName: string): any;
 
@@ -188,7 +188,7 @@ export class SentryErrorHandler implements ErrorHandler {
     EventCardComponent,
     EventActionsComponent,
     EventTableComponent,
-    EventCardMapAGMComponent,
+    EventCardMapComponent,
     EventCardStatsComponent,
     EventActionsComponent,
     EventCardLapsComponent,
