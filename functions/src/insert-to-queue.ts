@@ -3,7 +3,10 @@ import * as admin from "firebase-admin";
 import {generateIDFromParts} from "./utils";
 import {processQueueItem} from "./parse-queue";
 
-export const insertToQueue = functions.region('europe-west2').runWith({timeoutSeconds: 60}).https.onRequest(async (req, res) => {
+const TIMEOUT_IN_SECONDS = 540;
+const MEMORY = "2GB";
+
+export const insertToQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY}).https.onRequest(async (req, res) => {
   // Check Auth first
   const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
   if (authentication !== req.headers.authorization){

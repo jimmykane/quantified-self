@@ -16,7 +16,7 @@ import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.
 const TIMEOUT_IN_SECONDS = 540;
 const RETRY_COUNT = 20;
 const LIMIT = 200;
-const MEMORY = "512MB";
+const MEMORY = "2GB";
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 12 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
