@@ -346,7 +346,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     }
   }
 
-  getStyles(appTheme: AppThemes) {
+  getStyles(appTheme: MapThemes) {
     return mapStyles[appTheme]
   }
 

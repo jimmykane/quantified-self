@@ -30,6 +30,8 @@
           [latitude]="position.latitudeDegrees"
           [longitude]="position.longitudeDegrees">
         </agm-polyline-point>
+        <agm-icon-sequence [fixedRotation]="true" [path]="'FORWARD_CLOSED_ARROW'">
+        </agm-icon-sequence>
       </agm-polyline>
       <!-- End marker -->
       <agm-marker
@@ -38,7 +40,7 @@
         [latitude]="activityMapData.positions[activityMapData.positions.length -1].latitudeDegrees"
         [longitude]="activityMapData.positions[activityMapData.positions.length -1].longitudeDegrees">
       </agm-marker>
-<!--      [iconUrl]="'https://chart.googleapis.com/chart?chst=' +  'd_map_pin_letter&chld=' + (i+1) + '|' + eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"-->
+      <!--      [iconUrl]="'https://chart.googleapis.com/chart?chst=' +  'd_map_pin_letter&chld=' + (i+1) + '|' + eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"-->
       <!-- Laps -->
       <agm-marker
         *ngFor="let lap of activityMapData.laps; let i = index; last as isLast"
