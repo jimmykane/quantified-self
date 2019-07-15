@@ -7,22 +7,18 @@ import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 
 export abstract class UnitBasedAbstract {
   /**
-   * This gets the base and extended unit datatypes from a datatype array depending on the user settings and the activity type
+   * This gets the base and extended unit datatypes from a datatype array depending on the user settings
    * @param dataTypes
    * @param userUnitSettings
-   * @param activity
    */
-  protected getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface, activity?: ActivityInterface): string[] {
+  protected getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
     let unitBasedDataTypes = [];
     if (!userUnitSettings) {
       return unitBasedDataTypes
     }
     if (dataTypes.indexOf(DataPace.type) !== -1) {
-      if (activity && [ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1) {
         unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.swimPaceUnits);
-      } else {
         unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
-      }
     }
     if (dataTypes.indexOf(DataSpeed.type) !== -1) {
       unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.speedUnits);
