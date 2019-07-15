@@ -1,12 +1,8 @@
 import {
-  AfterViewInit,
-  ChangeDetectorRef,
   ElementRef,
   Input,
   NgZone,
-  OnChanges,
   OnDestroy,
-  OnInit,
   ViewChild
 } from '@angular/core';
 import * as Sentry from '@sentry/browser';
@@ -36,8 +32,11 @@ import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
 import {DataElevation} from 'quantified-self-lib/lib/data/data.elevation';
+import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
+import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
+import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 
-export abstract class ChartAbstract implements OnDestroy {
+export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
 
@@ -61,6 +60,7 @@ export abstract class ChartAbstract implements OnDestroy {
   };
 
   constructor(protected zone: NgZone) {
+    super();
   }
 
   getCategoryAxis(): am4charts.CategoryAxis {
@@ -175,7 +175,7 @@ export abstract class ChartAbstract implements OnDestroy {
 
   protected getYAxisForSeries(streamType: string) {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(streamType) !== -1) {
+    if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
       yAxis = new am4charts.DurationAxis()
     } else {
       yAxis = new am4charts.ValueAxis();
@@ -231,6 +231,9 @@ export abstract class ChartAbstract implements OnDestroy {
     }
     if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
       return 'Pace'
+    }
+    if ([ DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
+      return 'Swim Pace'
     }
     return name;
   }

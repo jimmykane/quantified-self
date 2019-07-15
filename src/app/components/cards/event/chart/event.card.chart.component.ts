@@ -29,14 +29,15 @@ import {
   XAxisTypes
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
-import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {UserSettingsService} from '../../../../services/app.user.settings.service';
 import {ThemeService} from '../../../../services/app.theme.service';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
+import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -85,7 +86,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   async ngOnChanges(simpleChanges) {
     // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
-
 
     // If not visible and no data is bound do nothing
     if (!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)) {
@@ -146,9 +146,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         // @todo create whitelist for unitstreams and not generate all and then remove ...
         // We get the unit streams and we filter on them based on the user pref
         const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
-          return this.getUnitBasedDataTypesToUseFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
+          // If its a swimming activity it will detect the corresponding metrics
+          return this.getUnitBasedDataTypesToUseFromDataTypes(streams.map(st => st.type), this.userUnitSettings, activity).indexOf(stream.type) !== -1;
         });
-        // debugger;
         return unitStreams.concat(streams).map((stream) => {
           return this.createOrUpdateChartSeries(activity, stream, selectedDataTypes);
         });
@@ -391,7 +391,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Name is acting like a type so get them grouped
     series.name = this.getSeriesName(stream.type);
 
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
+    // @todo use base type
+    if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
       series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
       series.tooltipText = `${activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
@@ -551,28 +552,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }, []);
     }
     return dataTypes;
-  }
-
-  /**
-   * This gets the base and extended unit datatypes from a datatype array depending on the user settings
-   * @param dataTypes
-   * @param userUnitSettings
-   */
-  private getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
-    let unitBasedDataTypes = [];
-    if (!userUnitSettings) {
-      return unitBasedDataTypes
-    }
-    if (dataTypes.indexOf(DataPace.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
-    }
-    if (dataTypes.indexOf(DataSpeed.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.speedUnits);
-    }
-    if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
-      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.verticalSpeedUnits);
-    }
-    return unitBasedDataTypes;
   }
 
   protected hideSeries(series: am4charts.XYSeries, save?: boolean) {

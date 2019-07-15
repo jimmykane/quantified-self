@@ -18,7 +18,7 @@ import {UserSettingsInterface} from 'quantified-self-lib/lib/users/user.settings
 import {
   DaysOfTheWeek,
   PaceUnits,
-  SpeedUnits,
+  SpeedUnits, SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
@@ -248,6 +248,7 @@ export class UserService implements OnDestroy {
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
+    settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || [SwimPaceUnits.MinutesPer100Meter];
     settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || [VerticalSpeedUnits.MetersPerSecond];
     settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Sunday;
     settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};

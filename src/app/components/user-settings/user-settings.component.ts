@@ -18,7 +18,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {
   DaysOfTheWeek,
   PaceUnits,
-  SpeedUnits,
+  SpeedUnits, SwimPaceUnits,
   UserUnitSettingsInterface, VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
@@ -65,6 +65,7 @@ export class UserSettingsComponent implements OnChanges {
   public speedUnits = SpeedUnits;
   public verticalSpeedUnits = VerticalSpeedUnits;
   public paceUnits = PaceUnits;
+  public swimPaceUnits = SwimPaceUnits;
   public userSettingsFormGroup: FormGroup;
 
   constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog) {
@@ -113,6 +114,11 @@ export class UserSettingsComponent implements OnChanges {
       ]),
 
       paceUnitsToUse: new FormControl(this.user.settings.unitSettings.paceUnits, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      swimPaceUnitsToUse: new FormControl(this.user.settings.unitSettings.swimPaceUnits, [
         Validators.required,
         // Validators.minLength(1),
       ]),
@@ -188,6 +194,7 @@ export class UserSettingsComponent implements OnChanges {
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
+            swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnits').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },

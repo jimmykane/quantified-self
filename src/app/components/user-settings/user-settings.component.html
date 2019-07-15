@@ -210,6 +210,15 @@
                     <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
                 </mat-form-field>
 
+              <mat-form-field>
+                <mat-select placeholder="Units for swim pace" formControlName="swimPaceUnitsToUse" multiple>
+                  <mat-option *ngFor="let swimPaceUnit of swimPaceUnits | keyvalue" [value]="swimPaceUnit.value">
+                    {{swimPaceUnit.value}}
+                  </mat-option>
+                </mat-select>
+                <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+              </mat-form-field>
+
                 <mat-form-field>
                     <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse"
                                 multiple>
