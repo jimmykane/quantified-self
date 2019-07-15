@@ -62,6 +62,12 @@
           <span matTooltip="Show laps on map?">Show laps</span>
         </mat-slide-toggle>
         <mat-hint><b>Tip:</b> laps can help in the route analysis</mat-hint>
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="showMapArrows">
+          <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
+        </mat-slide-toggle>
+        <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
       </mat-card>
 
         <mat-card>

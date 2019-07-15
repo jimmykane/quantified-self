@@ -28,8 +28,10 @@ import {UserService} from '../../services/app.user.service';
 export class MapActionsComponent implements OnChanges {
 
   @Input() showLaps: boolean;
+  @Input() showArrows: boolean;
   @Input() user: User;
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() showArrowsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
 
   constructor(
@@ -40,9 +42,11 @@ export class MapActionsComponent implements OnChanges {
     // debugger;
     if (this.user) {
       this.user.settings.mapSettings.showLaps = this.showLaps;
+      this.user.settings.mapSettings.showArrows = this.showArrows;
       await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
     }
     this.showLapsChange.emit(this.showLaps);
+    this.showLapsChange.emit(this.showArrows);
 
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()

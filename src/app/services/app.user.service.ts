@@ -262,6 +262,7 @@ export class UserService implements OnDestroy {
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || this.getDefaultMapTheme();
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
+    settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || [LapTypes.AutoLap, LapTypes.Distance];
 
     // @warning !!!!!! Enums with 0 as start value default to the override

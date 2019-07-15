@@ -13,4 +13,15 @@
     </mat-slide-toggle>
   </section>
 
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="checkBoxChanged($event)"
+      [(ngModel)]="showArrows">
+      <span matTooltip="When enabled directional arrows will be shown on the map">
+        Show directional arrows
+      </span>
+    </mat-slide-toggle>
+  </section>
+
 </mat-menu>

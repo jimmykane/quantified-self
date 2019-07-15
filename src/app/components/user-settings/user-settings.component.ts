@@ -148,6 +148,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showMapArrows: new FormControl(this.user.settings.mapSettings.showArrows, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       mapLapTypes: new FormControl(this.user.settings.mapSettings.lapTypes, [
         // Validators.required,
         // Validators.minLength(1),
@@ -189,12 +194,13 @@ export class UserSettingsComponent implements OnChanges {
           mapSettings: <UserMapSettingsInterface>{
             theme: this.userSettingsFormGroup.get('mapTheme').value,
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
+            showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
             lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value
           },
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
-            swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnits').value,
+            swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },

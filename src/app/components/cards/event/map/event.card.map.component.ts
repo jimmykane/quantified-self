@@ -37,7 +37,7 @@ declare function require(moduleName: string): any;
 const mapStyles = require('./map-styles.json');
 
 @Component({
-  selector: 'app-event-card-map-agm',
+  selector: 'app-event-card-map',
   templateUrl: './event.card.map.component.html',
   styleUrls: ['./event.card.map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,6 +51,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   @Input() isVisible: boolean;
   @Input() theme: MapThemes;
   @Input() showLaps: boolean;
+  @Input() showArrows: boolean;
   @Input() lapTypes: LapTypes[] = [];
 
 

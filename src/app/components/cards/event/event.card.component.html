@@ -42,15 +42,16 @@
             align="end">
           </app-map-actions>
         </ng-template>
-        <app-event-card-map-agm
+        <app-event-card-map
           [isVisible]="tabIndex === 0"
           [selectedActivities]="selectedActivities"
           [user]="targetUser"
           [event]="event"
           [showLaps]="showMapLaps"
           [lapTypes]="currentUser ? currentUser.settings.mapSettings.lapTypes : null"
+          [showArrows]="showMapArrows"
           [theme]="mapTheme">
-        </app-event-card-map-agm>
+        </app-event-card-map>
       </mat-tab>
       <mat-tab label="Stats">
         <ng-template matTabLabel>

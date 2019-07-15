@@ -31,6 +31,7 @@
           [longitude]="position.longitudeDegrees">
         </agm-polyline-point>
         <agm-icon-sequence
+          *ngIf="showArrows"
           [fixedRotation]="false"
           [scale]="3"
           [offset]="'10%'"
