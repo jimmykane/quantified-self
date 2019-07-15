@@ -30,7 +30,16 @@
           [latitude]="position.latitudeDegrees"
           [longitude]="position.longitudeDegrees">
         </agm-polyline-point>
-        <agm-icon-sequence [fixedRotation]="true" [path]="'FORWARD_CLOSED_ARROW'">
+        <agm-icon-sequence
+          [fixedRotation]="false"
+          [scale]="3"
+          [offset]="'10%'"
+          [repeat]="'200px'"
+          [strokeColor]="'#00000'"
+          [fillColor]="'#FFFFFF'"
+          [strokeWeight]="1.2"
+          [fillOpacity]="0.8"
+          [path]="'FORWARD_CLOSED_ARROW'">
         </agm-icon-sequence>
       </agm-polyline>
       <!-- End marker -->
