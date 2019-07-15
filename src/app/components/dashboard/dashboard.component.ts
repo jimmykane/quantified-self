@@ -27,7 +27,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public searchStartDate: Date;
   public searchEndDate: Date;
   public startOfTheWeek: DaysOfTheWeek;
-  public showUpload: boolean;
+  public showUpload: boolean = this.authService.isCurrentUserAnonymous();
 
   constructor(private router: Router,
               public authService: AppAuthService,
