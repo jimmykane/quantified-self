@@ -19,7 +19,7 @@ import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {
   ControlPosition,
   MapTypeControlOptions,
-  MapTypeControlStyle,
+  MapTypeControlStyle, RotateControlOptions,
   ZoomControlOptions
 } from '@agm/core/services/google-maps-types';
 import {Log} from 'ng2-logger/browser';
@@ -64,9 +64,13 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   public clickedPoint: PointInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
     // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
-    // mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
+    mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
     position: ControlPosition.LEFT_TOP,
-    style: MapTypeControlStyle.HORIZONTAL_BAR
+    style: MapTypeControlStyle.DEFAULT
+  };
+
+  public rotateControlOptions: RotateControlOptions = {
+    position: ControlPosition.LEFT_BOTTOM,
   };
 
   public zoomControlOptions: ZoomControlOptions = {

@@ -10,6 +10,9 @@
            [scrollwheel]="null"
            [mapTypeControlOptions]="mapTypeControlOptions"
            [zoomControlOptions]="zoomControlOptions"
+           [rotateControlOptions]="rotateControlOptions"
+           [tilt]="45"
+           [disableDefaultUI]="true"
            [styles]="getStyles(theme)"
            [streetViewControl]="false">
     <ng-container *ngFor="let activityMapData of activitiesMapData">
