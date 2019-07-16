@@ -85,6 +85,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
+      this.dataSmoothingLevel = user.settings.chartSettings.dataSmoothingLevel;
+      this.showAllData = user.settings.chartSettings.showAllData;
       this.showMapLaps = user.settings.mapSettings.showLaps;
       this.showMapArrows = user.settings.mapSettings.showArrows;
     });

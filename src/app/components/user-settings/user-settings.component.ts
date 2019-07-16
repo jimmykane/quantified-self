@@ -103,6 +103,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showAllData: new FormControl(this.user.settings.chartSettings.showAllData, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       startOfTheWeek: new FormControl(this.user.settings.unitSettings.startOfTheWeek, [
         Validators.required,
         // Validators.minLength(1),
@@ -184,7 +189,8 @@ export class UserSettingsComponent implements OnChanges {
         dataTypeSettings: {},
         theme: this.userSettingsFormGroup.get('chartTheme').value,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
-        xAxisType: this.userSettingsFormGroup.get('xAxisType').value
+        xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
+        showAllData: this.userSettingsFormGroup.get('showAllData').value
       });
 
       await this.userService.updateUserProperties(this.user, {

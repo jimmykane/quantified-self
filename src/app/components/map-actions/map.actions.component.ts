@@ -30,6 +30,7 @@ export class MapActionsComponent implements OnChanges {
   @Input() showLaps: boolean;
   @Input() showArrows: boolean;
   @Input() user: User;
+
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showArrowsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 

@@ -238,19 +238,26 @@ export class UserService implements OnDestroy {
 
   private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
+    // App
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
     settings.appSettings.theme = settings.appSettings.theme || this.getDefaultAppTheme();
+    // Chart
     settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
     settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || this.getDefaultUserChartSettingsDataTypeSettings();
     settings.chartSettings.theme = settings.chartSettings.theme || this.getDefaultChartTheme();
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || XAxisTypes.Duration;
+    settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
+    settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || 3;
+
+    // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
     settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || [SwimPaceUnits.MinutesPer100Meter];
     settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || [VerticalSpeedUnits.MetersPerSecond];
     settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Sunday;
+    // Dashboard
     settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
     settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || DateRanges.thisWeek;
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
@@ -258,7 +265,7 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || this.getDefaultUserDashboardChartSettings();
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
-
+    // Map
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || this.getDefaultMapTheme();
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;

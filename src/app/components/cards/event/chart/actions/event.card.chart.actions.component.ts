@@ -10,6 +10,8 @@ import {Router} from '@angular/router';
 import {EventService} from '../../../../../services/app.event.service';
 import {UserSettingsService} from '../../../../../services/app.user.settings.service';
 import {XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {User} from 'quantified-self-lib/lib/users/user';
+import {UserService} from '../../../../../services/app.user.service';
 
 @Component({
   selector: 'app-event-card-chart-actions',
@@ -19,6 +21,7 @@ import {XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.inte
 })
 
 export class EventCardChartActionsComponent implements OnChanges {
+  @Input() user: User;
   @Input() xAxisType: XAxisTypes;
   @Input() showAllData: boolean;
   @Input() dataSmoothingLevel: number;
@@ -29,17 +32,20 @@ export class EventCardChartActionsComponent implements OnChanges {
   public xAxisTypes = XAxisTypes;
 
   constructor(
-    private eventService: EventService,
-    private changeDetectorRef: ChangeDetectorRef,
-    private router: Router,
+    private userService: UserService,
     private userSettingsService: UserSettingsService) {
   }
 
-  somethingChanged(event) {
+  async somethingChanged(event) {
+    if (this.user) {
+      this.user.settings.chartSettings.xAxisType = this.xAxisType;
+      this.user.settings.chartSettings.dataSmoothingLevel = this.dataSmoothingLevel;
+      this.user.settings.chartSettings.showAllData = this.showAllData;
+      await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    }
     this.xAxisTypeChange.emit(this.xAxisType);
     this.showAllDataChange.emit(this.showAllData);
     this.dataSmoothingLevelChange.emit(this.dataSmoothingLevel);
-    this.userSettingsService.setShowAllData(this.showAllData);
   }
 
   formatLabel(value: number | null) {
