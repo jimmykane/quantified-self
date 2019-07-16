@@ -26,7 +26,7 @@ import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interfa
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
-  public targetUser: User;
+  public targetUserID: string;
   public currentUser: User;
   public tabIndex;
   public streams: StreamInterface[] = [];
@@ -72,7 +72,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     const eventID = this.route.snapshot.paramMap.get('eventID');
 
     // Set a "user from params"
-    this.targetUser = new User(userID);
+    this.targetUserID = userID;
 
     this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
       this.tabIndex = +queryParams.get('tabIndex');
@@ -107,7 +107,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     // Subscribe to the actual subject our event
-    this.eventSubscription = this.eventService.getEventAndActivities(this.targetUser, eventID).subscribe((event) => {
+    this.eventSubscription = this.eventService.getEventAndActivities(new User(this.targetUserID), eventID).subscribe((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']).then(() => {
           this.snackBar.open('Not found', null, {
@@ -126,7 +126,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   isOwner() {
-    return !!(this.targetUser && this.currentUser && (this.targetUser.uid === this.currentUser.uid));
+    return !!(this.targetUserID && this.currentUser && (this.targetUserID === this.currentUser.uid));
   }
 
   ngOnDestroy(): void {

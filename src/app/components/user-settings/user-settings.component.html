@@ -102,11 +102,20 @@
       <mat-card-content>
         <mat-form-field>
           <mat-select placeholder="Theme that the map should use" formControlName="mapTheme">
-            <mat-option *ngFor="let mapTheme of mapThemes | keyvalue" [value]="mapTheme.key">
-              {{mapTheme.value}}
+            <mat-option *ngFor="let mapTheme of mapThemes | keyvalue" [value]="mapTheme.value">
+              {{mapTheme.key}}
             </mat-option>
           </mat-select>
           <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-select placeholder="Map type that you prefer to use" formControlName="mapType">
+            <mat-option *ngFor="let mapType of mapTypes | keyvalue" [value]="mapType.value">
+              {{mapType.key}}
+            </mat-option>
+          </mat-select>
+          <mat-hint><b>Tip:</b> prefer satellite for non urban areas</mat-hint>
         </mat-form-field>
 
         <mat-form-field>

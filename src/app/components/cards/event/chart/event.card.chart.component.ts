@@ -48,7 +48,7 @@ import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/dat
 export class EventCardChartComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @Input() event: EventInterface;
-  @Input() user: User;
+  @Input() targetUserID: string;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
@@ -79,7 +79,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   async ngOnInit() {
-    if (!this.user || !this.event) {
+    if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and users');
     }
   }
@@ -131,12 +131,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       for (const selectedActivity of this.selectedActivities) {
         this.distanceAxesForActivitiesMap.set(
           selectedActivity.getID(),
-          (await this.eventService.getStreamsByTypes(this.user, this.event.getID(), selectedActivity.getID(), [DataDistance.type]).pipe(take(1)).toPromise())[0]
+          (await this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), selectedActivity.getID(), [DataDistance.type]).pipe(take(1)).toPromise())[0]
         );
       }
     }
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(),
+      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
         this.getDataTypesToRequest(), //
       );
       return allOrSomeSubscription.pipe(map((streams) => {

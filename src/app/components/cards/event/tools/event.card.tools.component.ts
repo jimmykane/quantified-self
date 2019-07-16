@@ -21,7 +21,7 @@ import {DataIBI} from 'quantified-self-lib/lib/data/data.ibi';
 })
 export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 
-  @Input() user: User;
+  @Input() targetUserID: string;
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
 
@@ -50,7 +50,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   async applyFilters(defaultFilters?: boolean, resetToRawIBIData?: boolean) {
     for (const activity of this.selectedActivities) {
       // Add the ibi stream
-      activity.addStreams(await this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(), [DataIBI.type]).pipe(take(1)).toPromise());
+      activity.addStreams(await this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(), [DataIBI.type]).pipe(take(1)).toPromise());
       if (!activity.hasStreamData(DataIBI.type)) {
         continue;
       }

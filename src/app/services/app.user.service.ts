@@ -42,8 +42,9 @@ import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {MapThemes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
+import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {MapType} from '@angular/compiler';
 
 
 @Injectable()
@@ -271,6 +272,7 @@ export class UserService implements OnDestroy {
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || [LapTypes.AutoLap, LapTypes.Distance];
+    settings.mapSettings.mapType = settings.mapSettings.mapType || MapTypes.RoadMap;
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;

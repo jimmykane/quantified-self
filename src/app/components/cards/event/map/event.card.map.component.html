@@ -1,7 +1,10 @@
 <mat-card>
+
   <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
   <!-- Map -->
   <agm-map *ngIf="activitiesMapData.length > 0"
+           [mapTypeId]="user && user.settings ? user.settings.mapSettings.mapType: 'roadmap'"
+           (mapTypeIdChange)="changeMapType($event)"
            [fullscreenControl]="true"
            [mapTypeControl]="true"
            [scaleControl]="true"
@@ -36,12 +39,12 @@
         <agm-icon-sequence
           *ngIf="showArrows"
           [fixedRotation]="false"
-          [scale]="3"
+          [scale]="4"
           [offset]="'10%'"
           [repeat]="'200px'"
           [strokeColor]="'#00000'"
           [fillColor]="'#FFFFFF'"
-          [strokeWeight]="1.2"
+          [strokeWeight]="1.4"
           [fillOpacity]="0.8"
           [path]="'FORWARD_CLOSED_ARROW'">
         </agm-icon-sequence>

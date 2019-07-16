@@ -19,7 +19,7 @@ import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {
   ControlPosition,
   MapTypeControlOptions,
-  MapTypeControlStyle, RotateControlOptions,
+  MapTypeControlStyle, MapTypeId, RotateControlOptions,
   ZoomControlOptions
 } from '@agm/core/services/google-maps-types';
 import {Log} from 'ng2-logger/browser';
@@ -32,6 +32,7 @@ import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
+import {UserService} from '../../../../services/app.user.service';
 
 declare function require(moduleName: string): any;
 const mapStyles = require('./map-styles.json');
@@ -46,6 +47,7 @@ const mapStyles = require('./map-styles.json');
 export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap, {static: false}) agmMap;
   @Input() event: EventInterface;
+  @Input() targetUserID: string;
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
   @Input() isVisible: boolean;
@@ -82,13 +84,14 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private eventService: EventService,
+    private userService: UserService,
     public eventColorService: EventColorService) {
   }
 
 
   ngOnInit() {
-    if (!this.user || !this.event) {
-      throw new Error('Component needs events and user');
+    if (!this.targetUserID || !this.event) {
+      throw new Error('Component needs events and userID');
     }
   }
 
@@ -97,7 +100,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
 
 
   ngOnChanges(simpleChanges) {
-    // debugger
     // // If no operational changes return
     if ((simpleChanges.event
       || simpleChanges.selectedActivities
@@ -130,7 +132,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
     this.selectedActivities.forEach((activity) => {
-      this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.user, this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+      this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .subscribe((streams) => {
           // In case we are in the middle of a deletion of one of the lat/long streams or no streams
           if (!streams.length || streams.length !== 2) {
@@ -367,6 +369,11 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
 
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
     return Array.from(map.values());
+  }
+
+  async changeMapType(mapType){
+    this.user.settings.mapSettings.mapType = mapType;
+    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])

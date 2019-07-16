@@ -22,7 +22,7 @@ import {
   UserUnitSettingsInterface, VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
-import {MapThemes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
+import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 @Component({
@@ -61,6 +61,8 @@ export class UserSettingsComponent implements OnChanges {
     'Interval': LapTypes.Interval,
     'Fitness Equipment': LapTypes.FitnessEquipment,
   };
+
+  public mapTypes = MapTypes;
 
   public speedUnits = SpeedUnits;
   public verticalSpeedUnits = VerticalSpeedUnits;
@@ -148,6 +150,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      mapType: new FormControl(this.user.settings.mapSettings.mapType, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       showMapLaps: new FormControl(this.user.settings.mapSettings.showLaps, [
         // Validators.required,
         // Validators.minLength(1),
@@ -201,7 +208,8 @@ export class UserSettingsComponent implements OnChanges {
             theme: this.userSettingsFormGroup.get('mapTheme').value,
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
-            lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value
+            lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value,
+            mapType: this.userSettingsFormGroup.get('mapType').value
           },
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
