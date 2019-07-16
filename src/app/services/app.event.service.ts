@@ -285,7 +285,7 @@ export class EventService implements OnDestroy {
             .doc(activity.getID())
             .set(activity.toJSON()));
 
-        activity.getAllStreams().forEach((stream) => {
+        activity.getAllExportableStreams().forEach((stream) => {
           // this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
           // this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromUint8Array(Pako.gzip(JSON.stringify(stream.data))))}`);
           // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);

@@ -16,12 +16,10 @@ export abstract class UnitBasedAbstract {
     if (!userUnitSettings) {
       return unitBasedDataTypes
     }
-    if (dataTypes.indexOf(DataPace.type) !== -1) {
-        unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.swimPaceUnits);
-        unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
-    }
     if (dataTypes.indexOf(DataSpeed.type) !== -1) {
       unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.speedUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.swimPaceUnits);
+      unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.paceUnits);
     }
     if (dataTypes.indexOf(DataVerticalSpeed.type) !== -1) {
       unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.verticalSpeedUnits);
