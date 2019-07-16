@@ -36,7 +36,7 @@ import {ChartAbstract} from '../../../charts/chart.abstract';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
-import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
+import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 
 @Component({
@@ -150,10 +150,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           return this.getUnitBasedDataTypesToUseFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
         });
         return unitStreams.concat(streams).filter((stream) => {
-          if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1){
+          // Filter out pace if swimming
+          if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1) {
             return [DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) === -1;
           }
-          return stream;
+          return [DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type].indexOf(stream.type) === -1;
         }).map((stream) => {
           return this.createOrUpdateChartSeries(activity, stream, selectedDataTypes);
         });
