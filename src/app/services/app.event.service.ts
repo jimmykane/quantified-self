@@ -1,17 +1,11 @@
 import {Injectable, OnDestroy} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importers/json/importer.json';
-import {combineLatest, merge, EMPTY, of, Observable, Observer, from, zip} from 'rxjs';
-import {
-  Action,
-  AngularFirestore,
-  AngularFirestoreCollection,
-  DocumentChangeAction, DocumentSnapshot, DocumentSnapshotExists,
-  QueryDocumentSnapshot,
-} from '@angular/fire/firestore';
-import {bufferCount, catchError, concatMap, first, map, mergeMap, reduce, switchMap, take} from 'rxjs/operators';
+import {combineLatest, from, Observable, Observer, of, zip} from 'rxjs';
+import {Action, AngularFirestore, AngularFirestoreCollection,} from '@angular/fire/firestore';
+import {bufferCount, catchError, concatMap, map, switchMap, take} from 'rxjs/operators';
 import {AngularFireStorage} from '@angular/fire/storage';
-import {FirebaseError, firestore} from 'firebase/app';
+import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
 import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.interface';
 import {ActivityJSONInterface} from 'quantified-self-lib/lib/activities/activity.json.interface';
@@ -23,7 +17,6 @@ import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {getSize} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 
 @Injectable()
@@ -127,7 +120,7 @@ export class EventService implements OnDestroy {
   }
 
   private getEventsAndActivitiesForUserInternal(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
-    const eventObservable = this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
+    return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
       .snapshotChanges().pipe(map((eventSnapshots) => {
         return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
           eventIDS.push(eventSnapshot.payload.doc.id);
@@ -142,7 +135,6 @@ export class EventService implements OnDestroy {
           return this.getEventAndActivities(user, eventID);
         }))
       }));
-    return eventObservable;
   }
 
   private getEventCollectionForUser(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot) {
