@@ -47,7 +47,7 @@ export class MapActionsComponent implements OnChanges {
       await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
     }
     this.showLapsChange.emit(this.showLaps);
-    this.showLapsChange.emit(this.showArrows);
+    this.showArrowsChange.emit(this.showArrows);
 
     // this.changeDetectorRef.detectChanges()
     // this.changeDetectorRef.markForCheck()

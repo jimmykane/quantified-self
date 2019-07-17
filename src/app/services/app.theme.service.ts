@@ -75,15 +75,15 @@ export class ThemeService {
   }
 
   private getAppThemeFromStorage(): AppThemes {
-    return localStorage.getItem('appThemes') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appThemes'))] : this.userService.getDefaultAppTheme();
+    return localStorage.getItem('appThemes') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appThemes'))] : UserService.getDefaultAppTheme();
   }
 
   private getMapThemeFromStorage(): MapThemes {
-    return localStorage.getItem('mapThemes') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapThemes'))] : this.userService.getDefaultMapTheme();
+    return localStorage.getItem('mapThemes') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapThemes'))] : UserService.getDefaultMapTheme();
   }
 
   private getChartThemeFromStorage(): ChartThemes {
-    return localStorage.getItem('chartTheme') !== null ? ChartThemes[this.getEnumKeyByEnumValue(ChartThemes, localStorage.getItem('chartTheme'))] : this.userService.getDefaultChartTheme();
+    return localStorage.getItem('chartTheme') !== null ? ChartThemes[this.getEnumKeyByEnumValue(ChartThemes, localStorage.getItem('chartTheme'))] : UserService.getDefaultChartTheme();
   }
 
   private getEnumKeyByEnumValue(myEnum, enumValue) {

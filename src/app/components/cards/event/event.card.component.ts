@@ -16,6 +16,8 @@ import {ChartThemes, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.
 import {ThemeService} from '../../../services/app.theme.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
+import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {UserService} from '../../../services/app.user.service';
 
 
 @Component({
@@ -34,6 +36,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   public showAllData: boolean;
   public chartXAxisType = XAxisTypes.Duration;
+  public mapLapTypes = UserService.getDefaultMapLapTypes();
   public showMapLaps;
   public showMapArrows;
   public dataSmoothingLevel = 3;
@@ -89,6 +92,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.showAllData = user.settings.chartSettings.showAllData;
       this.showMapLaps = user.settings.mapSettings.showLaps;
       this.showMapArrows = user.settings.mapSettings.showArrows;
+      this.mapLapTypes = user.settings.mapSettings.lapTypes;
     });
 
     // Subscribe to the chartTheme changes

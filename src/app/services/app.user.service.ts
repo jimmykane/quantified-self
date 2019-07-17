@@ -18,7 +18,8 @@ import {UserSettingsInterface} from 'quantified-self-lib/lib/users/user.settings
 import {
   DaysOfTheWeek,
   PaceUnits,
-  SpeedUnits, SwimPaceUnits,
+  SpeedUnits,
+  SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
@@ -44,13 +45,101 @@ import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
-import {MapType} from '@angular/compiler';
 
 
 @Injectable()
 export class UserService implements OnDestroy {
 
   protected logger = Log.create('UserService');
+
+  static getDefaultChartTheme(): ChartThemes {
+    return ChartThemes.Material;
+  }
+
+  static getDefaultAppTheme(): AppThemes {
+    return AppThemes.Normal;
+  }
+
+  static getDefaultMapTheme(): MapThemes {
+    return MapThemes.Normal;
+  }
+
+  // @todo move other calls to this
+
+  static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
+    return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
+      dataTypeSettings[dataTypeToUse] = {enabled: true};
+      return dataTypeSettings
+    }, {})
+  }
+
+  static getDefaultUserDashboardChartSettings(): UserDashboardChartSettingsInterface[] {
+    return [{
+      name: 'Duration',
+      order: 0,
+      type: ChartTypes.Pie,
+      dataType: DataDuration.type,
+      dataValueType: ChartDataValueTypes.Total
+    }, {
+      name: 'Distance',
+      order: 1,
+      type: ChartTypes.Pie,
+      dataType: DataDistance.type,
+      dataValueType: ChartDataValueTypes.Total
+    }, {
+      name: 'Energy',
+      order: 2,
+      type: ChartTypes.ColumnsHorizontal,
+      dataType: DataEnergy.type,
+      dataValueType: ChartDataValueTypes.Total
+    }, {
+      name: 'Ascent',
+      order: 3,
+      type: ChartTypes.PyramidsVertical,
+      dataType: DataAscent.type,
+      dataValueType: ChartDataValueTypes.Maximum
+    }]
+  }
+
+  static getDefaultMapLapTypes(): LapTypes[] {
+    return [LapTypes.AutoLap, LapTypes.Distance];
+  }
+
+  static getDefaultSmoothingLevel(): number{
+    return 3;
+  }
+
+  static getDefaultMapType(): MapTypes{
+    return MapTypes.RoadMap;
+  }
+
+  static getDefaultDateRange(): DateRanges{
+    return DateRanges.thisWeek;
+  }
+
+  static getDefaultXAxisType(): XAxisTypes{
+    return  XAxisTypes.Duration;
+  }
+
+  static getDefaultSpeedUnits(): SpeedUnits[]{
+    return [SpeedUnits.MetersPerSecond];
+  }
+
+  static getDefaultPaceUnits(): PaceUnits[]{
+    return [PaceUnits.MinutesPerKilometer];
+  }
+
+  static getDefaultSwimPaceUnits(): SwimPaceUnits[]{
+    return [SwimPaceUnits.MinutesPer100Meter];
+  }
+
+  static getDefaultVerticalSpeedUnits(): VerticalSpeedUnits[]{
+    return [VerticalSpeedUnits.MetersPerSecond];
+  }
+
+  static getDefaultStartOfTheWeek(): DaysOfTheWeek{
+    return DaysOfTheWeek.Monday;
+  }
 
   constructor(
     private afs: AngularFirestore,
@@ -188,91 +277,42 @@ export class UserService implements OnDestroy {
     }
   }
 
-  public getDefaultChartTheme(): ChartThemes {
-    return ChartThemes.Material;
-  }
-
-  public getDefaultAppTheme(): AppThemes {
-    return AppThemes.Normal;
-  }
-
-  public getDefaultMapTheme(): MapThemes {
-    return MapThemes.Normal;
-  }
-
-  // @todo move other calls to this
-
-  private getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
-    return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
-      dataTypeSettings[dataTypeToUse] = {enabled: true};
-      return dataTypeSettings
-    }, {})
-  }
-
-  getDefaultUserDashboardChartSettings(): UserDashboardChartSettingsInterface[] {
-    return [{
-      name: 'Duration',
-      order: 0,
-      type: ChartTypes.Pie,
-      dataType: DataDuration.type,
-      dataValueType: ChartDataValueTypes.Total
-    }, {
-      name: 'Distance',
-      order: 1,
-      type: ChartTypes.Pie,
-      dataType: DataDistance.type,
-      dataValueType: ChartDataValueTypes.Total
-    }, {
-      name: 'Energy',
-      order: 2,
-      type: ChartTypes.ColumnsHorizontal,
-      dataType: DataEnergy.type,
-      dataValueType: ChartDataValueTypes.Total
-    }, {
-      name: 'Ascent',
-      order: 3,
-      type: ChartTypes.PyramidsVertical,
-      dataType: DataAscent.type,
-      dataValueType: ChartDataValueTypes.Maximum
-    }]
-  }
-
   private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     // App
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
-    settings.appSettings.theme = settings.appSettings.theme || this.getDefaultAppTheme();
+    settings.appSettings.theme = settings.appSettings.theme || UserService.getDefaultAppTheme();
     // Chart
     settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
-    settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || this.getDefaultUserChartSettingsDataTypeSettings();
-    settings.chartSettings.theme = settings.chartSettings.theme || this.getDefaultChartTheme();
+    settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || UserService.getDefaultUserChartSettingsDataTypeSettings();
+    settings.chartSettings.theme = settings.chartSettings.theme || UserService.getDefaultChartTheme();
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
-    settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || XAxisTypes.Duration;
+    settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || UserService.getDefaultXAxisType();
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
-    settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || 3;
+    settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || UserService.getDefaultSmoothingLevel();
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
-    settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || [SpeedUnits.MetersPerSecond];
-    settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || [PaceUnits.MinutesPerKilometer];
-    settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || [SwimPaceUnits.MinutesPer100Meter];
-    settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || [VerticalSpeedUnits.MetersPerSecond];
-    settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || DaysOfTheWeek.Sunday;
+    settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || UserService.getDefaultSpeedUnits();
+    settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || UserService.getDefaultPaceUnits();
+    settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || UserService.getDefaultSwimPaceUnits();
+    settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || UserService.getDefaultVerticalSpeedUnits();
+    settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || UserService.getDefaultStartOfTheWeek();
     // Dashboard
     settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
-    settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || DateRanges.thisWeek;
+    settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || UserService.getDefaultDateRange();
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
-    settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || this.getDefaultUserDashboardChartSettings();
+    settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || UserService.getDefaultUserDashboardChartSettings();
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
     // Map
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
-    settings.mapSettings.theme = settings.mapSettings.theme || this.getDefaultMapTheme();
+    settings.mapSettings.theme = settings.mapSettings.theme || UserService.getDefaultMapTheme();
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
-    settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || [LapTypes.AutoLap, LapTypes.Distance];
-    settings.mapSettings.mapType = settings.mapSettings.mapType || MapTypes.RoadMap;
+    settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || UserService.getDefaultMapLapTypes();
+    settings.mapSettings.mapType = settings.mapSettings.mapType || UserService.getDefaultMapType();
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;

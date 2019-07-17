@@ -104,6 +104,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     if ((simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.lapTypes
+      // || simpleChanges.showArrows
       || simpleChanges.showLaps)) {
       this.bindToNewData();
     }
