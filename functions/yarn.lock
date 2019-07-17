@@ -1816,9 +1816,10 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-"quantified-self-lib@github:jimmykane/quantified-self-lib":
-  version "3.0.0"
-  resolved "https://codeload.github.com/jimmykane/quantified-self-lib/tar.gz/618f169d191c15eca628350a293b39a723cc799c"
+quantified-self-lib@^3.0.1:
+  version "3.0.1"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.0.1.tgz#78e5b60b36ca84eceefd68b7a07d992d1c1653f3"
+  integrity sha512-6CoCLF9U1YSLNuwUDNSXISXS1oWQ4KDFUK0Xdxz03lPhvWPGYc+YBElDjxGCwUNcAR+UMPXoKhz7VlrC5WahAA==
   dependencies:
     "@types/node" "^12.0.6"
     fast-xml-parser "^3.12.16"
