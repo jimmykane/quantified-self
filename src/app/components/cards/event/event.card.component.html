@@ -32,7 +32,7 @@
     <mat-tab-group
       [dynamicHeight]="true"
       [selectedIndex]="tabIndex"
-      (selectedIndexChange)="router.navigate(['/user', targetUserID.uid, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">
+      (selectedIndexChange)="router.navigate(['/user', targetUserID, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">
       <mat-tab label="Map">
         <ng-template matTabLabel>
           <mat-icon>map</mat-icon>
@@ -113,7 +113,7 @@
 <!--        <ng-template matTabLabel>-->
 <!--          <mat-icon>build</mat-icon>-->
 <!--        </ng-template>-->
-<!--        <app-event-card-tools *ngIf="currentUser" [selectedActivities]="selectedActivities" [event]="event" [user]="currentUser"></app-event-card-tools>-->
+<!--        <app-event-card-tools *ngIf="currentUser" [selectedActivities]="selectedActivities" [event]="event" [targetUserID]="targetUserID"></app-event-card-tools>-->
 <!--      </mat-tab>-->
     </mat-tab-group>
   </mat-card-content>
