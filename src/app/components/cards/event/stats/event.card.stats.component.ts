@@ -5,12 +5,14 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {AppColors} from '../../../../services/color/app.colors';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {PaceUnits, UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {UnitBasedAbstract} from '../../../unit-based/unit-based.abstract';
+import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
+import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 
 @Component({
   selector: 'app-event-card-stats',
@@ -50,16 +52,24 @@ export class EventCardStatsComponent extends UnitBasedAbstract implements OnChan
           statsMap.set(stat.getType(), stat);
           return
         }
+
         // IF it's derived and there are no user uni settings noop
         if (!this.userUnitSettings) {
           return
         }
+
         // If the user has preference
-        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1) {
+        if (
+          (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
+          || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
+        ) {
           statsMap.set(stat.getType(), stat);
           return;
         }
-        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1) {
+
+        if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1 &&
+          ((Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
+            || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1))) {
           statsMap.set(stat.getType(), stat);
           return;
         }
