@@ -40,7 +40,7 @@ export class EventSearchComponent implements OnChanges, OnInit {
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ]),
-    }, [startDateToEndDateValidator]);
+    });
   }
 
 
