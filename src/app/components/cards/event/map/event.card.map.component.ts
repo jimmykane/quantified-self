@@ -35,6 +35,7 @@ import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interfa
 import {UserService} from '../../../../services/app.user.service';
 
 declare function require(moduleName: string): any;
+
 const mapStyles = require('./map-styles.json');
 
 @Component({
@@ -157,30 +158,33 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
           const longData = streams[1].getNumericData();
 
           // If no numeric data for any reason
-          if (!latData.length || !longData.length) {
+          const positions = latData.reduce((latLongArray, value, index) => {
+            latLongArray[index] = {
+              latitudeDegrees: latData[index],
+              longitudeDegrees: longData[index],
+            };
+            return latLongArray
+          }, []).filter((position) => {
+            // We filter due to stryd
+            return position.latitudeDegrees !== 0 || position.longitudeDegrees !== 0
+          });
+
+          if (!positions.length){
             this.isLoading = false;
-            if (!this.activitiesMapData.length) {
-              this.noMapData = true;
-            }
+            this.changeDetectorRef.detectChanges();
             return;
           }
 
           this.activitiesMapData.push({
             activity: activity,
-            positions: latData.reduce((latLongArray, value, index) => {
-              latLongArray[index] = {
-                latitudeDegrees: latData[index],
-                longitudeDegrees: longData[index],
-              };
-              return latLongArray
-            }, []),
+            positions: positions,
             laps: activity.getLaps().reduce((laps, lap) => {
               // @todo gives back too big arrays should check the implementation of the activity method
               const positionData = activity.getSquashedPositionData(lap.startDate, lap.endDate, streams[0], streams[1]);
               if (!positionData.length || !this.showLaps) {
                 return laps;
               }
-              if (this.lapTypes.indexOf(lap.type) === -1){
+              if (this.lapTypes.indexOf(lap.type) === -1) {
                 return laps;
               }
               laps.push({
@@ -372,7 +376,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     return Array.from(map.values());
   }
 
-  async changeMapType(mapType){
+  async changeMapType(mapType) {
     this.user.settings.mapSettings.mapType = mapType;
     await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
