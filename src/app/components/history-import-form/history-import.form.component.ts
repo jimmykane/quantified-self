@@ -126,7 +126,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
 
     try {
       await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value);
-      this.snackBar.open('History import started', null, {
+      this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
       this.dialogRef.close();

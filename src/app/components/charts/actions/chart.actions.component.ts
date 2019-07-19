@@ -110,7 +110,6 @@ export class ChartActionsComponent implements OnInit {
         DataVO2Max.type,
         DataRecovery.type,
         DataTotalTrainingEffect.type,
-        DataEPOC.type,
         DataPeakTrainingEffect.type,
         DataPeakEPOC.type,
       ]
