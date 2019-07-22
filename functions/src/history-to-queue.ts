@@ -19,6 +19,7 @@ const BATCH_SIZE = 450;
 export const addHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
+    console.error(`Not allowed`);
     res.status(403);
     res.send();
     return
@@ -66,7 +67,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
     const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivities / 500) * 24 * 60 * 60 * 1000));   // 7 days for  285,7142857143 per day
     if ((nextHistoryImportAvailableDate > new Date()) && data.processedActivities !== 0) {
-      console.log(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
+      console.error(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
       res.status(403);
       res.send(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
       return

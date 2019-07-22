@@ -117,6 +117,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
 export const deauthorize = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST') ) {
+    console.error(`Not allowed `)
     res.status(403);
     res.send();
     return
@@ -162,7 +163,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
   // Deauthorize all tokens for that user
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
-    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, true);
+    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, true); // @todo fix and allow to refresh first
 
     try {
       await requestPromise.get({
