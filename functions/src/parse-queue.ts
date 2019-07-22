@@ -50,7 +50,17 @@ export async function processQueueItem(queueItem: any) {
   let processedCount = 0;
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
-    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot);
+    let serviceToken;
+
+    // So if 2 tokens exist for 1 queue item then it will
+    // IF refresh fails it will go and try to import the for the next token
+    // If import fails for the next token it will increase count (fail ) and try from start.
+    try {
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot);
+    }catch (e) {
+      console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      continue
+    }
 
     const parent1 = tokenQueryDocumentSnapshot.ref.parent;
     if (!parent1) {

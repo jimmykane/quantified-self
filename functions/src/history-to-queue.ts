@@ -74,7 +74,6 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     }
   }
 
-
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
 
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
@@ -84,7 +83,15 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   let processedBatchesCount = 0;
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
-    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
+    let serviceToken;
+    try {
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
+    }catch (e) {
+      console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      res.status(500);
+      res.send();
+      return;
+    }
 
     let result: any;
     try {
@@ -101,13 +108,15 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     } catch (e) {
       console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`, e);
       res.status(500);
-      res.send({result: 'Could not get history'});
-      continue;
+      res.send();
+      return;
     }
 
     if (result.error !== null) {
       console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid} due to service error`, result.error);
-      continue;
+      res.status(500);
+      res.send();
+      return;
     }
 
     if (result.metadata.workoutcount === 0) {
@@ -165,6 +174,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
   }
 
   console.log(`${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${decodedIdToken.uid}`);
+  // @todo make sure all went fine else return error
 
   // Respond
   res.status(200);

@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import {suuntoAppAuth} from "./suunto-app-auth";
 import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
+
 //
 export const refreshTheRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
   console.log('This will be run every 2 hours!');
@@ -59,24 +60,16 @@ export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSa
     console.log(`Successfully refreshed token ${doc.id}`);
   } catch (e) {
     console.error(`Could not refresh token for user ${doc.id}` ,e);
-    // if (e.code === 1) {
-    //   console.log(`Error with code 1 deleting token ${doc.id}`);
-    //   try {
-    //     await doc.ref.delete();
-    //   } catch (e) {
-    //     console.error(`Could not delete token ${doc.id}`);
-    //   }
-    // }
-    return {
-      accessToken: serviceTokenData.accessToken,
-      refreshToken: serviceTokenData.refreshToken,
-      expiresAt: serviceTokenData.expiresAt,
-      scope: serviceTokenData.scope,
-      tokenType: serviceTokenData.tokenType,
-      userName: serviceTokenData.userName,
-      dateRefreshed: serviceTokenData.dateRefreshed,
-      dateCreated: serviceTokenData.dateCreated
-    };
+    if (e.isBoom && e.output.statusCode === 401) {
+      console.log(`Error with code 401 deleting token ${doc.id}`);
+      try {
+        await doc.ref.delete();
+        console.log(`Deleted token ${doc.id} because of   response '${e.message}'`)
+      } catch (e) {
+        console.error(`Could not delete token ${doc.id}`);
+      }
+    }
+    throw e;
   }
 
   await doc.ref.update(<ServiceTokenInterface>{

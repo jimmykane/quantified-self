@@ -163,7 +163,13 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
   // Deauthorize all tokens for that user
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
 
-    const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, true); // @todo fix and allow to refresh first
+    let serviceToken;
+    try {
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, true);
+    }catch (e) {
+      console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      continue
+    }
 
     try {
       await requestPromise.get({
@@ -178,7 +184,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
       console.error(`Could not deauthorize token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
-      continue;
+      return;
     }
 
     // Now get from all users the same username token
@@ -194,10 +200,10 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
       }
     } catch (e) {
       console.error(e);
-      console.error(`Could not deauthorize token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
+      console.error(`Could not delete token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
-      continue;
+      return;
     }
     console.log(`Deauthorized successfully token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
   }
