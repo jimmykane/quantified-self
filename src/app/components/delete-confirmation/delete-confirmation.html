@@ -1,0 +1,12 @@
+<h3>Are you sure you want to delete?</h3>
+<mat-nav-list>
+  <a href="https://keep.google.com/" mat-list-item (click)="shouldDelete(true)">
+    <span mat-line>Yes</span>
+    <span mat-line>All data will be deleted</span>
+  </a>
+
+  <a href="https://docs.google.com/" mat-list-item (click)="shouldDelete(false)">
+    <span mat-line>No</span>
+    <span mat-line>Cancel the operation</span>
+  </a>
+</mat-nav-list>

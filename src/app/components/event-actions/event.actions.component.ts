@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 // import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
@@ -12,6 +12,8 @@ import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {ClipboardService} from '../../services/app.clipboard.service';
 import {SharingService} from '../../services/app.sharing.service';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {MatBottomSheet} from '@angular/material';
+import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 
 @Component({
   selector: 'app-event-actions',
@@ -21,9 +23,11 @@ import {User} from 'quantified-self-lib/lib/users/user';
   changeDetection: ChangeDetectionStrategy.OnPush,
 
 })
-export class EventActionsComponent implements OnInit {
+export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
   @Input() user: User;
+
+  private deleteConfirmationSubscription;
 
   constructor(
     private eventService: EventService,
@@ -33,6 +37,7 @@ export class EventActionsComponent implements OnInit {
     private clipboardService: ClipboardService,
     private sharingService: SharingService,
     private fileService: FileService,
+    private deleteConfirmationBottomSheet: MatBottomSheet,
     private dialog: MatDialog) {
   }
 
@@ -92,10 +97,25 @@ export class EventActionsComponent implements OnInit {
   }
 
   async delete() {
-    await this.eventService.deleteAllEventData(this.user, this.event.getID());
-    await this.router.navigate(['/dashboard']);
-    this.snackBar.open('Event deleted', null, {
-      duration: 2000,
+    const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent, {
+    });
+    this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+      if (!result) {
+        return;
+      }
+      await this.eventService.deleteAllEventData(this.user, this.event.getID());
+      await this.router.navigate(['/dashboard']);
+      this.snackBar.open('Event deleted', null, {
+        duration: 2000,
+      });
     });
   }
+
+  ngOnDestroy(): void {
+    if (this.deleteConfirmationSubscription){
+      this.deleteConfirmationSubscription.unsubscribe()
+    }
+  }
+
+
 }

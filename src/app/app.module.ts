@@ -99,6 +99,8 @@ import {ChartsColumnComponent} from './components/charts/column/charts.column.co
 import {ChartActionsComponent} from './components/charts/actions/chart.actions.component';
 import {EventCardChartActionsComponent} from './components/cards/event/chart/actions/event.card.chart.actions.component';
 import {EventCardMapComponent} from "./components/cards/event/map/event.card.map.component";
+import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
+import {MatBottomSheetModule} from '@angular/material';
 
 declare function require(moduleName: string): any;
 
@@ -176,6 +178,7 @@ export class SentryErrorHandler implements ErrorHandler {
     MatSelectModule,
     MatBadgeModule,
     MatStepperModule,
+    MatBottomSheetModule,
   ],
   declarations: [
     AppComponent,
@@ -219,7 +222,7 @@ export class SentryErrorHandler implements ErrorHandler {
     ChartsColumnComponent,
     SummariesComponent,
     ChartActionsComponent,
-
+    DeleteConfirmationComponent
   ],
   entryComponents: [
     EventFormComponent,
@@ -227,7 +230,8 @@ export class SentryErrorHandler implements ErrorHandler {
     UserAgreementFormComponent,
     ActivityFormComponent,
     UploadErrorComponent,
-    HistoryImportFormComponent
+    HistoryImportFormComponent,
+    DeleteConfirmationComponent
   ],
   providers: [
     AppAuthService,

@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
@@ -7,8 +7,10 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {EventUtilities} from "quantified-self-lib/lib/events/utilities/event.utilities";
-import {take} from "rxjs/operators";
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {take} from 'rxjs/operators';
+import {MatBottomSheet} from '@angular/material';
+import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 
 @Component({
   selector: 'app-activity-actions',
@@ -16,22 +18,25 @@ import {take} from "rxjs/operators";
   styleUrls: ['./activity.actions.component.css'],
   providers: [],
 })
-export class ActivityActionsComponent implements OnInit {
+export class ActivityActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() activity: ActivityInterface;
+
+  private deleteConfirmationSubscription;
 
   constructor(
     private eventService: EventService,
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
+    private deleteConfirmationBottomSheet: MatBottomSheet,
     public dialog: MatDialog) {
   }
 
   ngOnInit(): void {
     if (!this.user || !this.event) {
-      throw 'Component needs events and user';
+      throw new Error('Component needs events and user');
     }
   }
 
@@ -67,12 +72,24 @@ export class ActivityActionsComponent implements OnInit {
   }
 
   async deleteActivity() {
-    this.event.removeActivity(this.activity);
-    await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
-    EventUtilities.reGenerateStatsForEvent(this.event);
-    await this.eventService.setEvent(this.user, this.event);
-    this.snackBar.open('Activity deleted', null, {
-      duration: 2000,
+    const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
+    this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+      if (!result) {
+        return;
+      }
+      this.event.removeActivity(this.activity);
+      await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
+      EventUtilities.reGenerateStatsForEvent(this.event);
+      await this.eventService.setEvent(this.user, this.event);
+      this.snackBar.open('Activity deleted', null, {
+        duration: 2000,
+      });
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.deleteConfirmationSubscription){
+      this.deleteConfirmationSubscription.unsubscribe()
+    }
   }
 }

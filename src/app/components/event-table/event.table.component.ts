@@ -35,6 +35,8 @@ import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 import {ActivityTypes} from "quantified-self-lib/lib/activities/activity.types";
+import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
+import {MatBottomSheet} from '@angular/material';
 
 
 @Component({
@@ -66,6 +68,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
+  private deleteConfirmationSubscription: Subscription;
   private currentPageIndex = 0;
 
   private logger = Log.create('EventTableComponent');
@@ -75,6 +78,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
               private actionButtonService: ActionButtonService,
+              private deleteConfirmationBottomSheet: MatBottomSheet,
               private router: Router, private  datePipe: DatePipe) {
   }
 
@@ -391,19 +395,27 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'delete',
         async () => {
           this.isLoadingResults = true;
-          this.actionButtonService.removeActionButton('deleteEvents');
-          this.actionButtonService.removeActionButton('mergeEvents');
-          this.unsubscribeFromAll();
-          const deletePromises = [];
-          this.selection.selected.map(selected => selected.checkbox).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
-          this.eventSelectionMap.clear();
-          this.selection.clear();
-          await Promise.all(deletePromises);
-          this.isLoadingResults = false;
-          this.subscribeToAll();
-          this.snackBar.open('Events deleted', null, {
-            duration: 2000,
+          const deleteConfirmationBottomSheet  = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
+          this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+            if (!result){
+              this.isLoadingResults = false;
+              return;
+            }
+            this.actionButtonService.removeActionButton('deleteEvents');
+            this.actionButtonService.removeActionButton('mergeEvents');
+            this.unsubscribeFromAll();
+            const deletePromises = [];
+            this.selection.selected.map(selected => selected.checkbox).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
+            this.eventSelectionMap.clear();
+            this.selection.clear();
+            await Promise.all(deletePromises);
+            this.subscribeToAll();
+            this.snackBar.open('Events deleted', null, {
+              duration: 2000,
+            });
           });
+          return;
+
         },
         'material',
       ));
@@ -499,6 +511,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
     if (this.eventsSubscription) {
       this.eventsSubscription.unsubscribe();
+    }
+    if (this.deleteConfirmationSubscription) {
+      this.deleteConfirmationSubscription.unsubscribe();
     }
   }
 
