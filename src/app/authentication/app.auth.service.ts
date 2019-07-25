@@ -46,29 +46,29 @@ export class AppAuthService implements OnDestroy {
     return this.authState;
   }
 
-  async googleLogin(): Promise<auth.UserCredential> {
+  async googleLogiWwithRedirect() {
     const provider = new auth.GoogleAuthProvider();
-    return this.oAuthLogin(provider);
+    return this.oAuthLoginWithRedirect(provider);
   }
 
-  async githubLogin(): Promise<auth.UserCredential> {
+  async githubLoginWithRedirect() {
     const provider = new auth.GithubAuthProvider();
-    return this.oAuthLogin(provider);
+    return this.oAuthLoginWithRedirect(provider);
   }
 
-  async facebookLogin(): Promise<auth.UserCredential> {
+  async facebookLoginWithRedirect() {
     const provider = new auth.FacebookAuthProvider();
-    return this.oAuthLogin(provider);
+    return this.oAuthLoginWithRedirect(provider);
   }
 
-  async twitterLogin(): Promise<auth.UserCredential> {
+  async twitterLoginWithRedirect() {
     const provider = new auth.TwitterAuthProvider();
-    return this.oAuthLogin(provider);
+    return this.oAuthLoginWithRedirect(provider);
   }
 
-  private async oAuthLogin(provider: any) {
+  oAuthLoginWithRedirect(provider: any) {
     try {
-      return this.afAuth.auth.signInWithPopup(provider);
+      return this.afAuth.auth.signInWithRedirect(provider);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -79,7 +79,7 @@ export class AppAuthService implements OnDestroy {
 
   async anonymousLogin() {
     try {
-      return this.afAuth.auth.signInAnonymously();
+      return await this.afAuth.auth.signInAnonymously();
     } catch (e) {
       this.handleError(e);
       throw e;

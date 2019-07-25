@@ -1,4 +1,4 @@
-import {Component, HostListener} from '@angular/core';
+import {Component, HostListener, OnInit} from '@angular/core';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Router} from '@angular/router';
@@ -17,7 +17,7 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.css'],
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
 
   isLoading: boolean;
 
@@ -41,6 +41,17 @@ export class LoginComponent {
   ) {
   }
 
+  async ngOnInit() {
+    // Should the router guard this for logged in users
+    this.isLoading = true;
+    const result = await  this.afAuth.auth.getRedirectResult();
+    if (result.user) {
+        await this.redirectOrShowDataPrivacyDialog(result);
+    }
+    this.isLoading = false;
+  }
+
+
   async anonymousLogin() {
     try {
       return this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
@@ -55,7 +66,7 @@ export class LoginComponent {
 
   async googleLogin() {
     try {
-      return this.redirectOrShowDataPrivacyDialog(await this.authService.googleLogin());
+      return this.redirectOrShowDataPrivacyDialog(this.authService.googleLogiWwithRedirect());
     } catch (e) {
       Sentry.captureException(e);
       this.logger.error(e);
@@ -67,7 +78,19 @@ export class LoginComponent {
 
   async facebookLogin() {
     try {
-      return this.redirectOrShowDataPrivacyDialog(await this.authService.facebookLogin());
+      return this.redirectOrShowDataPrivacyDialog(this.authService.facebookLoginWithRedirect());
+    } catch (e) {
+      Sentry.captureException(e);
+      this.logger.error(e);
+      this.snackBar.open(`Could not log in due to ${e}`, null, {
+        duration: 2000,
+      });
+    }
+  }
+
+  async twitterLogin() {
+    try {
+      return this.redirectOrShowDataPrivacyDialog(this.authService.twitterLoginWithRedirect());
     } catch (e) {
       Sentry.captureException(e);
       this.logger.error(e);
@@ -89,19 +112,6 @@ export class LoginComponent {
     }
     wnd.onunload = () => this.isLoading = false;
   }
-
-  async twitterLogin() {
-    try {
-      return this.redirectOrShowDataPrivacyDialog(await this.authService.twitterLogin());
-    } catch (e) {
-      Sentry.captureException(e);
-      this.logger.error(e);
-      this.snackBar.open(`Could not log in due to ${e}`, null, {
-        duration: 2000,
-      });
-    }
-  }
-
 
   private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: ServiceTokenInterface) {
     this.isLoading = true;
