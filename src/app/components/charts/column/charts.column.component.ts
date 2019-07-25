@@ -37,6 +37,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
   protected chart: am4charts.XYChart;
   protected logger = Log.create('ChartColumnComponent');
+  public noData: boolean;
 
   constructor(protected zone: NgZone) {
     super(zone);
@@ -56,6 +57,13 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     if (simpleChanges.chartTheme) {
       this.destroyChart();
     }
+
+    if (!this.data.length) {
+      this.noData = true;
+      return
+    }
+
+    this.noData = false;
 
     // 1. If there is no chart create
     if (!this.chart) {
@@ -94,28 +102,29 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     const chartTitle = topContainer.createChild(am4core.Label);
     chartTitle.align = 'left';
     chartTitle.adapter.add('text', (text, target, key) => {
+      const data = target.parent.parent.parent.parent['data'];
       let value;
       if (this.chartDataValueType === ChartDataValueTypes.Total) {
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
           sum += data.value;
           return sum;
         }, 0));
       }
       if (this.chartDataValueType === ChartDataValueTypes.Minimum) {
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.parent.parent.parent.parent['data'].reduce((min, data) => {
+        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
           min = min > data.value ? data.value : min;
           return min;
         }, Infinity));
       }
       if (this.chartDataValueType === ChartDataValueTypes.Maximum) {
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.parent.parent.parent.parent['data'].reduce((min, data) => {
+        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
           min = min <= data.value ? data.value : min;
           return min;
         }, -Infinity));
       }
       if (this.chartDataValueType === ChartDataValueTypes.Average) {
         let count = 0;
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.parent.parent.parent.parent['data'].reduce((sum, data) => {
+        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
           count++;
           sum += data.value;
           return sum;
