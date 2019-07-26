@@ -1,8 +1,8 @@
 import {Component, Input, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
@@ -57,7 +57,6 @@ export class UploadComponent implements OnInit {
         let newEvent;
         const fileReaderResult = fileReader.result;
         try {
-
           if ((typeof fileReaderResult === 'string') && metaData.extension === 'json') {
             try {
               newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
@@ -73,13 +72,16 @@ export class UploadComponent implements OnInit {
             newEvent = await EventImporterGPX.getFromString(fileReaderResult);
           } else if ((fileReaderResult instanceof ArrayBuffer) && metaData.extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
+          } else {
+            resolve();
+            return;
           }
           newEvent.name = metaData.filename;
         } catch (e) {
           metaData.status = UPLOAD_STATUS.ERROR;
           Sentry.captureException(e);
-          this.logger.error(`Could not load event from file  ${metaData.file.name}`, e);
-          resolve(); // no-op here!
+          this.logger.error(`Could not load event from file`, e);
+          reject(); // no-op here!
           return;
         }
         try {
@@ -90,7 +92,7 @@ export class UploadComponent implements OnInit {
           console.error(e);
           Sentry.captureException(e);
           metaData.status = UPLOAD_STATUS.ERROR;
-          resolve();
+          reject();
           return;
         }
         resolve(newEvent);
