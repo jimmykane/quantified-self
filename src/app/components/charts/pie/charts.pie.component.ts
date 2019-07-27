@@ -169,23 +169,29 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     label.verticalCenter = 'middle';
     // label.fontSize = 12;
     if (this.chartDataValueType === ChartDataValueTypes.Total) {
-      label.html = `{values.value.sum.formatNumber('#')}`;
+      label.text = `{values.value.sum.formatNumber('#')}`;
     }
     if (this.chartDataValueType === ChartDataValueTypes.Maximum) {
-      label.html = `{values.value.high.formatNumber('#')}`;
+      label.text = `{values.value.high.formatNumber('#')}`;
     }
     if (this.chartDataValueType === ChartDataValueTypes.Minimum) {
-      label.html = `{values.value.low.formatNumber('#')}`;
+      label.text = `{values.value.low.formatNumber('#')}`;
     }
     if (this.chartDataValueType === ChartDataValueTypes.Average) {
-      label.html = `{values.value.average.formatNumber('#')}`;
+      label.text = `{values.value.average.formatNumber('#')}`;
     }
-    label.adapter.add('htmlOutput', (text, target, key) => {
+    label.adapter.add('textOutput', (text, target, key) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `<div style="text-align: center; font-size: 1.3em;">${data.getDisplayType()}</div>
-                <div style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</div>
-                <div style="text-align: center; font-size: 1.0em; ">${this.chartDataValueType}</div>`;
+      return `[font-size: 1.3em]${data.getDisplayType()}[/]
+              [font-size: 1.4em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
+              [font-size: 1.0em]${this.chartDataValueType}[/]`
     });
+    // label.adapter.add('htmlOutput', (text, target, key) => {
+    //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
+    //   return `<div style="text-align: center; font-size: 1.3em;">${data.getDisplayType()}</div>
+    //             <div style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</div>
+    //             <div style="text-align: center; font-size: 1.0em; ">${this.chartDataValueType}</div>`;
+    // });
 
     // chart.exporting.menu = this.getExportingMenu();
 
