@@ -53,16 +53,13 @@
                       (change)="$event ? checkBoxClick(row) : null"
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
-        <span *ngIf="column === 'privacy'">
-          <app-privacy-icon [privacy]="row[column]"></app-privacy-icon>
-        </span>
         <span *ngIf="column === 'actions'">
-          <app-event-actions *ngIf="user" [user]="user" [event]="row[column]"></app-event-actions>
+          <app-event-actions *ngIf="user" [user]="user" [event]="row.event"></app-event-actions>
         </span>
-        <span *ngIf="column === 'name'" matTooltip="{{ row[column] }}">
+        <span *ngIf="column === 'stats.Activity Types'">
           <span *ngIf="row['isMerge']"><mat-icon>compare_arrows</mat-icon></span> {{ row[column] | slice:0:15 }}...
         </span>
-        <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'name' && column!=='privacy'">
+        <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'stats.Activity Types' && column!=='privacy'">
           {{ row[column] }}
         </span>
       </td>
@@ -93,7 +90,7 @@
 
     <tr mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></tr>
     <tr mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
-            [routerLink]="['/user', user.uid, 'event', row['id']]"
+            [routerLink]="['/user', user.uid, 'event', row.event.getID()]"
             [class.merged]="row['isMerge']"
             [class.expanded-row]="expandedElement === row">
     </tr>

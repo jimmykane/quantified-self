@@ -249,16 +249,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               return eventArray;
             }
             const dataObject: EventRowElement = <EventRowElement>{};
-            if (this.hasActions) {
-              dataObject.checkbox = event;
-            }
-
 
             const ascent = event.getStat(DataAscent.type);
             const descent = event.getStat(DataDescent.type);
             const energy = event.getStat(DataEnergy.type);
             const heartRateAverage = event.getStat(DataHeartRateAvg.type);
-            dataObject.id = event.getID();
             dataObject.privacy = event.privacy;
             dataObject.name = event.name;
             dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
@@ -276,14 +271,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject['isMerge'] = event.isMerge;
             dataObject.description = event.description;
+            dataObject.event = event;
 
             const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
 
             dataObject['stats.Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
             // dataObject.event = event;
-            if (this.hasActions) {
-              dataObject.actions = event;
-            }
 
             eventArray.push(dataObject);
             return eventArray;
@@ -371,7 +364,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
-            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.checkbox.getID()).pipe(take(1)).toPromise());
+            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.event.getID()).pipe(take(1)).toPromise());
           });
           // Now we can clear the selection
           this.eventSelectionMap.clear();
@@ -417,7 +410,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             this.actionButtonService.removeActionButton('mergeEvents');
             this.unsubscribeFromAll();
             const deletePromises = [];
-            this.selection.selected.map(selected => selected.checkbox).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
+            this.selection.selected.map(selected => selected.event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
             this.eventSelectionMap.clear();
             this.selection.clear();
             await Promise.all(deletePromises);
@@ -539,8 +532,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
 
 export interface EventRowElement {
-  checkbox?: EventInterface,
-  id: string,
+  event: EventInterface,
   privacy: Privacy,
   name: string,
   startDate: String,
@@ -553,7 +545,7 @@ export interface EventRowElement {
     'Device Names': string,
   },
   isMerge: boolean,
-  actions: EventInterface,
+  actions: boolean,
   description: string,
 }
 
