@@ -57,7 +57,8 @@
           <app-event-actions *ngIf="user" [user]="user" [event]="row.event"></app-event-actions>
         </span>
         <span *ngIf="column === 'stats.Activity Types'">
-          <span *ngIf="row['isMerge']"><mat-icon>compare_arrows</mat-icon></span> {{ row[column] | slice:0:15 }}...
+          <span *ngIf="row['isMerge']"><mat-icon>compare_arrows</mat-icon></span>
+          {{ row[column] }}
         </span>
         <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'stats.Activity Types' && column!=='privacy'">
           {{ row[column] }}
@@ -71,15 +72,21 @@
              [@detailExpand]="element == expandedElement ? 'expanded' : 'collapsed'">
         <table style="text-align: left">
           <tr>
-            <th>Name</th>
-            <th>Description</th>
-          </tr>
-          <tr>
             <td>
-              {{element.name}}
+              <app-edit-input
+                [(data)]='element.name'
+                [type]="'text'"
+                [placeHolder]="'Name'"
+                (dataChange)="saveEventName(element.name, element.event)">
+              </app-edit-input>
             </td>
             <td>
-              {{element.description}}
+              <app-edit-input
+                [(data)]='element.description'
+                [type]="'textArea'"
+                [placeHolder]="'Add a description'"
+                (dataChange)="saveEventDescription(element.description, element.event)">
+              </app-edit-input>
             </td>
           </tr>
         </table>
@@ -92,7 +99,8 @@
     <tr mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
             [routerLink]="['/user', user.uid, 'event', row.event.getID()]"
             [class.merged]="row['isMerge']"
-            [class.expanded-row]="expandedElement === row">
+            [class.expanded-row]="expandedElement === row"
+            class="normal-row">
     </tr>
     <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
   </table>

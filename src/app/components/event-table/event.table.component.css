@@ -81,13 +81,16 @@ tr.detail-row {
   height: 0;
 }
 
+tr.mat-row:focus{
+  outline-width: 0;
+}
 
-tr.mat-row td {
+tr.mat-row.normal-row td {
   border-bottom-width: 0;
 }
 
 tr.detail-row td{
-
+  border-top-width: 0;
 }
 
 tr.detail-row td{

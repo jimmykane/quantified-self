@@ -259,8 +259,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
 
             const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-            dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
-              `${ActivityTypes.Multisport}: ${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
+            dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1  ?
+              `${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
               : ActivityTypes[<string>activityTypes.getDisplayValue()];
 
             dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
@@ -425,6 +425,22 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'material',
       ));
     }
+  }
+
+  async saveEventDescription(description: string, event: EventInterface) {
+    event.description = description;
+    await this.eventService.setEvent(this.user, event);
+    this.snackBar.open('Event saved', null, {
+      duration: 2000,
+    });
+  }
+
+  async saveEventName(name: string, event: EventInterface) {
+    event.name = name;
+    await this.eventService.setEvent(this.user, event);
+    this.snackBar.open('Event saved', null, {
+      duration: 2000,
+    });
   }
 
   private goToPageNumber(number: number) {
