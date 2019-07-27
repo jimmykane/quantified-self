@@ -4,19 +4,24 @@ mat-cell, .mat-header-cell {
 
 .mat-cell{
   font-size: 0.85em ;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
 }
 
 .mat-column-checkbox, .mat-column-actions, .mat-column-privacy{
   max-width: 32px;
-  padding: 0;
 }
 
-.mat-column-Checkbox {
+.mat-column-checkbox {
   justify-content: flex-start;
+  padding-left:  1em !important;
+  /*padding-right:  1em !important;*/
 }
 
-.mat-column-Actions {
+.mat-column-actions {
   justify-content: flex-end;
+  padding-right:  1em !important;
+  /*padding-left:  1em !important;*/
 }
 
 .mat-row {
@@ -35,7 +40,10 @@ mat-icon {
 }
 
 .mat-header-row, .mat-row{
-  padding: 0;
+  /*padding: 0;*/
+}
+
+td.mat-cell, th.mat-header-cell{
 }
 
 mat-card{
@@ -46,9 +54,7 @@ mat-card{
   padding: 0;
 }
 
-.mat-column-Checkbox{
-  padding-left: 0;
-}
+
 
 .merged {
  opacity: 0.7;
@@ -56,4 +62,34 @@ mat-card{
 
 ::ng-deep .mat-paginator-container{
   justify-content: flex-start !important;
+}
+
+
+table {
+  width: 100%;
+}
+
+tr.mat-row:not(.expanded-row):hover {
+  background: rgba(51, 98, 132, 0.4);
+}
+
+tr.detail-row {
+  height: 0;
+}
+
+
+tr.mat-row td {
+  border-bottom-width: 0;
+}
+
+tr.detail-row td{
+
+}
+
+tr.detail-row td{
+}
+
+.detail {
+  overflow: hidden;
+  display: flex;
 }

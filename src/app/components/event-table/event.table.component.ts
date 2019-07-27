@@ -37,13 +37,21 @@ import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 import {ActivityTypes} from "quantified-self-lib/lib/activities/activity.types";
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {MatBottomSheet} from '@angular/material';
+import {animate, state, style, transition, trigger} from '@angular/animations';
 
 
 @Component({
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
   styleUrls: ['./event.table.component.css'],
-  animations: [rowsAnimation],
+  animations: [
+    rowsAnimation,
+    trigger('detailExpand', [
+      state('collapsed', style({height: '0px', minHeight: '0'})),
+      state('expanded', style({height: '*'})),
+      transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
+    ]),
+  ],
   providers: [DatePipe],
   // changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -65,6 +73,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   resultsLength = 0;
   isLoadingResults = true;
   errorLoading;
+  expandedElement: EventRowElement | null;
 
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
@@ -74,6 +83,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   private logger = Log.create('EventTableComponent');
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
+  isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
+
 
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
@@ -237,7 +248,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             if (!event) {
               return eventArray;
             }
-            const dataObject: any = {};
+            const dataObject: EventRowElement = <EventRowElement>{};
             if (this.hasActions) {
               dataObject.checkbox = event;
             }
@@ -461,8 +472,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
     // push all the rest
     columns.push(...[
-      'privacy',
-      'name',
+      // 'privacy',
+      // 'name',
       'startDate',
       'stats.Activity Types',
       'stats.Distance',
@@ -523,6 +534,69 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.actionButtonService.removeActionButton('deleteEvents');
   }
 }
+
+
+export interface EventRowElement {
+  checkbox?: EventInterface,
+  id: string,
+  privacy: Privacy,
+  name: string,
+  startDate: String,
+  stats: {
+    'Activity Types': string[],
+    'Distance': string,
+    'Ascent': string,
+    'Average Heart Rate': string,
+    'Duration': string,
+    'Device Names': string,
+  },
+  isMerge: boolean,
+  actions: EventInterface,
+  description: string,
+}
+
+
+
+// const dataObject: any = {};
+// if (this.hasActions) {
+//   dataObject.checkbox = event;
+// }
+
+
+// const ascent = event.getStat(DataAscent.type);
+// const descent = event.getStat(DataDescent.type);
+// const energy = event.getStat(DataEnergy.type);
+// const heartRateAverage = event.getStat(DataHeartRateAvg.type);
+// dataObject.id = event.getID();
+// dataObject.privacy = event.privacy;
+// dataObject.name = event.name;
+// dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
+//
+// const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
+// dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
+//   `${ActivityTypes.Multisport}: ${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
+//   : ActivityTypes[<string>activityTypes.getDisplayValue()];
+//
+// dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
+// dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
+// dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
+// dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
+// dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
+// dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
+// dataObject['isMerge'] = event.isMerge;
+//
+// const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
+//
+// dataObject['stats.Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
+// // dataObject.event = event;
+// if (this.hasActions) {
+//   dataObject.actions = event;
+// }
+//
+// eventArray.push(dataObject);
+
+
+
 
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
