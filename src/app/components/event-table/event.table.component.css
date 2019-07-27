@@ -9,7 +9,11 @@ mat-cell, .mat-header-cell {
 }
 
 .mat-column-checkbox, .mat-column-actions, .mat-column-privacy, .mat-column-expand{
-  max-width: 32px;
+  /*max-width: 32px;*/
+}
+
+.mat-column-expand{
+  cursor: pointer;
 }
 
 .mat-column-expand {

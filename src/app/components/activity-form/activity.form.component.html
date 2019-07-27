@@ -1,7 +1,7 @@
 <mat-dialog-content>
 
 
-  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit($event)">
+  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)">
 
     <app-shade [isActive]="isLoading"></app-shade>
 

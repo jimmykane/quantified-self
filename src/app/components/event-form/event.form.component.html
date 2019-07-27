@@ -1,5 +1,5 @@
 <mat-dialog-content>
-  <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)">
+  <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)">
 
     <span class="mat-headline">Editing event</span>
     <span class="mat-subheader">internal id {{ event.getID() }}</span>
