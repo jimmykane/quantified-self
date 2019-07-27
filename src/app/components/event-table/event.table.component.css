@@ -69,8 +69,8 @@ table {
   width: 100%;
 }
 
-tr.mat-row:not(.expanded-row):hover {
-  background: rgba(51, 98, 132, 0.4);
+tr.mat-row:not(.expanded-row):not(.detail-row):hover {
+  background: rgba(239, 239, 239, 0.4);
 }
 
 tr.detail-row {
