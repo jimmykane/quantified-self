@@ -1,0 +1,16 @@
+<mat-form-field>
+  <input matInput
+         [placeholder]="placeHolder"
+         *ngIf='type !== "textArea"'
+         (focusout)="onFocusOut();"
+         (keydown.enter)='$event.target.blur()'
+         [(ngModel)]='data'
+         [type]="type">
+  <textarea matInput
+            [placeholder]="placeHolder"
+            *ngIf='type === "textArea"'
+            (focusout)="onFocusOut();"
+            (keydown.enter)='$event.target.blur()'
+            [(ngModel)]='data'>
+  </textarea>
+</mat-form-field>

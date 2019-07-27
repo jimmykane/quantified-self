@@ -101,6 +101,7 @@ import {EventCardChartActionsComponent} from './components/cards/event/chart/act
 import {EventCardMapComponent} from "./components/cards/event/map/event.card.map.component";
 import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
 import {MatBottomSheetModule} from '@angular/material';
+import {EditInputComponent} from './components/edit-input/edit-input.component';
 
 declare function require(moduleName: string): any;
 
@@ -222,7 +223,8 @@ export class SentryErrorHandler implements ErrorHandler {
     ChartsColumnComponent,
     SummariesComponent,
     ChartActionsComponent,
-    DeleteConfirmationComponent
+    DeleteConfirmationComponent,
+    EditInputComponent,
   ],
   entryComponents: [
     EventFormComponent,
