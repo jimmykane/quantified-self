@@ -8,14 +8,18 @@ mat-cell, .mat-header-cell {
   padding-right: 0.5em;
 }
 
-.mat-column-checkbox, .mat-column-actions, .mat-column-privacy{
+.mat-column-checkbox, .mat-column-actions, .mat-column-privacy, .mat-column-expand{
   max-width: 32px;
 }
 
-.mat-column-checkbox {
+.mat-column-expand {
   justify-content: flex-start;
-  padding-left:  1em !important;
+  padding-left:  0 !important;
   /*padding-right:  1em !important;*/
+}
+
+.mat-column-checkbox{
+  padding-left: 0;
 }
 
 .mat-column-actions {

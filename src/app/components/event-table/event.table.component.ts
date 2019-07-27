@@ -275,6 +275,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject['isMerge'] = event.isMerge;
+            dataObject.description = event.description;
 
             const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
 
@@ -464,7 +465,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
   @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {
-    let columns = [];
+    let columns = ['expand'];
+
     // Push the starting one
     if (this.hasActions) {
       columns.push('checkbox')
@@ -554,50 +556,6 @@ export interface EventRowElement {
   actions: EventInterface,
   description: string,
 }
-
-
-
-// const dataObject: any = {};
-// if (this.hasActions) {
-//   dataObject.checkbox = event;
-// }
-
-
-// const ascent = event.getStat(DataAscent.type);
-// const descent = event.getStat(DataDescent.type);
-// const energy = event.getStat(DataEnergy.type);
-// const heartRateAverage = event.getStat(DataHeartRateAvg.type);
-// dataObject.id = event.getID();
-// dataObject.privacy = event.privacy;
-// dataObject.name = event.name;
-// dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
-//
-// const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-// dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
-//   `${ActivityTypes.Multisport}: ${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
-//   : ActivityTypes[<string>activityTypes.getDisplayValue()];
-//
-// dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
-// dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
-// dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
-// dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
-// dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
-// dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
-// dataObject['isMerge'] = event.isMerge;
-//
-// const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
-//
-// dataObject['stats.Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
-// // dataObject.event = event;
-// if (this.hasActions) {
-//   dataObject.actions = event;
-// }
-//
-// eventArray.push(dataObject);
-
-
-
-
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
   itemsPerPageLabel = 'Items per page';
