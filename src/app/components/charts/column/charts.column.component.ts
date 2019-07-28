@@ -106,19 +106,19 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
       let value;
       if (this.chartDataValueType === ChartDataValueTypes.Total) {
         value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += data.value;
+          sum += dataItem.value;
           return sum;
         }, 0));
       }
       if (this.chartDataValueType === ChartDataValueTypes.Minimum) {
         value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > data.value ? data.value : min;
+          min = min > dataItem.value ? dataItem.value : min;
           return min;
         }, Infinity));
       }
       if (this.chartDataValueType === ChartDataValueTypes.Maximum) {
         value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= data.value ? data.value : min;
+          min = min <= dataItem.value ? dataItem.value : min;
           return min;
         }, -Infinity));
       }
@@ -126,7 +126,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
         let count = 0;
         value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
           count++;
-          sum += data.value;
+          sum += dataItem.value;
           return sum;
         }, 0) / count);
       }
