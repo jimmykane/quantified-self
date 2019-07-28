@@ -2,16 +2,16 @@
   <app-shade [isActive]="isLoading" ></app-shade>
   <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" [rowHeight]="'fit'">
     <mat-grid-tile>
-      <button mat-stroked-button color="primary" (click)="anonymousLogin()">Login as Anonymous<br/><span class="mat-small">no worries, everything will work</span></button>
+      <button mat-stroked-button color="primary" (click)="signInWithProvider(signInProviders.Anonymous)">Login as Anonymous<br/><span class="mat-small">no worries, everything will work</span></button>
     </mat-grid-tile>
     <mat-grid-tile>
-      <button mat-stroked-button color="primary" (click)="googleLogin()">Login with Google<br/><span class="mat-small">if you have a Google account</span></button>
+      <button mat-stroked-button color="primary" (click)="signInWithProvider(signInProviders.Google)">Login with Google<br/><span class="mat-small">if you have a Google account</span></button>
     </mat-grid-tile>
     <mat-grid-tile>
-      <button mat-stroked-button color="primary" (click)="facebookLogin()">Login with Facebook<br/><span class="mat-small">if you have a Facebook account</span></button>
+      <button mat-stroked-button color="primary" (click)="signInWithProvider(signInProviders.Facebook)">Login with Facebook<br/><span class="mat-small">if you have a Facebook account</span></button>
     </mat-grid-tile>
     <mat-grid-tile>
-      <button mat-stroked-button color="primary" (click)="twitterLogin()">Login with Twitter<br/><span class="mat-small">if you have a Twitter account</span></button>
+      <button mat-stroked-button color="primary" (click)="signInWithProvider(signInProviders.Twitter)">Login with Twitter<br/><span class="mat-small">if you have a Twitter account</span></button>
     </mat-grid-tile>
 <!--    <mat-grid-tile>-->
 <!--      <button mat-stroked-button color="primary" (click)="suuntoAppLogin()">Login with Suunto App<br/><span class="mat-small">if you have a Suunto App account</span></button>-->

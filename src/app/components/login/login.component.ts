@@ -20,6 +20,7 @@ import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/serv
 export class LoginComponent implements OnInit {
 
   isLoading: boolean;
+  signInProviders = SignInProviders;
 
   private logger = Log.create('LoginComponent');
 
@@ -44,17 +45,31 @@ export class LoginComponent implements OnInit {
   async ngOnInit() {
     // Should the router guard this for logged in users
     this.isLoading = true;
-    const result = await  this.afAuth.auth.getRedirectResult();
+    const result = await this.afAuth.auth.getRedirectResult();
     if (result.user) {
-        await this.redirectOrShowDataPrivacyDialog(result);
+      await this.redirectOrShowDataPrivacyDialog(result);
     }
     this.isLoading = false;
   }
 
 
-  async anonymousLogin() {
+  async signInWithProvider(provider: SignInProviders) {
+    this.isLoading = true;
     try {
-      return this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
+      switch (provider) {
+        case SignInProviders.Anonymous:
+          this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
+          break;
+        case SignInProviders.Google:
+          this.authService.googleLogiWwithRedirect();
+          break;
+        case SignInProviders.Facebook:
+          this.authService.facebookLoginWithRedirect();
+          break;
+        case SignInProviders.Twitter:
+          this.authService.twitterLoginWithRedirect();
+          break;
+      }
     } catch (e) {
       Sentry.captureException(e);
       this.logger.error(e);
@@ -62,42 +77,7 @@ export class LoginComponent implements OnInit {
         duration: 2000,
       });
     }
-  }
-
-  async googleLogin() {
-    try {
-      return this.redirectOrShowDataPrivacyDialog(this.authService.googleLogiWwithRedirect());
-    } catch (e) {
-      Sentry.captureException(e);
-      this.logger.error(e);
-      this.snackBar.open(`Could not log in due to ${e}`, null, {
-        duration: 2000,
-      });
-    }
-  }
-
-  async facebookLogin() {
-    try {
-      return this.redirectOrShowDataPrivacyDialog(this.authService.facebookLoginWithRedirect());
-    } catch (e) {
-      Sentry.captureException(e);
-      this.logger.error(e);
-      this.snackBar.open(`Could not log in due to ${e}`, null, {
-        duration: 2000,
-      });
-    }
-  }
-
-  async twitterLogin() {
-    try {
-      return this.redirectOrShowDataPrivacyDialog(this.authService.twitterLoginWithRedirect());
-    } catch (e) {
-      Sentry.captureException(e);
-      this.logger.error(e);
-      this.snackBar.open(`Could not log in due to ${e}`, null, {
-        duration: 2000,
-      });
-    }
+    this.isLoading = false;
   }
 
   async suuntoAppLogin() {
@@ -155,4 +135,13 @@ export class LoginComponent implements OnInit {
     return window.innerWidth < 600 ? 1 : 2;
   }
 
+}
+
+
+export enum SignInProviders {
+  Anonymous,
+  Google,
+  Facebook,
+  Twitter,
+  SuuntoApp
 }

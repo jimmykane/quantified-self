@@ -5,7 +5,7 @@ import {User as FireBaseUser} from 'firebase/app';
 
 import {Observable, of, Subscription} from 'rxjs';
 import {map, switchMap, take} from 'rxjs/operators';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {User} from 'quantified-self-lib/lib/users/user';
@@ -46,22 +46,22 @@ export class AppAuthService implements OnDestroy {
     return this.authState;
   }
 
-  async googleLogiWwithRedirect() {
+  googleLogiWwithRedirect() {
     const provider = new auth.GoogleAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
-  async githubLoginWithRedirect() {
+  githubLoginWithRedirect() {
     const provider = new auth.GithubAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
-  async facebookLoginWithRedirect() {
+  facebookLoginWithRedirect() {
     const provider = new auth.FacebookAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
-  async twitterLoginWithRedirect() {
+  twitterLoginWithRedirect() {
     const provider = new auth.TwitterAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
