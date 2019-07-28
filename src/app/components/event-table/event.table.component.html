@@ -74,6 +74,7 @@
           <tr>
             <td>
               <app-edit-input
+                *ngIf="hasActions"
                 [(data)]='element.name'
                 [type]="'text'"
                 [placeHolder]="'Name'"
@@ -82,6 +83,7 @@
             </td>
             <td>
               <app-edit-input
+                *ngIf="hasActions"
                 [(data)]='element.description'
                 [type]="'textArea'"
                 [placeHolder]="'Add a description'"
