@@ -11,7 +11,11 @@ import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
 import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
-import {ChartDataValueTypes, ChartTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {
+  ChartDataValueTypes,
+  ChartTypes,
+  UserDashboardChartSettingsInterface
+} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import {UserService} from '../../../services/app.user.service';
 import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
@@ -31,6 +35,7 @@ import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
 import {DataCadenceMin} from 'quantified-self-lib/lib/data/data.cadence-min';
 import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
 import {DataPeakEPOC} from 'quantified-self-lib/lib/data/data.peak-epoc';
+import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 
 @Component({
   selector: 'app-chart-actions',
@@ -116,23 +121,44 @@ export class ChartActionsComponent implements OnInit {
     },
   ];
 
-  changeChartType(event) {
+  async changeChartType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).type = event.value;
     // If its pie show only totals
     if (event.value === ChartTypes.Pie) {
       this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = ChartDataValueTypes.Total;
     }
-    this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  changeChartDataType(event) {
+  async changeChartDataType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataType = event.value;
-    this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  changeChartDataValueType(event) {
+  async changeChartDataValueType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = event.value;
-    this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async addNewChart($event: MouseEvent) {
+    const chart = Object.assign({}, this.user.settings.dashboardSettings.chartsSettings.find((chartSetting: UserDashboardChartSettingsInterface) => chartSetting.order === this.chartOrder));
+    chart.order = this.user.settings.dashboardSettings.chartsSettings.length;
+    this.user.settings.dashboardSettings.chartsSettings.push(chart);
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async deleteChart(event) {
+    if (this.user.settings.dashboardSettings.chartsSettings.length === 1) {
+      throw new Error('Cannot delete chart there is only one left');
+    }
+    // should search and replace order index according to the remaining order indexes after the splice
+    this.user.settings.dashboardSettings.chartsSettings = this.user.settings.dashboardSettings.chartsSettings
+      .filter((chartSetting) => chartSetting.order !== this.chartOrder)
+      .map((chartSetting, index) => {
+        chartSetting.order = index;
+        return chartSetting
+      });
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   constructor(
@@ -145,4 +171,6 @@ export class ChartActionsComponent implements OnInit {
       throw new Error('Component needs user');
     }
   }
+
+
 }

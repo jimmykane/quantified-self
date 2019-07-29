@@ -2,6 +2,21 @@
 mat-select{
 }
 
+section{
+  display: flex;
+}
+
 .first{
   padding-top: 1em;
+}
+button{
+  flex: 1 1 auto;
+  padding: 0;
+  text-align: center;
+}
+button.big{
+  width: 100%;
+}
+button.small{
+  width: 45%;
 }

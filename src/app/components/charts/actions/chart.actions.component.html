@@ -1,42 +1,54 @@
 <button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation();">
-    <mat-icon>more_vert</mat-icon>
+  <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-    <section mat-menu-item class="first">
-        <mat-form-field>
-            <mat-label>Chart type</mat-label>
-            <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
-                <mat-option *ngFor="let chartType of chartTypes | keyvalue" [value]="chartType.value">
-                    {{chartType.value}}
-                </mat-option>
-            </mat-select>
-        </mat-form-field>
-    </section>
-    <section mat-menu-item>
-        <mat-form-field>
-            <mat-label>What data to look at</mat-label>
-            <mat-select placeholder="Type" [value]="chartDataType" (selectionChange)="changeChartDataType($event)">
-                <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
-                              [disabled]="dataGroup.disabled">
-                    <mat-option *ngFor="let data of dataGroup.data" [value]="data">
-                        {{data}}
-                    </mat-option>
-                </mat-optgroup>
-            </mat-select>
-        </mat-form-field>
-    </section>
-    <section mat-menu-item>
-        <mat-form-field>
-            <mat-label>How to look at the data</mat-label>
-            <mat-select placeholder="Type calculation" [value]="chartDataValueType"
-                        (selectionChange)="changeChartDataValueType($event)">
-                <section *ngIf="chartType !== chartTypes.Pie">
-                    <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue"
-                                [value]="chartValueType.value">
-                        {{chartValueType.value}}
-                    </mat-option>
-                </section>
-            </mat-select>
-        </mat-form-field>
-    </section>
+  <section  class="first" *ngIf="user.settings.dashboardSettings.chartsSettings.length <= 10">
+    <button mat-menu-item  class="big"  (click)="addNewChart($event)">
+      <mat-icon>add</mat-icon>
+      <span>Add new</span>
+    </button>
+  </section>
+  <section mat-menu-item >
+    <mat-form-field>
+      <mat-label>Chart type</mat-label>
+      <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
+        <mat-option *ngFor="let chartType of chartTypes | keyvalue" [value]="chartType.value">
+          {{chartType.value}}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>What data to look at</mat-label>
+      <mat-select placeholder="Type" [value]="chartDataType" (selectionChange)="changeChartDataType($event)">
+        <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
+                      [disabled]="dataGroup.disabled">
+          <mat-option *ngFor="let data of dataGroup.data" [value]="data">
+            {{data}}
+          </mat-option>
+        </mat-optgroup>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>How to look at the data</mat-label>
+      <mat-select placeholder="Type calculation" [value]="chartDataValueType"
+                  (selectionChange)="changeChartDataValueType($event)">
+        <section *ngIf="chartType !== chartTypes.Pie">
+          <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue"
+                      [value]="chartValueType.value">
+            {{chartValueType.value}}
+          </mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section  *ngIf="user.settings.dashboardSettings.chartsSettings.length > 1">
+      <button class="big" mat-menu-item (click)="deleteChart($event)">
+        <mat-icon>delete</mat-icon>
+        <span>Delete</span>
+      </button>
+  </section>
 </mat-menu>
