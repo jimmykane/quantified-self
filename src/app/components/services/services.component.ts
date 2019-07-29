@@ -42,6 +42,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
       duration: 2000,
     });
   }
+  @HostListener('window:authError', ['$event'])
+  async authError(event) {
+    this.isLoading = false;
+    Sentry.captureException(new Error(event.detail.error));
+    this.snackBar.open(`Could not connect to Suunto app. Please try another browser or allow popups and cross-site cookies form this site. ERROR: ${event.detail.error}`, null, {
+      duration: 10000,
+    });
+  }
 
   constructor(private http: HttpClient, private fileService: FileService,
               private fns: AngularFireFunctions,
@@ -155,7 +163,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
       return
     }
-    wnd.onunload = () => this.isLoading = false;
+    // wnd.onunload = () => this.isLoading = false;
   }
 
   async deauthorizeSuuntoApp(event) {

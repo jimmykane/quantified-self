@@ -60,8 +60,8 @@ export const authRedirect = functions.region('europe-west2').https.onRequest(asy
  */
 export const authToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
   const oauth2 = suuntoAppAuth();
-  try {
-    return cookieParser()(req, res, async () => {
+  cookieParser()(req, res, async () => {
+    try {
       const currentDate = new Date();
       const signInWithService = req.cookies.signInWithService === 'true';
       console.log('Should sign in:', signInWithService);
@@ -103,12 +103,12 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
         },
         serviceName: ServiceNames.SuuntoApp
       });
-    });
-  } catch (error) {
-    return res.jsonp({
-      error: error.toString(),
-    });
-  }
+    } catch (error) {
+      return res.jsonp({
+        error: error.toString(),
+      });
+    }
+  });
 });
 
 /**
@@ -116,7 +116,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
  */
 export const deauthorize = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST') ) {
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed `)
     res.status(403);
     res.send();
@@ -131,7 +131,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
     return;
   }
 
-  if (!req.body.firebaseAuthToken){
+  if (!req.body.firebaseAuthToken) {
     console.error(`No params provided. This call needs: 'firebaseAuthToken'`);
     res.status(500);
     res.send();
@@ -166,7 +166,7 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
     let serviceToken;
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, true);
-    }catch (e) {
+    } catch (e) {
       console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       continue
     }
@@ -202,10 +202,10 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
       console.error(e);
       console.error(`Could not delete token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
       res.status(500);
-      res.send({result: 'Could not deauthorize'});
+      res.send({result: 'Could not delete token'});
       return;
     }
-    console.log(`Deauthorized successfully token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
+    console.log(`Deleted successfully token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
   }
 
   res.status(200);
@@ -259,7 +259,7 @@ export function setAccessControlHeadersOnResponse(req: Request, res: functions.R
   return res;
 }
 
-export function isCorsAllowed(req: Request){
+export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }
 

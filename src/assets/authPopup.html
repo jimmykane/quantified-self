@@ -34,15 +34,20 @@ Please wait...
           serviceAuthResponse: data.serviceAuthResponse
         }
       }));
-      window.close();
       // firebase.auth().tokensReceived(data.token).then(function(test) {
       //
       //   window.close();
       // });
     } else {
-      console.error(data);
-      document.body.innerText = 'Error in the token Function: ' + data.error;
+      console.error(data.error);
+        window.opener.dispatchEvent(new CustomEvent("authError", {
+            detail: {
+                error: data.error
+            }
+        }));
     }
+    // Finally
+    window.close();
   }
 
   var code = getURLParameter('code');
