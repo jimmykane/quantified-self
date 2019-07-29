@@ -34,7 +34,7 @@ import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg
 import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
-import {ActivityTypes} from "quantified-self-lib/lib/activities/activity.types";
+import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {MatBottomSheet} from '@angular/material';
 import {animate, state, style, transition, trigger} from '@angular/animations';
@@ -74,6 +74,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   isLoadingResults = true;
   errorLoading;
   expandedElement: EventRowElement | null;
+  expandAll: boolean;
 
   private eventsSubscription: Subscription;
   private sortSubscription: Subscription;
@@ -84,7 +85,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
   public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
   isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
-
 
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
@@ -243,10 +243,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           if (this.currentPageIndex > this.paginator.pageIndex) {
             this.events.reverse();
           }
-
-          const data = events.reduce((eventArray, event) => {
+          const data = events.reduce((EventRowElementsArray, event) => {
             if (!event) {
-              return eventArray;
+              return EventRowElementsArray;
             }
             const dataObject: EventRowElement = <EventRowElement>{};
 
@@ -278,8 +277,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
             // dataObject.event = event;
 
-            eventArray.push(dataObject);
-            return eventArray;
+            EventRowElementsArray.push(dataObject);
+            return EventRowElementsArray;
           }, []);
 
           // Set the columns
@@ -287,7 +286,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           //   this.columns = Object.keys(data[0]).filter((key) => !(key === 'id' || key === 'event'));
           // }
 
-          return new MatTableDataSource<any>(data);
+          return new MatTableDataSource<EventRowElement>(data);
         }),
         catchError((error) => {
           this.isLoadingResults = false;
@@ -402,7 +401,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           this.isLoadingResults = true;
           const deleteConfirmationBottomSheet  = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
           this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
-            if (!result){
+            if (!result) {
               this.isLoadingResults = false;
               return;
             }
