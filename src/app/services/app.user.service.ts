@@ -230,10 +230,6 @@ export class UserService implements OnDestroy {
   }
 
   public async updateUser(user: User) {
-    debugger;
-    const a  = user.toJSON();
-    debugger;
-
     return this.afs.collection('users').doc(user.uid).update(user.toJSON());
   }
 
