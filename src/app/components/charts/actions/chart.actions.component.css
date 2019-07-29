@@ -7,8 +7,9 @@ section{
 }
 
 .first{
-  padding-top: 1em;
+  /*padding-top: 1em;*/
 }
+
 button{
   flex: 1 1 auto;
   padding: 0;

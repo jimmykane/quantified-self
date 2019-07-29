@@ -29,7 +29,7 @@
         </section>
 
         <section>
-          <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()">
+          <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
             <mat-form-field>
               <label>
                 <input matInput placeholder="Link" formControlName="input">

@@ -1,96 +1,101 @@
-<form *ngIf="searchFormGroup"  [formGroup]="searchFormGroup" (submit)="onSubmit($event)" autocomplete="off">
-    <!--  <mat-form-field>-->
-    <!--    <input matInput placeholder="Name" formControlName="search">-->
-    <!--    <button mat-button *ngIf="this.searchFormGroup.get('search').value" matSuffix mat-icon-button aria-label="Clear"-->
-    <!--            (click)="clear('search')">-->
-    <!--      <mat-icon>close</mat-icon>-->
-    <!--    </button>-->
-    <!--    <mat-hint>Absolute name</mat-hint>-->
-    <!--  </mat-form-field>-->
+<form *ngIf="searchFormGroup" [formGroup]="searchFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)" autocomplete="off" >
+  <!--  <mat-form-field>-->
+  <!--    <input matInput placeholder="Name" formControlName="search">-->
+  <!--    <button mat-button *ngIf="this.searchFormGroup.get('search').value" matSuffix mat-icon-button aria-label="Clear"-->
+  <!--            (click)="clear('search')">-->
+  <!--      <mat-icon>close</mat-icon>-->
+  <!--    </button>-->
+  <!--    <mat-hint>Absolute name</mat-hint>-->
+  <!--  </mat-form-field>-->
 
-    <section>
-        <mat-form-field style=" margin-right: 1em;">
-            <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From 00:00:00"
-                   (dateChange)="onDateChange($event)"
-                   formControlName="startDate">
-            <mat-datepicker-toggle matSuffix [for]="startDatepicker">
-                <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
-            </mat-datepicker-toggle>
-            <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
-            <!--    <mat-hint>The start date</mat-hint>-->
-            <mat-error *ngIf="hasError('startDate')">
-                invalid date
-            </mat-error>
-        </mat-form-field>
+  <section>
+    <mat-form-field style=" margin-right: 1em;">
+      <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From 00:00:00"
+             (dateChange)="onDateChange($event)"
+             formControlName="startDate">
+      <mat-datepicker-toggle matSuffix [for]="startDatepicker">
+        <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
+      </mat-datepicker-toggle>
+      <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
+      <!--    <mat-hint>The start date</mat-hint>-->
+      <mat-error *ngIf="hasError('startDate')">
+        invalid date
+      </mat-error>
+    </mat-form-field>
 
-        <mat-form-field>
-            <input matInput [matDatepicker]="endDatepicker" (focus)="endDatepicker.open()" placeholder="To 23:59:59 "
-                   (dateChange)="onDateChange($event)"
-                   formControlName="endDate">
-            <mat-datepicker-toggle matSuffix [for]="endDatepicker">
-                <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
-            </mat-datepicker-toggle>
-            <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
-            <!--    <mat-hint>The end date</mat-hint>-->
-            <mat-error *ngIf="hasError('endDate')">
-                invalid date
-            </mat-error>
-        </mat-form-field>
+    <mat-form-field>
+      <input matInput [matDatepicker]="endDatepicker" (focus)="endDatepicker.open()" placeholder="To 23:59:59 "
+             (dateChange)="onDateChange($event)"
+             formControlName="endDate">
+      <mat-datepicker-toggle matSuffix [for]="endDatepicker">
+        <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
+      </mat-datepicker-toggle>
+      <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
+      <!--    <mat-hint>The end date</mat-hint>-->
+      <mat-error *ngIf="hasError('endDate')">
+        invalid date
+      </mat-error>
+    </mat-form-field>
 
-        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">
-            There is something wrong with the date range
-        </mat-error>
-        <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select
-            a range up to 3 months
-        </mat-error>
+    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">
+      There is something wrong with the date range
+    </mat-error>
+    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select
+      a range up to 3 months
+    </mat-error>
 
 
-    </section>
+  </section>
 
-    <section>
-        <mat-button-toggle-group [value]="selectedDateRange"
-                                 (change)="dateToggleChange($event)">
-            <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
-                This week
-            </mat-button-toggle>
-            <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
-                Last week
-            </mat-button-toggle>
-            <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="Last 7 days">
-                Last 7 days
-            </mat-button-toggle>
-        </mat-button-toggle-group>
-        <mat-button-toggle-group [value]="selectedDateRange"
-                                 (change)="dateToggleChange($event)">
-            <mat-button-toggle [value]="dateRanges.lastThirtyDays" aria-label="Last 30 days">
-                Last 30 days
-            </mat-button-toggle>
-            <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
-                This month
-            </mat-button-toggle>
-            <mat-button-toggle [value]="dateRanges.lastMonth" aria-label="Last month">
-                Last month
-            </mat-button-toggle>
-        </mat-button-toggle-group>
+  <section>
+    <mat-button-toggle-group [value]="selectedDateRange"
+                             (change)="dateToggleChange($event)">
+      <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
+        This week
+      </mat-button-toggle>
+      <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
+        Last week
+      </mat-button-toggle>
+      <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="Last 7 days">
+        Last 7 days
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+    <mat-button-toggle-group [value]="selectedDateRange"
+                             (change)="dateToggleChange($event)">
+      <mat-button-toggle [value]="dateRanges.lastThirtyDays" aria-label="Last 30 days">
+        Last 30 days
+      </mat-button-toggle>
+      <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
+        This month
+      </mat-button-toggle>
+      <mat-button-toggle [value]="dateRanges.lastMonth" aria-label="Last month">
+        Last month
+      </mat-button-toggle>
+    </mat-button-toggle-group>
 
-        <mat-button-toggle-group [value]="selectedDateRange"
-                                 (change)="dateToggleChange($event)">
-            <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
-                {{currentYear}}
-            </mat-button-toggle>
-            <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
-                {{currentYear - 1}}
-            </mat-button-toggle>
-            <mat-button-toggle aria-label="Custom" [value]="dateRanges.custom">
-                Custom
-            </mat-button-toggle>
-            <mat-button-toggle aria-label="All" [value]="dateRanges.all">
-                All
-            </mat-button-toggle>
-        </mat-button-toggle-group>
-    </section>
+    <mat-button-toggle-group [value]="selectedDateRange"
+                             (change)="dateToggleChange($event)">
+      <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
+        {{currentYear}}
+      </mat-button-toggle>
+      <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
+        {{currentYear - 1}}
+      </mat-button-toggle>
+      <mat-button-toggle aria-label="Custom" [value]="dateRanges.custom">
+        Custom
+      </mat-button-toggle>
+      <mat-button-toggle aria-label="All" [value]="dateRanges.all">
+        All
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+  </section>
 
-    <button *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
-            mat-button color="primary" (click)="onSubmit($event)">search
+  <section>
+    <button
+      *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
+      mat-button color="primary" (click)="onSubmit($event)">search
     </button>
+  </section>
 </form>
+
+
