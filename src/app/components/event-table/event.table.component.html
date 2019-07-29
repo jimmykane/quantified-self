@@ -73,6 +73,9 @@
         <table style="text-align: left">
           <tr>
             <td>
+              <app-privacy-icon [privacy]="element.privacy" ></app-privacy-icon>
+            </td>
+            <td>
               <app-edit-input
                 *ngIf="hasActions"
                 [(data)]='element.name'
