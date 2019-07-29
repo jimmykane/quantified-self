@@ -6,7 +6,7 @@
          (keydown.enter)='$event.target.blur()'
          [(ngModel)]='data'
          [type]="type">
-  <textarea matInput
+  <textarea matInput rows="1"
             [placeholder]="placeHolder"
             *ngIf='type === "textArea"'
             (focusout)="onFocusOut();"

@@ -81,21 +81,19 @@
       <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
         {{currentYear - 1}}
       </mat-button-toggle>
-      <mat-button-toggle aria-label="Custom" [value]="dateRanges.custom">
-        Custom
-      </mat-button-toggle>
       <mat-button-toggle aria-label="All" [value]="dateRanges.all">
         All
       </mat-button-toggle>
+      <mat-button-toggle aria-label="Custom" [value]="dateRanges.custom">
+        Custom
+      </mat-button-toggle>
+      <button
+        *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
+        mat-stroked-button class="search-button" color="primary" (click)="onSubmit($event)">search
+      </button>
     </mat-button-toggle-group>
   </section>
 
-  <section>
-    <button
-      *ngIf="!hasError() && !searchFormGroup.pristine && selectedDateRange === dateRanges.custom && searchFormGroup.get('startDate').value "
-      mat-button color="primary" (click)="onSubmit($event)">search
-    </button>
-  </section>
 </form>
 
 

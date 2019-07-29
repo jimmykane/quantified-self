@@ -13,3 +13,8 @@ mat-button-toggle-group{
   margin-right: 1em;
   /*margin-bottom: 1em;*/
 }
+
+.search-button{
+  min-height: 48px;
+  border: 0;
+}
