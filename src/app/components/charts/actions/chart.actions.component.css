@@ -21,3 +21,12 @@ button.big{
 button.small{
   width: 45%;
 }
+
+.toolTip{
+  margin-left: 1em;
+  font-size: 1em;
+  height: 1em;
+}
+mat-icon.delete{
+  margin: 0;
+}

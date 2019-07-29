@@ -49,7 +49,7 @@
         <mat-icon *ngIf="column === 'expand' && !expandAll && expandedElement !== row" (click)="$event.stopPropagation(); expandedElement = expandedElement === row ? null : row">
           chevron_right
         </mat-icon>
-        <mat-icon *ngIf="column === 'expand' && !expandAll && expandedElement === row" (click)="$event.stopPropagation(); expandedElement = expandedElement === row ? null : row">
+        <mat-icon *ngIf="column === 'expand' && (expandAll || expandedElement === row)" (click)="$event.stopPropagation(); expandAll = false; expandedElement = expandedElement === row ? null : row">
           expand_more
         </mat-icon>
         <mat-checkbox *ngIf="column === 'checkbox'" (click)="$event.stopPropagation()"

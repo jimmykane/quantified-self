@@ -9,7 +9,7 @@ mat-cell, .mat-header-cell {
 }
 
 .mat-column-checkbox, .mat-column-actions, .mat-column-privacy, .mat-column-expand{
-  /*max-width: 32px;*/
+  /*width: 40px;*/
 }
 
 .mat-column-expand{
@@ -81,6 +81,7 @@ tr.mat-row:not(.expanded-row):not(.detail-row):hover {
 
 tr.detail-row {
   height: 0;
+  padding: 0;
 }
 
 tr.mat-row:focus{
@@ -93,6 +94,7 @@ tr.mat-row.normal-row td {
 
 tr.detail-row td{
   border-top-width: 0;
+  padding: 0;
 }
 
 tr.detail-row td{
