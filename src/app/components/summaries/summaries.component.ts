@@ -39,7 +39,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   public events: EventInterface[];
 
   public charts: SummariesChartInterface[] = [];
-  public chartTypes = ChartTypes
+  public chartTypes = ChartTypes;
 
   private eventsSubscription: Subscription;
   private chartThemeSubscription: Subscription;

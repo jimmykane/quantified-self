@@ -20,6 +20,9 @@ import animated from '@amcharts/amcharts4/themes/animated';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {ChartAbstract} from '../chart.abstract';
 import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {concat} from 'rxjs';
 
 @Component({
   selector: 'app-column-chart',
@@ -34,6 +37,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() vertical = true;
+  @Input() filterLowValues: boolean;
 
   protected chart: am4charts.XYChart;
   protected logger = Log.create('ChartColumnComponent');
@@ -80,7 +84,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     }
 
     // To create an animation here it has to update the values of the data items
-    this.chart.data = this.data;
+    this.chart.data = this.generateChartData(this.data);
     this.chart.invalidateLabels()
 
   }
@@ -103,33 +107,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     chartTitle.align = 'left';
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
-      let value;
-      if (this.chartDataValueType === ChartDataValueTypes.Total) {
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem.value;
-          return sum;
-        }, 0));
-      }
-      if (this.chartDataValueType === ChartDataValueTypes.Minimum) {
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem.value ? dataItem.value : min;
-          return min;
-        }, Infinity));
-      }
-      if (this.chartDataValueType === ChartDataValueTypes.Maximum) {
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem.value ? dataItem.value : min;
-          return min;
-        }, -Infinity));
-      }
-      if (this.chartDataValueType === ChartDataValueTypes.Average) {
-        let count = 0;
-        value = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          count++;
-          sum += dataItem.value;
-          return sum;
-        }, 0) / count);
-      }
+      const value = this.getAggregateData(data, this.chartDataValueType);
       return `[font-size: 1.3em]${value.getDisplayType()}[/] [bold font-size: 1.4em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
     });
 
@@ -233,5 +211,54 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     // this.attachEventListenersOnChart(chart);
 
     return chart;
+  }
+
+  private generateChartData(data) {
+    if (!this.filterLowValues){
+      return data;
+    }
+    const chartData = [];
+    let otherData: {type: string, value: number};
+    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
+    data.forEach((dataItem: {type: string, value: number}) => {
+      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
+      if (percent < 5) {
+        otherData = otherData || {type: 'Other', value: dataItem.value};
+        otherData.value = <number>this.getAggregateData([otherData, dataItem ], this.chartDataValueType).getValue();
+        return;
+      }
+      chartData.push(dataItem);
+    });
+    if (otherData && isNumber(otherData.value)){
+      chartData.unshift(otherData)
+    }
+    return chartData;
+  }
+
+  private getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
+    switch (chartDataValueType) {
+      case ChartDataValueTypes.Average:
+        let count = 0;
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
+          count++;
+          sum += dataItem.value;
+          return sum;
+        }, 0) / count);
+      case ChartDataValueTypes.Maximum:
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
+          min = min <= dataItem.value ? dataItem.value : min;
+          return min;
+        }, -Infinity));
+      case ChartDataValueTypes.Minimum:
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
+          min = min > dataItem.value ? dataItem.value : min;
+          return min;
+        }, Infinity));
+      case ChartDataValueTypes.Total:
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
+          sum += dataItem.value;
+          return sum;
+        }, 0));
+    }
   }
 }

@@ -49,6 +49,7 @@ export class ChartActionsComponent implements OnInit {
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartOrder: number;
+  @Input() filterLowValues: boolean;
 
 
   public chartTypes = ChartTypes;
@@ -144,6 +145,11 @@ export class ChartActionsComponent implements OnInit {
     const chart = Object.assign({}, this.user.settings.dashboardSettings.chartsSettings.find((chartSetting: UserDashboardChartSettingsInterface) => chartSetting.order === this.chartOrder));
     chart.order = this.user.settings.dashboardSettings.chartsSettings.length;
     this.user.settings.dashboardSettings.chartsSettings.push(chart);
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async switchFilterLowValues(){
+    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).filterLowValues = this.filterLowValues;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 

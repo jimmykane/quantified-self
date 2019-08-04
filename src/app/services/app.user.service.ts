@@ -79,25 +79,29 @@ export class UserService implements OnDestroy {
       order: 0,
       type: ChartTypes.Pie,
       dataType: DataDuration.type,
-      dataValueType: ChartDataValueTypes.Total
+      dataValueType: ChartDataValueTypes.Total,
+      filterLowValues: true,
     }, {
       name: 'Distance',
       order: 1,
       type: ChartTypes.Pie,
       dataType: DataDistance.type,
-      dataValueType: ChartDataValueTypes.Total
+      dataValueType: ChartDataValueTypes.Total,
+      filterLowValues: true,
     }, {
       name: 'Energy',
       order: 2,
       type: ChartTypes.ColumnsHorizontal,
       dataType: DataEnergy.type,
-      dataValueType: ChartDataValueTypes.Total
+      dataValueType: ChartDataValueTypes.Total,
+      filterLowValues: true,
     }, {
       name: 'Ascent',
       order: 3,
       type: ChartTypes.PyramidsVertical,
       dataType: DataAscent.type,
-      dataValueType: ChartDataValueTypes.Maximum
+      dataValueType: ChartDataValueTypes.Maximum,
+      filterLowValues: true,
     }]
   }
 

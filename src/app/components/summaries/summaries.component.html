@@ -7,6 +7,7 @@
                            [chartTheme]="chartTheme"
                            [chartDataType]="chart.dataType"
                            [chartDataValueType]="chart.dataValueType"
+                           [filterLowValues]="chart.filterLowValues"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
             <app-column-chart
@@ -16,12 +17,14 @@
                     [vertical]="chart.type === chartTypes.PyramidsVertical"
                     [chartDataType]="chart.dataType"
                     [chartDataValueType]="chart.dataValueType"
+                    [filterLowValues]="chart.filterLowValues"
                     [userChartSettings]="user.settings.chartSettings">
             </app-column-chart>
             <app-chart-actions [user]="user"
                                [chartType]="chart.type"
                                [chartDataType]="chart.dataType"
                                [chartOrder]="chart.order"
+                               [filterLowValues]="chart.filterLowValues"
                                [chartDataValueType]="chart.dataValueType">
             </app-chart-actions>
         </mat-grid-tile>

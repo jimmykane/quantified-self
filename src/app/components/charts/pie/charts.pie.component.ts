@@ -30,6 +30,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
 
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
+  @Input() filterLowValues: boolean;
+
 
   public noData: boolean;
 
@@ -152,7 +154,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        if (target.dataItem.values.value.percent < 1) {
+        if (target.dataItem.values.value.percent < 3 && this.filterLowValues) {
           return null;
         }
         if (!target.dataItem.dataContext.type) {

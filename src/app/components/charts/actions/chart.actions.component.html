@@ -2,14 +2,14 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  <section  class="first" *ngIf="user.settings.dashboardSettings.chartsSettings.length <= 10">
-    <button mat-menu-item  class="big"  (click)="addNewChart($event)">
+  <section class="first" *ngIf="user.settings.dashboardSettings.chartsSettings.length <= 10">
+    <button mat-menu-item class="big" (click)="addNewChart($event)">
       <mat-icon>add</mat-icon>
       <span>Add new</span>
       <mat-icon class="toolTip" matTooltip="This will copy the current chart and create a new one">info</mat-icon>
     </button>
   </section>
-  <section mat-menu-item >
+  <section mat-menu-item>
     <mat-form-field>
       <mat-label>Chart type</mat-label>
       <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
@@ -46,9 +46,19 @@
       </mat-select>
     </mat-form-field>
   </section>
-  <section  *ngIf="user.settings.dashboardSettings.chartsSettings.length > 1">
-      <button class="big" mat-menu-item (click)="deleteChart($event)">
-        <mat-icon class="delete">delete</mat-icon>
-      </button>
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="switchFilterLowValues($event)"
+      [(ngModel)]="filterLowValues">
+      <span matTooltip="Turn this on to declutter the charts and show what is important instead of all">
+        Filter out low values
+      </span>
+    </mat-slide-toggle>
+  </section>
+  <section *ngIf="user.settings.dashboardSettings.chartsSettings.length > 1">
+    <button class="big" mat-menu-item (click)="deleteChart($event)">
+      <mat-icon class="delete">delete</mat-icon>
+    </button>
   </section>
 </mat-menu>
