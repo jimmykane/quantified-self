@@ -126,14 +126,14 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     const pieSeries = chart.series.push(new am4charts.PieSeries());
     pieSeries.dataFields.value = 'value';
     pieSeries.dataFields.category = 'type';
-    pieSeries.interpolationDuration = 500;
-    pieSeries.rangeChangeDuration = 500;
-    pieSeries.sequencedInterpolation = true;
+    // pieSeries.interpolationDuration = 500;
+    // pieSeries.rangeChangeDuration = 500;
+    // pieSeries.sequencedInterpolation = true;
 
     pieSeries.slices.template.propertyFields.isActive = 'pulled';
-    pieSeries.slices.template.strokeWidth = 0.3;
+    pieSeries.slices.template.strokeWidth = 0.4;
     pieSeries.slices.template.strokeOpacity = 1;
-    // pieSeries.slices.template.stroke = am4core.color('#0c96ff');
+    pieSeries.slices.template.stroke = am4core.color('#175e84');
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
       return `{category} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`

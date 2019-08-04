@@ -30,3 +30,6 @@ button.small{
 mat-icon.delete{
   margin: 0;
 }
+.mat-slide-toggle{
+  height: 100%;
+}

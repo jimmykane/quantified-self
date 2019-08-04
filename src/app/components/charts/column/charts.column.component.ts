@@ -191,11 +191,12 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
     series.columns.template.strokeOpacity = 1;
-    series.columns.template.strokeWidth = 0.5;
+    series.columns.template.strokeWidth = 0.4;
+    series.columns.template.stroke = am4core.color('#175e84');
     if (this.vertical) {
       series.columns.template.tension = 1;
     }
-    series.columns.template.fillOpacity = 0.95;
+    // series.columns.template.fillOpacity = 1;
     series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
     series.columns.template.adapter.add('tooltipText', (text, target, key) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
