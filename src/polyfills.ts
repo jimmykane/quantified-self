@@ -66,3 +66,6 @@ import 'zone.js/dist/zone';  // Included with Angular CLI.
  * Needed for: All but Chrome, Firefox, Edge, IE11 and Safari 10
  */
 // import 'intl';  // Run `npm install --save intl`.
+
+// Buffer that is a dependency from Fit parser uses global to check against typed arrays
+(window as any).global = window;
