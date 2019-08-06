@@ -148,7 +148,7 @@ export class ChartActionsComponent implements OnInit {
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  async switchFilterLowValues(){
+  async switchFilterLowValues(event){
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).filterLowValues = this.filterLowValues;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
