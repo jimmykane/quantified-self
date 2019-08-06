@@ -10,7 +10,7 @@
 
   <section>
     <mat-form-field style=" margin-right: 1em;">
-      <input matInput [matDatepicker]="startDatepicker" (focus)="startDatepicker.open()" placeholder="From 00:00:00"
+      <input matInput [matDatepicker]="startDatepicker" (click)="startDatepicker.open()" placeholder="From 00:00:00"
              (dateChange)="onDateChange($event)"
              formControlName="startDate">
       <mat-datepicker-toggle matSuffix [for]="startDatepicker">
@@ -24,7 +24,7 @@
     </mat-form-field>
 
     <mat-form-field>
-      <input matInput [matDatepicker]="endDatepicker" (focus)="endDatepicker.open()" placeholder="To 23:59:59 "
+      <input matInput [matDatepicker]="endDatepicker" (click)="endDatepicker.open()" placeholder="To 23:59:59 "
              (dateChange)="onDateChange($event)"
              formControlName="endDate">
       <mat-datepicker-toggle matSuffix [for]="endDatepicker">

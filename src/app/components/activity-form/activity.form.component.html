@@ -1,7 +1,8 @@
 <mat-dialog-content>
 
 
-  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)">
+  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit($event)"
+        (keyup.enter)="onSubmit($event)">
 
     <app-shade [isActive]="isLoading"></app-shade>
 
@@ -16,17 +17,46 @@
       </mat-error>
     </mat-form-field>
 
-    <!-- Start Date -->
-    <!--<mat-form-field>-->
-    <!--<input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate"-->
-    <!--[(ngModel)]="activity.startDate">-->
-    <!--<mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>-->
-    <!--<mat-datepicker #startDate></mat-datepicker>-->
-    <!--<mat-hint>The start date of the activity</mat-hint>-->
-    <!--<mat-error *ngIf="hasError('startDate')">-->
-    <!--invalid date-->
-    <!--</mat-error>-->
-    <!--</mat-form-field>-->
+    Date
+    <mat-form-field>
+      <input matInput [matDatepicker]="startDate" (click)="startDate.open()" placeholder="Start Date" (dateChange)="onStartDateAndStartTimeChange($event)"
+             formControlName="startDate">
+      <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
+      <mat-datepicker #startDate></mat-datepicker>
+      <mat-hint>The start date of the activity</mat-hint>
+      <mat-error *ngIf="hasError('startDate')">
+        invalid start date
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field>
+      <input matInput placeholder="Start Time" type="time" formControlName="startTime" step="1" (change)="onStartDateAndStartTimeChange($event)">
+      <mat-hint>Start time</mat-hint>
+      <mat-error *ngIf="hasError('startTime')">
+        invalid start time
+      </mat-error>
+    </mat-form-field>
+
+
+    <mat-form-field>
+      <input matInput [matDatepicker]="endDate" (click)="endDate.open()" placeholder="End Date"
+             formControlName="endDate">
+      <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
+      <mat-datepicker #endDate></mat-datepicker>
+      <mat-hint>The end date of the activity</mat-hint>
+      <mat-error *ngIf="hasError('endDate')">
+        invalid end date
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field>
+      <input matInput placeholder="End Time" type="time" formControlName="endTime" step="1">
+      <mat-hint>End time</mat-hint>
+      <mat-error *ngIf="hasError('endTime')">
+        invalid end time
+      </mat-error>
+    </mat-form-field>
+
 
     <!-- End Date -->
     <!--<mat-form-field>-->
@@ -42,9 +72,10 @@
 
     <!-- Start Distance -->
 
+    Distance
     <section *ngIf="this.activity.hasStreamData('Distance')">
       <mat-form-field>
-        <input matInput placeholder="Starting distance" type="number"  formControlName="startDistance">
+        <input matInput placeholder="Starting distance" type="number" formControlName="startDistance">
         <span matSuffix="">m &nbsp;</span>
         <mat-hint>The starting distance of the activity</mat-hint>
         <mat-error *ngIf="hasError('startDistance')">
@@ -64,8 +95,8 @@
     </section>
 
 
-
-    <mat-hint><b>Note</b>: Changing the start or end distance will recreate all statistics for the selected activity</mat-hint>
+    <mat-hint><b>Note</b>: Changing the start or end distance will recreate all statistics for the selected activity
+    </mat-hint>
 
     <mat-error class="generic-form-error" *ngIf="hasError()">Something does not seem logical above 🤔</mat-error>
 

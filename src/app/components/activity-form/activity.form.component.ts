@@ -17,11 +17,11 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {activityDistanceValidator} from './activity.form.distance.validator';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {take} from "rxjs/operators";
-import {Log} from "ng2-logger/browser";
-import {DataDistance} from "quantified-self-lib/lib/data/data.distance";
+import {take} from 'rxjs/operators';
+import {Log} from 'ng2-logger/browser';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 
 
 @Component({
@@ -66,16 +66,29 @@ export class ActivityFormComponent implements OnInit {
     // To use this component we need the full hydrated object and we might not have it
     this.activity.clearStreams();
     this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
-
     // Now build the controls
     this.activityFormGroup = new FormGroup({
         activity: new FormControl(this.activity),
         creatorName: new FormControl(this.activity.creator.name, [
           Validators.required,
         ]),
+        startDate: new FormControl(this.activity.startDate, [
+          Validators.required,
+        ]),
+        endDate: new FormControl({value: this.activity.endDate, disabled: true}, [
+          Validators.required,
+        ]),
+        startTime: new FormControl(this.getTimeFromDateAsString(this.activity.startDate), [
+          Validators.required,
+        ]),
+        endTime: new FormControl({
+          value: this.getTimeFromDateAsString(this.activity.endDate),
+          disabled: true
+        }, [
+          Validators.required,
+        ])
       }
     );
-
     // Find the starting distance for this activity
     if (this.activity.hasStreamData(DataDistance.type)) {
       this.activityFormGroup.addControl('startDistance', new FormControl(0, [
@@ -89,12 +102,21 @@ export class ActivityFormComponent implements OnInit {
         Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
       ]));
 
-      this.activityFormGroup.validator = activityDistanceValidator;
+      this.activityFormGroup.setValidators([activityDistanceValidator]);
     }
     // Set this to done loading
     this.isLoading = false;
   }
 
+  onStartDateAndStartTimeChange(event){
+    const starDate = this.activityFormGroup.get('startDate').value;
+    starDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
+    starDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
+    starDate.setSeconds(this.activityFormGroup.get('startTime').value.split(':')[2]);
+    const endDate = new Date(starDate.getTime() + this.activity.getDuration().getValue() * 1000 + this.activity.getPause().getValue() * 1000);
+    this.activityFormGroup.get('endDate').setValue(endDate);
+    this.activityFormGroup.get('endTime').setValue(this.getTimeFromDateAsString(endDate))
+  }
 
   hasError(field?: string) {
     if (!field) {
@@ -110,25 +132,36 @@ export class ActivityFormComponent implements OnInit {
       return;
     }
     this.isLoading = true;
-    if (this.activity.startDate < this.event.startDate) {
-      this.event.startDate = this.activity.startDate;
-    }
-    if (this.activity.endDate > this.event.endDate) {
-      this.event.endDate = this.activity.endDate;
-    }
-
 
     try {
+      // this saves 2 entities
       if (this.activityFormGroup.get('creatorName').dirty) {
-        await this.eventService.changeActivityCreatorName(this.user, this.event, this.activity, this.activityFormGroup.get('creatorName').value);
+        this.activity.creator.name = this.activityFormGroup.get('creatorName').value;
+        this.event.addStat(new DataDeviceNames(this.event.getActivities().map(eventActivities => eventActivities.creator.name)));
+      }
+      if (this.activityFormGroup.get('startDate').dirty || this.activityFormGroup.get('startTime').dirty) {
+        this.activity.startDate = this.activityFormGroup.get('startDate').value;
+        this.activity.startDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
+        this.activity.startDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
+        this.activity.startDate.setSeconds(this.activityFormGroup.get('startTime').value.split(':')[2]);
+        this.activity.startDate.setMilliseconds(0);
+        this.activity.endDate = new Date(this.activity.startDate.getTime() + this.activity.getDuration().getValue() * 1000 + this.activity.getPause().getValue() * 1000);
+        if (this.activity === this.event.getFirstActivity()) {
+          this.event.startDate = this.activity.startDate;
+        }
+        if (this.activity === this.event.getLastActivity()) {
+          this.event.endDate = this.activity.endDate;
+        }
       }
       if (this.activity.hasStreamData(DataDistance.type) && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
         EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
         this.activity.clearStats();
         EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
         EventUtilities.reGenerateStatsForEvent(this.event);
-        await this.eventService.setEvent(this.user, this.event);
       }
+
+      await this.eventService.setEvent(this.user, this.event);
+
       this.snackBar.open('Activity saved', null, {
         duration: 2000,
       });
@@ -162,5 +195,19 @@ export class ActivityFormComponent implements OnInit {
     event.preventDefault();
     this.dialogRef.close();
   }
+
+  private getTimeFromDateAsString(date: Date): string{
+    return `${('0' + date.getHours()).slice(-2)}:${('0' + date.getMinutes()).slice(-2)}:${('0' + date.getSeconds()).slice(-2)}`
+  }
 }
 
+
+export const activityDistanceValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+  const startDistance = control.get('startDistance');
+  const endDistance = control.get('endDistance');
+
+  if (endDistance.value <= startDistance.value) {
+    return {'endDistanceSmallerThanStartDistance': true};
+  }
+  return null;
+};
