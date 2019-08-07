@@ -72,8 +72,8 @@
 
     <!-- Start Distance -->
 
-    Distance
-    <section *ngIf="this.activity.hasStreamData('Distance')">
+    <section *ngIf="hasDistance()">
+      Distance
       <mat-form-field>
         <input matInput placeholder="Starting distance" type="number" formControlName="startDistance">
         <span matSuffix="">m &nbsp;</span>
@@ -92,11 +92,9 @@
           invalid distance
         </mat-error>
       </mat-form-field>
+      <mat-hint><b>Note</b>: Changing the start or end distance will recreate all statistics for the selected activity
+      </mat-hint>
     </section>
-
-
-    <mat-hint><b>Note</b>: Changing the start or end distance will recreate all statistics for the selected activity
-    </mat-hint>
 
     <mat-error class="generic-form-error" *ngIf="hasError()">Something does not seem logical above 🤔</mat-error>
 

@@ -90,7 +90,7 @@ export class ActivityFormComponent implements OnInit {
       }
     );
     // Find the starting distance for this activity
-    if (this.activity.hasStreamData(DataDistance.type)) {
+    if (this.hasDistance()) {
       this.activityFormGroup.addControl('startDistance', new FormControl(0, [
         Validators.required,
         Validators.min(0),
@@ -116,6 +116,10 @@ export class ActivityFormComponent implements OnInit {
     const endDate = new Date(starDate.getTime() + this.activity.getDuration().getValue() * 1000 + this.activity.getPause().getValue() * 1000);
     this.activityFormGroup.get('endDate').setValue(endDate);
     this.activityFormGroup.get('endTime').setValue(this.getTimeFromDateAsString(endDate))
+  }
+
+  hasDistance(){
+    return this.activity.hasStreamData(DataDistance.type) && this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1] !== 0;
   }
 
   hasError(field?: string) {
