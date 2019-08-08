@@ -165,7 +165,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     })).subscribe((series: am4charts.LineSeries[]) => {
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       this.logger.info(`Rendering chart data per series`);
-      // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
+      series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
 
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
@@ -350,7 +350,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
     // If there is already a series with this id only data update should be done
     if (series) {
-      series.data = this.convertStreamDataToSeriesData(activity, stream);
+      series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
       return series
     }
 
@@ -458,7 +458,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // this.chart.invalidateData(); // @todo Perhaps this can go away.
     // Finally set the data and return
-    series.data = this.convertStreamDataToSeriesData(activity, stream);
+    series.dummyData = this.convertStreamDataToSeriesData(activity, stream);
     return series;
   }
 
