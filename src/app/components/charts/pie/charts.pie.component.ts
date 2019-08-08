@@ -15,8 +15,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {ChartAbstract} from '../chart.abstract';
 import * as Sentry from '@sentry/browser';
 import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-// Chart Themes
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 
 
 @Component({
@@ -79,40 +78,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
 
 
     // To create an animation here it has to update the values of the data items
-    // if (!this.chart.data.length) {
     this.chart.data = this.generateChartData(this.data);
-    // }
-
-
-    // // Take out all data from the chart that do not exist on the new set
-    // let removedSomeData = false;
-    // for (let i = this.chart.data.length - 1; i >= 0; i--) {
-    //   if (!generatedData.find(data => data.type === this.chart.data[i].type)) {
-    //     this.chart.data.splice(i, 1);
-    //     removedSomeData = true;
-    //   }
-    // }
-    // // Go over all the new data
-    // for (const data of generatedData) {
-    //   const existingDataItem = this.chart.data.find(dataItem => data.type === dataItem.type);
-    //   if (!existingDataItem) {
-    //     this.chart.addData(data);
-    //   } else {
-    //     existingDataItem.value = data.value;
-    //   }
-    // }
-    //
-    // console.log(this.chart.data);
-    // removedSomeData ? this.chart.invalidateData() : this.chart.invalidateRawData();
-    // this.chart.series.each(series => {
-    //   series.invalidateLayout()
-    //   series.invalidateRawData()
-    //   series.invalidateData();
-    //   series.appear();
-    // })
-
-    // this.chart.invalidate()
-    // this.generateChartData(this.data).forEach(data => this.chart.addData(data))
   }
 
   protected createChart(): am4charts.PieChart {
@@ -137,18 +103,6 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
       return `{category} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
-    });
-    pieSeries.slices.template.events.on('hit', (event) => {
-      // const a = this.chart.data.find(dataItem => dataItem.type === 'Running');
-      // debugger;
-      // a.value = 100000;
-      // this.chart.invalidateRawData()
-      // if (event.target.dataItem.dataContext['id'] !== undefined) {
-      //   this.dataSelected = event.target.dataItem.dataContext['id'];
-      // } else {
-      //   this.dataSelected  = null;
-      // }
-      // this.chart.data = this.generateChartData(this.data);
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
@@ -188,18 +142,16 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
               [font-size: 1.4em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
               [font-size: 1.0em]${this.chartDataValueType}[/]`
     });
-    // label.adapter.add('htmlOutput', (text, target, key) => {
-    //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-    //   return `<div style="text-align: center; font-size: 1.3em;">${data.getDisplayType()}</div>
-    //             <div style="text-align: center; font-size: 1.4em; font-weight: bold">${data.getDisplayValue()}${data.getDisplayUnit()}</div>
-    //             <div style="text-align: center; font-size: 1.0em; ">${this.chartDataValueType}</div>`;
-    // });
 
     // chart.exporting.menu = this.getExportingMenu();
 
-    //
     // Disable the preloader
     chart.preloader.disabled = true;
+
+    // let grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
+    // grouper.threshold = 10;
+    // grouper.groupName = "Other";
+    // grouper.clickBehavior = "break";
 
     // Attach events
     this.attachEventListenersOnChart(chart);

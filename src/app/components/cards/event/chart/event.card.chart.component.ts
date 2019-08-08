@@ -21,7 +21,7 @@ import {combineLatest, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 import {map, take} from 'rxjs/operators';
-import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
+import {StreamDataItem, StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
@@ -254,7 +254,81 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor = new am4charts.XYCursor();
     // chart.cursor.fullWidthLineX = true;
     // chart.cursor.fullWidthLineY = true;
-    // chart.cursor.behavior = 'zoomY';
+    chart.cursor.behavior = 'selectX'; // @todo should become a setting
+    chart.cursor.events.on('selectstarted', (ev) => {
+      const rangeLabelsContainer = <am4core.Label>ev.target.chart.map.getKey('rangeLabelsContainer');
+      if (rangeLabelsContainer) {
+        rangeLabelsContainer.dispose();
+      }
+    });
+    chart.cursor.events.on('selectended', (ev) => {
+      const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
+      const range = ev.target.xRange;
+      const axis = ev.target.chart.xAxes.getIndex(0);
+      let start;
+      let end;
+      switch (this.xAxisType) {
+        case XAxisTypes.Time:
+          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.start));
+          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.end));
+          break;
+        case XAxisTypes.Duration:
+          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.start));
+          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.end));
+          break;
+        default:
+          start = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(range.start));
+          end = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(range.end));
+          break;
+      }
+      // alert('Selected start ' + start + ' end ' + end);
+      // Now since we know the actual start end we need end iterate over the visible series and calculate AVG, Max,Min, Gain and loss not an easy job I suppose
+      this.getVisibleSeries(this.chart).forEach(series => {
+        let data;
+        switch (this.xAxisType) {
+          case XAxisTypes.Time:
+            data = series.data.reduce((array, dataItem) => {
+              if (new Date(dataItem.time) >= start && new Date(dataItem.time) <= end) {
+                array.push(dataItem.value);
+              }
+              return array
+            }, []);
+            break;
+          case XAxisTypes.Duration:
+            data = series.data.reduce((array, dataItem) => {
+              if (new Date(dataItem.time) >= start && new Date(dataItem.time) <= end) {
+                array.push(dataItem.value);
+              }
+              return array
+            }, []);
+            break;
+          default:
+            data = series.data.reduce((array, dataItem) => {
+              if (dataItem.axisValue >= start && dataItem.axisValue <= end) {
+                array.push(dataItem.value);
+              }
+              return array
+            }, []);
+            break;
+        }
+
+        // Here we have all the data we need
+
+        const dataType = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type);
+
+        // Todo should group pace and derived units
+        // Should use dynamic data loader
+        this.createLabel(rangeLabelsContainer, series, {
+          unit: dataType.unit,
+          average: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue(),
+          max: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue(),
+          min: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue(),
+          gain: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue(),
+          loss: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue(),
+        })
+      });
+
+    });
 
     // Add watermark
     const watermark = new am4core.Label();
@@ -347,7 +421,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface, selectedDataTypes?: string[] | null): am4charts.XYSeries {
-    let series = this.chart.series.values.find(series => series.id === `${activity.getID()}${stream.type}`);
+    let series = this.chart.series.values.find(seriesItem => seriesItem.dummyData.activty === activity && seriesItem.dummyData.stream.type === stream.type);
     // If there is already a series with this id only data update should be done
     if (series) {
       series.data = this.convertStreamDataToSeriesData(activity, stream);
@@ -392,10 +466,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.yAxis = yAxis;
 
     // Setup the series
-    series.id = `${activity.getID()}${stream.type}`;
+    // series.id = `${activity.getID()}:${stream.type}`;
 
     // Name is acting like a type so get them grouped
     series.name = this.getSeriesName(stream.type);
+    series.dummyData = {
+      activity: activity,
+      stream: stream,
+    };
 
     // @todo use base type
     if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
@@ -408,8 +486,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
     // Search if there is any other series with the same color we would like to have
-    const found = this.chart.series.values.find((series) => {
-      return series.stroke.toString() === am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString();
+    const found = this.chart.series.values.find((seriesItem) => {
+      return seriesItem.stroke.toString() === am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString();
     });
     // IF there is no other series with the same color then add the activity color
     if (!found) {
@@ -429,7 +507,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     series.dataFields.valueY = 'value';
     series.dataFields.dateX = 'time';
-    series.dataFields.valueX = 'distance';
+    series.dataFields.valueX = 'axisValue';
     // series.dataFields.categoryX = 'distance';
 
     series.interactionsEnabled = false;
@@ -462,6 +540,42 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return series;
   }
 
+  private createRangeLabelsContainer(chart: am4charts.XYChart): am4core.Container {
+    const rangeLabelsContainer = chart.plotContainer.createChild(am4core.Container);
+    rangeLabelsContainer.id = 'rangeLabelsContainer';
+    rangeLabelsContainer.width = chart.plotContainer.width;
+    rangeLabelsContainer.height = chart.plotContainer.height;
+    rangeLabelsContainer.x = am4core.percent(5);
+    rangeLabelsContainer.y = am4core.percent(5);
+    // rangeLabelsContainer.align = 'left';
+    rangeLabelsContainer.layout = 'grid';
+    return rangeLabelsContainer
+  }
+
+  private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData): am4core.Label {
+    const labelContainer = container.createChild(am4core.Container);
+    labelContainer.background.fillOpacity = 0.2;
+    labelContainer.background.fill = am4core.color('#000');
+    labelContainer.padding(10, 10, 10, 10);
+    labelContainer.marginLeft = am4core.percent(1);
+
+    const label = labelContainer.createChild(am4core.Label);
+    // label.fontSize = 12;
+    label.align = 'center';
+    label.horizontalCenter = 'middle';
+
+    label.text = `
+      [${series.stroke}]${series.name}[/]\n
+      [${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
+      Avg: ${labelData.average} ${labelData.unit}\n
+      Max: ${labelData.max} ${labelData.unit}\n
+      Min: ${labelData.min} ${labelData.unit}\n
+      Gain: ${labelData.gain} ${labelData.unit}\n
+      Loss: ${labelData.loss} ${labelData.unit}\n`;
+    return label;
+  }
+
+
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     let data = [];
@@ -477,7 +591,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         return dataMap;
       }, new Map<number, number>()).forEach((value, distance) => {
         data.push({
-          distance: distance,
+          axisValue: distance,
           value: value
         }) // @todo if needed sort here by distance
       });
@@ -516,22 +630,22 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
   }
 
-  private getDataFromSeriesDummyData(series: am4charts.LineSeries[]): any {
-    const data = series.reduce((data, series) => {
-      // debugger;
-      series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
-        // debugger;
-        if (!data[dataItem.time]) {
-          data[dataItem.time] = {time: dataItem.time}
-        }
-        data[dataItem.time][series.id] = dataItem.value;
-      });
-      return data;
-    }, {});
-    return Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
-      return dataItemA.time - dataItemB.time;
-    })
-  }
+  // private getDataFromSeriesDummyData(series: am4charts.LineSeries[]): any {
+  //   const data = series.reduce((data, series) => {
+  //     // debugger;
+  //     series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
+  //       // debugger;
+  //       if (!data[dataItem.time]) {
+  //         data[dataItem.time] = {time: dataItem.time}
+  //       }
+  //       data[dataItem.time][series.id] = dataItem.value;
+  //     });
+  //     return data;
+  //   }, {});
+  //   return Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
+  //     return dataItemA.time - dataItemB.time;
+  //   })
+  // }
 
   private getDataTypesToRequest(): string[] {
     return this.getNonUnitBasedDataTypes();
@@ -587,4 +701,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected getSubscriptions(): Subscription[] {
     return this.streamsSubscription ? [this.streamsSubscription] : [];
   }
+}
+
+export interface LabelData {
+  unit: string,
+  average: number,
+  min: number,
+  max: number,
+  gain: number,
+  loss: number,
 }
