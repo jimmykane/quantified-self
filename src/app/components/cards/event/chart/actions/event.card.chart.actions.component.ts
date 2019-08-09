@@ -52,7 +52,7 @@ export class EventCardChartActionsComponent implements OnChanges {
     if (!value) {
       return '';
     }
-    return `${((value - 1) * 100 / 20).toFixed(0)}%`
+    return `${((value - 0.5) * 100 / 20).toFixed(0)}%`
   }
 
   ngOnChanges(simpleChanges) {

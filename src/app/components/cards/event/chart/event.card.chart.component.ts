@@ -127,6 +127,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private async processChanges(selectedDataTypes: string[] | null) {
     this.loading();
+    am4core.options.minPolylineStep =  this.dataSmoothingLevel;
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
         this.distanceAxesForActivitiesMap.set(
@@ -182,7 +183,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected createChart(): am4charts.XYChart {
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
 
-    // am4core.options.minPolylineStep = 100
     chart.fontSize = '0.75em';
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
@@ -622,7 +622,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
     data = data
       .filter((streamData) => streamData.value !== null)
-      .filter((streamData, index) => (index % samplingRate) === 0);
+      // .filter((streamData, index) => (index % samplingRate) === 0);
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
