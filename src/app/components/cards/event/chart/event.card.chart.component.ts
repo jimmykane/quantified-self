@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  ElementRef,
   Input,
   NgZone,
   OnChanges,
@@ -21,14 +20,10 @@ import {combineLatest, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
 import {map, take} from 'rxjs/operators';
-import {StreamDataItem, StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
+import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
-import {
-  ChartCursorBehaviours,
-  XAxisTypes
-} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {ChartCursorBehaviours, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserSettingsService} from '../../../../services/app.user.settings.service';
 import {ThemeService} from '../../../../services/app.theme.service';
@@ -120,6 +115,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
       this.unsubscribeAndClearChart();
       this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
+      return;
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
@@ -168,9 +164,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
-      this.logger.info(`Rendering chart data per series`);
+      // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
-      this.logger.info(`Data Injected`);
+      // this.logger.info(`Data Injected`);
 
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // After you have all the info adjust the axis if needed
@@ -246,11 +242,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
-    // chart.cursor.fullWidthLineX = true;
-    // chart.cursor.fullWidthLineY = true;
+
+    chart.cursor.interactions.hitOptions.hitTolerance = 1;
+
     chart.cursor.behavior = this.chartCursorBehaviour;
-    chart.cursor.events.on('down', (ev) => {
-    });
+    chart.cursor.zIndex = 10;
     chart.cursor.events.on('selectended', (ev) => {
       this.disposeRangeLabelsContainer(ev.target.chart);
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
@@ -318,6 +314,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         }
         if (this.doesDataTypeSupportMinToMaxDifference(series.dummyData.stream.type)) {
           labelData.minToMaxDiff = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--';
+        }
+        if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
+          labelData.slopePercentage = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--';
         }
         // Todo should group pace and derived units
         // Should use dynamic data loader
@@ -421,6 +420,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface, selectedDataTypes?: string[] | null): am4charts.XYSeries {
+    this.logger.warn(`ID: ${this.getSeriesIDFromActivityAndStream(activity, stream)}`);
+
     let series = this.chart.series.values.find(seriesItem => seriesItem.dummyData.activty === activity && seriesItem.dummyData.stream.type === stream.type);
     // If there is already a series with this id only data update should be done
     if (series) {
@@ -450,6 +451,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
+    const a = this.chart.map.getKey(this.getSeriesIDFromActivityAndStream(activity, stream));
     series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
 
@@ -575,14 +577,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const label = labelContainer.createChild(am4core.Label);
     label.align = 'center';
     label.text = `
-      [bold font-size: 1.5em ${series.stroke}]${series.name}[/]\n
-      [bold font-size: 1.4em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
+      [bold font-size: 1.4em ${series.stroke}]${series.name}[/]\n
+      [bold font-size: 1.35em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
       [bold font-size: 1.2em]Avg:[/] [font-size: 1.3em]${labelData.average}[/]${labelData.unit}\n
       [bold font-size: 1.2em]Max:[/] [font-size: 1.3em]${labelData.max}[/]${labelData.unit}\n
       [bold font-size: 1.2em]Min:[/] [font-size: 1.3em]${labelData.min}[/]${labelData.unit}\n
-      [bold font-size: 1.2em]Diff:[/] [font-size: 1.3em]${labelData.minToMaxDiff === undefined ? 'N/A' : labelData.minToMaxDiff}[/]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}\n
-      [bold font-size: 1.2em]Gain:[/] [font-size: 1.3em]${labelData.gain === undefined ? 'N/A' : labelData.gain}[/]${labelData.gain === undefined ? '' : labelData.unit}\n
-      [bold font-size: 1.2em]Loss:[/] [font-size: 1.3em]${labelData.loss === undefined ? 'N/A' : labelData.loss}[/]${labelData.loss === undefined ? '' : labelData.unit}\n`;
+      [bold font-size: 1.2em]Diff:[/] [font-size: 1.3em]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff}[/]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}\n
+      [bold font-size: 1.2em]Gain:[/] [font-size: 1.3em]${labelData.gain === undefined ? '--' : labelData.gain}[/]${labelData.gain === undefined ? '' : labelData.unit}\n
+      [bold font-size: 1.2em]Loss:[/] [font-size: 1.3em]${labelData.loss === undefined ? '--' : labelData.loss}[/]${labelData.loss === undefined ? '' : labelData.unit}\n
+      [bold font-size: 1.2em]Gradient:[/] [font-size: 1.3em]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage}[/]${labelData.slopePercentage === undefined ? '' : '%'}\n`;
 
     // Important! disable it after the creation of the child label
     labelContainer.disabled = hidden;
@@ -601,8 +604,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     button.zIndex = 100;
     button.events.on('hit', (ev) => {
-      chart.cursor.behavior = chart.cursor.behavior === 'selectX' ? 'zoomX' : 'selectX';
-      ev.target.label.text = chart.cursor.behavior === 'selectX' ? 'Selecting' : 'Zooming';
+      chart.cursor.behavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? ChartCursorBehaviours.ZoomX : ChartCursorBehaviours.SelectX;
+      ev.target.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX  ? 'Selecting' : 'Zooming';
     });
     return button;
   }
@@ -758,6 +761,16 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
   }
 
+  // @todo move to data class
+  protected doesDataTypeSupportSlope(dataType: string): boolean {
+    switch (dataType) {
+      case DataAltitude.type:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   protected getSubscriptions(): Subscription[] {
     return this.streamsSubscription ? [this.streamsSubscription] : [];
   }
@@ -795,4 +808,5 @@ export interface LabelData {
   gain?: string,
   loss?: string,
   minToMaxDiff?: string,
+  slopePercentage?: string,
 }
