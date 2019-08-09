@@ -549,7 +549,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     rangeLabelsContainer.width = am4core.percent(100);
     rangeLabelsContainer.height = am4core.percent(100);
     rangeLabelsContainer.x = 0;
-    rangeLabelsContainer.y = am4core.percent(99.5);
+    rangeLabelsContainer.y = am4core.percent(99);
     rangeLabelsContainer.layout = 'horizontal';
     // rangeLabelsContainer.align = 'center';
     // rangeLabelsContainer.verticalCenter = 'rop';
@@ -561,15 +561,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData, hidden: boolean = false): am4core.Label {
     const labelContainer = container.createChild(am4core.Container);
     labelContainer.id = this.getSeriesRangeLabelContainerID(series);
-    labelContainer.background.fillOpacity = 0.8;
+    labelContainer.background.fillOpacity = 0.75;
     labelContainer.background.fill = am4core.color('#000');
-    labelContainer.padding(0, 15, 15, 15);
+    labelContainer.padding(15, 15, 15, 15);
     labelContainer.marginLeft = am4core.percent(0.5);
     labelContainer.horizontalCenter = 'middle';
     labelContainer.verticalCenter = 'bottom';
     labelContainer.background.stroke = am4core.color('#FFF');
-    labelContainer.background.strokeOpacity = 0.7;
-    labelContainer.background.strokeWidth = 1;
+    labelContainer.background.strokeOpacity = 0.6;
+    labelContainer.background.strokeWidth = 0.65;
 
     // labelContainer.hidden = hidden;
 
@@ -578,14 +578,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     label.align = 'center';
     label.text = `
       [bold font-size: 1.4em ${series.stroke}]${series.name}[/]\n
-      [bold font-size: 1.35em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
-      [bold font-size: 1.2em]Avg:[/] [font-size: 1.3em]${labelData.average}[/]${labelData.unit}\n
-      [bold font-size: 1.2em]Max:[/] [font-size: 1.3em]${labelData.max}[/]${labelData.unit}\n
-      [bold font-size: 1.2em]Min:[/] [font-size: 1.3em]${labelData.min}[/]${labelData.unit}\n
-      [bold font-size: 1.2em]Diff:[/] [font-size: 1.3em]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff}[/]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}\n
-      [bold font-size: 1.2em]Gain:[/] [font-size: 1.3em]${labelData.gain === undefined ? '--' : labelData.gain}[/]${labelData.gain === undefined ? '' : labelData.unit}\n
-      [bold font-size: 1.2em]Loss:[/] [font-size: 1.3em]${labelData.loss === undefined ? '--' : labelData.loss}[/]${labelData.loss === undefined ? '' : labelData.unit}\n
-      [bold font-size: 1.2em]Gradient:[/] [font-size: 1.3em]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage}[/]${labelData.slopePercentage === undefined ? '' : '%'}\n`;
+      [bold font-size: 1.25em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.average}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.max}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.min}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      `;
 
     // Important! disable it after the creation of the child label
     labelContainer.disabled = hidden;
@@ -635,6 +636,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
     data = data
       .filter((streamData) => streamData.value !== null)
+    // Here it should filter of large activity type and here it should reduce the original data
     // .filter((streamData, index) => (index % samplingRate) === 0);
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
