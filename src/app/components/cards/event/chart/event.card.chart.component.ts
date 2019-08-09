@@ -182,6 +182,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected createChart(): am4charts.XYChart {
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
 
+    // am4core.options.minPolylineStep = 100
     chart.fontSize = '0.75em';
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
@@ -210,20 +211,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     } else {
       // Create a date axis
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
-      // dateAxis.skipEmptyPeriods= true;
     }
     xAxis.title.text = this.xAxisType;
 
-    // dateAxis.baseInterval = {
-    //   timeUnit: "second",
-    //   count: 1
-    // //   count: this.getStreamSamplingRateInSeconds(this.selectedActivities),
-    // };
-    // dateAxis.skipEmptyPeriods= true;
-
     // Create a value axis
-    // const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
-    // chart.durationFormatter.durationFormat = " mm ':' ss 'min/km'";
 
     // Create a Legend
     chart.legend = new am4charts.Legend();
@@ -256,10 +247,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // chart.cursor.fullWidthLineY = true;
     chart.cursor.behavior = 'selectX'; // @todo should become a setting
     chart.cursor.events.on('selectstarted', (ev) => {
-      const rangeLabelsContainer = <am4core.Label>ev.target.chart.map.getKey('rangeLabelsContainer');
-      if (rangeLabelsContainer) {
-        rangeLabelsContainer.dispose();
-      }
+      this.disposeRangeLabelsContainer(ev.target.chart);
     });
     chart.cursor.events.on('selectended', (ev) => {
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
@@ -283,7 +271,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
       // alert('Selected start ' + start + ' end ' + end);
       // Now since we know the actual start end we need end iterate over the visible series and calculate AVG, Max,Min, Gain and loss not an easy job I suppose
-      this.getVisibleSeries(this.chart).forEach(series => {
+      this.chart.series.values.forEach(series => {
         let data;
         switch (this.xAxisType) {
           case XAxisTypes.Time:
@@ -314,21 +302,25 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
         // Here we have all the data we need
 
-        const dataType = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type);
+        const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
 
         // Todo should group pace and derived units
         // Should use dynamic data loader
         this.createLabel(rangeLabelsContainer, series, {
-          unit: dataType.unit,
-          average: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue(),
-          max: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue(),
-          min: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue(),
-          gain: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue(),
-          loss: <number>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue(),
-        })
+          unit: dataTypeUnit,
+          average: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
+          max: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
+          min: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
+          gain: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue()}` : '--',
+          loss: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue()}` : '--',
+        }, series.hidden)
       });
 
     });
+
+    // Add zoom button
+    this.addZoomOrSelectButton(chart);
+
 
     // Add watermark
     const watermark = new am4core.Label();
@@ -450,6 +442,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
+    series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
 
     this.chart.series.sort((left, right) => {
@@ -543,36 +536,65 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private createRangeLabelsContainer(chart: am4charts.XYChart): am4core.Container {
     const rangeLabelsContainer = chart.plotContainer.createChild(am4core.Container);
     rangeLabelsContainer.id = 'rangeLabelsContainer';
-    rangeLabelsContainer.width = chart.plotContainer.width;
-    rangeLabelsContainer.height = chart.plotContainer.height;
-    rangeLabelsContainer.x = am4core.percent(5);
-    rangeLabelsContainer.y = am4core.percent(5);
-    // rangeLabelsContainer.align = 'left';
-    rangeLabelsContainer.layout = 'grid';
+    rangeLabelsContainer.width = am4core.percent(100);
+    rangeLabelsContainer.height = am4core.percent(100);
+    rangeLabelsContainer.x = 0;
+    rangeLabelsContainer.y = am4core.percent(100);
+    rangeLabelsContainer.layout = 'horizontal';
+    // rangeLabelsContainer.align = 'center';
+    // rangeLabelsContainer.verticalCenter = 'rop';
+    rangeLabelsContainer.zIndex = 99;
     return rangeLabelsContainer
+
   }
 
-  private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData): am4core.Label {
+  private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData, hidden: boolean = false): am4core.Label {
     const labelContainer = container.createChild(am4core.Container);
-    labelContainer.background.fillOpacity = 0.2;
+    labelContainer.id = this.getSeriesRangeLabelContainerID(series);
+    labelContainer.background.fillOpacity = 0.8;
     labelContainer.background.fill = am4core.color('#000');
-    labelContainer.padding(10, 10, 10, 10);
-    labelContainer.marginLeft = am4core.percent(1);
+    labelContainer.padding(0, 15, 15, 15);
+    labelContainer.horizontalCenter = 'middle';
+    labelContainer.verticalCenter = 'bottom';
+    labelContainer.background.stroke = am4core.color('#FFF');
+    labelContainer.background.strokeOpacity = 0.7;
+    labelContainer.background.strokeWidth = 1;
+
+    // labelContainer.hidden = hidden;
+
 
     const label = labelContainer.createChild(am4core.Label);
-    // label.fontSize = 12;
     label.align = 'center';
-    label.horizontalCenter = 'middle';
-
     label.text = `
-      [${series.stroke}]${series.name}[/]\n
-      [${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
-      Avg: ${labelData.average} ${labelData.unit}\n
-      Max: ${labelData.max} ${labelData.unit}\n
-      Min: ${labelData.min} ${labelData.unit}\n
-      Gain: ${labelData.gain} ${labelData.unit}\n
-      Loss: ${labelData.loss} ${labelData.unit}\n`;
+      [bold font-size: 1.5em ${series.stroke}]${series.name}[/]\n
+      [bold font-size: 1.4em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
+      [bold font-size: 1.2em]Avg:[/] [font-size: 1.3em]${labelData.average}[/]${labelData.unit}\n
+      [bold font-size: 1.2em]Max:[/] [font-size: 1.3em]${labelData.max}[/]${labelData.unit}\n
+      [bold font-size: 1.2em]Min:[/] [font-size: 1.3em]${labelData.min}[/]${labelData.unit}\n
+      [bold font-size: 1.2em]Gain:[/] [font-size: 1.3em]${labelData.gain}[/]${labelData.unit}\n
+      [bold font-size: 1.2em]Loss:[/] [font-size: 1.3em]${labelData.loss}[/]${labelData.unit}\n`;
+
+    // Important! disable it after the creation of the child label
+    labelContainer.disabled = hidden;
     return label;
+  }
+
+  private addZoomOrSelectButton(chart: am4charts.XYChart): am4core.Button {
+    const button = chart.plotContainer.createChild(am4core.Button);
+    button.id = 'zoomOrSelectButton';
+    button.label.text = chart.cursor.behavior === 'selectX' ? 'Selecting' : 'Zooming';
+    button.padding(10, 10, 10, 10);
+    // button.width = 20;
+    button.fontSize = '1.4em';
+    button.align = 'left';
+    button.marginLeft = 15;
+
+    button.zIndex = 100;
+    button.events.on('hit', (ev) => {
+      chart.cursor.behavior = chart.cursor.behavior === 'selectX' ? 'zoomX' : 'selectX';
+      ev.target.label.text = chart.cursor.behavior === 'selectX' ? 'Selecting' : 'Zooming';
+    });
+    return button;
   }
 
 
@@ -630,23 +652,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
   }
 
-  // private getDataFromSeriesDummyData(series: am4charts.LineSeries[]): any {
-  //   const data = series.reduce((data, series) => {
-  //     // debugger;
-  //     series.dummyData.forEach((dataItem: { time: number, value: number | string | boolean }) => {
-  //       // debugger;
-  //       if (!data[dataItem.time]) {
-  //         data[dataItem.time] = {time: dataItem.time}
-  //       }
-  //       data[dataItem.time][series.id] = dataItem.value;
-  //     });
-  //     return data;
-  //   }, {});
-  //   return Object.keys(data).map(key => data[key]).sort((dataItemA: any, dataItemB: any) => {
-  //     return dataItemA.time - dataItemB.time;
-  //   })
-  // }
-
   private getDataTypesToRequest(): string[] {
     return this.getNonUnitBasedDataTypes();
   }
@@ -674,8 +679,37 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return dataTypes;
   }
 
+  protected disposeRangeLabelsContainer(chart: am4charts.XYChart) {
+    const rangeLabelsContainer = chart.map.getKey('rangeLabelsContainer');
+    if (rangeLabelsContainer) {
+      rangeLabelsContainer.dispose();
+    }
+  }
+
+  protected disposeCursorSelection(chart: am4charts.XYChart){
+    const cursor =  chart.cursor;
+    if (cursor && cursor.selection) {
+      // const a = cursor;
+      // debugger;
+      // @todo clear selection
+      cursor.selection.hide();
+    }
+  }
+
+  protected clearChart() {
+    super.clearChart();
+    if (this.chart) {
+      this.chart.yAxes.clear();
+      this.disposeRangeLabelsContainer(this.chart);
+      this.disposeCursorSelection(this.chart);
+    }
+  }
+
   protected hideSeries(series: am4charts.XYSeries, save?: boolean) {
     super.hideSeries(series);
+    if (this.getSeriesRangeLabelContainer(series)) {
+      this.getSeriesRangeLabelContainer(series).disabled = true;
+    }
     if (save) {
       this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
     }
@@ -683,10 +717,27 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   protected showSeries(series: am4charts.XYSeries, save?: boolean) {
     super.showSeries(series);
+    if (this.getSeriesRangeLabelContainer(series)) {
+      this.getSeriesRangeLabelContainer(series).disabled = false;
+      this.getSeriesRangeLabelContainer(series).deepInvalidate();
+    }
     if (save) {
       this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
     }
   }
+
+  private getSeriesRangeLabelContainer(series): am4core.Container | null {
+    return <am4core.Container>series.chart.map.getKey(this.getSeriesRangeLabelContainerID(series));
+  }
+
+  private getSeriesIDFromActivityAndStream(activity, stream): string {
+    return `${activity.getID()}${stream.type}`;
+  }
+
+  private getSeriesRangeLabelContainerID(series): string {
+    return `rangeLabelContainer${series.id}`;
+  }
+
 
   private loading() {
     this.isLoading = true;
@@ -705,9 +756,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
 export interface LabelData {
   unit: string,
-  average: number,
-  min: number,
-  max: number,
-  gain: number,
-  loss: number,
+  average: string,
+  min: string,
+  max: string,
+  gain: string,
+  loss: string,
 }
