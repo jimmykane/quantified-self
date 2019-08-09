@@ -7,19 +7,19 @@
     "@types/bs58": "^4.0.0",
     "@types/cookie-parser": "^1.4.1",
     "@types/cors": "^2.8.5",
-    "@types/node-fetch": "^2.5.0",
+    "@types/node-fetch": "^2.3.7",
     "@types/pako": "^1.0.1",
-    "@types/request": "^2.48.2",
+    "@types/request": "^2.48.1",
     "@types/request-promise-native": "^1.0.16",
     "@types/simple-oauth2": "^2.2.1",
     "bs58": "^4.0.1",
     "cookie-parser": "^1.4.3",
     "cors": "^2.8.5",
-    "firebase-admin": "^8.3.0",
-    "firebase-functions": "^3.2.0",
+    "firebase-admin": "^8.2.0",
+    "firebase-functions": "^3.0.2",
     "node-fetch": "^2.5.0",
     "pako": "^1.0.10",
-    "quantified-self-lib": "^3.1.1",
+    "quantified-self-lib": "^3.0.11",
     "request": "^2.74.0",
     "request-promise-native": "^1.0.3",
     "simple-oauth2": "^2.2.1"
@@ -39,6 +39,6 @@
   "devDependencies": {
     "firebase-functions-test": "^0.1.6",
     "tslint": "^5.18.0",
-    "typescript": "^3.5.3"
+    "typescript": "^3.5.2"
   }
 }
