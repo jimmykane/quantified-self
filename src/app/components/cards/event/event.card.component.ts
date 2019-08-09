@@ -12,7 +12,11 @@ import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {ChartThemes, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {
+  ChartCursorBehaviours,
+  ChartThemes,
+  XAxisTypes
+} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {ThemeService} from '../../../services/app.theme.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
@@ -43,6 +47,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
+  public chartCursorBehaviour: ChartCursorBehaviours;
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
@@ -89,6 +94,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
       this.dataSmoothingLevel = user.settings.chartSettings.dataSmoothingLevel;
+      this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
       this.showAllData = user.settings.chartSettings.showAllData;
       this.showMapLaps = user.settings.mapSettings.showLaps;
       this.showMapArrows = user.settings.mapSettings.showArrows;

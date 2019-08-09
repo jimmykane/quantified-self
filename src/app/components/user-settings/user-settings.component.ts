@@ -1,25 +1,28 @@
-import {Component, Inject, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {Component, Input, OnChanges} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
-import {MatDialog, MatDialogRef} from '@angular/material/dialog';
+import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
 import * as Sentry from '@sentry/browser';
 import {UserSettingsInterface} from 'quantified-self-lib/lib/users/user.settings.interface';
 import {
+  ChartCursorBehaviours,
   ChartThemes,
-  UserChartSettingsInterface, XAxisTypes,
+  UserChartSettingsInterface,
+  XAxisTypes,
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {Log} from 'ng2-logger/browser';
 import {AppThemes, UserAppSettingsInterface} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {
-  DaysOfTheWeek,
   PaceUnits,
-  SpeedUnits, SwimPaceUnits,
-  UserUnitSettingsInterface, VerticalSpeedUnits
+  SpeedUnits,
+  SwimPaceUnits,
+  UserUnitSettingsInterface,
+  VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
 import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
@@ -106,6 +109,11 @@ export class UserSettingsComponent implements OnChanges {
       ]),
 
       showAllData: new FormControl(this.user.settings.chartSettings.showAllData, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      chartCursorBehaviour: new FormControl(this.user.settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, [
         // Validators.required,
         // Validators.minLength(1),
       ]),
@@ -197,7 +205,8 @@ export class UserSettingsComponent implements OnChanges {
         theme: this.userSettingsFormGroup.get('chartTheme').value,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
-        showAllData: this.userSettingsFormGroup.get('showAllData').value
+        showAllData: this.userSettingsFormGroup.get('showAllData').value,
+        chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
       });
 
       await this.userService.updateUserProperties(this.user, {

@@ -194,6 +194,13 @@
 
         <mat-slide-toggle
           [color]="'accent'"
+          formControlName="chartCursorBehaviour">
+          <span matTooltip="Cursor selection by default?">Cursor selection</span>
+        </mat-slide-toggle>
+        <mat-hint><b>Tip:</b> turn this on if you want the default behaviour of the cursor to be select (default is zoom)</mat-hint>
+
+        <mat-slide-toggle
+          [color]="'accent'"
           formControlName="useAnimations">
           <span matTooltip="Use animations or no">Animations</span>
         </mat-slide-toggle>

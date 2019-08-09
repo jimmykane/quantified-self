@@ -8,6 +8,7 @@ import {EventService} from './app.event.service';
 import {map, take} from 'rxjs/operators';
 import {AppThemes, UserAppSettingsInterface} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {
+  ChartCursorBehaviours,
   ChartThemes,
   DataTypeSettings,
   UserChartSettingsInterface,
@@ -64,6 +65,10 @@ export class UserService implements OnDestroy {
     return MapThemes.Normal;
   }
 
+  static getDefaultChartCursorBehaviour(): ChartCursorBehaviours {
+    return ChartCursorBehaviours.ZoomX;
+  }
+
   // @todo move other calls to this
 
   static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
@@ -109,39 +114,39 @@ export class UserService implements OnDestroy {
     return [LapTypes.AutoLap, LapTypes.Distance];
   }
 
-  static getDefaultSmoothingLevel(): number{
+  static getDefaultSmoothingLevel(): number {
     return 3;
   }
 
-  static getDefaultMapType(): MapTypes{
+  static getDefaultMapType(): MapTypes {
     return MapTypes.RoadMap;
   }
 
-  static getDefaultDateRange(): DateRanges{
+  static getDefaultDateRange(): DateRanges {
     return DateRanges.thisWeek;
   }
 
-  static getDefaultXAxisType(): XAxisTypes{
-    return  XAxisTypes.Duration;
+  static getDefaultXAxisType(): XAxisTypes {
+    return XAxisTypes.Duration;
   }
 
-  static getDefaultSpeedUnits(): SpeedUnits[]{
+  static getDefaultSpeedUnits(): SpeedUnits[] {
     return [SpeedUnits.MetersPerSecond];
   }
 
-  static getDefaultPaceUnits(): PaceUnits[]{
+  static getDefaultPaceUnits(): PaceUnits[] {
     return [PaceUnits.MinutesPerKilometer];
   }
 
-  static getDefaultSwimPaceUnits(): SwimPaceUnits[]{
+  static getDefaultSwimPaceUnits(): SwimPaceUnits[] {
     return [SwimPaceUnits.MinutesPer100Meter];
   }
 
-  static getDefaultVerticalSpeedUnits(): VerticalSpeedUnits[]{
+  static getDefaultVerticalSpeedUnits(): VerticalSpeedUnits[] {
     return [VerticalSpeedUnits.MetersPerSecond];
   }
 
-  static getDefaultStartOfTheWeek(): DaysOfTheWeek{
+  static getDefaultStartOfTheWeek(): DaysOfTheWeek {
     return DaysOfTheWeek.Monday;
   }
 
@@ -290,6 +295,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || UserService.getDefaultXAxisType();
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
     settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || UserService.getDefaultSmoothingLevel();
+    settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || UserService.getDefaultChartCursorBehaviour();
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

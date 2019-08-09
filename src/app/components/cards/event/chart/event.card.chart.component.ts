@@ -26,6 +26,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
 import {
+  ChartCursorBehaviours,
   XAxisTypes
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
@@ -38,6 +39,7 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
+import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -56,6 +58,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
   @Input() waterMark: string;
+  @Input() chartCursorBehaviour: ChartCursorBehaviours;
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -92,7 +95,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return;
     }
 
-    if (simpleChanges.chartTheme || simpleChanges.xAxisType) {
+    if (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.chartCursorBehaviour) {
       this.destroyChart();
     }
 
@@ -127,7 +130,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private async processChanges(selectedDataTypes: string[] | null) {
     this.loading();
-    am4core.options.minPolylineStep =  this.dataSmoothingLevel;
+    am4core.options.minPolylineStep = this.dataSmoothingLevel;
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
         this.distanceAxesForActivitiesMap.set(
@@ -245,11 +248,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor = new am4charts.XYCursor();
     // chart.cursor.fullWidthLineX = true;
     // chart.cursor.fullWidthLineY = true;
-    chart.cursor.behavior = 'selectX'; // @todo should become a setting
-    chart.cursor.events.on('selectstarted', (ev) => {
-      this.disposeRangeLabelsContainer(ev.target.chart);
+    chart.cursor.behavior = this.chartCursorBehaviour;
+    chart.cursor.events.on('down', (ev) => {
     });
     chart.cursor.events.on('selectended', (ev) => {
+      this.disposeRangeLabelsContainer(ev.target.chart);
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
       const range = ev.target.xRange;
       const axis = ev.target.chart.xAxes.getIndex(0);
@@ -303,17 +306,22 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         // Here we have all the data we need
 
         const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
-
-        // Todo should group pace and derived units
-        // Should use dynamic data loader
-        this.createLabel(rangeLabelsContainer, series, {
+        const labelData = <LabelData>{
           unit: dataTypeUnit,
           average: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
           max: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
           min: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
-          gain: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue()}` : '--',
-          loss: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue()}` : '--',
-        }, series.hidden)
+        };
+        if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
+          labelData.gain = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue()}` : '--';
+          labelData.loss = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue()}` : '--';
+        }
+        if (this.doesDataTypeSupportMinToMaxDifference(series.dummyData.stream.type)) {
+          labelData.minToMaxDiff = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--';
+        }
+        // Todo should group pace and derived units
+        // Should use dynamic data loader
+        this.createLabel(rangeLabelsContainer, series, labelData, series.hidden)
       });
 
     });
@@ -539,7 +547,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     rangeLabelsContainer.width = am4core.percent(100);
     rangeLabelsContainer.height = am4core.percent(100);
     rangeLabelsContainer.x = 0;
-    rangeLabelsContainer.y = am4core.percent(100);
+    rangeLabelsContainer.y = am4core.percent(99.5);
     rangeLabelsContainer.layout = 'horizontal';
     // rangeLabelsContainer.align = 'center';
     // rangeLabelsContainer.verticalCenter = 'rop';
@@ -554,6 +562,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     labelContainer.background.fillOpacity = 0.8;
     labelContainer.background.fill = am4core.color('#000');
     labelContainer.padding(0, 15, 15, 15);
+    labelContainer.marginLeft = am4core.percent(0.5);
     labelContainer.horizontalCenter = 'middle';
     labelContainer.verticalCenter = 'bottom';
     labelContainer.background.stroke = am4core.color('#FFF');
@@ -571,8 +580,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       [bold font-size: 1.2em]Avg:[/] [font-size: 1.3em]${labelData.average}[/]${labelData.unit}\n
       [bold font-size: 1.2em]Max:[/] [font-size: 1.3em]${labelData.max}[/]${labelData.unit}\n
       [bold font-size: 1.2em]Min:[/] [font-size: 1.3em]${labelData.min}[/]${labelData.unit}\n
-      [bold font-size: 1.2em]Gain:[/] [font-size: 1.3em]${labelData.gain}[/]${labelData.unit}\n
-      [bold font-size: 1.2em]Loss:[/] [font-size: 1.3em]${labelData.loss}[/]${labelData.unit}\n`;
+      [bold font-size: 1.2em]Diff:[/] [font-size: 1.3em]${labelData.minToMaxDiff === undefined ? 'N/A' : labelData.minToMaxDiff}[/]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}\n
+      [bold font-size: 1.2em]Gain:[/] [font-size: 1.3em]${labelData.gain === undefined ? 'N/A' : labelData.gain}[/]${labelData.gain === undefined ? '' : labelData.unit}\n
+      [bold font-size: 1.2em]Loss:[/] [font-size: 1.3em]${labelData.loss === undefined ? 'N/A' : labelData.loss}[/]${labelData.loss === undefined ? '' : labelData.unit}\n`;
 
     // Important! disable it after the creation of the child label
     labelContainer.disabled = hidden;
@@ -622,7 +632,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
     data = data
       .filter((streamData) => streamData.value !== null)
-      // .filter((streamData, index) => (index % samplingRate) === 0);
+    // .filter((streamData, index) => (index % samplingRate) === 0);
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
@@ -686,8 +696,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
   }
 
-  protected disposeCursorSelection(chart: am4charts.XYChart){
-    const cursor =  chart.cursor;
+  protected disposeCursorSelection(chart: am4charts.XYChart) {
+    const cursor = chart.cursor;
     if (cursor && cursor.selection) {
       // const a = cursor;
       // debugger;
@@ -726,6 +736,32 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
   }
 
+  // @todo move to data class
+  protected doesDataTypeSupportGainOrLoss(dataType: string): boolean {
+    switch (dataType) {
+      case DataAltitude.type:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // @todo move to data class
+  protected doesDataTypeSupportMinToMaxDifference(dataType: string): boolean {
+    switch (dataType) {
+      case DataAltitude.type:
+        return true;
+      case DataPower.type:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  protected getSubscriptions(): Subscription[] {
+    return this.streamsSubscription ? [this.streamsSubscription] : [];
+  }
+
   private getSeriesRangeLabelContainer(series): am4core.Container | null {
     return <am4core.Container>series.chart.map.getKey(this.getSeriesRangeLabelContainerID(series));
   }
@@ -749,9 +785,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.changeDetector.detectChanges();
   }
 
-  protected getSubscriptions(): Subscription[] {
-    return this.streamsSubscription ? [this.streamsSubscription] : [];
-  }
 }
 
 export interface LabelData {
@@ -759,6 +792,7 @@ export interface LabelData {
   average: string,
   min: string,
   max: string,
-  gain: string,
-  loss: string,
+  gain?: string,
+  loss?: string,
+  minToMaxDiff?: string,
 }
