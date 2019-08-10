@@ -101,11 +101,17 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     pieSeries.slices.template.strokeOpacity = 1;
     pieSeries.slices.template.stroke = am4core.color('#175e84');
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
+      if (!target.dataItem){
+        return '';
+      }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
       return `{category} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
+      if (!target.dataItem){
+        return '';
+      }
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
         if (target.dataItem.values.value.percent < 3 && this.filterLowValues) {
