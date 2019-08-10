@@ -114,13 +114,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         return;
       }
       this.unsubscribeAndClearChart();
-      this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
+      await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
       return;
     }
 
     // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
+      debugger;
+      await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
     }
   }
 
@@ -166,8 +167,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
-      // this.logger.info(`Data Injected`);
-
+      this.logger.info(`Data Injected`);
+      this.loaded();
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // After you have all the info adjust the axis if needed
       // if (this.xAxisType === XAxisTypes.Distance){
@@ -228,7 +229,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     marker.strokeWidth = 2;
     marker.strokeOpacity = 1;
     marker.stroke = am4core.color('#0a97ee');
-
 
     chart.legend.itemContainers.template.events.on('toggled', (ev) => {
       const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
@@ -307,13 +307,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           average: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
           max: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
           min: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
+          minToMaxDiff: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--'
         };
         if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
           labelData.gain = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue()}` : '--';
           labelData.loss = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue()}` : '--';
-        }
-        if (this.doesDataTypeSupportMinToMaxDifference(series.dummyData.stream.type)) {
-          labelData.minToMaxDiff = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--';
         }
         if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
           labelData.slopePercentage = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--';
@@ -361,9 +359,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Attach events
     chart.events.on('validated', (ev) => {
       this.logger.info('validated');
-      // if (ev.target.data.length) {
-      //   this.loaded();
-      // }
     });
 
     chart.events.on('globalscalechanged', (ev) => {
@@ -420,9 +415,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface, selectedDataTypes?: string[] | null): am4charts.XYSeries {
-    this.logger.warn(`ID: ${this.getSeriesIDFromActivityAndStream(activity, stream)}`);
-
-    let series = this.chart.series.values.find(seriesItem => seriesItem.dummyData.activty === activity && seriesItem.dummyData.stream.type === stream.type);
+    let series = this.chart.series.values.find(seriesItem => seriesItem.id === this.getSeriesIDFromActivityAndStream(activity, stream));
     // If there is already a series with this id only data update should be done
     if (series) {
       series.data = this.convertStreamDataToSeriesData(activity, stream);
@@ -451,7 +444,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
-    const a = this.chart.map.getKey(this.getSeriesIDFromActivityAndStream(activity, stream));
     series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
 
@@ -469,7 +461,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.yAxis = yAxis;
 
     // Setup the series
-    // series.id = `${activity.getID()}:${stream.type}`;
 
     // Name is acting like a type so get them grouped
     series.name = this.getSeriesName(stream.type);
@@ -528,9 +519,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Attach events
     series.events.on('validated', (ev) => {
-      this.logger.info(`Series ${ev.target.id} validated`);
+      // this.logger.info(`Series ${ev.target.id} validated`);
       ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px';
-      this.loaded();
+      // this.loaded();
     });
 
     series.events.on('ready', (ev) => {
@@ -616,7 +607,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     let data = [];
     const samplingRate = this.getStreamSamplingRateInSeconds(stream);
-    this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
+    // this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
       distanceStream.data.reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
@@ -635,10 +626,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
     }
     data = data
-      .filter((streamData) => streamData.value !== null)
+      .filter((streamData) => streamData.value !== null);
     // Here it should filter of large activity type and here it should reduce the original data
     // .filter((streamData, index) => (index % samplingRate) === 0);
-    this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
+    // this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
 
@@ -651,7 +642,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
     const numberOfSamplesToHours = numberOfSamples / 3600;
     samplingRate = Math.ceil((numberOfSamplesToHours * this.dataSmoothingLevel * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities);
-    this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
+    // this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
   }
 
@@ -745,18 +736,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected doesDataTypeSupportGainOrLoss(dataType: string): boolean {
     switch (dataType) {
       case DataAltitude.type:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  // @todo move to data class
-  protected doesDataTypeSupportMinToMaxDifference(dataType: string): boolean {
-    switch (dataType) {
-      case DataAltitude.type:
-        return true;
-      case DataPower.type:
         return true;
       default:
         return false;
