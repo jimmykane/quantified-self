@@ -36,6 +36,8 @@ import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/l
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
+import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
+import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -311,8 +313,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           minToMaxDiff: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--'
         };
         if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
-          labelData.gain = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true)).getDisplayValue()}` : '--';
-          labelData.loss = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false)).getDisplayValue()}` : '--';
+          labelData.gain = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, 1)).getDisplayValue()}` : '--';
+          labelData.loss = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false,1)).getDisplayValue()}` : '--';
         }
         if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
           labelData.slopePercentage = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--';
@@ -768,6 +770,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     switch (dataType) {
       case DataAltitude.type:
       case DataGPSAltitude.type:
+      case DataAccumulatedPower.type:
+      case DataTemperature.type:
         return true;
       default:
         return false;
@@ -779,6 +783,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     switch (dataType) {
       case DataAltitude.type:
       case DataGPSAltitude.type:
+      case DataAccumulatedPower.type:
+      case DataTemperature.type:
         return true;
       default:
         return false;

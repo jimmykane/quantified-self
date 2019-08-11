@@ -115,7 +115,7 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultSmoothingLevel(): number {
-    return 3;
+    return 3.5;
   }
 
   static getDefaultMapType(): MapTypes {

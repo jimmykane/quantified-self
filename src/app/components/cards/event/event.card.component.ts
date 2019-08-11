@@ -43,7 +43,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public mapLapTypes = UserService.getDefaultMapLapTypes();
   public showMapLaps;
   public showMapArrows;
-  public dataSmoothingLevel = 3;
+  public dataSmoothingLevel = 3.5;
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
