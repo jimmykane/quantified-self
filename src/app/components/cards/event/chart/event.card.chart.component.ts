@@ -35,6 +35,7 @@ import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 import {DataPower} from 'quantified-self-lib/lib/data/data.power';
+import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -766,6 +767,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected doesDataTypeSupportGainOrLoss(dataType: string): boolean {
     switch (dataType) {
       case DataAltitude.type:
+      case DataGPSAltitude.type:
         return true;
       default:
         return false;
@@ -776,6 +778,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected doesDataTypeSupportSlope(dataType: string): boolean {
     switch (dataType) {
       case DataAltitude.type:
+      case DataGPSAltitude.type:
         return true;
       default:
         return false;
