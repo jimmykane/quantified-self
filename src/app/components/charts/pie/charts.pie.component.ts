@@ -16,6 +16,7 @@ import {ChartAbstract} from '../chart.abstract';
 import * as Sentry from '@sentry/browser';
 import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
+import {group} from '@angular/animations';
 
 
 @Component({
@@ -158,6 +159,9 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     grouper.threshold = 5;
     grouper.groupName = 'Other';
     grouper.clickBehavior = 'break';
+    grouper.zoomOutButton.align = 'left';
+    grouper.zoomOutButton.width = 35;
+    grouper.zoomOutButton.valign = 'top';
 
     // Attach events
     this.attachEventListenersOnChart(chart);
