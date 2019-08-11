@@ -25,9 +25,10 @@ app-column-chart{
 
 app-chart-actions{
   position: absolute;
-  top: 0;
-  right: 0;
+  top: -10px;
+  left: -12px;
   z-index: 2;
+  overflow: visible;
 }
 
 /*@media only screen and (min-width: 800px)  {*/

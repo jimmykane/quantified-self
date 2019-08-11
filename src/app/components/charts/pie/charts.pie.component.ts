@@ -84,7 +84,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
   protected createChart(): am4charts.PieChart {
     const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
 
-    chart.hiddenState.properties.opacity = 0;
+    // chart.hiddenState.properties.opacity = 0;
     // chart.padding(0, 0, 0, 0)
     chart.radius = am4core.percent(80);
     chart.innerRadius = am4core.percent(55);
@@ -101,7 +101,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     pieSeries.slices.template.strokeOpacity = 1;
     pieSeries.slices.template.stroke = am4core.color('#175e84');
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem){
+      if (!target.dataItem) {
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
@@ -109,12 +109,12 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
-      if (!target.dataItem){
+      if (!target.dataItem) {
         return '';
       }
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        if (target.dataItem.values.value.percent < 3 && this.filterLowValues) {
+        if (target.dataItem.values.value.percent <= 2.5 && this.filterLowValues) {
           return null;
         }
         if (!target.dataItem.dataContext.type) {
@@ -154,10 +154,10 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     // Disable the preloader
     chart.preloader.disabled = true;
 
-    // let grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
-    // grouper.threshold = 10;
-    // grouper.groupName = "Other";
-    // grouper.clickBehavior = "break";
+    const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
+    grouper.threshold = 5;
+    grouper.groupName = 'Other';
+    grouper.clickBehavior = 'break';
 
     // Attach events
     this.attachEventListenersOnChart(chart);
