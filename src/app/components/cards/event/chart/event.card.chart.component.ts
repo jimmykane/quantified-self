@@ -249,8 +249,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.zIndex = 10;
     chart.cursor.events.on('selectended', (ev) => {
       this.disposeRangeLabelsContainer(ev.target.chart);
-      const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
       const range = ev.target.xRange;
+      const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
       const axis = ev.target.chart.xAxes.getIndex(0);
       let start;
       let end;
@@ -570,13 +570,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     label.text = `
       [bold font-size: 1.4em ${series.stroke}]${series.name}[/]\n
       [bold font-size: 1.25em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.average}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.max}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.min}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.5em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.average}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.max}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.min}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
 
     // Important! disable it after the creation of the child label
@@ -606,7 +606,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     let data = [];
-    const samplingRate = this.getStreamSamplingRateInSeconds(stream);
     // this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
@@ -628,7 +627,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     data = data
       .filter((streamData) => streamData.value !== null);
     // Here it should filter of large activity type and here it should reduce the original data
-    // .filter((streamData, index) => (index % samplingRate) === 0);
+    if (activity.getDuration().getValue() > 60*60*10){ // If greater than 10h
+      const samplingRate = Math.ceil((activity.getDuration().getValue()/(60*60*5))) // skip every 5h one point
+      console.log(samplingRate);
+      data = data.filter((streamData, index) => (index % samplingRate) === 0);
+    }
+    //
     // this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
