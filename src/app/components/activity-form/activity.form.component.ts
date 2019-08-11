@@ -110,6 +110,9 @@ export class ActivityFormComponent implements OnInit {
 
   onStartDateAndStartTimeChange(event){
     const starDate = this.activityFormGroup.get('startDate').value;
+    if (!starDate){
+      return;
+    }
     starDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
     starDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
     starDate.setSeconds(this.activityFormGroup.get('startTime').value.split(':')[2]);
