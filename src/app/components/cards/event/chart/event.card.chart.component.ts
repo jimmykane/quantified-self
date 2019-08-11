@@ -120,7 +120,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // 4. If nothing has changed but we do not have data binding then bind
     if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      debugger;
       await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
     }
   }
@@ -249,6 +248,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.zIndex = 10;
     chart.cursor.events.on('selectended', (ev) => {
       this.disposeRangeLabelsContainer(ev.target.chart);
+      this.addClearSelectionButton(ev.target.chart);
       const range = ev.target.xRange;
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
       const axis = ev.target.chart.xAxes.getIndex(0);
@@ -602,6 +602,25 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return button;
   }
 
+  private addClearSelectionButton(chart: am4charts.XYChart): am4core.Button {
+    const button = chart.plotContainer.createChild(am4core.Button);
+    button.id = 'clearSelectionButton';
+    button.label.text = 'Clear';
+    button.padding(10, 10, 10, 10);
+    // button.width = 20;
+    button.y = 50;
+    button.fontSize = '1.4em';
+    button.align = 'left';
+    button.marginLeft = 15;
+    button.zIndex = 100;
+    button.events.on('hit', (ev) => {
+      this.disposeRangeLabelsContainer(chart);
+      this.disposeCursorSelection(chart);
+      this.disposeClearSelectionButton(chart);
+    });
+    return button;
+  }
+
 
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
@@ -693,6 +712,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const rangeLabelsContainer = chart.map.getKey('rangeLabelsContainer');
     if (rangeLabelsContainer) {
       rangeLabelsContainer.dispose();
+    }
+  }
+
+  protected disposeClearSelectionButton(chart: am4charts.XYChart) {
+    const clearSelectionButton = chart.map.getKey('clearSelectionButton');
+    if (clearSelectionButton) {
+      clearSelectionButton.dispose();
     }
   }
 
