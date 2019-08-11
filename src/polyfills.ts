@@ -56,6 +56,8 @@
 import 'zone.js/dist/zone';  // Included with Angular CLI.
 
 
+// Jquery fix ?
+declare var $: any;
 
 /***************************************************************************************************
  * APPLICATION IMPORTS
