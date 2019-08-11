@@ -251,6 +251,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.zIndex = 10;
     chart.cursor.events.on('selectended', (ev) => {
       this.disposeRangeLabelsContainer(ev.target.chart);
+      this.disposeClearSelectionButton(ev.target.chart);
       this.addClearSelectionButton(ev.target.chart);
       const range = ev.target.xRange;
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
@@ -741,6 +742,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.chart.yAxes.clear();
       this.disposeRangeLabelsContainer(this.chart);
       this.disposeCursorSelection(this.chart);
+      this.disposeClearSelectionButton(this.chart);
     }
   }
 
