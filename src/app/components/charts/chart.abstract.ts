@@ -35,6 +35,17 @@ import {DataElevation} from 'quantified-self-lib/lib/data/data.elevation';
 import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
+import {
+  DataSpeed,
+  DataSpeedFeetPerMinute,
+  DataSpeedFeetPerSecond, DataSpeedKilometersPerHour,
+  DataSpeedMetersPerMinute, DataSpeedMilesPerHour
+} from 'quantified-self-lib/lib/data/data.speed';
+import {
+  DataVerticalSpeed, DataVerticalSpeedFeetPerHour, DataVerticalSpeedFeetPerMinute,
+  DataVerticalSpeedFeetPerSecond, DataVerticalSpeedKilometerPerHour, DataVerticalSpeedMetersPerHour,
+  DataVerticalSpeedMetersPerMinute, DataVerticalSpeedMilesPerHour
+} from 'quantified-self-lib/lib/data/data.vertical-speed';
 
 export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
@@ -143,7 +154,7 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
 
   }
 
-  protected clearChart(){
+  protected clearChart() {
     if (this.chart) {
       this.chart.series.clear();
       this.chart.colors.reset();
@@ -235,7 +246,27 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
     if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
       return 'Pace'
     }
-    if ([ DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
+    if ([
+      DataSpeed.type,
+      DataSpeedMetersPerMinute.type,
+      DataSpeedFeetPerMinute.type,
+      DataSpeedFeetPerSecond.type,
+      DataSpeedMilesPerHour.type,
+      DataSpeedKilometersPerHour.type
+    ].indexOf(name) !== -1) {
+      return 'Speed'
+    }
+    if ([DataVerticalSpeed.type,
+      DataVerticalSpeedFeetPerSecond.type,
+      DataVerticalSpeedMetersPerMinute.type,
+      DataVerticalSpeedFeetPerMinute.type,
+      DataVerticalSpeedMetersPerHour.type,
+      DataVerticalSpeedFeetPerHour.type,
+      DataVerticalSpeedKilometerPerHour.type,
+      DataVerticalSpeedMilesPerHour.type].indexOf(name) !== -1) {
+      return 'Vertical Speed'
+    }
+    if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
       return 'Swim Pace'
     }
     return name;

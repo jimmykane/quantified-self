@@ -521,7 +521,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
 
     series.strokeWidth = 1.2;
-    series.fillOpacity = 0.3;
+    series.fillOpacity = 0.2;
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
