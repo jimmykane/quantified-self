@@ -669,14 +669,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
     }
     data = data
-      .filter((streamData) => streamData.value !== null);
-    // Here it should filter of large activity type and here it should reduce the original data
-    if (activity.getDuration().getValue() > 60 * 60 * 10) { // If greater than 10h
-      const samplingRate = Math.ceil((activity.getDuration().getValue() / (60 * 60 * 5))) // skip every 5h one point
-      console.log(samplingRate);
-      data = data.filter((streamData, index) => (index % samplingRate) === 0);
-    }
-    //
+      .filter((streamData) => streamData.value !== null)
+      .filter((streamData, index) => (index % this.getStreamSamplingRate(activity)) === 0);
     // this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
@@ -692,6 +686,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     samplingRate = Math.ceil((numberOfSamplesToHours * this.dataSmoothingLevel * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities);
     // this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
     return samplingRate;
+  }
+
+  private getStreamSamplingRate(activity: ActivityInterface): number {
+    const hours = Math.ceil((activity.getDuration().getValue() / (60 * 60 )));
+    return Math.ceil(hours/2);
   }
 
   private addDataToChart(data: any) {
