@@ -199,7 +199,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     // series.columns.template.fillOpacity = 1;
     series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
     series.columns.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem){
+      if (!target.dataItem || !target.dataItem.dataContext){
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);

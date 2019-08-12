@@ -17,6 +17,7 @@ import * as Sentry from '@sentry/browser';
 import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 import {group} from '@angular/animations';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 
 @Component({
@@ -102,7 +103,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     pieSeries.slices.template.strokeOpacity = 1;
     pieSeries.slices.template.stroke = am4core.color('#175e84');
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem) {
+      if (!target.dataItem || !target.dataItem.values || !isNumber(target.dataItem.values.value)) {
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
@@ -110,7 +111,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
-      if (!target.dataItem) {
+      if (!target.dataItem || !target.dataItem.values || !isNumber(target.dataItem.values.value)) {
         return '';
       }
       try {
