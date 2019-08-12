@@ -38,6 +38,7 @@ import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
+import {DataVerticalSpeedMetersPerMinute} from 'quantified-self-lib/lib/data/data.vertical-speed';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -307,18 +308,38 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
         const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
         const labelData = <LabelData>{
-          unit: dataTypeUnit,
-          average: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
-          max: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
-          min: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
-          minToMaxDiff: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--'
+          average: {
+            value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
+            unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayUnit()}`
+          },
+          max: {
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayUnit()}`
+          },
+          min: {
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayUnit()}`
+          },
+          minToMaxDiff: {
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayUnit()}`
+          }
         };
         if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
-          labelData.gain = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, 1)).getDisplayValue()}` : '--';
-          labelData.loss = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false,1)).getDisplayValue()}` : '--';
+          labelData.gain = {
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, 1)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, 1)).getDisplayUnit()}`
+          };
+          labelData.loss = {
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, 1)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, 1)).getDisplayUnit()}`
+          };
         }
         if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
-          labelData.slopePercentage = data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--';
+          labelData.slopePercentage = {
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
+          };
         }
         // Todo should group pace and derived units
         // Should use dynamic data loader
@@ -574,13 +595,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     label.text = `
       [bold font-size: 1.4em ${series.stroke}]${series.name}[/]\n
       [bold font-size: 1.25em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.average}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.max}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.min}[/][${am4core.color('#FFFFFF')}]${labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.min.value}[/][${am4core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
+      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
 
     // Important! disable it after the creation of the child label
@@ -601,7 +622,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.zIndex = 100;
     button.events.on('hit', (ev) => {
       chart.cursor.behavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? ChartCursorBehaviours.ZoomX : ChartCursorBehaviours.SelectX;
-      ev.target.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX  ? 'Selecting' : 'Zooming';
+      ev.target.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
     });
     return button;
   }
@@ -650,8 +671,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     data = data
       .filter((streamData) => streamData.value !== null);
     // Here it should filter of large activity type and here it should reduce the original data
-    if (activity.getDuration().getValue() > 60*60*10){ // If greater than 10h
-      const samplingRate = Math.ceil((activity.getDuration().getValue()/(60*60*5))) // skip every 5h one point
+    if (activity.getDuration().getValue() > 60 * 60 * 10) { // If greater than 10h
+      const samplingRate = Math.ceil((activity.getDuration().getValue() / (60 * 60 * 5))) // skip every 5h one point
       console.log(samplingRate);
       data = data.filter((streamData, index) => (index % samplingRate) === 0);
     }
@@ -823,12 +844,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 }
 
 export interface LabelData {
-  unit: string,
-  average: string,
-  min: string,
-  max: string,
-  gain?: string,
-  loss?: string,
-  minToMaxDiff?: string,
-  slopePercentage?: string,
+  average: { value: string, unit: string },
+  min: { value: string, unit: string },
+  max: { value: string, unit: string },
+  gain?: { value: string, unit: string },
+  loss?: { value: string, unit: string },
+  minToMaxDiff?: { value: string, unit: string },
+  slopePercentage?: { value: string, unit: string },
 }
