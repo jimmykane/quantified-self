@@ -103,7 +103,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     pieSeries.slices.template.strokeOpacity = 1;
     pieSeries.slices.template.stroke = am4core.color('#175e84');
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.values) {
+      if (!target.dataItem || !target.dataItem.values || ! target.dataItem.dataContext) {
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
@@ -111,7 +111,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.values) {
+      if (!target.dataItem || !target.dataItem.values || !target.dataItem.dataContext) {
         return '';
       }
       try {
