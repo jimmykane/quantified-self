@@ -14,7 +14,6 @@ import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
 import {EventColorService} from '../../../../services/color/app.event.color.service';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {PointInterface} from 'quantified-self-lib/lib/points/point.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
 import {
   ControlPosition,
