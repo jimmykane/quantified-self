@@ -31,7 +31,6 @@ import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
-import {DataElevation} from 'quantified-self-lib/lib/data/data.elevation';
 import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
@@ -46,6 +45,12 @@ import {
   DataVerticalSpeedFeetPerSecond, DataVerticalSpeedKilometerPerHour, DataVerticalSpeedMetersPerHour,
   DataVerticalSpeedMetersPerMinute, DataVerticalSpeedMilesPerHour
 } from 'quantified-self-lib/lib/data/data.vertical-speed';
+import {DataStrydDistance} from 'quantified-self-lib/lib/data/data.stryd-distance';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataLeftBalance} from 'quantified-self-lib/lib/data/data.left-balance';
+import {DataRightBalance} from 'quantified-self-lib/lib/data/data.right-balance';
+import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
+import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
 
 export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
@@ -234,7 +239,7 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
   protected getSeriesName(name: string) {
-    if ([DataAltitude.type, DataGPSAltitude.type, DataElevation.type].indexOf(name) !== -1) {
+    if ([DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type].indexOf(name) !== -1) {
       return DataAltitude.type;
     }
     if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
@@ -248,6 +253,7 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
     }
     if ([
       DataSpeed.type,
+      DataStrydSpeed.type,
       DataSpeedMetersPerMinute.type,
       DataSpeedFeetPerMinute.type,
       DataSpeedFeetPerSecond.type,
@@ -268,6 +274,14 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
     }
     if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
       return 'Swim Pace'
+    }
+    if ([DataLeftBalance.type,
+      DataRightBalance.type].indexOf(name) !== -1) {
+      return 'Left/Right Balance'
+    }
+    if ([DataDistance.type,
+      DataStrydDistance.type].indexOf(name) !== -1) {
+      return 'Left/Right Balance'
     }
     return name;
   }
