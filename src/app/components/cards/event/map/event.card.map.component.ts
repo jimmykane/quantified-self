@@ -360,15 +360,15 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     return mapStyles[appTheme]
   }
 
-  lineClick(event: PolyMouseEvent, points: PointInterface[]) {
-    // const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
-    //   latitudeDegrees: event.latLng.lat(),
-    //   longitudeDegrees: event.latLng.lng(),
-    // }, positions);
-    // if (nearestPoint) {
-    //   this.clickedPoint = nearestPoint;
-    // }
-  }
+  // lineClick(event: PolyMouseEvent, points: PointInterface[]) {
+  //   // const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
+  //   //   latitudeDegrees: event.latLng.lat(),
+  //   //   longitudeDegrees: event.latLng.lng(),
+  //   // }, positions);
+  //   // if (nearestPoint) {
+  //   //   this.clickedPoint = nearestPoint;
+  //   // }
+  // }
 
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
     return Array.from(map.values());
