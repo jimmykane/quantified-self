@@ -63,7 +63,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public clickedPoint: PointInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
     // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
     mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
