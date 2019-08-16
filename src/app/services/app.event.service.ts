@@ -43,7 +43,7 @@ export class EventService implements OnDestroy {
         })),
       this.getActivities(user, eventID),
     ).pipe(catchError((error) => {
-      if (error.code && error.code === 'permission-denied') {
+      if (error && error.code && error.code === 'permission-denied') {
         return of([null, null])
       }
       Sentry.captureException(error);
