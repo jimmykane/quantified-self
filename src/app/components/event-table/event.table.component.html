@@ -103,7 +103,7 @@
             </td>
             <td>
               <app-edit-input
-                *ngIf="hasActions && element.feeling !== undefined"
+                *ngIf="hasActions"
                 [(data)]='element.feeling'
                 [type]="'select'"
                 [placeHolder]="'Feeling'"

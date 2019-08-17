@@ -16,7 +16,6 @@ export class EditInputComponent implements OnChanges{
   editMode = false;
 
   ngOnChanges(changes: SimpleChanges): void {
-    debugger;
   }
 
 
