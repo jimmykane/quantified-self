@@ -9,8 +9,9 @@ import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 export class EditInputComponent implements OnChanges{
   @Input() data: string | number;
-  @Input() type: 'text' | 'number' | 'textArea' = 'text';
   @Input() placeHolder: string;
+  @Input() type: 'text' | 'number' | 'textArea' | 'select' = 'text';
+  @Input() selectOptions: [] = [];
   @Output() dataChange: EventEmitter<number|string> = new EventEmitter<number|string>();
   editMode = false;
 
@@ -18,7 +19,7 @@ export class EditInputComponent implements OnChanges{
   }
 
 
-  onFocusOut() {
+  onChange() {
     this.editMode = false;
     this.dataChange.emit(this.data);
   }

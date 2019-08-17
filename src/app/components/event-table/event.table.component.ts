@@ -38,6 +38,9 @@ import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {MatBottomSheet} from '@angular/material';
 import {animate, state, style, transition, trigger} from '@angular/animations';
+import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
+import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 
 @Component({
@@ -67,6 +70,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   @ViewChild(MatSort, {static: true}) sort: MatSort;
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
   @ViewChild(MatCard, {static: true}) table: MatCard;
+  private eventsSubscription: Subscription;
+  private sortSubscription: Subscription;
+  private deleteConfirmationSubscription: Subscription;
+  private currentPageIndex = 0;
+
+  private logger = Log.create('EventTableComponent');
+
   events: EventInterface[];
   data: MatTableDataSource<any>;
   selection = new SelectionModel(true, []);
@@ -76,15 +86,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   expandedElement: EventRowElement | null;
   expandAll: boolean;
 
-  private eventsSubscription: Subscription;
-  private sortSubscription: Subscription;
-  private deleteConfirmationSubscription: Subscription;
-  private currentPageIndex = 0;
-
-  private logger = Log.create('EventTableComponent');
-
-  public eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
+  eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
   isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
+
 
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
@@ -258,7 +262,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
 
             const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-            dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1  ?
+            dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
               `${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
               : ActivityTypes[<string>activityTypes.getDisplayValue()];
 
@@ -270,6 +274,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
             dataObject['isMerge'] = event.isMerge;
             dataObject.description = event.description;
+
+            const eventRPE = event.getStat(DataRPE.type);
+            if (eventRPE) {
+              dataObject.rpe = <RPEBorgCR10SCale>eventRPE.getValue();
+            }
             dataObject.event = event;
 
             const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
@@ -399,7 +408,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'delete',
         async () => {
           this.isLoadingResults = true;
-          const deleteConfirmationBottomSheet  = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
+          const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
           this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
             if (!result) {
               this.isLoadingResults = false;
@@ -440,6 +449,27 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
+  }
+
+  async saveEventRPE(rpe: RPEBorgCR10SCale, event: EventInterface) {
+    console.log(RPEBorgCR10SCale[rpe]);
+    if (!isNumber(rpe)) {
+      return;
+    }
+    // @todo should get the activities with a fetch and add that stat to those as well.
+    event.addStat(new DataRPE(rpe));
+    await this.eventService.setEvent(this.user, event);
+    this.snackBar.open('Event saved', null, {
+      duration: 2000,
+    });
+  }
+
+  getRPEKEyValue() {
+    return Object.keys(RPEBorgCR10SCale).slice(Object.keys(RPEBorgCR10SCale).length / 2)
+      .reduce((obj, key) => {
+        obj[`${RPEBorgCR10SCale[key]}: ${key}`] = RPEBorgCR10SCale[key];
+        return obj
+      }, {});
   }
 
   private goToPageNumber(number: number) {
@@ -562,6 +592,7 @@ export interface EventRowElement {
   isMerge: boolean,
   actions: boolean,
   description: string,
+  rpe: RPEBorgCR10SCale,
 }
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {

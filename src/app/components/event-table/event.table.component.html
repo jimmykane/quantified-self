@@ -76,7 +76,7 @@
         <table style="text-align: left">
           <tr>
             <td>
-              <app-privacy-icon [privacy]="element.privacy" ></app-privacy-icon>
+              <app-privacy-icon [privacy]="element.privacy"></app-privacy-icon>
             </td>
             <td>
               <app-edit-input
@@ -94,6 +94,23 @@
                 [type]="'textArea'"
                 [placeHolder]="'Add a description'"
                 (dataChange)="saveEventDescription(element.description, element.event)">
+              </app-edit-input>
+            </td>
+          </tr>
+          <tr>
+            <td>
+
+            </td>
+            <td>
+            </td>
+            <td>
+              <app-edit-input
+                *ngIf="hasActions"
+                [(data)]='element.rpe'
+                [type]="'select'"
+                [placeHolder]="'Rating of Perceived Exertion'"
+                [selectOptions]="getRPEKEyValue()"
+                (dataChange)="saveEventRPE(element.rpe, element.event)">
               </app-edit-input>
             </td>
           </tr>

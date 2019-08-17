@@ -304,6 +304,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
             break;
         }
 
+        if (!data.length) {
+          return;
+        }
+
         // Here we have all the data we need
 
         const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
@@ -689,8 +693,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getStreamSamplingRate(activity: ActivityInterface): number {
-    const hours = Math.ceil((activity.getDuration().getValue() / (60 * 60 )));
-    return Math.ceil(hours/2);
+    const hours = Math.ceil((activity.getDuration().getValue() / (60 * 60)));
+    return Math.ceil(hours / 2);
   }
 
   private addDataToChart(data: any) {

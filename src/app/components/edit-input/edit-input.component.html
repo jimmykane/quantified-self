@@ -1,16 +1,28 @@
-<mat-form-field>
+<mat-form-field *ngIf='type === "text"'>
   <input matInput
          [placeholder]="placeHolder"
-         *ngIf='type !== "textArea"'
-         (focusout)="onFocusOut();"
+        (change)="onChange();"
          (keydown.enter)='$event.target.blur()'
          [(ngModel)]='data'
          [type]="type">
-  <textarea matInput rows="1"
-            [placeholder]="placeHolder"
-            *ngIf='type === "textArea"'
-            (focusout)="onFocusOut();"
-            (keydown.enter)='$event.target.blur()'
-            [(ngModel)]='data'>
+
+
+</mat-form-field>
+<mat-form-field  *ngIf='type === "select"'>
+  <mat-select
+              (selectionChange)="onChange();"
+              [(ngModel)]='data'
+              [placeholder]="placeHolder">
+    <mat-option *ngFor="let selectOption of selectOptions | keyvalue" [value]="selectOption.value">
+      {{selectOption.key}}
+    </mat-option>
+  </mat-select>
+</mat-form-field>
+<mat-form-field  *ngIf='type === "textArea"'>
+   <textarea matInput rows="1"
+             [placeholder]="placeHolder"
+             (change)="onChange();"
+             (keydown.enter)='$event.target.blur()'
+             [(ngModel)]='data'>
   </textarea>
 </mat-form-field>
