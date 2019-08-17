@@ -38,9 +38,9 @@ import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {MatBottomSheet} from '@angular/material';
 import {animate, state, style, transition, trigger} from '@angular/animations';
-import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 
 
 @Component({
@@ -85,6 +85,8 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   errorLoading;
   expandedElement: EventRowElement | null;
   expandAll: boolean;
+  rpeBorgCR10SCale = RPEBorgCR10SCale;
+  feelings = Feelings;
 
   eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
   isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
@@ -279,6 +281,12 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             if (eventRPE) {
               dataObject.rpe = <RPEBorgCR10SCale>eventRPE.getValue();
             }
+
+            const eventFeeling = event.getStat(DataFeeling.type);
+            if (eventFeeling) {
+              dataObject.feeling = <Feelings>eventFeeling.getValue();
+            }
+
             dataObject.event = event;
 
             const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
@@ -452,11 +460,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   }
 
   async saveEventRPE(rpe: RPEBorgCR10SCale, event: EventInterface) {
-    console.log(RPEBorgCR10SCale[rpe]);
     if (!isNumber(rpe)) {
       return;
     }
-    // @todo should get the activities with a fetch and add that stat to those as well.
     event.addStat(new DataRPE(rpe));
     await this.eventService.setEvent(this.user, event);
     this.snackBar.open('Event saved', null, {
@@ -464,10 +470,21 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     });
   }
 
-  getRPEKEyValue() {
-    return Object.keys(RPEBorgCR10SCale).slice(Object.keys(RPEBorgCR10SCale).length / 2)
+  async saveEventFeeling(feeling: Feelings, event: EventInterface) {
+    if (!isNumber(feeling)) {
+      return;
+    }
+    event.addStat(new DataFeeling(feeling));
+    await this.eventService.setEvent(this.user, event);
+    this.snackBar.open('Event saved', null, {
+      duration: 2000,
+    });
+  }
+
+  getEnumKeyValue(enumerator) {
+    return Object.keys(enumerator).slice(Object.keys(enumerator).length / 2)
       .reduce((obj, key) => {
-        obj[`${RPEBorgCR10SCale[key]}: ${key}`] = RPEBorgCR10SCale[key];
+        obj[`${enumerator[key]}: ${key}`] = enumerator[key];
         return obj
       }, {});
   }
@@ -592,7 +609,8 @@ export interface EventRowElement {
   isMerge: boolean,
   actions: boolean,
   description: string,
-  rpe: RPEBorgCR10SCale,
+  rpe?: RPEBorgCR10SCale,
+  feeling?: Feelings,
 }
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {

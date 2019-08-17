@@ -102,6 +102,14 @@
 
             </td>
             <td>
+              <app-edit-input
+                *ngIf="hasActions && element.feeling !== undefined"
+                [(data)]='element.feeling'
+                [type]="'select'"
+                [placeHolder]="'Feeling'"
+                [selectOptions]="getEnumKeyValue(feelings)"
+                (dataChange)="saveEventFeeling(element.feeling, element.event)">
+              </app-edit-input>
             </td>
             <td>
               <app-edit-input
@@ -109,7 +117,7 @@
                 [(data)]='element.rpe'
                 [type]="'select'"
                 [placeHolder]="'Rating of Perceived Exertion'"
-                [selectOptions]="getRPEKEyValue()"
+                [selectOptions]="getEnumKeyValue(rpeBorgCR10SCale)"
                 (dataChange)="saveEventRPE(element.rpe, element.event)">
               </app-edit-input>
             </td>
