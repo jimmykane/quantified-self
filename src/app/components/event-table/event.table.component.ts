@@ -1,5 +1,5 @@
 import {
-  AfterViewInit,
+  AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef,
   Component, HostListener,
   Input,
   OnChanges,
@@ -56,7 +56,7 @@ import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
     ]),
   ],
   providers: [DatePipe],
-  // changeDetection: ChangeDetectionStrategy.OnPush,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
@@ -81,7 +81,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   data: MatTableDataSource<any>;
   selection = new SelectionModel(true, []);
   resultsLength = 0;
-  isLoadingResults = true;
+  isLoading = true;
   errorLoading;
   expandedElement: EventRowElement | null;
   expandAll: boolean;
@@ -96,6 +96,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               private eventService: EventService,
               private actionButtonService: ActionButtonService,
               private deleteConfirmationBottomSheet: MatBottomSheet,
+              private  changeDetector: ChangeDetectorRef,
               private router: Router, private  datePipe: DatePipe) {
   }
 
@@ -175,6 +176,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
 
   private subscribeToAll() {
+    this.loading();
     this.unsubscribeFromAll();
     this.paginator.pageIndex = 0;
     this.currentPageIndex = 0;
@@ -188,7 +190,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       .pipe(
         startWith({}),
         switchMap(() => {
-          this.isLoadingResults = true;
           const where = [];
           if (this.searchTerm) {
             where.push({
@@ -238,7 +239,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         }),
         map(events => {
           // Flip flag to show that loading has finished.
-          this.isLoadingResults = false;
           this.errorLoading = false;
           // this.resultsLength = data.total_count;
 
@@ -306,7 +306,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           return new MatTableDataSource<EventRowElement>(data);
         }),
         catchError((error) => {
-          this.isLoadingResults = false;
+          this.isLoading = false;
           // Catch
           this.errorLoading = error; // @todo maybe reset on ok
           Sentry.captureException(error);
@@ -316,9 +316,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       ).subscribe(data => {
         // Bind to the data
         this.data = data;
-
-        // debugger;
-
 
         if (this.paginator.pageIndex === 0) {
           this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
@@ -358,6 +355,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
 
         // Set the current page index
         this.currentPageIndex = this.paginator.pageIndex;
+        this.loaded();
       });
   }
 
@@ -371,7 +369,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'compare_arrows',
         async () => {
           // Show loading
-          this.isLoadingResults = true;
+          this.isLoading = true;
           // Remove all subscriptions
           this.unsubscribeFromAll();
           // Clear all selections
@@ -405,7 +403,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             });
           }
           this.subscribeToAll();
-          this.isLoadingResults = false;
+          this.isLoading = false;
         },
         'material',
       ));
@@ -415,11 +413,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.addActionButton('deleteEvents', new ActionButton(
         'delete',
         async () => {
-          this.isLoadingResults = true;
+          this.isLoading = true;
           const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
           this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
             if (!result) {
-              this.isLoadingResults = false;
+              this.isLoading = false;
               return;
             }
             this.actionButtonService.removeActionButton('deleteEvents');
@@ -571,6 +569,16 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       columns.push('actions')
     }
     return columns
+  }
+
+  private loading() {
+    this.isLoading = true;
+    this.changeDetector.detectChanges();
+  }
+
+  private loaded() {
+    this.isLoading = false;
+    this.changeDetector.detectChanges();
   }
 
   private unsubscribeFromAll() {
