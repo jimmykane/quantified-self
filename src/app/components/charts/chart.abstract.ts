@@ -51,6 +51,9 @@ import {DataLeftBalance} from 'quantified-self-lib/lib/data/data.left-balance';
 import {DataRightBalance} from 'quantified-self-lib/lib/data/data.right-balance';
 import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
 import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
+import {DataPower} from 'quantified-self-lib/lib/data/data.power';
+import {DataPowerLeft} from 'quantified-self-lib/lib/data/data.power-left';
+import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
 
 export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
@@ -275,13 +278,18 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
     if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
       return 'Swim Pace'
     }
+    if ([DataPower.type,
+      DataPowerRight.type,
+      DataPowerLeft.type].indexOf(name) !== -1) {
+      return 'Left/Right Balance'
+    }
     if ([DataLeftBalance.type,
       DataRightBalance.type].indexOf(name) !== -1) {
       return 'Left/Right Balance'
     }
     if ([DataDistance.type,
       DataStrydDistance.type].indexOf(name) !== -1) {
-      return 'Left/Right Balance'
+      return 'Distance'
     }
     return name;
   }

@@ -312,6 +312,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
         const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
         const labelData = <LabelData>{
+          name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
           average: {
             value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
             unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayUnit()}`
@@ -597,7 +598,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const label = labelContainer.createChild(am4core.Label);
     label.align = 'center';
     label.text = `
-      [bold font-size: 1.4em ${series.stroke}]${series.name}[/]\n
+      [bold font-size: 1.4em ${series.stroke}]${labelData.name}[/]\n
       [bold font-size: 1.25em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
       [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
       [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
@@ -847,6 +848,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 }
 
 export interface LabelData {
+  name: string,
   average: { value: string, unit: string },
   min: { value: string, unit: string },
   max: { value: string, unit: string },
