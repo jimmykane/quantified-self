@@ -85,7 +85,9 @@ export class EventSearchComponent implements OnChanges, OnInit {
   onDateChange(event) {
     this.selectedDateRange = this.dateRanges.custom;
     // Start date should be on 00:00:00 but end date needs fix
-    this.searchFormGroup.get('endDate').setValue(new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)));
+    if (this.searchFormGroup.get('endDate').value){
+      this.searchFormGroup.get('endDate').setValue(new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)));
+    }
   }
 
   validateAllFormFields(formGroup: FormGroup) {
