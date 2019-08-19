@@ -306,7 +306,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
           return new MatTableDataSource<EventRowElement>(data);
         }),
         catchError((error) => {
-          this.isLoading = false;
+          this.loaded();
           // Catch
           this.errorLoading = error; // @todo maybe reset on ok
           Sentry.captureException(error);
@@ -369,7 +369,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
         'compare_arrows',
         async () => {
           // Show loading
-          this.isLoading = true;
+          this.loading();
           // Remove all subscriptions
           this.unsubscribeFromAll();
           // Clear all selections
@@ -403,7 +403,7 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
             });
           }
           this.subscribeToAll();
-          this.isLoading = false;
+          this.loaded();
         },
         'material',
       ));
@@ -413,11 +413,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       this.actionButtonService.addActionButton('deleteEvents', new ActionButton(
         'delete',
         async () => {
-          this.isLoading = true;
+          this.loading();
           const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
           this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
             if (!result) {
-              this.isLoading = false;
+              this.loaded();
               return;
             }
             this.actionButtonService.removeActionButton('deleteEvents');
