@@ -116,7 +116,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
       }
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        if (target.dataItem.values.value.percent <= 2.5 && this.filterLowValues) {
+        if (target.dataItem.values.value.percent <= 1 && this.filterLowValues) {
           return null;
         }
         if (!target.dataItem.dataContext.type) {
@@ -159,7 +159,7 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
     grouper.threshold = 5;
     grouper.groupName = 'Other';
-    grouper.clickBehavior = 'break';
+    grouper.clickBehavior = 'zoom';
     grouper.zoomOutButton.align = 'left';
     grouper.zoomOutButton.width = 35;
     grouper.zoomOutButton.valign = 'top';
