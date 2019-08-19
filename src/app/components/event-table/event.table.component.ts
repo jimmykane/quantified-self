@@ -397,13 +397,13 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
               // will be tagged with my-tag="my value"
               Sentry.captureException(e);
+              this.subscribeToAll();
+              this.loaded();
             });
             this.snackBar.open('Could not merge events', null, {
               duration: 5000,
             });
           }
-          this.subscribeToAll();
-          this.loaded();
         },
         'material',
       ));
