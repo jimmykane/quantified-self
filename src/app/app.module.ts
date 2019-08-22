@@ -142,7 +142,7 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFireAuthModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-      // apiVersion: '3.31'
+      apiVersion: 'weekly'
     }),
     ReactiveFormsModule,
     MatExpansionModule,
