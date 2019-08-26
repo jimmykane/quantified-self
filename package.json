@@ -20,7 +20,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0-beta.7",
-    "@amcharts/amcharts4": "4.5.14",
+    "@amcharts/amcharts4": "4.5.15",
     "@angular/animations": "8.2.3",
     "@angular/cdk": "^8.1.3",
     "@angular/common": "8.2.3",
@@ -38,7 +38,7 @@
     "@types/pako": "^1.0.1",
     "@types/uuid": "^3.4.5",
     "buffer": "^5.4.0",
-    "firebase": "^6.4.0",
+    "firebase": "^6.4.2",
     "hammerjs": "^2.0.8",
     "material-design-icons": "^3.0.1",
     "ng2-logger": "2.0.48",
