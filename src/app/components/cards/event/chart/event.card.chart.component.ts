@@ -216,6 +216,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
     }
     xAxis.title.text = this.xAxisType;
+    // xAxis.renderer.grid.template.disabled = true;
+    xAxis.renderer.grid.template.strokeOpacity = 0.5;
+    xAxis.renderer.grid.template.strokeWidth = 0.5;
+
+    xAxis.padding = 0;
 
     // Create a value axis
 
@@ -228,7 +233,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     chart.legend.useDefaultMarker = true;
     const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-    marker.cornerRadius(12, 12, 12, 12);
+    marker.cornerRadius(14, 14, 14, 14);
     marker.strokeWidth = 2;
     marker.strokeOpacity = 1;
     marker.stroke = am4core.color('#0a97ee');
@@ -252,7 +257,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
     // Sticky
-    chart.cursor.events.on('cursorpositionchanged', (event) =>  {
+    chart.cursor.events.on('cursorpositionchanged', (event) => {
       chart.cursor.triggerMove(event.target.point, 'soft');
     });
     // On select
@@ -477,6 +482,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     yAxis.renderer.maxLabelPosition = 0.95;
     yAxis.renderer.axisFills.template.disabled = true;
     yAxis.renderer.ticks.template.disabled = true;
+    yAxis.renderer.grid.template.disabled = true;
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());
@@ -515,24 +521,29 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
     // series.legendSettings.itemValueText = `{valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
-    // Search if there is any other series with the same color we would like to have
-    const found = this.chart.series.values.find((seriesItem) => {
-      return seriesItem.stroke.toString() === am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString();
-    });
-    // IF there is no other series with the same color then add the activity color
-    if (!found) {
-      // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-      // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
-      series.adapter.add('fill', (fill, target) => {
-        return series.chart.colors.getIndex(series.chart.series.indexOf(target));
-      });
-      series.adapter.add('stroke', (fill, target) => {
-        return series.chart.colors.getIndex(series.chart.series.indexOf(target));
-      });
-    }
-
-    series.strokeWidth = 1.2;
-    series.fillOpacity = 0.2;
+    // // Search if there is any other series with the same color we would like to have
+    // const found = this.chart.series.values.find((seriesItem) => {
+    //   return seriesItem.stroke.toString() === am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString();
+    // });
+    // // IF there is no other series with the same color then add the activity color
+    // // if (!found) {
+    // //   // series.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+    // //   // series.fill = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
+    // //   series.adapter.add('fill', (fill, target) => {
+    // //     return series.chart.colors.getIndex(series.chart.series.indexOf(target));
+    // //   });
+    // //   series.adapter.add('stroke', (fill, target) => {
+    // //     return series.chart.colors.getIndex(series.chart.series.indexOf(target));
+    // //   });
+    // // }
+    // series.adapter.add('fill', (fill, target) => {
+    //   return series.chart.colors.getIndex(series.chart.series.indexOf(target));
+    // });
+    // series.adapter.add('stroke', (fill, target) => {
+    //   return series.chart.colors.getIndex(series.chart.series.indexOf(target));
+    // });
+    series.strokeWidth = 1;
+    series.fillOpacity = 0.15;
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
