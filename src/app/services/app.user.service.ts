@@ -46,6 +46,7 @@ import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 
 @Injectable()
@@ -148,6 +149,18 @@ export class UserService implements OnDestroy {
 
   static getDefaultStartOfTheWeek(): DaysOfTheWeek {
     return DaysOfTheWeek.Monday;
+  }
+
+  static getDefaultChartStrokeWidth(): number {
+    return 1;
+  }
+
+  static getDefaultChartStrokeOpacity(): number {
+    return 1;
+  }
+
+  static getDefaultChartFillOpacity(): number {
+    return 0.15;
   }
 
   constructor(
@@ -296,6 +309,9 @@ export class UserService implements OnDestroy {
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
     settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || UserService.getDefaultSmoothingLevel();
     settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || UserService.getDefaultChartCursorBehaviour();
+    settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || UserService.getDefaultChartStrokeWidth();
+    settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : UserService.getDefaultChartStrokeOpacity();
+    settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : UserService.getDefaultChartFillOpacity();
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

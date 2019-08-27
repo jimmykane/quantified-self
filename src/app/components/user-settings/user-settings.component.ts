@@ -98,6 +98,21 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      chartStrokeWidth: new FormControl(this.user.settings.chartSettings.strokeWidth, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      chartStrokeOpacity: new FormControl(this.user.settings.chartSettings.strokeOpacity, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      chartFillOpacity: new FormControl(this.user.settings.chartSettings.fillOpacity, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       xAxisType: new FormControl(this.user.settings.chartSettings.xAxisType, [
         Validators.required,
         // Validators.minLength(1),
@@ -207,6 +222,9 @@ export class UserSettingsComponent implements OnChanges {
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
         showAllData: this.userSettingsFormGroup.get('showAllData').value,
         chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
+        strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
+        strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
+        fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
       });
 
       await this.userService.updateUserProperties(this.user, {

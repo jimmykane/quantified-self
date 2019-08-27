@@ -65,26 +65,30 @@
           <mat-hint><b>Tip:</b> on this day the dashboard adjusts to</mat-hint>
         </mat-form-field>
       </mat-card-content>
-      <mat-slide-toggle
-        [color]="'accent'"
-        formControlName="showSummaries">
+      <section>
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="showSummaries">
           <span matTooltip="If you want to see summaries or no">
              Show summaries
           </span>
-      </mat-slide-toggle>
-      <mat-hint class="smaller"><b>Tip:</b> if you don't care about summaries and analysis you might want to turn
-        this off
-      </mat-hint>
-      <mat-slide-toggle
-        [color]="'accent'"
-        formControlName="pinUploadSection">
+        </mat-slide-toggle>
+        <mat-hint class="smaller"><b>Tip:</b> if you don't care about summaries and analysis you might want to turn
+          this off
+        </mat-hint>
+      </section>
+      <section>
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="pinUploadSection">
           <span matTooltip="Should the upload section always show?">
              Pin upload button
           </span>
-      </mat-slide-toggle>
-      <mat-hint class="smaller"><b>Tip:</b> if you upload regularly and manually you might want to turn this on to
-        pin the upload button
-      </mat-hint>
+        </mat-slide-toggle>
+        <mat-hint class="smaller"><b>Tip:</b> if you upload regularly and manually you might want to turn this on to
+          pin the upload button
+        </mat-hint>
+      </section>
     </mat-card>
 
 
@@ -128,18 +132,22 @@
         </mat-form-field>
       </mat-card-content>
 
-      <mat-slide-toggle
-        [color]="'accent'"
-        formControlName="showMapLaps">
-        <span matTooltip="Show laps on map?">Show laps</span>
-      </mat-slide-toggle>
-      <mat-hint><b>Tip:</b> laps can help in the route analysis</mat-hint>
-      <mat-slide-toggle
-        [color]="'accent'"
-        formControlName="showMapArrows">
-        <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
-      </mat-slide-toggle>
-      <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
+      <section>
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="showMapLaps">
+          <span matTooltip="Show laps on map?">Show laps</span>
+        </mat-slide-toggle>
+        <mat-hint><b>Tip:</b> laps can help in the route analysis</mat-hint>
+      </section>
+      <section>
+        <mat-slide-toggle
+          [color]="'accent'"
+          formControlName="showMapArrows">
+          <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
+        </mat-slide-toggle>
+        <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
+      </section>
     </mat-card>
 
     <mat-card>
@@ -185,26 +193,71 @@
           <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
         </mat-form-field>
 
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="showAllData">
-          <span matTooltip="Show all data?">Show all data</span>
-        </mat-slide-toggle>
-        <mat-hint><b>Tip:</b> turn this on if you don't need any filtering or want to see all activity data</mat-hint>
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="showAllData">
+            <span matTooltip="Show all data?">Show all data</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> turn this on if you don't need any filtering or want to see all activity data</mat-hint>
+        </section>
+        <section>
 
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="chartCursorBehaviour">
-          <span matTooltip="Cursor selection by default?">Cursor selection</span>
-        </mat-slide-toggle>
-        <mat-hint><b>Tip:</b> turn this on if you want the default behaviour of the cursor to be select (default is zoom)</mat-hint>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="chartCursorBehaviour">
+            <span matTooltip="Cursor selection by default?">Cursor selection</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> turn this on if you want the default behaviour of the cursor to be select (default is
+            zoom)
+          </mat-hint>
+        </section>
+        <section>
 
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="useAnimations">
-          <span matTooltip="Use animations or no">Animations</span>
-        </mat-slide-toggle>
-        <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="useAnimations">
+            <span matTooltip="Use animations or no">Animations</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
+        </section>
+        <section>
+          <mat-hint matTooltip="How thick the chart lines will be">
+            Stroke width
+          </mat-hint>
+          <mat-slider
+            [max]="10"
+            [min]="0.05"
+            [step]="0.05"
+            [thumbLabel]="true"
+            formControlName="chartStrokeWidth">
+          </mat-slider>
+        </section>
+        <section>
+          <mat-hint matTooltip="How vibrant the chart lines will be">
+            Stroke opacity
+          </mat-hint>
+          <mat-slider
+            [max]="1"
+            [min]="0.05"
+            [step]="0.05"
+            [thumbLabel]="true"
+            formControlName="chartStrokeOpacity">
+          </mat-slider>
+        </section>
+
+        <section>
+          <mat-hint matTooltip="How strong the fill color should be">
+            Fill opacity
+          </mat-hint>
+          <mat-slider
+            [max]="1"
+            [min]="0.00"
+            [step]="0.05"
+            [thumbLabel]="true"
+            formControlName="chartFillOpacity">
+          </mat-slider>
+        </section>
 
       </mat-card-content>
     </mat-card>
