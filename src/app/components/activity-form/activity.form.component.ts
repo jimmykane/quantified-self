@@ -146,7 +146,7 @@ export class ActivityFormComponent implements OnInit {
         this.activity.creator.name = this.activityFormGroup.get('creatorName').value;
         this.event.addStat(new DataDeviceNames(this.event.getActivities().map(eventActivities => eventActivities.creator.name)));
       }
-      if (this.activityFormGroup.get('startDate').dirty || this.activityFormGroup.get('startTime').dirty) {
+      if (this.activityFormGroup.get('startDate') && this.activityFormGroup.get('startDate').dirty || this.activityFormGroup.get('startTime').dirty) {
         this.activity.startDate = this.activityFormGroup.get('startDate').value;
         this.activity.startDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
         this.activity.startDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
