@@ -141,10 +141,10 @@
   dependencies:
     tslib "^1.9.0"
 
-"@angular/cdk@^8.1.3":
-  version "8.1.3"
-  resolved "https://registry.yarnpkg.com/@angular/cdk/-/cdk-8.1.3.tgz#c791b4ae950bd015c4f618204e4f974e2dd64254"
-  integrity sha512-+DOS6x05/nNdnoRmEi3bgQxKym34PeCRGD6dimdw0l7ZgM57qhlaBWo0dXB7QSyR9E44uVT91e4h8ye+/ne1DQ==
+"@angular/cdk@^8.1.4":
+  version "8.1.4"
+  resolved "https://registry.yarnpkg.com/@angular/cdk/-/cdk-8.1.4.tgz#69066053fe4cbd80cee2bb7fa238f1c9abb963fc"
+  integrity sha512-U0tjhAZM4qqUHGGKIKFZZ9d8929s2U/HO0FdoT/eX+oHPOA6mm3bBep7myrSzlkP9V7O1JJfYdhEgijXhYxprQ==
   dependencies:
     tslib "^1.7.1"
   optionalDependencies:
@@ -230,10 +230,10 @@
   dependencies:
     tslib "^1.9.0"
 
-"@angular/material@^8.1.3":
-  version "8.1.3"
-  resolved "https://registry.yarnpkg.com/@angular/material/-/material-8.1.3.tgz#1e65a6e02196348413cb073da3255771116c7618"
-  integrity sha512-qZVWrJ/EO1y0lJCy7pe536RlYiih3p3fQzj7tgus7JdOpspyF+zBLzn8gNrdAFACXpVWwq2kLorieoR3BB47ZQ==
+"@angular/material@^8.1.4":
+  version "8.1.4"
+  resolved "https://registry.yarnpkg.com/@angular/material/-/material-8.1.4.tgz#8bda747bb023af8ccce2c2d3e9e8dc25f05b3605"
+  integrity sha512-HV1qU63MaOtAc+cWg21Y2ygQKdEDjsGQ/3d3qym9sfR0xU2vvY7OG6gH48BfPeU63oMYxQkhxfoGP8wWMXSU1w==
   dependencies:
     tslib "^1.7.1"
 
@@ -4028,11 +4028,11 @@ flush-write-stream@^1.0.0:
     readable-stream "^2.3.6"
 
 follow-redirects@^1.0.0:
-  version "1.7.0"
-  resolved "https://registry.yarnpkg.com/follow-redirects/-/follow-redirects-1.7.0.tgz#489ebc198dc0e7f64167bd23b03c4c19b5784c76"
-  integrity sha512-m/pZQy4Gj287eNy94nivy5wchN3Kp+Q5WgUPNy5lJSZ3sgkVKSYV/ZChMAQVIgx1SqfZ2zBZtPA2YlXIWxxJOQ==
+  version "1.8.0"
+  resolved "https://registry.yarnpkg.com/follow-redirects/-/follow-redirects-1.8.0.tgz#dcf34930bcfdb6c1eb22b8eb7c457ec95a3dcf40"
+  integrity sha512-eYyazyi+vwXZ6LfSQicvqFwaNEF5xTvnB/rpzRLuqwK45u7WbBEnQ/dDic66KD/A8IzTXFlj2ROAcaP0f2v4lg==
   dependencies:
-    debug "^3.2.6"
+    debug "^4.1.1"
 
 fontkit@^1.0.0:
   version "1.8.0"
@@ -5310,10 +5310,10 @@ karma-source-map-support@1.4.0:
   dependencies:
     source-map-support "^0.5.5"
 
-karma@~4.2.0:
-  version "4.2.0"
-  resolved "https://registry.yarnpkg.com/karma/-/karma-4.2.0.tgz#27e88b310cde090d016980ff5444e3a239196fca"
-  integrity sha512-fmCuxN1rwJxTdZfOXK5LjlmS4Ana/OvzNMpkyLL/TLE8hmgSkpVpMYQ7RTVa8TNKRVQDZNl5W1oF5cfKfgIMlA==
+karma@~4.3.0:
+  version "4.3.0"
+  resolved "https://registry.yarnpkg.com/karma/-/karma-4.3.0.tgz#e14471ea090a952265a42ebb442b1a3c09832559"
+  integrity sha512-NSPViHOt+RW38oJklvYxQC4BSQsv737oQlr/r06pCM+slDOr4myuI1ivkRmp+3dVpJDfZt2DmaPJ2wkx+ZZuMQ==
   dependencies:
     bluebird "^3.3.0"
     body-parser "^1.16.1"
@@ -5329,7 +5329,7 @@ karma@~4.2.0:
     graceful-fs "^4.1.2"
     http-proxy "^1.13.0"
     isbinaryfile "^3.0.0"
-    lodash "^4.17.11"
+    lodash "^4.17.14"
     log4js "^4.0.0"
     mime "^2.3.1"
     minimatch "^3.0.2"
@@ -6915,10 +6915,10 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.2.3:
-  version "3.2.3"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.2.3.tgz#6a17f916272db43d04231876ff8a8ba58a0429eb"
-  integrity sha512-GrTMP4Tanaxr2C0WO6dQ9FPOxIazv7xGnhUucy7UQ8uohV7TlqJljzgLytFHLj8+bSeuFIJxRTeYd/gtd2OPNQ==
+quantified-self-lib@^3.2.4:
+  version "3.2.4"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.2.4.tgz#b53daf39574ddc8d085f57ee5507b9b0bc37367f"
+  integrity sha512-ai0kzkDyBjwg3bRMmrqW2VLFeMpbu1wwjeZCbybIGXr33TRnlO9VtF6zfN98arao7cDa3WNCPdIX+e2TYUEsTg==
   dependencies:
     "@types/node" "^12.7.1"
     fast-xml-parser "^3.12.19"
