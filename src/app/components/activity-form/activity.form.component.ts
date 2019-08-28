@@ -22,6 +22,8 @@ import {take} from 'rxjs/operators';
 import {Log} from 'ng2-logger/browser';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 
 
 @Component({
@@ -86,9 +88,37 @@ export class ActivityFormComponent implements OnInit {
           disabled: true
         }, [
           Validators.required,
-        ])
+        ]),
+        descent: new FormControl(this.activity.getStat(DataDescent.type).getValue(), [
+          Validators.required,
+        ]),
+        distance: new FormControl(this.activity.getStat(DataDistance.type).getValue(), [
+          Validators.required,
+        ]),
       }
     );
+
+    const ascent = this.activity.getStat(DataAscent.type);
+    if (ascent) {
+      this.activityFormGroup.addControl('ascent', new FormControl(ascent.getValue(), [
+        Validators.required,
+      ]))
+    }
+
+    const descent = this.activity.getStat(DataDescent.type);
+    if (descent) {
+      this.activityFormGroup.addControl('descent', new FormControl(descent.getValue(), [
+        Validators.required,
+      ]))
+    }
+
+    const distance = this.activity.getStat(DataDistance.type);
+    if (distance) {
+      this.activityFormGroup.addControl('descent', new FormControl(descent.getValue(), [
+        Validators.required,
+      ]))
+    }
+
     // Find the starting distance for this activity
     if (this.hasDistance()) {
       this.activityFormGroup.addControl('startDistance', new FormControl(0, [
@@ -108,9 +138,9 @@ export class ActivityFormComponent implements OnInit {
     this.isLoading = false;
   }
 
-  onStartDateAndStartTimeChange(event){
+  onStartDateAndStartTimeChange(event) {
     const starDate = this.activityFormGroup.get('startDate').value;
-    if (!starDate){
+    if (!starDate) {
       return;
     }
     starDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
@@ -121,7 +151,7 @@ export class ActivityFormComponent implements OnInit {
     this.activityFormGroup.get('endTime').setValue(this.getTimeFromDateAsString(endDate))
   }
 
-  hasDistance(){
+  hasDistance() {
     return this.activity.hasStreamData(DataDistance.type) && this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1] !== 0;
   }
 
@@ -146,7 +176,7 @@ export class ActivityFormComponent implements OnInit {
         this.activity.creator.name = this.activityFormGroup.get('creatorName').value;
         this.event.addStat(new DataDeviceNames(this.event.getActivities().map(eventActivities => eventActivities.creator.name)));
       }
-      if (this.activityFormGroup.get('startDate') && this.activityFormGroup.get('startDate').dirty || this.activityFormGroup.get('startTime').dirty) {
+      if (this.activityFormGroup.get('startDate') && (this.activityFormGroup.get('startDate').dirty || this.activityFormGroup.get('startTime').dirty)) {
         this.activity.startDate = this.activityFormGroup.get('startDate').value;
         this.activity.startDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
         this.activity.startDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
@@ -160,12 +190,47 @@ export class ActivityFormComponent implements OnInit {
           this.event.endDate = this.activity.endDate;
         }
       }
+
+      if (this.activityFormGroup.get('ascent').dirty) {
+        this.activity.addStat(new DataAscent(this.activityFormGroup.get('ascent').value));
+        this.event.addStat(new DataAscent(this.event.getActivities().reduce((ascent, activity) => {
+          const activityAscent = activity.getStat(DataAscent.type);
+          if (activityAscent) {
+            ascent += <number>activityAscent.getValue();
+          }
+          return ascent;
+        }, 0)));
+      }
+
+      if (this.activityFormGroup.get('descent').dirty) {
+        this.activity.addStat(new DataDescent(this.activityFormGroup.get('descent').value));
+        this.event.addStat(new DataDescent(this.event.getActivities().reduce((descent, activity) => {
+          const activityDescent = activity.getStat(DataDescent.type);
+          if (activityDescent) {
+            descent += <number>activityDescent.getValue();
+          }
+          return descent;
+        }, 0)));
+      }
+
+      if (this.activityFormGroup.get('descent').dirty) {
+        this.activity.addStat(new DataDescent(this.activityFormGroup.get('descent').value));
+        this.event.addStat(new DataDistance(this.event.getActivities().reduce((descent, activity) => {
+          const activityDescent = activity.getStat(DataDescent.type);
+          if (activityDescent) {
+            descent += <number>activityDescent.getValue();
+          }
+          return descent;
+        }, 0)));
+      }
+
       if (this.activity.hasStreamData(DataDistance.type) && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
         EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
         this.activity.clearStats();
         EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
         EventUtilities.reGenerateStatsForEvent(this.event);
       }
+
 
       await this.eventService.setEvent(this.user, this.event);
 
@@ -203,7 +268,7 @@ export class ActivityFormComponent implements OnInit {
     this.dialogRef.close();
   }
 
-  private getTimeFromDateAsString(date: Date): string{
+  private getTimeFromDateAsString(date: Date): string {
     return `${('0' + date.getHours()).slice(-2)}:${('0' + date.getMinutes()).slice(-2)}:${('0' + date.getSeconds()).slice(-2)}`
   }
 }
