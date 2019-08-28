@@ -89,12 +89,6 @@ export class ActivityFormComponent implements OnInit {
         }, [
           Validators.required,
         ]),
-        descent: new FormControl(this.activity.getStat(DataDescent.type).getValue(), [
-          Validators.required,
-        ]),
-        distance: new FormControl(this.activity.getStat(DataDistance.type).getValue(), [
-          Validators.required,
-        ]),
       }
     );
 
@@ -114,7 +108,7 @@ export class ActivityFormComponent implements OnInit {
 
     const distance = this.activity.getStat(DataDistance.type);
     if (distance) {
-      this.activityFormGroup.addControl('descent', new FormControl(descent.getValue(), [
+      this.activityFormGroup.addControl('descent', new FormControl(distance.getValue(), [
         Validators.required,
       ]))
     }
