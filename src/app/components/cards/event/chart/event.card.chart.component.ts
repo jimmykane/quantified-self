@@ -39,6 +39,7 @@ import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataVerticalSpeedMetersPerMinute} from 'quantified-self-lib/lib/data/data.vertical-speed';
+import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -729,7 +730,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getDataTypesToRequest(): string[] {
-    return this.getNonUnitBasedDataTypes();
+    return this.getNonUnitBasedDataTypes().concat([DataSpeed.type]); // Inject speed always for pace and swim pace till this is refactored
   }
 
   /**
