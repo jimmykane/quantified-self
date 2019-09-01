@@ -1,7 +1,5 @@
 <mat-dialog-content>
-
-  <h1>Sign In with Your Phone Number</h1>
-  <div id="recaptcha-container" (show)="!windowRef.confirmationResult"></div>
+  <h2 class="mat-subheading-2">Sign In with Your Phone Number</h2>
 
 
   <section *ngIf="!windowRef.confirmationResult">
@@ -13,6 +11,7 @@
 
 
 
+    <div id="recaptcha-container"></div>
 
     <button mat-flat-button color="primary" (click)="sendLoginCode()">SMS Text Login Code</button>
   </section>
@@ -25,6 +24,5 @@
 
     <button  mat-flat-button color="primary"  class="button is-success" (click)="verifyLoginCode()">Verify</button>
   </section>
-
 
 </mat-dialog-content>

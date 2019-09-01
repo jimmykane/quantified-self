@@ -1,4 +1,12 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  Inject,
+  Input,
+  OnInit
+} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import {ErrorStateMatcher} from '@angular/material/core';
@@ -18,7 +26,7 @@ import * as firebase from 'firebase/app';
 })
 
 
-export class PhoneFormComponent implements OnInit {
+export class PhoneFormComponent implements OnInit, AfterViewInit {
 
   windowRef: any;
 
@@ -38,18 +46,18 @@ export class PhoneFormComponent implements OnInit {
   ) {
   }
 
-  ngOnInit(): void {
-    this.windowRef = this.windowService.windowRef;
+  ngAfterViewInit(): void {
     this.windowRef.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container')
-
     this.windowRef.recaptchaVerifier
       .render()
       .then( widgetId => {
-
         this.windowRef.recaptchaWidgetId = widgetId
       });
   }
 
+  ngOnInit(): void {
+    this.windowRef = this.windowService.windowRef;
+  }
 
   sendLoginCode() {
     this.afAuth.auth
@@ -57,7 +65,12 @@ export class PhoneFormComponent implements OnInit {
       .then(result => {
         this.windowRef.confirmationResult = result;
       })
-      .catch( error => console.log(error) );
+      .catch( error => {
+        this.snackBar.open(`Could not login due to ${error.message}`, null, {
+          duration: 2000,
+        });
+        console.log(error)
+      });
   }
 
   verifyLoginCode() {

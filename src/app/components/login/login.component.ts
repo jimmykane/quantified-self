@@ -142,13 +142,12 @@ export class LoginComponent implements OnInit {
   private showPhoneNumberForm() {
     const dialogRef = this.dialog.open(PhoneFormComponent, {
       width: '75vw',
-      disableClose: true,
-      data: {
-      },
+      disableClose: false,
+      data: {},
     });
 
     dialogRef.afterClosed().subscribe(result => {
-      if (result.user){
+      if (result && result.user) {
         this.redirectOrShowDataPrivacyDialog(result)
       }
       this.isLoading = false;
