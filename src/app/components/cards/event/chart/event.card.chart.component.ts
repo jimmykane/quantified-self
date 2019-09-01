@@ -642,6 +642,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.fontSize = '1.4em';
     button.align = 'left';
     button.marginLeft = 15;
+    button.opacity = 0.5;
 
     button.zIndex = 100;
     button.events.on('hit', (ev) => {
@@ -662,6 +663,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.align = 'left';
     button.marginLeft = 15;
     button.zIndex = 100;
+    button.opacity = 0.5;
     button.events.on('hit', (ev) => {
       this.disposeRangeLabelsContainer(chart);
       this.disposeCursorSelection(chart);
