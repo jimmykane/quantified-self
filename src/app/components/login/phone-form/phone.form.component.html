@@ -1,0 +1,30 @@
+<mat-dialog-content>
+
+  <h1>Sign In with Your Phone Number</h1>
+  <div id="recaptcha-container" (show)="!windowRef.confirmationResult"></div>
+
+
+  <section *ngIf="!windowRef.confirmationResult">
+
+    <mat-form-field>
+      <input matInput placeholder="Enter a phone number" type="text" [min]="2" [max]="2" [(ngModel)]="phoneNumber">
+      <mat-hint>Your phone number including the country prefix</mat-hint>
+    </mat-form-field>
+
+
+
+
+    <button mat-flat-button color="primary" (click)="sendLoginCode()">SMS Text Login Code</button>
+  </section>
+
+  <section *ngIf="windowRef.confirmationResult">
+    <mat-form-field>
+      <input matInput placeholder="Enter the verification code" type="text"  [(ngModel)]="verificationCode">
+      <mat-hint>Look at your phone text messages fro a verification code</mat-hint>
+    </mat-form-field>
+
+    <button  mat-flat-button color="primary"  class="button is-success" (click)="verifyLoginCode()">Verify</button>
+  </section>
+
+
+</mat-dialog-content>

@@ -11,6 +11,7 @@ import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
+import {PhoneFormComponent} from './phone-form/phone.form.component';
 
 @Component({
   selector: 'app-login',
@@ -68,6 +69,9 @@ export class LoginComponent implements OnInit {
           break;
         case SignInProviders.Twitter:
           this.authService.twitterLoginWithRedirect();
+          break;
+        case SignInProviders.PhoneNumber:
+          this.showPhoneNumberForm();
           break;
       }
     } catch (e) {
@@ -132,9 +136,24 @@ export class LoginComponent implements OnInit {
 
   @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {
-    return window.innerWidth < 600 ? 1 : 2;
+    return window.innerWidth < 600 ? 1 : window.innerWidth < 900 ? 2 : 3;
   }
 
+  private showPhoneNumberForm() {
+    const dialogRef = this.dialog.open(PhoneFormComponent, {
+      width: '75vw',
+      disableClose: true,
+      data: {
+      },
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      if (result.user){
+        this.redirectOrShowDataPrivacyDialog(result)
+      }
+      this.isLoading = false;
+    });
+  }
 }
 
 
@@ -143,5 +162,6 @@ export enum SignInProviders {
   Google,
   Facebook,
   Twitter,
-  SuuntoApp
+  SuuntoApp,
+  PhoneNumber
 }

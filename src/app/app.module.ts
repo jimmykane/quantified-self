@@ -102,6 +102,8 @@ import {EventCardMapComponent} from "./components/cards/event/map/event.card.map
 import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
 import {MatBottomSheetModule} from '@angular/material';
 import {EditInputComponent} from './components/edit-input/edit-input.component';
+import {PhoneFormComponent} from './components/login/phone-form/phone.form.component';
+import {WindowService} from './services/app.window.service';
 
 declare function require(moduleName: string): any;
 
@@ -225,6 +227,7 @@ export class SentryErrorHandler implements ErrorHandler {
     ChartActionsComponent,
     DeleteConfirmationComponent,
     EditInputComponent,
+    PhoneFormComponent,
   ],
   entryComponents: [
     EventFormComponent,
@@ -233,7 +236,8 @@ export class SentryErrorHandler implements ErrorHandler {
     ActivityFormComponent,
     UploadErrorComponent,
     HistoryImportFormComponent,
-    DeleteConfirmationComponent
+    DeleteConfirmationComponent,
+    PhoneFormComponent
   ],
   providers: [
     AppAuthService,
@@ -251,6 +255,7 @@ export class SentryErrorHandler implements ErrorHandler {
     SideNavService,
     ThemeService,
     AppInfoService,
+    WindowService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? SentryErrorHandler : ErrorHandler},
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
