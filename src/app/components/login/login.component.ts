@@ -148,7 +148,7 @@ export class LoginComponent implements OnInit {
 
     dialogRef.afterClosed().subscribe(result => {
       if (result && result.user) {
-        this.redirectOrShowDataPrivacyDialog(result)
+        this.redirectOrShowDataPrivacyDialog(result.user)
       }
       this.isLoading = false;
     });
