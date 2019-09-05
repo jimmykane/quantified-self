@@ -46,11 +46,20 @@ export class LoginComponent implements OnInit {
   async ngOnInit() {
     // Should the router guard this for logged in users
     this.isLoading = true;
-    const result = await this.afAuth.auth.getRedirectResult();
-    if (result.user) {
-      await this.redirectOrShowDataPrivacyDialog(result);
+    try {
+      const result = await this.afAuth.auth.getRedirectResult();
+      if (result.user) {
+        await this.redirectOrShowDataPrivacyDialog(result);
+      }
+    } catch (e) {
+      Sentry.captureException(e);
+      this.logger.error(e);
+      this.snackBar.open(`Could not log in due to ${e}`, null, {
+        duration: 2000,
+      });
+    } finally {
+      this.isLoading = false;
     }
-    this.isLoading = false;
   }
 
 
@@ -59,16 +68,19 @@ export class LoginComponent implements OnInit {
     try {
       switch (provider) {
         case SignInProviders.Anonymous:
-          this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
+          await this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
           break;
         case SignInProviders.Google:
-          this.authService.googleLogiWwithRedirect();
+          await this.authService.googleLogiWwithRedirect();
           break;
         case SignInProviders.Facebook:
-          this.authService.facebookLoginWithRedirect();
+          await this.authService.facebookLoginWithRedirect();
           break;
         case SignInProviders.Twitter:
-          this.authService.twitterLoginWithRedirect();
+          await this.authService.twitterLoginWithRedirect();
+          break;
+        case SignInProviders.GitHub:
+          await this.authService.gitHubLoginWithRedirect();
           break;
         case SignInProviders.PhoneNumber:
           this.showPhoneNumberForm();
@@ -162,5 +174,6 @@ export enum SignInProviders {
   Facebook,
   Twitter,
   SuuntoApp,
-  PhoneNumber
+  GitHub,
+  PhoneNumber,
 }

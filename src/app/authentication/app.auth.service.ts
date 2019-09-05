@@ -66,6 +66,11 @@ export class AppAuthService implements OnDestroy {
     return this.oAuthLoginWithRedirect(provider);
   }
 
+  gitHubLoginWithRedirect() {
+    const provider = new auth.GithubAuthProvider();
+    return this.oAuthLoginWithRedirect(provider);
+  }
+
   oAuthLoginWithRedirect(provider: any) {
     try {
       return this.afAuth.auth.signInWithRedirect(provider);

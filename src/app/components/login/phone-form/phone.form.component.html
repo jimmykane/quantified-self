@@ -27,7 +27,7 @@
   <form  [formGroup]="verificationCodeFormGroup" [hidden]="!windowRef.confirmationResult"  (submit)="verifyLoginCode($event)">
 
     <mat-form-field>
-      <input matInput placeholder="Enter the verification code" type="text"  formControlName="verificationCode">
+      <input matInput placeholder="Enter the verification code" type="text"  formControlName="verificationCode" autocomplete="off">
       <mat-hint>Look at your phone's text messages fro a verification code</mat-hint>
       <mat-error *ngIf="hasError(verificationCodeFormGroup, 'verificationCode')">
         invalid verification code
