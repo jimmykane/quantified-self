@@ -47,7 +47,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
-  public chartCursorBehaviour: ChartCursorBehaviours;
+  public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;

@@ -543,9 +543,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // series.adapter.add('stroke', (fill, target) => {
     //   return series.chart.colors.getIndex(series.chart.series.indexOf(target));
     // });
-    series.strokeWidth = this.userChartSettings.strokeWidth;
-    series.strokeOpacity = this.userChartSettings.strokeOpacity;
-    series.fillOpacity = this.userChartSettings.fillOpacity;
+    if (this.userChartSettings) {
+      series.strokeWidth = this.userChartSettings.strokeWidth;
+      series.strokeOpacity = this.userChartSettings.strokeOpacity;
+      series.fillOpacity = this.userChartSettings.fillOpacity;
+    }else {
+      series.strokeWidth = UserService.getDefaultChartStrokeWidth();
+      series.strokeOpacity = UserService.getDefaultChartStrokeOpacity();
+      series.fillOpacity = UserService.getDefaultChartFillOpacity();
+    }
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
