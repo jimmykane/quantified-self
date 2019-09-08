@@ -67,11 +67,12 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
       console.log('Should sign in:', signInWithService);
       console.log('Received verification state:', req.cookies.state);
       console.log('Received state:', req.query.state);
-      if (!req.cookies.state) {
-        throw new Error('State cookie not set or expired. Maybe you took too long to authorize. Please try again.');
-      } else if (req.cookies.state !== req.query.state) {
-        throw new Error('State validation failed');
-      }
+      // if (!req.cookies.state) {
+      //   throw new Error('State cookie not set or expired. Maybe you took too long to authorize. Please try again.');
+      // } else if (req.cookies.state !== req.query.state) {
+      //   throw new Error('State validation failed');
+      // }
+
       console.log('Received auth code:', req.query.code);
       const results = await oauth2.authorizationCode.getToken({
         code: req.query.code,
