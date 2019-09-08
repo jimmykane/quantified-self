@@ -40,6 +40,7 @@ import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulate
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataVerticalSpeedMetersPerMinute} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {UserService} from '../../../../services/app.user.service';
 
 @Component({
   selector: 'app-event-card-chart',
