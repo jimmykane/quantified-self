@@ -108,7 +108,7 @@ export class ActivityFormComponent implements OnInit {
 
     const distance = this.activity.getStat(DataDistance.type);
     if (distance) {
-      this.activityFormGroup.addControl('descent', new FormControl(distance.getValue(), [
+      this.activityFormGroup.addControl('distance', new FormControl(distance.getValue(), [
         Validators.required,
       ]))
     }
@@ -207,14 +207,14 @@ export class ActivityFormComponent implements OnInit {
         }, 0)));
       }
 
-      if (this.activityFormGroup.get('descent').dirty) {
-        this.activity.addStat(new DataDescent(this.activityFormGroup.get('descent').value));
-        this.event.addStat(new DataDistance(this.event.getActivities().reduce((descent, activity) => {
-          const activityDescent = activity.getStat(DataDescent.type);
-          if (activityDescent) {
-            descent += <number>activityDescent.getValue();
+      if (this.activityFormGroup.get('distance').dirty) {
+        this.activity.addStat(new DataDistance(this.activityFormGroup.get('distance').value));
+        this.event.addStat(new DataDistance(this.event.getActivities().reduce((distance, activity) => {
+          const activityDistance = activity.getStat(DataDistance.type);
+          if (activityDistance) {
+            distance += <number>activityDistance.getValue();
           }
-          return descent;
+          return distance;
         }, 0)));
       }
 
