@@ -192,6 +192,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
 
+    // Add scrollbar
+    chart.scrollbarX = new am4core.Scrollbar();
+
     let xAxis;
     if (this.xAxisType === XAxisTypes.Distance) {
       xAxis = chart.xAxes.push(new am4charts.ValueAxis());
