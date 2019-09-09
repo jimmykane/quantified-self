@@ -13,12 +13,12 @@ export class ClipboardService {
   public copyToClipboard(text: string) {
     try {
       this.zone.runOutsideAngular(() => {
-        const el = document.createElement('textarea');
-        el.value = text;
-        document.body.appendChild(el);
-        el.select();
+        document.addEventListener('copy', (e: ClipboardEvent) => {
+          e.clipboardData.setData('text/plain', (text));
+          e.preventDefault();
+          document.removeEventListener('copy', null);
+        });
         document.execCommand('copy');
-        document.body.removeChild(el);
       });
     } catch (e) {
       this.logger.error(`Could not copy ${text}`);
