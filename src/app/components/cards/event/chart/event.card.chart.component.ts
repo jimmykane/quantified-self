@@ -262,9 +262,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
     // Sticky
-    chart.cursor.events.on('cursorpositionchanged', (event) => {
-      chart.cursor.triggerMove(event.target.point, 'soft');
-    });
+    // chart.cursor.events.on('cursorpositionchanged', (event) => {
+    //   chart.cursor.triggerMove(event.target.point, 'soft');
+    // });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
       this.disposeRangeLabelsContainer(ev.target.chart);
