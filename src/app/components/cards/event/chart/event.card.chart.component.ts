@@ -40,6 +40,7 @@ import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulate
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataVerticalSpeedMetersPerMinute} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {UserService} from '../../../../services/app.user.service';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -191,6 +192,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
 
+    // Add scrollbar
+    chart.scrollbarX = new am4core.Scrollbar();
+
     let xAxis;
     if (this.xAxisType === XAxisTypes.Distance) {
       xAxis = chart.xAxes.push(new am4charts.ValueAxis());
@@ -258,9 +262,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
     // Sticky
-    chart.cursor.events.on('cursorpositionchanged', (event) => {
-      chart.cursor.triggerMove(event.target.point, 'soft');
-    });
+    // chart.cursor.events.on('cursorpositionchanged', (event) => {
+    //   chart.cursor.triggerMove(event.target.point, 'soft');
+    // });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
       this.disposeRangeLabelsContainer(ev.target.chart);
@@ -543,9 +547,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // series.adapter.add('stroke', (fill, target) => {
     //   return series.chart.colors.getIndex(series.chart.series.indexOf(target));
     // });
-    series.strokeWidth = this.userChartSettings.strokeWidth;
-    series.strokeOpacity = this.userChartSettings.strokeOpacity;
-    series.fillOpacity = this.userChartSettings.fillOpacity;
+    if (this.userChartSettings) {
+      series.strokeWidth = this.userChartSettings.strokeWidth;
+      series.strokeOpacity = this.userChartSettings.strokeOpacity;
+      series.fillOpacity = this.userChartSettings.fillOpacity;
+    }else {
+      series.strokeWidth = UserService.getDefaultChartStrokeWidth();
+      series.strokeOpacity = UserService.getDefaultChartStrokeOpacity();
+      series.fillOpacity = UserService.getDefaultChartFillOpacity();
+    }
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';

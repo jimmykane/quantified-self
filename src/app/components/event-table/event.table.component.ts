@@ -557,11 +557,11 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
     }
 
     if (window.innerWidth < 740) {
-      columns = columns.filter(column => ['stats.Activity Types', 'stats.Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['stats.Device Names'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 640) {
-      columns = columns.filter(column => ['privacy'].indexOf(column) === -1)
+      columns = columns.filter(column => ['stats.Ascent'].indexOf(column) === -1)
     }
 
     // Push the last
