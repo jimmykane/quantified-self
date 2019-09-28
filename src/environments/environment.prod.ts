@@ -10,6 +10,7 @@ export const environment = {
     storageBucket: 'quantified-self-io.appspot.com',
     messagingSenderId: '242713487388',
     appId: '1:242713487388:web:af0b3e931f2e96ed',
+    measurementId: 'G-F8YB8P8091'
   },
   functions: {
     deauthorizeSuuntoAppServiceURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorize',
