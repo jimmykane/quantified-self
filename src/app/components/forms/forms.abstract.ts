@@ -7,13 +7,15 @@ import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import {FormControl, FormGroup} from '@angular/forms';
 
 
-
+/**
+ * @todo move all forms to here
+ */
 export abstract class FormsAbstract {
 
   constructor(
     public dialogRef: MatDialogRef<any>,
-    @Inject(MAT_DIALOG_DATA) public data: any,
-    private snackBar: MatSnackBar,
+    public data: any,
+    protected snackBar?: MatSnackBar,
   ) {
 
   }

@@ -18,6 +18,9 @@ import {
 } from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {EventFormComponent} from '../event-form/event.form.component';
+import {MatDialog} from '@angular/material/dialog';
+import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
 
 @Component({
   selector: 'app-summaries',
@@ -53,7 +56,7 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     this.rowHeight = this.getRowHeight();
   }
 
-  constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private themeService: ThemeService, private snackBar: MatSnackBar) {
+  constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private themeService: ThemeService, private snackBar: MatSnackBar, private dialog: MatDialog) {
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
   }
@@ -104,6 +107,13 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       this.events = events.filter(event => !event.isMerge);
       this.charts = this.getChartsAndData(this.events, this.user.settings.dashboardSettings.chartsSettings);
       this.isLoading = false;
+      const dialogRef = this.dialog.open(EventsExportFormComponent, {
+        // width: '75vw',
+        disableClose: false,
+        data: {
+          user: this.user
+        },
+      });
     });
   }
 

@@ -1,0 +1,188 @@
+<mat-dialog-content>
+  <app-shade [isActive]="isLoading"></app-shade>
+
+  <span class="mat-headline">Export to CSV</span>
+
+  <form *ngIf="exportFromGroup" [formGroup]="exportFromGroup">
+    <section>
+      <span class="mat-subheading-2">Select the data you want to include</span>
+    </section>
+    <!--    <form *ngIf="exportFromGroup" [formGroup]="exportFromGroup" (submit)="onSubmit($event)"-->
+    <!--        (keyup.enter)="onSubmit($event)">-->
+
+    <!--    <app-shade [isActive]="isLoading"></app-shade>-->
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="startDate">
+          <span matTooltip="Include the start date in the export">
+             Start date
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="name">
+          <span matTooltip="Include name in the export">
+             Name
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="description">
+          <span matTooltip="Include description in the export">
+             Description
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="duration">
+          <span matTooltip="Include duration in the export">
+             Duration
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="ascent">
+          <span matTooltip="Include ascent in the export">
+             Ascent
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="descent">
+          <span matTooltip="Include descent in the export">
+             Descent
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="calories">
+          <span matTooltip="Include calories in the export">
+             Calories
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="feeling">
+          <span matTooltip="Include feeling in the export">
+             Feeling
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+    <mat-slide-toggle
+      [color]="'accent'"
+      formControlName="rpe">
+          <span matTooltip="Include RPE in the export">
+             RPE
+          </span>
+    </mat-slide-toggle>
+  </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="averageSpeed">
+          <span matTooltip="Include average speed in the export">
+             Average speed
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="averagePace">
+          <span matTooltip="Include average pace in the export">
+             Average pace
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="averageSwimPace">
+          <span matTooltip="Include average swim pace in the export">
+             Average swim pace
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="averageHeartRate">
+          <span matTooltip="Include average heart rate in the export">
+             Average heart rate
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="maximumHeartRate">
+          <span matTooltip="Include maximum heart rate in the export">
+             Maximum heart rate
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="averagePower">
+          <span matTooltip="Include average power in the export">
+             Average power
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="maximumPower">
+          <span matTooltip="Include maximum power in the export">
+             Maximum power
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="vO2Max">
+          <span matTooltip="Include VO2Max in the export">
+             VO2Max
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+  </form>
+</mat-dialog-content>

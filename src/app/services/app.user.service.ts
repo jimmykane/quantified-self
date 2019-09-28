@@ -47,6 +47,7 @@ import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {UserExportToCsvSettingsInterface} from 'quantified-self-lib/lib/users/user.export-to-csv.settings.interface';
 
 
 @Injectable()
@@ -335,6 +336,27 @@ export class UserService implements OnDestroy {
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || UserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || UserService.getDefaultMapType();
+
+    // Export to CSV
+    settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
+    settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
+    settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
+    settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
+    settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
+    settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;
+    settings.exportToCSVSettings.descent = settings.exportToCSVSettings.descent !== false;
+    settings.exportToCSVSettings.calories = settings.exportToCSVSettings.calories !== false;
+    settings.exportToCSVSettings.feeling = settings.exportToCSVSettings.feeling !== false;
+    settings.exportToCSVSettings.rpe = settings.exportToCSVSettings.rpe !== false;
+    settings.exportToCSVSettings.averageSpeed = settings.exportToCSVSettings.averageSpeed !== false;
+    settings.exportToCSVSettings.averagePace = settings.exportToCSVSettings.averagePace !== false;
+    settings.exportToCSVSettings.averageSwimPace = settings.exportToCSVSettings.averageSwimPace !== false;
+    settings.exportToCSVSettings.averageHeartRate = settings.exportToCSVSettings.averageHeartRate !== false;
+    settings.exportToCSVSettings.maximumHeartRate = settings.exportToCSVSettings.maximumHeartRate !== false;
+    settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
+    settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
+    settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
+
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;

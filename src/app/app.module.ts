@@ -104,6 +104,7 @@ import {MatBottomSheetModule} from '@angular/material';
 import {EditInputComponent} from './components/edit-input/edit-input.component';
 import {PhoneFormComponent} from './components/login/phone-form/phone.form.component';
 import {WindowService} from './services/app.window.service';
+import {EventsExportFormComponent} from './components/events-export-form/events-export.form.component';
 
 declare function require(moduleName: string): any;
 
@@ -228,6 +229,7 @@ export class SentryErrorHandler implements ErrorHandler {
     DeleteConfirmationComponent,
     EditInputComponent,
     PhoneFormComponent,
+    EventsExportFormComponent
   ],
   entryComponents: [
     EventFormComponent,
@@ -237,7 +239,8 @@ export class SentryErrorHandler implements ErrorHandler {
     UploadErrorComponent,
     HistoryImportFormComponent,
     DeleteConfirmationComponent,
-    PhoneFormComponent
+    PhoneFormComponent,
+    EventsExportFormComponent
   ],
   providers: [
     AppAuthService,
