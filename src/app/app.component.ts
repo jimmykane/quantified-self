@@ -24,6 +24,8 @@ import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
 import {slideInAnimation} from './animations/animations';
 
+import * as firebase from 'firebase/app'
+
 declare function require(moduleName: string): any;
 const {version: appVersion} = require('../../package.json');
 
@@ -81,6 +83,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
+    // Init analytics
+    firebase.analytics();
 
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events
