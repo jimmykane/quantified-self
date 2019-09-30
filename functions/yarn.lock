@@ -1007,10 +1007,10 @@ firebase-functions@^3.0.2:
     jsonwebtoken "^8.3.2"
     lodash "^4.6.1"
 
-fit-file-parser@^1.6.14:
-  version "1.6.14"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.14.tgz#d6a4a878c5737b3946836054231664c5d76f382f"
-  integrity sha512-wCkNTOiTcVEsgATxm8S6qPQ1vCY5U9D8v3+QlMM6EtbUaRt4zJYF7uOlUagMyVZFgFxmEkRTgaQEwFwxiZKoRw==
+fit-file-parser@^1.6.15:
+  version "1.6.15"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.15.tgz#e3c3671def1812c53350e848c4bc6c7029053650"
+  integrity sha512-yNBrlNGaYmybcz7dPeaE9w+29yggawXkaVWg9hDRbnFPytwVj7g6kmKfODvU2BmE2qL+jLaDGs14Mg9lC2zv0g==
   dependencies:
     buffer "^5.1.0"
 
@@ -1819,14 +1819,14 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.3.4:
-  version "3.3.4"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.3.4.tgz#93610495d33008fdb76226637da9ae89bfef1a84"
-  integrity sha512-HlPuxogDSSFopqk+hX01wsWGsSSEYWS8rZj8acSxE36dVT9JsrbEGECz4fsqVMD8DXwkfMNnAj8B5nAljw1oNw==
+quantified-self-lib@^3.3.5:
+  version "3.3.5"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.3.5.tgz#6d06153e9192ca81bccf1b205b9d84c4372d9c35"
+  integrity sha512-OUYyyNTckgJRh5+AhyfFHiTSr7BFYgBWyCCFo7R2gVKj/7lVqxinWUZ44qvGR44QNM5d5WgT/k7KiHHOFS8Y3A==
   dependencies:
     "@types/node" "^12.7.1"
     fast-xml-parser "^3.12.19"
-    fit-file-parser "^1.6.14"
+    fit-file-parser "^1.6.15"
     geolib "^3.0.4"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
