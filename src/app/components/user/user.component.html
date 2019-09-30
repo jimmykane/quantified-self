@@ -18,15 +18,6 @@
   <mat-card-content>
     <mat-tab-group
       [dynamicHeight]="true">
-      <mat-tab label="Events">
-        <ng-template matTabLabel>
-          <mat-icon>share</mat-icon>
-          Shared
-        </ng-template>
-        <mat-card>
-          <app-event-table [user]="targetUser" [privacyFilter]="'public'"></app-event-table>
-        </mat-card>
-      </mat-tab>
       <mat-tab label="Settings"  *ngIf="isOwner()">
         <ng-template matTabLabel>
           <mat-icon>settings</mat-icon>
