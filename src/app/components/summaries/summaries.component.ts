@@ -107,16 +107,16 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
       this.events = events.filter(event => !event.isMerge);
       this.charts = this.getChartsAndData(this.events, this.user.settings.dashboardSettings.chartsSettings);
       this.isLoading = false;
-      const dialogRef = this.dialog.open(EventsExportFormComponent, {
-        // width: '75vw',
-        disableClose: false,
-        data: {
-          user: this.user,
-          events: this.events,
-          startDate: this.searchStartDate,
-          endDate: this.searchEndDate,
-        },
-      });
+      // const dialogRef = this.dialog.open(EventsExportFormComponent, {
+      //   // width: '75vw',
+      //   disableClose: false,
+      //   data: {
+      //     user: this.user,
+      //     events: this.events,
+      //     startDate: this.searchStartDate,
+      //     endDate: this.searchEndDate,
+      //   },
+      // });
     });
   }
 
