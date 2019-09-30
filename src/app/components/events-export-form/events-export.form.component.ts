@@ -53,6 +53,8 @@ export class EventsExportFormComponent extends FormsAbstract {
   public exportFromGroup: FormGroup;
   public user: User;
   public events: EventInterface[];
+  public startDate: Date;
+  public endDate: Date;
   public isLoading: boolean;
 
 
@@ -66,8 +68,10 @@ export class EventsExportFormComponent extends FormsAbstract {
     super(dialogRef, data, snackBar);
     this.user = data.user;
     this.events = data.events;
-    if (!this.user || !this.events) {
-      throw new Error('Component needs events and user')
+    this.startDate = data.startDate;
+    this.endDate = data.endDate;
+    if (!this.user || !this.events || !this.startDate || !this.endDate) {
+      throw new Error('Component needs events, user, start date and end date')
     }
 
     this.exportFromGroup = new FormGroup({

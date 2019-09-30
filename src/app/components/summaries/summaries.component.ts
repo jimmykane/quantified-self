@@ -112,7 +112,9 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
         disableClose: false,
         data: {
           user: this.user,
-          events: this.events
+          events: this.events,
+          startDate: this.searchStartDate,
+          endDate: this.searchEndDate,
         },
       });
     });
