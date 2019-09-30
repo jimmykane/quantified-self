@@ -252,7 +252,8 @@ export class UserSettingsComponent implements OnChanges {
             startDate: this.user.settings.dashboardSettings.startDate,
             endDate: this.user.settings.dashboardSettings.endDate,
             dateRange: this.user.settings.dashboardSettings.dateRange,
-          }
+          },
+          exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
       });
       this.snackBar.open('User updated', null, {

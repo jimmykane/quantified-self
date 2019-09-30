@@ -4,6 +4,7 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 
 export abstract class UnitBasedAbstract {
   /**
@@ -11,7 +12,7 @@ export abstract class UnitBasedAbstract {
    * @param dataTypes
    * @param userUnitSettings
    */
-  protected getUnitBasedDataTypesToUseFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
+  protected getUnitBasedDataTypesFromDataTypes(dataTypes: string[], userUnitSettings?: UserUnitSettingsInterface): string[] {
     let unitBasedDataTypes = [];
     if (!userUnitSettings) {
       return unitBasedDataTypes
@@ -25,5 +26,29 @@ export abstract class UnitBasedAbstract {
       unitBasedDataTypes = unitBasedDataTypes.concat(userUnitSettings.verticalSpeedUnits);
     }
     return unitBasedDataTypes;
+  }
+
+  /**
+   * Gets the unitbased types
+   * @param dataType
+   * @param userUnitSettings
+   */
+  protected getUnitBasedDataTypesFromDataType(dataType: string, userUnitSettings?: UserUnitSettingsInterface): string[] {
+    if (!userUnitSettings) {
+      return [dataType]
+    }
+    if (dataType === DataSpeed.type) {
+      return userUnitSettings.speedUnits;
+    }
+    if (dataType === DataPace.type) {
+      return userUnitSettings.paceUnits;
+    }
+    if (dataType === DataSwimPace.type) {
+      return userUnitSettings.swimPaceUnits;
+    }
+    if (dataType === DataVerticalSpeed.type) {
+      return userUnitSettings.verticalSpeedUnits;
+    }
+    return [dataType];
   }
 }

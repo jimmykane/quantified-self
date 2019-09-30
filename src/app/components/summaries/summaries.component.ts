@@ -111,7 +111,8 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
         // width: '75vw',
         disableClose: false,
         data: {
-          user: this.user
+          user: this.user,
+          events: this.events
         },
       });
     });

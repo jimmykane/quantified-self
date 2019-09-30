@@ -5,24 +5,24 @@ import {
 } from '@angular/core';
 import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
 import {FormControl, FormGroup} from '@angular/forms';
+import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 
 
 /**
  * @todo move all forms to here
  */
-export abstract class FormsAbstract {
+export abstract class FormsAbstract extends UnitBasedAbstract{
 
   constructor(
     public dialogRef: MatDialogRef<any>,
     public data: any,
     protected snackBar?: MatSnackBar,
   ) {
-
+    super();
   }
 
 
   // @todo extract to abstract for all forms
-
   hasError(formGroup: FormGroup, field?: string) {
     if (!field) {
       return !formGroup.valid;
@@ -41,8 +41,11 @@ export abstract class FormsAbstract {
     });
   }
 
+  async onSubmit(event) {
+    event.preventDefault();
+  }
 
-  close(event) {
+  async close(event) {
     event.stopPropagation();
     event.preventDefault();
     this.dialogRef.close();

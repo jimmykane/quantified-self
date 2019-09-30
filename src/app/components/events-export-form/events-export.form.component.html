@@ -3,7 +3,7 @@
 
   <span class="mat-headline">Export to CSV</span>
 
-  <form *ngIf="exportFromGroup" [formGroup]="exportFromGroup">
+  <form *ngIf="exportFromGroup" [formGroup]="exportFromGroup" (ngSubmit)="onSubmit($event)">
     <section>
       <span class="mat-subheading-2">Select the data you want to include</span>
     </section>
@@ -37,6 +37,16 @@
         formControlName="description">
           <span matTooltip="Include description in the export">
              Description
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="distance">
+          <span matTooltip="Include distance in the export">
+             Distance
           </span>
       </mat-slide-toggle>
     </section>
@@ -92,14 +102,14 @@
     </section>
 
     <section>
-    <mat-slide-toggle
-      [color]="'accent'"
-      formControlName="rpe">
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="rpe">
           <span matTooltip="Include RPE in the export">
              RPE
           </span>
-    </mat-slide-toggle>
-  </section>
+      </mat-slide-toggle>
+    </section>
 
     <section>
       <mat-slide-toggle
@@ -130,7 +140,6 @@
           </span>
       </mat-slide-toggle>
     </section>
-
 
 
     <section>
@@ -184,5 +193,9 @@
       </mat-slide-toggle>
     </section>
 
+    <section>
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
+      <button mat-flat-button color="primary" (click)="onSubmit($event)" *ngIf="!hasError(exportFromGroup)">Export</button>
+    </section>
   </form>
 </mat-dialog-content>

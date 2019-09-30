@@ -153,7 +153,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         // We get the unit streams and we filter on them based on the user pref
         const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
           // If its a swimming activity it will detect the corresponding metrics
-          return this.getUnitBasedDataTypesToUseFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
+          return this.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
         });
         return unitStreams.concat(streams).filter((stream) => {
           // Filter out pace if swimming

@@ -342,6 +342,7 @@ export class UserService implements OnDestroy {
     settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
     settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
     settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
+    settings.exportToCSVSettings.distance = settings.exportToCSVSettings.distance !== false;
     settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
     settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;
     settings.exportToCSVSettings.descent = settings.exportToCSVSettings.descent !== false;
@@ -356,7 +357,6 @@ export class UserService implements OnDestroy {
     settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
     settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
     settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
-
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;
