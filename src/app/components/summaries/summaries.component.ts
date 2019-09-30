@@ -141,7 +141,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     const minOrMax = this.events.reduce((minOrMaxBuffer, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
-      if (!stat) {
+      if (!stat || !isNumber(stat.getValue())) {
         return minOrMaxBuffer;
       }
       return !min ? (<number>stat.getValue() > minOrMaxBuffer ? <number>stat.getValue() : minOrMaxBuffer) : (<number>stat.getValue() <= minOrMaxBuffer ? <number>stat.getValue() : minOrMaxBuffer)
@@ -161,6 +161,9 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
+      if (!isNumber(stat.getValue())){
+        return valueByTypeMap;
+      }
       const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]);
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], !isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue())); // @todo break the join (not use display value)
       return valueByTypeMap
@@ -172,7 +175,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     const valueSum = this.events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
-      if (!stat) {
+      if (!stat || !isNumber(stat.getValue())) {
         return sum;
       }
       sum += <number>stat.getValue();
@@ -194,7 +197,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
       const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-      if (!activityTypeValue && !stat.getValue()) { // delib include 0 to wipe out from sums
+      if (!isNumber(activityTypeValue) || !isNumber(stat.getValue())) {
         return valueByTypeMap;
       }
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
@@ -207,7 +210,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     let totalAvgCount = 0;
     const valueSum = this.events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
-      if (!stat) {
+      if (!stat || !isNumber(stat.getValue())) {
         return sum;
       }
       totalAvgCount++;
@@ -232,6 +235,9 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       }
       if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
+      }
+      if (!isNumber(stat.getValue())){
+        return valueByTypeMap;
       }
       const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;

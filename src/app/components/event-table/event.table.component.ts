@@ -63,7 +63,7 @@ import {LoadingAbstract} from '../loading/loading.abstract';
 export class EventTableComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() privacyFilter?: Privacy;
-  @Input() eventsPerPage ? = 10;
+  @Input() eventsPerPage ? = 100;
   @Input() hasActions?: boolean;
   @Input() searchTerm: string;
   @Input() searchStartDate: Date;

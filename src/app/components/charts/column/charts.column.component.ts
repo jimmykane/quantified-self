@@ -227,8 +227,8 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     data.forEach((dataItem: {type: string, value: number}) => {
       const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
       if (percent < 5) {
-        otherData = otherData || {type: 'Other', value: dataItem.value};
-        otherData.value = <number>this.getAggregateData([otherData, dataItem ], this.chartDataValueType).getValue();
+        otherData = otherData || {type: 'Other', value: dataItem.value}; // Sets initial value needs -dataItem.value
+        otherData.value = <number>this.getAggregateData([otherData, dataItem ], this.chartDataValueType).getValue() - dataItem.value; // Important the -dataItem.value
         return;
       }
       chartData.push(dataItem);

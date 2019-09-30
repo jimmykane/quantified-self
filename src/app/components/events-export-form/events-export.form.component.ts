@@ -275,7 +275,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.fileService.downloadFile((new Blob(
       [csvString],
       {type: 'data:text/csv;charset=utf-8'},
-    )), 'putdates', 'csv');
+    )), `${this.startDate.toLocaleDateString()}-${this.endDate.toLocaleDateString()}`, 'csv');
 
     this.close(new Event('Done')).then(() => {
       this.userService.updateUserProperties(this.user, {
