@@ -1,6 +1,6 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy,
+  ChangeDetectionStrategy, ChangeDetectorRef,
   Component,
   Input,
   NgZone,
@@ -41,8 +41,8 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
   protected chart: am4charts.PieChart;
   protected logger = Log.create('ChartPieComponent');
 
-  constructor(protected zone: NgZone) {
-    super(zone);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+    super(zone, changeDetector);
   }
 
   async ngAfterViewInit() {

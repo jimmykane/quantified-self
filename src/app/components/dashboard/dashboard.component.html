@@ -7,10 +7,8 @@
                     [startOfTheWeek]="startOfTheWeek"
                     (searchChange)="search($event)">
   </app-event-search>
-  <app-summaries  *ngIf="user && !this.authService.isCurrentUserAnonymous() && user.settings.dashboardSettings.showSummaries && (searchStartDate || searchEndDate)" [user]="user"
-                  [searchEndDate]="searchEndDate"
-                  [searchTerm]="searchTerm"
-                  [searchStartDate]="searchStartDate">
+  <app-summaries  *ngIf="user && !this.authService.isCurrentUserAnonymous() && user.settings.dashboardSettings.showSummaries" [user]="user"
+                  [events]="events">
   </app-summaries>
 
   <app-event-table [hasActions]="true" *ngIf="user" [user]="user" [searchEndDate]="searchEndDate" [searchTerm]="searchTerm" [searchStartDate]="searchStartDate"></app-event-table>

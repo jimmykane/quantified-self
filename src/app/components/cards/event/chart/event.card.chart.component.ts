@@ -70,13 +70,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected logger = Log.create('EventCardChartComponent');
 
 
-  constructor(private  changeDetector: ChangeDetectorRef,
+  constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
               private eventService: EventService,
               private userSettingsService: UserSettingsService,
               private themeService: ThemeService,
               private eventColorService: EventColorService) {
-    super(zone);
+    super(zone, changeDetector);
   }
 
   async ngAfterViewInit() {
@@ -863,17 +863,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private getSeriesRangeLabelContainerID(series): string {
     return `rangeLabelContainer${series.id}`;
-  }
-
-
-  private loading() {
-    this.isLoading = true;
-    this.changeDetector.detectChanges();
-  }
-
-  private loaded() {
-    this.isLoading = false;
-    this.changeDetector.detectChanges();
   }
 
 }

@@ -1,4 +1,5 @@
 import {
+  ChangeDetectorRef,
   ElementRef,
   Input,
   NgZone,
@@ -54,8 +55,9 @@ import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
 import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataPowerLeft} from 'quantified-self-lib/lib/data/data.power-left';
 import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
+import {LoadingAbstract} from '../loading/loading.abstract';
 
-export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestroy {
+export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
 
@@ -78,8 +80,8 @@ export abstract class ChartAbstract extends UnitBasedAbstract implements OnDestr
     'kelly': kelly,
   };
 
-  constructor(protected zone: NgZone) {
-    super();
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+    super(changeDetector);
   }
 
   getCategoryAxis(): am4charts.CategoryAxis {

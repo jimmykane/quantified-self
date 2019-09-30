@@ -1,6 +1,6 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy,
+  ChangeDetectionStrategy, ChangeDetectorRef,
   Component,
   ElementRef,
   Input,
@@ -43,8 +43,8 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
   protected logger = Log.create('ChartColumnComponent');
   public noData: boolean;
 
-  constructor(protected zone: NgZone) {
-    super(zone);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+    super(zone, changeDetector);
   }
 
   async ngAfterViewInit() {

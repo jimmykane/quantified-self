@@ -5,7 +5,6 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {ChartThemes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {BehaviorSubject, Observable} from 'rxjs';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
-import {LapTypes} from "quantified-self-lib/lib/laps/lap.types";
 
 
 @Injectable()

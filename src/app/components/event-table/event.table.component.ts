@@ -41,6 +41,7 @@ import {animate, state, style, transition, trigger} from '@angular/animations';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
+import {LoadingAbstract} from '../loading/loading.abstract';
 
 
 @Component({
@@ -59,7 +60,7 @@ import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventTableComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() privacyFilter?: Privacy;
   @Input() eventsPerPage ? = 10;
@@ -81,7 +82,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
   data: MatTableDataSource<any>;
   selection = new SelectionModel(true, []);
   resultsLength = 0;
-  isLoading = true;
   errorLoading;
   expandedElement: EventRowElement | null;
   expandAll: boolean;
@@ -96,8 +96,9 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
               private eventService: EventService,
               private actionButtonService: ActionButtonService,
               private deleteConfirmationBottomSheet: MatBottomSheet,
-              private  changeDetector: ChangeDetectorRef,
+              changeDetector: ChangeDetectorRef,
               private router: Router, private  datePipe: DatePipe) {
+    super(changeDetector);
   }
 
   ngOnInit() {
@@ -569,16 +570,6 @@ export class EventTableComponent implements OnChanges, OnInit, OnDestroy, AfterV
       columns.push('actions')
     }
     return columns
-  }
-
-  private loading() {
-    this.isLoading = true;
-    this.changeDetector.detectChanges();
-  }
-
-  private loaded() {
-    this.isLoading = false;
-    this.changeDetector.detectChanges();
   }
 
   private unsubscribeFromAll() {

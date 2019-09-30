@@ -1,4 +1,13 @@
-import {Component, HostListener, Input, OnChanges, OnDestroy, OnInit,} from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  HostListener,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -21,30 +30,26 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog} from '@angular/material/dialog';
 import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
+import {LoadingAbstract} from '../loading/loading.abstract';
 
 @Component({
   selector: 'app-summaries',
   templateUrl: './summaries.component.html',
   styleUrls: ['./summaries.component.css'],
-  // changeDetection: ChangeDetectionStrategy.OnPush,
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
-  @Input() searchTerm: string;
-  @Input() searchStartDate: Date;
-  @Input() searchEndDate: Date;
+export class SummariesComponent extends LoadingAbstract implements OnInit, OnDestroy, OnChanges {
+  @Input() events: EventInterface[];
   @Input() user: User;
 
   public rowHeight;
   public numberOfCols;
 
-  public isLoading = true;
-  public events: EventInterface[];
 
   public charts: SummariesChartInterface[] = [];
   public chartTypes = ChartTypes;
 
-  private eventsSubscription: Subscription;
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
 
@@ -56,68 +61,37 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
     this.rowHeight = this.getRowHeight();
   }
 
-  constructor(private router: Router, private authService: AppAuthService, private eventService: EventService, private themeService: ThemeService, private snackBar: MatSnackBar, private dialog: MatDialog) {
+  constructor(private router: Router,
+              private authService: AppAuthService,
+              private eventService: EventService,
+              private themeService: ThemeService,
+              private snackBar: MatSnackBar,
+              private dialog: MatDialog,
+              changeDetector: ChangeDetectorRef,
+  ) {
+    super(changeDetector);
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
   }
 
 
   ngOnInit() {
+    this.loading();
   }
 
   ngOnChanges() {
-    this.subscribeToAll()
+    this.loading();
+    this.subscribeToAll();
   }
 
   private subscribeToAll() {
     this.unsubscribeFromAll();
-    this.isLoading = true;
     // Subscribe to the chartTheme changes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
-    const limit = 0; // @todo double check this how it relates
-    const where = [];
-    if (this.searchTerm) {
-      where.push({
-        fieldPath: 'name',
-        opStr: <WhereFilterOp>'==',
-        value: this.searchTerm
-      });
-    }
-    if (!this.searchStartDate || !this.searchEndDate) {
-      const error = new Error(`Search startDate or endDate are missing`);
-      Sentry.captureException(error);
-      throw error;
-    }
-    // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
-    where.push({
-      fieldPath: 'startDate',
-      opStr: <WhereFilterOp>'>=',
-      value: this.searchStartDate.getTime() // Should remove mins from date
-    });
-    // this.searchEndDate.setHours(24, 0, 0, 0);
-    where.push({
-      fieldPath: 'startDate',
-      opStr: <WhereFilterOp>'<=', // Should remove mins from date
-      value: this.searchEndDate.getTime()
-    });
-
-    this.eventsSubscription = this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit).subscribe(events => {
-      this.events = events.filter(event => !event.isMerge);
-      this.charts = this.getChartsAndData(this.events, this.user.settings.dashboardSettings.chartsSettings);
-      this.isLoading = false;
-      // const dialogRef = this.dialog.open(EventsExportFormComponent, {
-      //   // width: '75vw',
-      //   disableClose: false,
-      //   data: {
-      //     user: this.user,
-      //     events: this.events,
-      //     startDate: this.searchStartDate,
-      //     endDate: this.searchEndDate,
-      //   },
-      // });
-    });
+    this.charts = this.getChartsAndData(this.events, this.user.settings.dashboardSettings.chartsSettings);
+    this.loaded();
   }
 
   private getChartsAndData(events: EventInterface[], userDashboardChartSettings: UserDashboardChartSettingsInterface[]): SummariesChartInterface[] {
@@ -128,8 +102,8 @@ export class SummariesComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private unsubscribeFromAll() {
-    if (this.eventsSubscription) {
-      this.eventsSubscription.unsubscribe();
+    if (this.chartThemeSubscription) {
+      this.chartThemeSubscription.unsubscribe();
     }
   }
 

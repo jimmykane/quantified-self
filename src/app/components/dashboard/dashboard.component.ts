@@ -12,6 +12,9 @@ import {UserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
+import {switchMap} from 'rxjs/operators';
+import * as Sentry from '@sentry/browser';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-dashboard',
@@ -22,7 +25,7 @@ import {ActionButton} from '../../services/action-buttons/app.action-button';
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public user: User;
   public events: EventInterface[];
-  public userSubscription: Subscription;
+  public dataSubscription: Subscription;
   public searchTerm: string;
   public searchStartDate: Date;
   public searchEndDate: Date;
@@ -36,11 +39,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
               private actionButtonService: ActionButtonService,
               private  changeDetector: ChangeDetectorRef,
               private snackBar: MatSnackBar) {
-
+    this.actionButtonService.addActionButton('turnOnUpload', new ActionButton('cloud_upload', () => {
+      this.showUpload = !this.showUpload;
+    }));
   }
 
   ngOnInit() {
-    this.userSubscription = this.authService.user.subscribe((user) => {
+    this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
+      // Get the user
       if (!user) {
         this.router.navigate(['home']).then(() => {
           this.snackBar.open('Logged out')
@@ -48,18 +54,50 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return of(null);
       }
       this.user = user;
+      // Setup the ranges to search depending on pref
       if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
         this.searchStartDate = new Date(this.user.settings.dashboardSettings.startDate);
         this.searchEndDate = new Date(this.user.settings.dashboardSettings.endDate);
         return;
       }
+
       this.searchStartDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).startDate;
       this.searchEndDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).endDate;
       this.startOfTheWeek = this.user.settings.unitSettings.startOfTheWeek;
+
+      const limit = 0; // @todo double check this how it relates
+      const where = [];
+      if (this.searchTerm) {
+        where.push({
+          fieldPath: 'name',
+          opStr: <WhereFilterOp>'==',
+          value: this.searchTerm
+        });
+      }
+      if (!this.searchStartDate || !this.searchEndDate) {
+        const error = new Error(`Search startDate or endDate are missing`);
+        Sentry.captureException(error);
+        throw error;
+      }
+      // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
+      where.push({
+        fieldPath: 'startDate',
+        opStr: <WhereFilterOp>'>=',
+        value: this.searchStartDate.getTime() // Should remove mins from date
+      });
+      // this.searchEndDate.setHours(24, 0, 0, 0);
+      where.push({
+        fieldPath: 'startDate',
+        opStr: <WhereFilterOp>'<=', // Should remove mins from date
+        value: this.searchEndDate.getTime()
+      });
+
+      // Get what is needed
+      return this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit);
+    })).subscribe((events) => {
+      this.events = events;
     });
-    this.actionButtonService.addActionButton('turnOnUpload', new ActionButton('cloud_upload', () => {
-      this.showUpload = !this.showUpload;
-    }));
+
   }
 
   search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
@@ -76,7 +114,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
-    this.userSubscription.unsubscribe();
+    this.dataSubscription.unsubscribe();
     this.actionButtonService.removeActionButton('turnOnUpload');
   }
 }
