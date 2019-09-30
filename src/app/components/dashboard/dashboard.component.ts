@@ -1,6 +1,6 @@
 import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit, } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
-import {of, Subscription} from 'rxjs';
+import {combineLatest, of, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -12,7 +12,7 @@ import {UserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
-import {switchMap} from 'rxjs/operators';
+import {flatMap, mergeMap, switchMap} from 'rxjs/operators';
 import * as Sentry from '@sentry/browser';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 

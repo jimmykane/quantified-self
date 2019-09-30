@@ -6,7 +6,7 @@ import {
   Input,
   OnChanges,
   OnDestroy,
-  OnInit,
+  OnInit, SimpleChanges,
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Subscription} from 'rxjs';
@@ -79,9 +79,11 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     this.loading();
   }
 
-  ngOnChanges() {
-    this.loading();
-    this.subscribeToAll();
+  ngOnChanges(simpleChanges: SimpleChanges) {
+    if (simpleChanges.events) {
+      this.loading();
+      this.subscribeToAll();
+    }
   }
 
   private subscribeToAll() {
