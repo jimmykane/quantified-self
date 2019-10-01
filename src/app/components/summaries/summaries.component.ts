@@ -115,7 +115,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
   getChartDataForDataTypeAndDataValueType(events: EventInterface[], dataType: string, dataValueType: ChartDataValueTypes) {
     if (!this.events) {
-      return [];
+      return null;
     }
     if (dataValueType === ChartDataValueTypes.Total) {
       return this.getChartDataForDataTypeSum(events, dataType);

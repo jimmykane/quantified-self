@@ -88,14 +88,14 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return new am4charts.CategoryAxis();
   }
 
-  protected createChart(chartType: typeof am4charts.Chart): am4charts.Chart {
+  protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
     return this.zone.runOutsideAngular(() => {
       this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
 
       // Create a chart
       am4core.options.commercialLicense = true;
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
-      const chart = am4core.create(this.chartDiv.nativeElement, chartType);
+      const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       chart.pixelPerfect = false;
       // chart.dataSource.updateCurrentData = true
       return chart;

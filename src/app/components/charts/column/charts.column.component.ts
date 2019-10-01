@@ -23,6 +23,8 @@ import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {concat} from 'rxjs';
+import {string} from '@amcharts/amcharts4/core';
+import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 
 @Component({
   selector: 'app-column-chart',
@@ -30,7 +32,7 @@ import {concat} from 'rxjs';
   styleUrls: ['./charts.column.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsColumnComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsColumnComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() data: any;
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
@@ -41,7 +43,6 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
 
   protected chart: am4charts.XYChart;
   protected logger = Log.create('ChartColumnComponent');
-  public noData: boolean;
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
@@ -51,42 +52,6 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
   }
 
   async ngOnInit() {
-    if (!this.data) {
-      throw new Error('Component data');
-    }
-  }
-
-  async ngOnChanges(simpleChanges) {
-    // If theme changes destroy the chart
-    if (simpleChanges.chartTheme) {
-      this.destroyChart();
-    }
-
-    if (!this.data.length) {
-      this.noData = true;
-      return
-    }
-
-    this.noData = false;
-
-    // 1. If there is no chart create
-    if (!this.chart) {
-      this.chart = this.createChart();
-      this.chart.data = [];
-    }
-
-    if (!simpleChanges.data && !simpleChanges.chartTheme) {
-      return;
-    }
-
-    if (!this.data) {
-      return;
-    }
-
-    // To create an animation here it has to update the values of the data items
-    this.chart.data = this.generateChartData(this.data);
-    this.chart.invalidateLabels()
-
   }
 
   protected createChart(): am4charts.XYChart {
@@ -217,7 +182,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     return chart;
   }
 
-  private generateChartData(data) {
+  protected generateChartData(data): {type: string, value: number, id: number}[] {
     if (!this.filterLowValues) {
       return data;
     }

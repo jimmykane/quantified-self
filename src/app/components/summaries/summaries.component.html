@@ -1,5 +1,4 @@
 <section class="pie" *ngIf="charts.length">
-    <app-shade [isActive]="isLoading"></app-shade>
     <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
         <mat-grid-tile colspan="1" *ngFor="let chart of charts">
             <app-pie-chart *ngIf="chart.type === chartTypes.Pie"

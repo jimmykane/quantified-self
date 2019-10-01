@@ -4,7 +4,7 @@ import {
   Input,
   OnChanges,
   OnDestroy,
-  OnInit,
+  OnInit, SimpleChanges,
   ViewChild,
 } from '@angular/core';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
@@ -51,9 +51,10 @@ import {LoadingAbstract} from '../loading/loading.abstract';
   animations: [
     rowsAnimation,
     trigger('detailExpand', [
-      state('collapsed', style({height: '0px', minHeight: '0'})),
-      state('expanded', style({height: '*', display: 'block'})),
+      state('collapsed, void', style({ height: '0px', minHeight: '0', display: 'none' })),
+      state('expanded', style({ height: '*' })),
       transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
+      transition('expanded <=> void', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)'))
     ]),
   ],
   providers: [DatePipe],
@@ -62,27 +63,19 @@ import {LoadingAbstract} from '../loading/loading.abstract';
 
 export class EventTableComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
-  @Input() privacyFilter?: Privacy;
-  @Input() eventsPerPage ? = 100;
+  @Input() events: EventInterface[];
+  @Input() eventsPerPage ? = 20;
   @Input() hasActions?: boolean;
-  @Input() searchTerm: string;
-  @Input() searchStartDate: Date;
-  @Input() searchEndDate: Date;
   @ViewChild(MatSort, {static: true}) sort: MatSort;
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
   @ViewChild(MatCard, {static: true}) table: MatCard;
-  private eventsSubscription: Subscription;
-  private sortSubscription: Subscription;
+
   private deleteConfirmationSubscription: Subscription;
-  private currentPageIndex = 0;
 
   private logger = Log.create('EventTableComponent');
 
-  events: EventInterface[];
-  data: MatTableDataSource<any>;
+  data: MatTableDataSource<any> = new MatTableDataSource<EventRowElement>();
   selection = new SelectionModel(true, []);
-  resultsLength = 0;
-  errorLoading;
   expandedElement: EventRowElement | null;
   expandAll: boolean;
   rpeBorgCR10SCale = RPEBorgCR10SCale;
@@ -102,13 +95,19 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   }
 
   ngOnInit() {
+    this.loading();
   }
 
   ngAfterViewInit() {
   }
 
-  ngOnChanges(): void {
-    this.subscribeToAll();
+  ngOnChanges(simpleChanges: SimpleChanges): void {
+    if (!this.events){
+      this.loading();
+    }
+    if (this.events && simpleChanges.events) {
+      this.processChanges();
+    }
   }
 
   checkBoxClick(row) {
@@ -134,17 +133,17 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
 
   getColumnHeaderIcon(columnName): string {
     switch (columnName) {
-      case 'stats.Distance':
+      case 'Distance':
         return 'trending_flat';
-      case 'stats.Duration':
+      case 'Duration':
         return 'timer';
       case 'startDate':
         return 'date_range';
-      case 'stats.Device Names':
+      case 'Device Names':
         return 'watch';
       case 'name':
         return 'font_download';
-      case 'stats.Activity Types':
+      case 'Activity Types':
         return 'filter_none';
       case 'privacy':
         return 'visibility';
@@ -155,13 +154,13 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
 
   getColumnHeaderSVGIcon(columnName): string {
     switch (columnName) {
-      case 'stats.Ascent':
+      case 'Ascent':
         return 'arrow_up_right';
-      case 'stats.Descent':
+      case 'Descent':
         return 'arrow_down_right';
-      case 'stats.Average Heart Rate':
+      case 'Average Heart Rate':
         return 'heart_rate';
-      case 'stats.Energy':
+      case 'Energy':
         return 'energy';
       default:
         return null;
@@ -169,195 +168,73 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   }
 
   isColumnHeaderSortable(columnName): boolean {
-    if (this.searchEndDate || this.searchEndDate) {
-      return columnName === 'startDate';
-    }
-    return ['startDate', 'name', 'stats.Distance', 'stats.Activity Types', 'stats.Duration', 'stats.Ascent', 'stats.Descent', 'stats.Average Heart Rate', 'stats.Energy', 'stats.Device Names'].indexOf(columnName) !== -1;
+    return ['startDate', 'Distance', 'Activity Types', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
   }
 
 
-  private subscribeToAll() {
-    this.loading();
-    this.unsubscribeFromAll();
-    this.paginator.pageIndex = 0;
-    this.currentPageIndex = 0;
-    // If the user changes the sort order, reset back to the first page.
-    this.sortSubscription = this.sort.sortChange.subscribe(() => {
-      this.paginator.pageIndex = 0;
-      this.currentPageIndex = 0;
-    });
+  private processChanges() {
+    const data = this.events.reduce((EventRowElementsArray, event) => {
+      if (!event) {
+        return EventRowElementsArray;
+      }
 
-    this.eventsSubscription = merge(this.sort.sortChange, this.paginator.page)
-      .pipe(
-        startWith({}),
-        switchMap(() => {
-          const where = [];
-          if (this.searchTerm) {
-            where.push({
-              fieldPath: 'name',
-              opStr: <WhereFilterOp>'==',
-              value: this.searchTerm
-            })
-          }
-          if (this.searchStartDate) {
-            where.push({
-              fieldPath: 'startDate',
-              opStr: <WhereFilterOp>'>=',
-              value: this.searchStartDate.getTime() // Should remove mins from date
-            })
-          }
-          if (this.searchEndDate) {
-            where.push({
-              fieldPath: 'startDate',
-              opStr: <WhereFilterOp>'<=', // Should remove mins from date
-              value: this.searchEndDate.getTime()
-            })
-          }
-          if (this.privacyFilter) {
-            where.push({
-              fieldPath: 'privacy',
-              opStr: <WhereFilterOp>'==',
-              value: this.privacyFilter
-            })
-          }
-          if (this.currentPageIndex === this.paginator.pageIndex) {
-            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage);
-          }
+      const dataObject: EventRowElement = <EventRowElement>{};
+      const ascent = event.getStat(DataAscent.type);
+      const descent = event.getStat(DataDescent.type);
+      const energy = event.getStat(DataEnergy.type);
+      const heartRateAverage = event.getStat(DataHeartRateAvg.type);
+      const eventRPE = event.getStat(DataRPE.type);
+      const eventFeeling = event.getStat(DataFeeling.type);
 
-          // Going to next page
-          if (this.currentPageIndex < this.paginator.pageIndex) {
-            // Increase the results length
-            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction === 'asc', this.eventsPerPage, this.events[this.events.length - 1]);
-          }
+      dataObject.privacy = event.privacy;
+      dataObject.name = event.name;
+      dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
 
-          // Going to previous page
-          if (this.currentPageIndex > this.paginator.pageIndex) {
-            return this.eventService.getEventsForUserBy(this.user, where, this.sort.active, this.sort.direction !== 'asc', this.eventsPerPage, this.events[0]);
-          }
+      const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
+      dataObject['Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
+        `${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
+        : ActivityTypes[<string>activityTypes.getDisplayValue()];
 
-          // return this.exampleDatabase!.getRepoIssues(
-          //   this.sort.active, this.sort.direction, this.paginator.pageIndex);
-        }),
-        map(events => {
-          // Flip flag to show that loading has finished.
-          this.errorLoading = false;
-          // this.resultsLength = data.total_count;
+      dataObject['Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
+      dataObject['Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
+      dataObject['Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
+      dataObject['Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
+      dataObject['Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
+      dataObject['Duration'] = event.getDuration().getDisplayValue();
+      dataObject['isMerge'] = event.isMerge;
+      dataObject.description = event.description;
+      const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
+      dataObject['Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
+      if (eventRPE) {
+        dataObject.rpe = <RPEBorgCR10SCale>eventRPE.getValue();
+      }
+      if (eventFeeling) {
+        dataObject.feeling = <Feelings>eventFeeling.getValue();
+      }
+      dataObject.event = event;
 
-          // Set the events
-          this.events = events;
+      // Add the sorts
+      dataObject['sort.startDate'] = event.startDate.getTime();
+      dataObject['sort.Activity Types'] = dataObject['Activity Types'];
+      dataObject['sort.Distance'] = event.getDistance().getValue() || 0;
+      dataObject['sort.Ascent'] = ascent ? <number>ascent.getValue() : 0;
+      dataObject['sort.Descent'] = descent ? <number>descent.getValue() : 0;
+      dataObject['sort.Energy'] = energy ? <number>energy.getValue() : 0;
+      dataObject['sort.Duration'] = event.getDuration().getValue() || 0;
+      dataObject['sort.Average Heart Rate'] = heartRateAverage ?  <number>heartRateAverage.getValue() : 0; // Check for null if better
+      dataObject['sort.Device Names'] = dataObject['Device Names'];
 
-          // Reverse sort if we are going to prev page see https://stackoverflow.com/questions/54074135/firestore-angularfire-how-to-paginate-to-previous-page/54075453#54075453
-          if (this.currentPageIndex > this.paginator.pageIndex) {
-            this.events.reverse();
-          }
-          const data = events.reduce((EventRowElementsArray, event) => {
-            if (!event) {
-              return EventRowElementsArray;
-            }
-            const dataObject: EventRowElement = <EventRowElement>{};
+      EventRowElementsArray.push(dataObject);
+      return EventRowElementsArray;
+    }, []);
 
-            const ascent = event.getStat(DataAscent.type);
-            const descent = event.getStat(DataDescent.type);
-            const energy = event.getStat(DataEnergy.type);
-            const heartRateAverage = event.getStat(DataHeartRateAvg.type);
-            dataObject.privacy = event.privacy;
-            dataObject.name = event.name;
-            dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
-
-            const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-            dataObject['stats.Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
-              `${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
-              : ActivityTypes[<string>activityTypes.getDisplayValue()];
-
-            dataObject['stats.Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
-            dataObject['stats.Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
-            dataObject['stats.Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
-            dataObject['stats.Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
-            dataObject['stats.Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
-            dataObject['stats.Duration'] = event.getDuration().getDisplayValue();
-            dataObject['isMerge'] = event.isMerge;
-            dataObject.description = event.description;
-
-            const eventRPE = event.getStat(DataRPE.type);
-            if (eventRPE) {
-              dataObject.rpe = <RPEBorgCR10SCale>eventRPE.getValue();
-            }
-
-            const eventFeeling = event.getStat(DataFeeling.type);
-            if (eventFeeling) {
-              dataObject.feeling = <Feelings>eventFeeling.getValue();
-            }
-
-            dataObject.event = event;
-
-            const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
-
-            dataObject['stats.Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
-            // dataObject.event = event;
-
-            EventRowElementsArray.push(dataObject);
-            return EventRowElementsArray;
-          }, []);
-
-          // Set the columns
-          // if (data.length) {
-          //   this.columns = Object.keys(data[0]).filter((key) => !(key === 'id' || key === 'event'));
-          // }
-
-          return new MatTableDataSource<EventRowElement>(data);
-        }),
-        catchError((error) => {
-          this.loaded();
-          // Catch
-          this.errorLoading = error; // @todo maybe reset on ok
-          Sentry.captureException(error);
-          this.logger.error(error);
-          return of(new MatTableDataSource([])); // @todo should reject or so
-        })
-      ).subscribe(data => {
-        // Bind to the data
-        this.data = data;
-
-        if (this.paginator.pageIndex === 0) {
-          this.resultsLength = this.data.data.length === this.eventsPerPage ? this.data.data.length + this.eventsPerPage : this.data.data.length;
-          // return;
-        }
-
-        // Stayed on the same page but data came in
-        if (this.currentPageIndex === this.paginator.pageIndex) {
-          // If we have no data (eg this pages event's were deleted) go to prev page
-          if (!this.data.data.length && this.paginator.pageIndex !== 0) {
-            this.goToPageNumber(this.currentPageIndex - 1);
-            return;
-          }
-          // debugger;
-          this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
-        }
-
-        // Gone to the next page
-        if (this.currentPageIndex < this.paginator.pageIndex) {
-          // If we just went to next page with empty data go to prev
-          if (!data.data.length) {
-            this.goToPageNumber(this.currentPageIndex);
-            this.snackBar.open('No more events to show', null, {
-              duration: 2000,
-            });
-            return;
-          }
-          // Increase the results length
-          this.resultsLength = this.data.data.length === this.eventsPerPage ? (this.eventsPerPage * (this.paginator.pageIndex + 2)) : this.eventsPerPage * (this.paginator.pageIndex) + this.data.data.length;
-          // return
-        }
-
-        // Gone to previous page
-        if (this.currentPageIndex > this.paginator.pageIndex) {
-          this.resultsLength = this.eventsPerPage * (this.paginator.pageIndex + 2)
-        }
-
-        // Set the current page index
-        this.currentPageIndex = this.paginator.pageIndex;
-        this.loaded();
-      });
+    this.data.data = data;
+    this.data.paginator = this.paginator;
+    this.data.sort = this.sort;
+    this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
+      return eventRowElement[`sort.${header}`];
+    };
+    this.loaded();
   }
 
   private updateActionButtonService() {
@@ -398,7 +275,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
               mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
               // will be tagged with my-tag="my value"
               Sentry.captureException(e);
-              this.subscribeToAll();
+              this.processChanges();
               this.loaded();
             });
             this.snackBar.open('Could not merge events', null, {
@@ -429,7 +306,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
             this.eventSelectionMap.clear();
             this.selection.clear();
             await Promise.all(deletePromises);
-            this.subscribeToAll();
+            this.processChanges();
             this.snackBar.open('Events deleted', null, {
               duration: 2000,
             });
@@ -490,7 +367,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
 
   private goToPageNumber(number: number) {
     this.paginator.pageIndex = number;
-    this.currentPageIndex = number;
     this.paginator.page.next({
       pageIndex: number,
       pageSize: this.paginator.pageSize,
@@ -531,26 +407,26 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       // 'privacy',
       // 'name',
       'startDate',
-      'stats.Activity Types',
-      'stats.Distance',
-      'stats.Ascent',
-      'stats.Descent',
-      'stats.Energy',
-      'stats.Average Heart Rate',
-      'stats.Duration',
-      'stats.Device Names',
+      'Activity Types',
+      'Distance',
+      'Ascent',
+      'Descent',
+      'Energy',
+      'Average Heart Rate',
+      'Duration',
+      'Device Names',
     ]);
 
     if (window.innerWidth < 1120) {
-      columns = columns.filter(column => ['stats.Energy'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 1060) {
-      columns = columns.filter(column => ['stats.Average Heart Rate'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Average Heart Rate'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 960) {
-      columns = columns.filter(column => ['stats.Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Descent'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 850) {
@@ -558,11 +434,11 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     }
 
     if (window.innerWidth < 740) {
-      columns = columns.filter(column => ['stats.Device Names'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Device Names'].indexOf(column) === -1)
     }
 
     if (window.innerWidth < 640) {
-      columns = columns.filter(column => ['stats.Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Ascent'].indexOf(column) === -1)
     }
 
     // Push the last
@@ -573,12 +449,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   }
 
   private unsubscribeFromAll() {
-    if (this.sortSubscription) {
-      this.sortSubscription.unsubscribe();
-    }
-    if (this.eventsSubscription) {
-      this.eventsSubscription.unsubscribe();
-    }
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe();
     }
@@ -597,14 +467,24 @@ export interface EventRowElement {
   privacy: Privacy,
   name: string,
   startDate: String,
-  stats: {
-    'Activity Types': string[],
-    'Distance': string,
-    'Ascent': string,
-    'Average Heart Rate': string,
-    'Duration': string,
-    'Device Names': string,
-  },
+  'Activity Types': string,
+  'Distance': string,
+  'Ascent': string,
+  'Descent': string,
+  'Average Heart Rate': string,
+  'Duration': string,
+  'Energy': string,
+  'Device Names': string,
+  // And their sortable data
+  'sort.startDate': number,
+  'sort.Activity Types': string,
+  'sort.Distance': number,
+  'sort.Ascent': number,
+  'sort.Descent': number,
+  'sort.Energy': number,
+  'sort.Average Heart Rate': number,
+  'sort.Duration': number,
+  'sort.Device Names': string,
   isMerge: boolean,
   actions: boolean,
   description: string,
@@ -614,14 +494,15 @@ export interface EventRowElement {
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
   itemsPerPageLabel = 'Items per page';
-  nextPageLabel = 'Load more...';
-  previousPageLabel = 'go to previous set';
+  nextPageLabel = 'Next page';
+  previousPageLabel = 'Previous page';
 
-  getRangeLabel = (page: number, pageSize: number, length: number): string => {
-    if (length === (page + 2) * pageSize) {
-      return `${page * pageSize} - ${(page + 1) * pageSize}`
-    }
-
-    return `${page * pageSize} - ${length} `
-  }
+  // getRangeLabel = (page: number, pageSize: number, length: number): string => {
+  //   debugger;
+  //   if (length === (page + 2) * pageSize) {
+  //     return `${page * pageSize} - ${(page + 1) * pageSize}`
+  //   }
+  //
+  //   return `${page * pageSize} - ${length} `
+  // }
 }

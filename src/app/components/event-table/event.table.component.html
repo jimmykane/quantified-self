@@ -1,7 +1,6 @@
 <mat-card class="mat-elevation-z0">
 
-  <app-shade [isActive]="isLoading" [hasError]="errorLoading" [errorMessage]="errorLoading"></app-shade>
-  <app-shade [isActive]="false" [hasError]="(!this.events || !this.events.length) && !isLoading" [errorMessage]="'Nothing to show'"></app-shade>
+  <app-shade [isActive]="isLoading" [hasError]="this.events && !this.events.length" [errorMessage]="'Nothing to show'"></app-shade>
 
   <!-- hide the below for now till proper DB filtering is live -->
   <!--<mat-form-field>-->
@@ -50,11 +49,11 @@
         <span *ngIf="column === 'actions'">
           <app-event-actions *ngIf="user" [user]="user" [event]="row.event"></app-event-actions>
         </span>
-        <span *ngIf="column === 'stats.Activity Types'">
+        <span *ngIf="column === 'Activity Types'">
           <span *ngIf="row['isMerge']"><mat-icon>compare_arrows</mat-icon></span>
           {{ row[column] }}
         </span>
-        <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'stats.Activity Types' && column!=='privacy'">
+        <span *ngIf="column !== 'checkbox' && column !== 'actions' && column !== 'Activity Types' && column!=='privacy'">
           {{ row[column] }}
         </span>
       </td>
@@ -128,5 +127,5 @@
     </tr>
     <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
   </table>
-  <mat-paginator [hidePageSize]="true" [length]="resultsLength" [pageSize]="eventsPerPage"></mat-paginator>
+  <mat-paginator [hidePageSize]="true" [length]="data ? data.data.length : 0" [pageSize]="eventsPerPage"></mat-paginator>
 </mat-card>

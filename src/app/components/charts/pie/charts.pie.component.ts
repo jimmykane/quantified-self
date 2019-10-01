@@ -18,6 +18,8 @@ import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 import {group} from '@angular/animations';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {string} from '@amcharts/amcharts4/core';
+import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 
 
 @Component({
@@ -26,7 +28,7 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() data: any;
 
   @Input() chartDataType: string;
@@ -34,9 +36,6 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
   @Input() filterLowValues: boolean;
 
 
-  public noData: boolean;
-
-  private dataSelected: any;
 
   protected chart: am4charts.PieChart;
   protected logger = Log.create('ChartPieComponent');
@@ -49,38 +48,6 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
   }
 
   async ngOnInit() {
-    if (!this.data) {
-      throw new Error('Component needs data');
-    }
-  }
-
-  async ngOnChanges(simpleChanges) {
-    // If theme changes destroy the chart
-    if (simpleChanges.chartTheme) {
-      this.destroyChart();
-    }
-
-    if (!this.data.length) {
-      this.noData = true;
-      return
-    }
-
-    this.noData = false;
-
-    // 1. If there is no chart create
-    if (!this.chart) {
-      this.chart = this.createChart();
-      this.chart.data = [];
-    }
-
-
-    if (!simpleChanges.data && !simpleChanges.chartTheme) {
-      return;
-    }
-
-
-    // To create an animation here it has to update the values of the data items
-    this.chart.data = this.generateChartData(this.data);
   }
 
   protected createChart(): am4charts.PieChart {
@@ -169,25 +136,15 @@ export class ChartsPieComponent extends ChartAbstract implements OnChanges, OnIn
     return chart;
   }
 
-  private generateChartData(data) {
+  protected generateChartData(data): {type: string, value: number, id: number}[] {
     const chartData = [];
     for (let i = 0; i < data.length; i++) {
-      if (i === this.dataSelected) {
-        for (let x = 0; x < data[i].subs.length; x++) {
-          chartData.push({
-            type: data[i].subs[x].type,
-            value: data[i].subs[x].value,
-            pulled: true
-          });
-        }
-      } else {
         chartData.push({
           type: data[i].type,
           value: data[i].value,
           id: i
         });
       }
-    }
     return chartData;
   }
 }

@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit, } from '@angular/core';
+import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit,} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {combineLatest, of, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -46,6 +46,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnInit() {
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
+      this.events = null;
       // Get the user
       if (!user) {
         this.router.navigate(['home']).then(() => {
@@ -58,11 +59,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
         this.searchStartDate = new Date(this.user.settings.dashboardSettings.startDate);
         this.searchEndDate = new Date(this.user.settings.dashboardSettings.endDate);
-        return;
+      } else {
+        this.searchStartDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).startDate;
+        this.searchEndDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).endDate;
       }
 
-      this.searchStartDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).startDate;
-      this.searchEndDate = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek).endDate;
       this.startOfTheWeek = this.user.settings.unitSettings.startOfTheWeek;
 
       const limit = 0; // @todo double check this how it relates
@@ -74,10 +75,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           value: this.searchTerm
         });
       }
+
       if (!this.searchStartDate || !this.searchEndDate) {
-        const error = new Error(`Search startDate or endDate are missing`);
-        Sentry.captureException(error);
-        throw error;
+        return of([])
       }
       // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
       where.push({
