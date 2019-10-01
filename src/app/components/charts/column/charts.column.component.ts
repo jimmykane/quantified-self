@@ -199,7 +199,7 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
     // series.columns.template.fillOpacity = 1;
     series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
     series.columns.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext){
+      if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
@@ -218,22 +218,25 @@ export class ChartsColumnComponent extends ChartAbstract implements OnChanges, O
   }
 
   private generateChartData(data) {
-    if (!this.filterLowValues){
+    if (!this.filterLowValues) {
       return data;
     }
     const chartData = [];
-    let otherData: {type: string, value: number};
+    let otherData: { type: string, value: number };
     const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    data.forEach((dataItem: {type: string, value: number}) => {
+    data.forEach((dataItem: { type: string, value: number }, index) => {
       const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
       if (percent < 5) {
-        otherData = otherData || {type: 'Other', value: dataItem.value}; // Sets initial value needs -dataItem.value
-        otherData.value = <number>this.getAggregateData([otherData, dataItem ], this.chartDataValueType).getValue() - dataItem.value; // Important the -dataItem.value
-        return;
+        /// @todo still not fixed
+        if (!otherData) {
+          otherData = {type: 'Other', value: dataItem.value};
+          return;
+        }
+        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue() - dataItem.value; // Important the -dataItem.value
       }
       chartData.push(dataItem);
     });
-    if (otherData && isNumber(otherData.value)){
+    if (otherData && isNumber(otherData.value)) {
       chartData.unshift(otherData)
     }
     return chartData;
