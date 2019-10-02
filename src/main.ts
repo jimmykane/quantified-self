@@ -8,9 +8,6 @@ import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interfa
 
 import 'firebase/analytics';
 
-declare function require(moduleName: string): any;
-const { version: appVersion } = require('../package.json');
-
 if (environment.production) {
   enableProdMode();
   Log.setProductionMode();
