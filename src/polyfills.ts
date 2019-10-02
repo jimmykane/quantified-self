@@ -71,3 +71,6 @@ declare var $: any;
 
 // Buffer that is a dependency from Fit parser uses global to check against typed arrays
 (window as any).global = window;
+
+// Import first input delay
+import 'first-input-delay';
