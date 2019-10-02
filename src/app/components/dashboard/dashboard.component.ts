@@ -46,7 +46,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   async ngOnInit() {
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
-      let shouldSearchForEvents = true;
       // Get the user
       if (!user) {
         this.router.navigate(['home']).then(() => {
@@ -54,17 +53,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
         return of(null);
       }
-
-      // Detect if dateranges changed
-      if (this.user && (
-        this.user.settings.dashboardSettings.dateRange === user.settings.dashboardSettings.dateRange
-      && this.user.settings.dashboardSettings.startDate === user.settings.dashboardSettings.startDate
-      && this.user.settings.dashboardSettings.endDate === user.settings.dashboardSettings.endDate
-      && this.user.settings.unitSettings.startOfTheWeek === user.settings.unitSettings.startOfTheWeek)){
-        shouldSearchForEvents = false;
-      }
-
-        // Set the user
       this.user = user;
       // Setup the ranges to search depending on pref
       if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
@@ -86,26 +74,27 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           value: this.searchTerm
         });
       }
+
       if (!this.searchStartDate || !this.searchEndDate) {
         return of([])
       }
+      // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
       where.push({
         fieldPath: 'startDate',
         opStr: <WhereFilterOp>'>=',
         value: this.searchStartDate.getTime() // Should remove mins from date
       });
+      // this.searchEndDate.setHours(24, 0, 0, 0);
       where.push({
         fieldPath: 'startDate',
         opStr: <WhereFilterOp>'<=', // Should remove mins from date
         value: this.searchEndDate.getTime()
       });
 
-      // Get what is needed if its needed
-      return shouldSearchForEvents ? this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit) : of(null);
+      // Get what is needed
+      return this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit);
     })).subscribe((events) => {
-      if (events) {
-        this.events = events;
-      }
+      this.events = events;
     });
 
   }
