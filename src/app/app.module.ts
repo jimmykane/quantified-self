@@ -105,6 +105,7 @@ import {EditInputComponent} from './components/edit-input/edit-input.component';
 import {PhoneFormComponent} from './components/login/phone-form/phone.form.component';
 import {WindowService} from './services/app.window.service';
 import {EventsExportFormComponent} from './components/events-export-form/events-export.form.component';
+import {AngularFirePerformanceModule} from '@angular/fire/performance';
 
 declare function require(moduleName: string): any;
 
@@ -143,6 +144,7 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFireFunctionsModule,
     AngularFireStorageModule,
     AngularFireAuthModule,
+    AngularFirePerformanceModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
       apiVersion: 'weekly'
