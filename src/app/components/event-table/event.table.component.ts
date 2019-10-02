@@ -14,7 +14,7 @@ import {Router} from '@angular/router';
 import {MatCard} from '@angular/material/card';
 import {MatPaginator, MatPaginatorIntl} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {MatSort} from '@angular/material/sort';
+import {MatSort, MatSortable} from '@angular/material/sort';
 import {MatTable, MatTableDataSource} from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
@@ -42,6 +42,7 @@ import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {LoadingAbstract} from '../loading/loading.abstract';
+import {UserService} from '../../services/app.user.service';
 
 
 @Component({
@@ -71,6 +72,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   @ViewChild(MatCard, {static: true}) table: MatCard;
 
   private deleteConfirmationSubscription: Subscription;
+  private sortSubscription: Subscription;
 
   private logger = Log.create('EventTableComponent');
 
@@ -82,13 +84,14 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   feelings = Feelings;
 
   eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
-  isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
+  // isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
 
 
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
               private actionButtonService: ActionButtonService,
               private deleteConfirmationBottomSheet: MatBottomSheet,
+              private userService: UserService,
               changeDetector: ChangeDetectorRef,
               private router: Router, private  datePipe: DatePipe) {
     super(changeDetector);
@@ -99,6 +102,19 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   }
 
   ngAfterViewInit() {
+    this.data.paginator = this.paginator;
+    this.data.sort = this.sort;
+    this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
+      return eventRowElement[`sort.${header}`];
+    };
+    this.sortSubscription = this.sort.sortChange.subscribe((sort) => {
+      // debugger;
+      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction){
+        this.user.settings.dashboardSettings.tableSettings.active = sort.active;
+        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction;
+        this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+      }
+    });
   }
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
@@ -228,12 +244,15 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       return EventRowElementsArray;
     }, []);
 
-    this.data.data = data;
-    this.data.paginator = this.paginator;
-    this.data.sort = this.sort;
-    this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
-      return eventRowElement[`sort.${header}`];
-    };
+    // this.data = new MatTableDataSource<any>(data);
+    this.data.data = data
+    // this.data.paginator = this.paginator;
+    // this.data.sort = this.sort;
+    //
+    // this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
+    //   return eventRowElement[`sort.${header}`];
+    // };
+
     this.loaded();
   }
 

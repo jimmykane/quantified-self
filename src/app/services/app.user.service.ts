@@ -32,7 +32,7 @@ import * as Sentry from '@sentry/browser';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 import {
-  DateRanges,
+  DateRanges, TableSettings,
   UserDashboardSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {
@@ -162,6 +162,14 @@ export class UserService implements OnDestroy {
 
   static getDefaultChartFillOpacity(): number {
     return 0.15;
+  }
+
+  static getDefaultTableSettings(): TableSettings {
+    return {
+      eventsPerPage: 20,
+      active: 'startDate',
+      direction: 'desc'
+    }
   }
 
   constructor(
@@ -329,6 +337,7 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || UserService.getDefaultUserDashboardChartSettings();
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
+    settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || UserService.getDefaultTableSettings();
     // Map
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || UserService.getDefaultMapTheme();

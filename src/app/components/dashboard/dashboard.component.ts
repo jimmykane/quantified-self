@@ -12,7 +12,7 @@ import {UserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
-import {flatMap, mergeMap, switchMap} from 'rxjs/operators';
+import {flatMap, mergeMap, switchMap, take} from 'rxjs/operators';
 import * as Sentry from '@sentry/browser';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
@@ -44,9 +44,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     }));
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
-      this.events = null;
       // Get the user
       if (!user) {
         this.router.navigate(['home']).then(() => {

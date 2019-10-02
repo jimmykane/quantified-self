@@ -6,7 +6,7 @@
   <!--<mat-form-field>-->
   <!--<input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">-->
   <!--</mat-form-field>-->
-  <table mat-table [dataSource]="data" matSort multiTemplateDataRows>
+  <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active" [matSortDirection]="user.settings.dashboardSettings.tableSettings.start" matSortDisableClear multiTemplateDataRows>
     <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize(); first as isFirst; last as isLast; index as i;" [matColumnDef]="column">
       <ng-container *ngIf="isFirst && hasActions">
         <th mat-header-cell *matHeaderCellDef>
@@ -127,5 +127,5 @@
     </tr>
     <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
   </table>
-  <mat-paginator [hidePageSize]="true" [length]="data ? data.data.length : 0" [pageSize]="eventsPerPage"></mat-paginator>
+  <mat-paginator [hidePageSize]="true" [length]="data ? data.data.length : 0" [pageSize]="eventsPerPage" [showFirstLastButtons]="true"></mat-paginator>
 </mat-card>

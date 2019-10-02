@@ -104,3 +104,5 @@ tr.detail-row td{
   overflow: hidden;
   display: flex;
 }
+
+th.mat-header-cell .mat-sort-header-container.mat-sort-header-sorted .mat-sort-header-arrow{ opacity: 1 !important; }
