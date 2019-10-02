@@ -52,8 +52,8 @@ import {UserService} from '../../services/app.user.service';
   animations: [
     rowsAnimation,
     trigger('detailExpand', [
-      state('collapsed, void', style({ height: '0px', minHeight: '0', display: 'none' })),
-      state('expanded', style({ height: '*' })),
+      state('collapsed, void', style({height: '0px', minHeight: '0', display: 'none'})),
+      state('expanded', style({height: '*'})),
       transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
       transition('expanded <=> void', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)'))
     ]),
@@ -83,6 +83,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   feelings = Feelings;
 
   eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
+
   // isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
 
 
@@ -107,8 +108,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       return eventRowElement[`sort.${header}`];
     };
     this.sortSubscription = this.sort.sortChange.subscribe((sort) => {
-      // debugger;
-      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction){
+      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
         this.user.settings.dashboardSettings.tableSettings.active = sort.active;
         this.user.settings.dashboardSettings.tableSettings.direction = sort.direction;
         this.userService.updateUserProperties(this.user, {settings: this.user.settings})
@@ -117,7 +117,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   }
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
-    if (!this.events){
+    if (!this.events) {
       this.loading();
     }
     if (this.events && simpleChanges.events) {
@@ -236,7 +236,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       dataObject['sort.Descent'] = descent ? <number>descent.getValue() : 0;
       dataObject['sort.Energy'] = energy ? <number>energy.getValue() : 0;
       dataObject['sort.Duration'] = event.getDuration().getValue() || 0;
-      dataObject['sort.Average Heart Rate'] = heartRateAverage ?  <number>heartRateAverage.getValue() : 0; // Check for null if better
+      dataObject['sort.Average Heart Rate'] = heartRateAverage ? <number>heartRateAverage.getValue() : 0; // Check for null if better
       dataObject['sort.Device Names'] = dataObject['Device Names'];
 
       EventRowElementsArray.push(dataObject);
