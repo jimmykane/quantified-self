@@ -93,25 +93,19 @@ export class ActivityFormComponent implements OnInit {
     );
 
     const ascent = this.activity.getStat(DataAscent.type);
-    if (ascent) {
-      this.activityFormGroup.addControl('ascent', new FormControl(ascent.getValue(), [
-        Validators.required,
-      ]))
-    }
+    this.activityFormGroup.addControl('ascent', new FormControl(ascent ? ascent.getValue() : 0, [
+      Validators.required,
+    ]));
 
     const descent = this.activity.getStat(DataDescent.type);
-    if (descent) {
-      this.activityFormGroup.addControl('descent', new FormControl(descent.getValue(), [
-        Validators.required,
-      ]))
-    }
+    this.activityFormGroup.addControl('descent', new FormControl(descent ? descent.getValue() : 0, [
+      Validators.required,
+    ]));
 
     const distance = this.activity.getStat(DataDistance.type);
-    if (distance) {
-      this.activityFormGroup.addControl('distance', new FormControl(distance.getValue(), [
-        Validators.required,
-      ]))
-    }
+    this.activityFormGroup.addControl('distance', new FormControl(distance ? distance.getValue() : 0, [
+      Validators.required,
+    ]));
 
     // Find the starting distance for this activity
     if (this.hasDistance()) {
