@@ -65,7 +65,6 @@ import {UserService} from '../../services/app.user.service';
 export class EventTableComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
-  @Input() eventsPerPage ? = 20;
   @Input() hasActions?: boolean;
   @ViewChild(MatSort, {static: true}) sort: MatSort;
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;

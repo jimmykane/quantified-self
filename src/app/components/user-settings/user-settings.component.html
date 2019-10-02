@@ -89,6 +89,14 @@
           pin the upload button
         </mat-hint>
       </section>
+      <mat-form-field>
+        <mat-select placeholder="Events per page" formControlName="eventsPerPage">
+          <mat-option *ngFor="let eventsPerPageOption of eventsPerPage " [value]="eventsPerPageOption">
+            {{eventsPerPageOption}}
+          </mat-option>
+        </mat-select>
+        <mat-hint><b>Tip:</b> the more selected the slower the app will load on the dashboard view</mat-hint>
+      </mat-form-field>
     </mat-card>
 
 

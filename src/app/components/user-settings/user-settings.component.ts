@@ -65,6 +65,8 @@ export class UserSettingsComponent implements OnChanges {
     'Fitness Equipment': LapTypes.FitnessEquipment,
   };
 
+  public eventsPerPage = [10, 20, 30, 40, 50, 100];
+
   public mapTypes = MapTypes;
 
   public speedUnits = SpeedUnits;
@@ -193,6 +195,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      eventsPerPage: new FormControl(this.user.settings.dashboardSettings.tableSettings.eventsPerPage, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
     });
   }
 
@@ -252,6 +259,11 @@ export class UserSettingsComponent implements OnChanges {
             startDate: this.user.settings.dashboardSettings.startDate,
             endDate: this.user.settings.dashboardSettings.endDate,
             dateRange: this.user.settings.dashboardSettings.dateRange,
+            tableSettings: {
+              active: this.user.settings.dashboardSettings.tableSettings.active,
+              direction: this.user.settings.dashboardSettings.tableSettings.direction,
+              eventsPerPage: this.userSettingsFormGroup.get('eventsPerPage').value
+            }
           },
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
