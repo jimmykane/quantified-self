@@ -1,25 +1,8 @@
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  Inject,
-  Input, OnDestroy,
-  OnInit
-} from '@angular/core';
+import {Component, Inject} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {
-  FormControl,
-  FormGroup,
-  NgForm,
-  Validators
-} from '@angular/forms';
-import {ErrorStateMatcher} from '@angular/material/core';
+import {FormControl, FormGroup, Validators} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
-import {AngularFireAuth} from '@angular/fire/auth';
-import * as firebase from 'firebase/app';
 import {FormsAbstract} from '../forms/forms.abstract';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
@@ -31,14 +14,18 @@ import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataFeeling} from 'quantified-self-lib/lib/data/data.feeling';
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {DataPaceAvg} from 'quantified-self-lib/lib/data/data.pace-avg';
-import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceAvg} from 'quantified-self-lib/lib/data/data.swim-pace-avg';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
 import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
-import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {SharingService} from '../../services/app.sharing.service';
+import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
+import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 
 
 @Component({
@@ -82,6 +69,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         ]),
         name: new FormControl(this.user.settings.exportToCSVSettings.name, []),
         description: new FormControl(this.user.settings.exportToCSVSettings.description, []),
+        activityTypes: new FormControl(this.user.settings.exportToCSVSettings.activityTypes, []),
         distance: new FormControl(this.user.settings.exportToCSVSettings.distance, []),
         duration: new FormControl(this.user.settings.exportToCSVSettings.duration, []),
         ascent: new FormControl(this.user.settings.exportToCSVSettings.ascent, []),
@@ -103,12 +91,13 @@ export class EventsExportFormComponent extends FormsAbstract {
   }
 
 
-  async onSubmit(event) {
-    super.onSubmit(event);
+  async onSubmit(someEvent) {
+    super.onSubmit(someEvent);
     // create csv header
     this.user.settings.exportToCSVSettings.startDate = this.exportFromGroup.get('startDate').value;
     this.user.settings.exportToCSVSettings.name = this.exportFromGroup.get('name').value;
     this.user.settings.exportToCSVSettings.description = this.exportFromGroup.get('description').value;
+    this.user.settings.exportToCSVSettings.activityTypes = this.exportFromGroup.get('activityTypes').value;
     this.user.settings.exportToCSVSettings.distance = this.exportFromGroup.get('distance').value;
     this.user.settings.exportToCSVSettings.duration = this.exportFromGroup.get('duration').value;
     this.user.settings.exportToCSVSettings.ascent = this.exportFromGroup.get('ascent').value;
@@ -132,13 +121,16 @@ export class EventsExportFormComponent extends FormsAbstract {
     const rows = [];
 
     if (this.user.settings.exportToCSVSettings.startDate) {
-     headers.push(`Date`);
+      headers.push(`Date`);
     }
     if (this.user.settings.exportToCSVSettings.name) {
       headers.push(`Name`);
     }
     if (this.user.settings.exportToCSVSettings.description) {
       headers.push(`Description`);
+    }
+    if (this.user.settings.exportToCSVSettings.description) {
+      headers.push(`Activity Types`);
     }
     if (this.user.settings.exportToCSVSettings.distance) {
       headers.push(`Distance`);
@@ -200,6 +192,11 @@ export class EventsExportFormComponent extends FormsAbstract {
 
     // Go over the events
     this.events.forEach((event) => {
+      const activityTypes = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+      const isRunning = activityTypes && [<string>ActivityTypes.running, <string>ActivityTypes.trail_running, <string>ActivityTypes.treadmill].indexOf(activityTypes.getValue()[0]) !== -1;
+      const isSwimming = activityTypes && [<string>ActivityTypes.swimming, <string>ActivityTypes['open water swimming']].indexOf(activityTypes.getValue()[0]) !== -1;
+
+
       const row = [];
       if (this.user.settings.exportToCSVSettings.startDate) {
         row.push(event.startDate.toLocaleDateString());
@@ -209,6 +206,13 @@ export class EventsExportFormComponent extends FormsAbstract {
       }
       if (this.user.settings.exportToCSVSettings.description) {
         row.push(event.description);
+      }
+      if (this.user.settings.exportToCSVSettings.activityTypes) {
+        const stat = event.getStat(DataActivityTypes.type);
+        if (!stat) {
+          row.push('');
+        }
+        row.push(event.getActivityTypesAsString());
       }
       if (this.user.settings.exportToCSVSettings.distance) {
         row.push(`${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`);
@@ -242,17 +246,38 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       if (this.user.settings.exportToCSVSettings.averageSpeed) {
         const stat = event.getStat(DataSpeedAvg.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        if (!stat) {
+          row.push('');
+        } else {
+          row.push(`"` + this.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
+            innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
+            return innerRows
+          }, []).join('\n') + `"`);
+        }
       }
 
       if (this.user.settings.exportToCSVSettings.averagePace) {
-        const stat = event.getStat(DataPaceAvg.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        const stat = event.getStat(DataPaceAvg.type) || event.getStat(DataSpeedAvg.type);
+        if (!stat || !isRunning) {
+          row.push('');
+        } else {
+          row.push(`"` + this.getUnitBasedDataTypesFromDataType(DataPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
+            innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
+            return innerRows
+          }, []).join('\n') + `"`);
+        }
       }
 
       if (this.user.settings.exportToCSVSettings.averageSwimPace) {
-        const stat = event.getStat(DataSwimPaceAvg.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        const stat = event.getStat(DataSwimPaceAvg.type) || event.getStat(DataSpeedAvg.type);
+        if (!stat || !isSwimming) {
+          row.push('');
+        } else {
+          row.push(`"` + this.getUnitBasedDataTypesFromDataType(DataSwimPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
+            innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
+            return innerRows
+          }, []).join('\n') + `"`);
+        }
       }
 
       if (this.user.settings.exportToCSVSettings.averageHeartRate) {

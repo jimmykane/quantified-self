@@ -351,6 +351,7 @@ export class UserService implements OnDestroy {
     settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
     settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
     settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
+    settings.exportToCSVSettings.activityTypes = settings.exportToCSVSettings.activityTypes !== false;
     settings.exportToCSVSettings.distance = settings.exportToCSVSettings.distance !== false;
     settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
     settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;

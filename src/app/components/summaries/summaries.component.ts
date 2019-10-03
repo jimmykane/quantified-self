@@ -75,7 +75,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
 
   ngOnInit() {
-    this.loading();
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {

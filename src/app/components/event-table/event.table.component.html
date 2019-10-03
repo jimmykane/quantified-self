@@ -1,6 +1,6 @@
 <mat-card class="mat-elevation-z0">
 
-  <app-shade [isActive]="isLoading" [hasError]="this.events && !this.events.length" [errorMessage]="'Nothing to show'"></app-shade>
+  <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0" [errorMessage]="'Nothing to show'"></app-shade>
 
   <mat-form-field>
     <input matInput (keyup)="applyFilter($event)" placeholder="Filter">

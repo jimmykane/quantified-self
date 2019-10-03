@@ -52,6 +52,16 @@
     <section>
       <mat-slide-toggle
         [color]="'accent'"
+        formControlName="activityTypes">
+          <span matTooltip="Include activity types in the export">
+             Activity types
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
         formControlName="distance">
           <span matTooltip="Include distance in the export">
              Distance

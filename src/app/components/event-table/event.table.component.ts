@@ -97,10 +97,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     super(changeDetector);
   }
 
-  ngOnInit() {
-    this.loading();
-  }
-
   ngAfterViewInit() {
     this.data.paginator = this.paginator;
     this.data.sort = this.sort;
@@ -117,8 +113,9 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   }
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
-    if (!this.events) {
+    if (!this.events || !this.user) {
       this.loading();
+      return;
     }
     if (this.events && simpleChanges.events) {
       this.processChanges();
@@ -126,6 +123,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     if (this.user && simpleChanges.user) {
       this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
     }
+    this.loaded();
   }
 
   checkBoxClick(row) {
@@ -209,9 +207,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
 
       const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-      dataObject['Activity Types'] = (<string[]>activityTypes.getValue()).length > 1 ?
-        `${this.getUniqueStringWithMultiplier((<string[]>activityTypes.getValue()).map(activityType => ActivityTypes[activityType]))}`
-        : ActivityTypes[<string>activityTypes.getDisplayValue()];
+      dataObject['Activity Types'] = event.getActivityTypesAsString();
 
       dataObject['Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
       dataObject['Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
@@ -222,7 +218,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       dataObject['isMerge'] = event.isMerge;
       dataObject.description = event.description;
       const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
-      dataObject['Device Names'] = this.getUniqueStringWithMultiplier(<string[]>deviceNames.getValue());
+      dataObject['Device Names'] = event.getDeviceNamesAsString();
       if (eventRPE) {
         dataObject.rpe = <RPEBorgCR10SCale>eventRPE.getValue();
       }
@@ -255,7 +251,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     //   return eventRowElement[`sort.${header}`];
     // };
 
-    this.loaded();
   }
 
   private updateActionButtonService() {
@@ -384,25 +379,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
         obj[`${enumerator[key]} - ${key}`] = enumerator[key];
         return obj
       }, {});
-  }
-
-  private getUniqueStringWithMultiplier(arrayOfStrings: string[]) {
-    const uniqueObject = arrayOfStrings.reduce((uniqueObj, type, index) => {
-      if (!uniqueObj[type]) {
-        uniqueObj[type] = 1;
-      } else {
-        uniqueObj[type] += 1;
-      }
-      return uniqueObj;
-    }, {});
-    return Object.keys(uniqueObject).reduce((uniqueArray, key, index, object) => {
-      if (uniqueObject[key] === 1) {
-        uniqueArray.push(key);
-      } else {
-        uniqueArray.push(uniqueObject[key] + 'x ' + key);
-      }
-      return uniqueArray;
-    }, []).join(', ');
   }
 
   @HostListener('window:resize', ['$event'])
