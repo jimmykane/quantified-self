@@ -15,6 +15,9 @@ import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {flatMap, mergeMap, switchMap, take} from 'rxjs/operators';
 import * as Sentry from '@sentry/browser';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import {MatDialog} from '@angular/material/dialog';
+import {EventFormComponent} from '../event-form/event.form.component';
+import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -40,10 +43,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
               private userService: UserService,
               private actionButtonService: ActionButtonService,
               private  changeDetector: ChangeDetectorRef,
+              private dialog: MatDialog,
               private snackBar: MatSnackBar) {
-    this.actionButtonService.addActionButton('turnOnUpload', new ActionButton('cloud_upload', () => {
-      this.showUpload = !this.showUpload;
-    }));
+    this.addUploadButton();
   }
 
   async ngOnInit() {
@@ -62,7 +64,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         || this.user.settings.dashboardSettings.startDate !== user.settings.dashboardSettings.startDate
         || this.user.settings.dashboardSettings.endDate !== user.settings.dashboardSettings.endDate
         || user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
-      )){
+      )) {
         this.events = null;
         this.shouldSearch = true;
       }
@@ -106,10 +108,15 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       });
 
       // Get what is needed
-      return this.shouldSearch  ? this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit) : of(this.events);
+      return this.shouldSearch ? this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit) : of(this.events);
     })).subscribe((events) => {
       this.events = events;
       this.shouldSearch = false;
+      if (this.events && this.events.length) {
+        this.addExportButton();
+      } else {
+        this.removeExportButton();
+      }
     });
 
   }
@@ -131,6 +138,37 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnDestroy(): void {
     this.dataSubscription.unsubscribe();
+    this.removeExportButton();
+    this.removeUploadButton();
+  }
+
+  private addUploadButton() {
+    this.actionButtonService.addActionButton('turnOnUpload', new ActionButton('cloud_upload', () => {
+      this.showUpload = !this.showUpload;
+    }));
+  }
+
+  private removeUploadButton() {
     this.actionButtonService.removeActionButton('turnOnUpload');
+
+  }
+
+  private addExportButton() {
+    this.actionButtonService.addActionButton('export', new ActionButton('arrow_downward', () => {
+      const dialogRef = this.dialog.open(EventsExportFormComponent, {
+        // width: '100vw',
+        disableClose: false,
+        data: {
+          events: this.events,
+          user: this.user,
+          startDate: this.searchStartDate,
+          endDate: this.searchEndDate,
+        },
+      });
+    }));
+  }
+
+  private removeExportButton() {
+    this.actionButtonService.removeActionButton('export');
   }
 }

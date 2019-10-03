@@ -29,7 +29,6 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog} from '@angular/material/dialog';
-import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
 import {LoadingAbstract} from '../loading/loading.abstract';
 
 @Component({
