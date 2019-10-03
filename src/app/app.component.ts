@@ -17,7 +17,7 @@ import {Router, RoutesRecognized} from '@angular/router';
 import {filter,  map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
-import {DomSanitizer} from '@angular/platform-browser';
+import {DomSanitizer, Title} from '@angular/platform-browser';
 import {ThemeService} from './services/app.theme.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
@@ -57,7 +57,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
     public themeService: ThemeService,
-    public appInfoSerice: AppInfoService,
+    public appInfoService: AppInfoService,
+    private titleService: Title,
     private snackBar: MatSnackBar) {
 
     this.matIconRegistry.addSvgIcon(
@@ -92,7 +93,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       .pipe(map((event: RoutesRecognized) => {
         return event.state.root.firstChild.data['title'];
       })).subscribe(title => {
-        this.title = title;
+        this.titleService.setTitle(`${title} - Quantified Self`);
       });
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
       this.sideNav.toggle();
@@ -111,7 +112,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.themeService.setMapTheme(user.settings.mapSettings.theme);
     });
 
-    this.appVersionSubscription = this.appInfoSerice.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
+    this.appVersionSubscription = this.appInfoService.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
       if (!versions) {
         return
       }
