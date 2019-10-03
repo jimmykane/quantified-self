@@ -32,6 +32,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public startOfTheWeek: DaysOfTheWeek;
   public showUpload: boolean = this.authService.isCurrentUserAnonymous();
 
+  private shouldSearch: boolean;
+
   constructor(private router: Router,
               public authService: AppAuthService,
               private eventService: EventService,
@@ -45,6 +47,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
+    this.shouldSearch = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       // Get the user
       if (!user) {
@@ -53,6 +56,17 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
         return of(null);
       }
+
+      if (this.user && (
+        this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange
+        || this.user.settings.dashboardSettings.startDate !== user.settings.dashboardSettings.startDate
+        || this.user.settings.dashboardSettings.endDate !== user.settings.dashboardSettings.endDate
+        || user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
+      )){
+        this.events = null;
+        this.shouldSearch = true;
+      }
+
       this.user = user;
       // Setup the ranges to search depending on pref
       if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
@@ -92,14 +106,17 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       });
 
       // Get what is needed
-      return this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit);
+      return this.shouldSearch  ? this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit) : of(this.events);
     })).subscribe((events) => {
       this.events = events;
+      this.shouldSearch = false;
     });
 
   }
 
   search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
+    this.events = null;
+    this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
     this.searchEndDate = search.endDate;
