@@ -166,7 +166,7 @@ export class UserService implements OnDestroy {
 
   static getDefaultTableSettings(): TableSettings {
     return {
-      eventsPerPage: 20,
+      eventsPerPage: 10,
       active: 'startDate',
       direction: 'desc'
     }

@@ -130,5 +130,5 @@
     </tr>
     <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
   </table>
-  <mat-paginator [hidePageSize]="true" [length]="data ? data.data.length : 0" [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"></mat-paginator>
+  <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0" [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true" [pageSizeOptions]="[5, 10, 25, 100]"></mat-paginator>
 </mat-card>

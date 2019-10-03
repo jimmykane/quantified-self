@@ -12,7 +12,7 @@ import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {EventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {MatCard} from '@angular/material/card';
-import {MatPaginator, MatPaginatorIntl} from '@angular/material/paginator';
+import {MatPaginator, MatPaginatorIntl, PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {MatSort, MatSortable} from '@angular/material/sort';
 import {MatTable, MatTableDataSource} from '@angular/material/table';
@@ -122,6 +122,9 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     }
     if (this.events && simpleChanges.events) {
       this.processChanges();
+    }
+    if (this.user && simpleChanges.user) {
+      this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
     }
   }
 
@@ -383,15 +386,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       }, {});
   }
 
-  private goToPageNumber(number: number) {
-    this.paginator.pageIndex = number;
-    this.paginator.page.next({
-      pageIndex: number,
-      pageSize: this.paginator.pageSize,
-      length: this.paginator.length
-    });
-  }
-
   private getUniqueStringWithMultiplier(arrayOfStrings: string[]) {
     const uniqueObject = arrayOfStrings.reduce((uniqueObj, type, index) => {
       if (!uniqueObj[type]) {
@@ -472,6 +466,11 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     }
   }
 
+  async pageChanges(pageEvent: PageEvent) {
+    this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
   applyFilter(event) {
     this.data.filter = event.target.value.trim().toLowerCase();
   }
@@ -515,9 +514,9 @@ export interface EventRowElement {
 }
 
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
-  itemsPerPageLabel = 'Items per page';
-  nextPageLabel = 'Next page';
-  previousPageLabel = 'Previous page';
+  itemsPerPageLabel = 'Items';
+  nextPageLabel = 'Next';
+  previousPageLabel = 'Previous';
 
   // getRangeLabel = (page: number, pageSize: number, length: number): string => {
   //   debugger;
