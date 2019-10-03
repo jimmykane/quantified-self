@@ -10,6 +10,7 @@ import {UserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
+import * as firebase from 'firebase/app';
 
 
 @Component({
@@ -100,6 +101,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open(`Thanks for registering ${dbUser.displayName || 'Anonymous'}`, null, {
         duration: 2000,
       });
+      firebase.analytics().logEvent('sign_up', {});
     } catch (e) {
       // debugger;
       this.snackBar.open('Could not update user', null, {

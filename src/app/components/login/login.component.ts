@@ -12,6 +12,8 @@ import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
+import * as firebase from 'firebase/app'
+
 
 @Component({
   selector: 'app-login',
@@ -121,6 +123,7 @@ export class LoginComponent implements OnInit {
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
           duration: 5000,
         });
+        firebase.analytics().logEvent('login', {});
         return;
       }
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), serviceName, serviceToken)
