@@ -472,6 +472,10 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     }
   }
 
+  applyFilter(event) {
+    this.data.filter = event.target.value.trim().toLowerCase();
+  }
+
   ngOnDestroy() {
     this.unsubscribeFromAll();
     this.actionButtonService.removeActionButton('mergeEvents');

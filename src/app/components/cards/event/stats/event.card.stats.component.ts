@@ -5,13 +5,12 @@ import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.int
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {AppColors} from '../../../../services/color/app.colors';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {PaceUnits, UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {UnitBasedAbstract} from '../../../unit-based/unit-based.abstract';
-import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 
 @Component({
@@ -145,9 +144,7 @@ export class EventCardStatsComponent extends UnitBasedAbstract implements OnChan
     this.data = new MatTableDataSource(data);
   }
 
-  applyFilter(filterValue: string) {
-    filterValue = filterValue.trim(); // Remove whitespace
-    filterValue = filterValue.toLowerCase(); // MatTableDataSource defaults to lowercase matches
-    this.data.filter = filterValue;
+  applyFilter(event) {
+    this.data.filter = event.target.value.trim().toLowerCase();
   }
 }
