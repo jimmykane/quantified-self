@@ -97,20 +97,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     super(changeDetector);
   }
 
-  ngAfterViewInit() {
-    this.data.paginator = this.paginator;
-    this.data.sort = this.sort;
-    this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
-      return eventRowElement[`sort.${header}`];
-    };
-    this.sortSubscription = this.sort.sortChange.subscribe((sort) => {
-      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
-        this.user.settings.dashboardSettings.tableSettings.active = sort.active;
-        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction;
-        this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-      }
-    });
-  }
+
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
     if (!this.events || !this.user) {
@@ -124,6 +111,24 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
     }
     this.loaded();
+  }
+
+  ngOnInit(): void {
+  }
+
+  ngAfterViewInit() {
+    this.data.paginator = this.paginator;
+    this.data.sort = this.sort;
+    this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
+      return eventRowElement[`sort.${header}`];
+    };
+    this.sortSubscription = this.sort.sortChange.subscribe((sort) => {
+      if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
+        this.user.settings.dashboardSettings.tableSettings.active = sort.active;
+        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction;
+        this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+      }
+    });
   }
 
   checkBoxClick(row) {
