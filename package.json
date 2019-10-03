@@ -6,7 +6,7 @@
     "ng": "ng",
     "start": "ng serve ",
     "build": "ng build --verbose",
-    "build-beta": "NODE_OPTIONS=--max-old-space-size=8192 ng build --verbose --configuration beta",
+    "build-beta": "ng build --verbose --configuration beta",
     "build-production": "ng build --verbose --prod",
     "firebase-hosting-beta": "firebase deploy --only hosting:beta",
     "firebase-hosting-production": "firebase deploy --only hosting:production",
