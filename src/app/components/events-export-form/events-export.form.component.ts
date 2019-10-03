@@ -38,6 +38,7 @@ import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
 import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {SharingService} from '../../services/app.sharing.service';
 
 
 @Component({
@@ -64,6 +65,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     protected snackBar: MatSnackBar,
     private userService: UserService,
     private fileService: FileService,
+    private sharingService: SharingService,
   ) {
     super(dialogRef, data, snackBar);
     this.user = data.user;
@@ -95,6 +97,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         averagePower: new FormControl(this.user.settings.exportToCSVSettings.averagePower, []),
         maximumPower: new FormControl(this.user.settings.exportToCSVSettings.maximumPower, []),
         vO2Max: new FormControl(this.user.settings.exportToCSVSettings.vO2Max, []),
+        includeLink: new FormControl(this.user.settings.exportToCSVSettings.includeLink, []),
       }
     );
   }
@@ -121,6 +124,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.user.settings.exportToCSVSettings.averagePower = this.exportFromGroup.get('averagePower').value;
     this.user.settings.exportToCSVSettings.maximumPower = this.exportFromGroup.get('maximumPower').value;
     this.user.settings.exportToCSVSettings.vO2Max = this.exportFromGroup.get('vO2Max').value;
+    this.user.settings.exportToCSVSettings.includeLink = this.exportFromGroup.get('includeLink').value;
 
     let csvString = ``;
     // Create a csv header
@@ -185,6 +189,10 @@ export class EventsExportFormComponent extends FormsAbstract {
     }
     if (this.user.settings.exportToCSVSettings.vO2Max) {
       headers.push(`VO2Max`);
+    }
+
+    if (this.user.settings.exportToCSVSettings.includeLink) {
+      headers.push(`Link`);
     }
 
     csvString += headers.join(',');
@@ -264,6 +272,11 @@ export class EventsExportFormComponent extends FormsAbstract {
         const stat = event.getStat(DataVO2Max.type);
         row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
       }
+
+      if (this.user.settings.exportToCSVSettings.includeLink) {
+        row.push(this.sharingService.getShareURLForEvent(this.user.uid, event.getID()));
+      }
+
       rows.push(row);
     });
 

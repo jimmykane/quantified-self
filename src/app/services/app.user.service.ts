@@ -366,6 +366,7 @@ export class UserService implements OnDestroy {
     settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
     settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
     settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
+    settings.exportToCSVSettings.includeLink = settings.exportToCSVSettings.includeLink !== false;
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;

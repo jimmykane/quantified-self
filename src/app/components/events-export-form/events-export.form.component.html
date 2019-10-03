@@ -190,7 +190,6 @@
       </mat-slide-toggle>
     </section>
 
-
     <section>
       <mat-slide-toggle
         [color]="'accent'"
@@ -202,9 +201,20 @@
     </section>
 
     <section>
+      <mat-slide-toggle
+        [color]="'accent'"
+        formControlName="includeLink">
+          <span matTooltip="Include link to Quantified Self event">
+             Include link
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+    <section>
       <button mat-stroked-button (click)="close($event)">Cancel</button>
       <button mat-flat-button color="primary" (click)="onSubmit($event)" *ngIf="!hasError(exportFromGroup)">Export
       </button>
     </section>
+
   </form>
 </mat-dialog-content>
