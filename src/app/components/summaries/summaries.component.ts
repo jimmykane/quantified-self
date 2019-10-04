@@ -78,7 +78,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    if (simpleChanges.events) {
+    if (simpleChanges.events || simpleChanges.user) {
       this.loading();
       this.subscribeToAll();
     }
