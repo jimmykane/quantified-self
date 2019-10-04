@@ -3,12 +3,13 @@ import {EventService} from '../../services/app.event.service';
 import {ActivatedRoute, Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {AppAuthService} from '../../authentication/app.auth.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {SideNavService} from '../../services/side-nav/side-nav.service';
 import * as firebase from 'firebase/app';
 
 declare function require(moduleName: string): any;
-const { version: appVersion } = require('../../../../package.json');
+
+const {version: appVersion} = require('../../../../package.json');
 
 
 @Component({
@@ -26,6 +27,11 @@ export class SideNavComponent implements OnInit {
   }
 
   ngOnInit() {
+  }
+
+  donate() {
+    window.open('https://paypal.me/DKanellopoulos');
+    this.analytics.logEvent('donate_click', {method: 'PayPal'});
   }
 
   async logout() {
