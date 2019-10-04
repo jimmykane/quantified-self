@@ -17,7 +17,8 @@ import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
-import {environment} from "../../../environments/environment";
+import {environment} from '../../../environments/environment';
+import * as firebase from 'firebase/app';
 
 
 @Component({
@@ -41,6 +42,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.snackBar.open(`Connected successfully`, null, {
       duration: 2000,
     });
+    firebase.analytics().logEvent('connected_to_service', {serviceName: event.detail.serviceName});
   }
   @HostListener('window:authError', ['$event'])
   async authError(event) {

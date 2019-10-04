@@ -123,24 +123,25 @@ export class LoginComponent implements OnInit {
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
           duration: 5000,
         });
-        firebase.analytics().logEvent('login', {});
+        firebase.analytics().logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous'});
         return;
       }
-      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), serviceName, serviceToken)
+      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous', serviceName, serviceToken)
     } catch (e) {
       Sentry.captureException(e);
       this.isLoading = false;
     }
   }
 
-  private showUserAgreementFormDialog(user: User, serviceName?: string, serviceToken?: ServiceTokenInterface) {
+  private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: ServiceTokenInterface) {
     const dialogRef = this.dialog.open(UserAgreementFormComponent, {
       width: '75vw',
       disableClose: true,
       data: {
         user: user,
+        signInMethod: signInMethod,
         serviceName: serviceName,
-        serviceToken: serviceToken
+        serviceToken: serviceToken,
       },
     });
 

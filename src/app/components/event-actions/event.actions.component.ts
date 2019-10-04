@@ -14,6 +14,7 @@ import {SharingService} from '../../services/app.sharing.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {MatBottomSheet} from '@angular/material';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
+import * as firebase from 'firebase/app';
 
 @Component({
   selector: 'app-event-actions',
@@ -52,6 +53,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
     this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
+    firebase.analytics().logEvent('share', {method: 'event_actions', content_type: 'event'});
     this.snackBar.open('Privacy is changed to public and link copied to your clipboard', null, {
       duration: 20000,
     })

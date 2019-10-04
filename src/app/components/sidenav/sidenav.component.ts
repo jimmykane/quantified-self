@@ -5,6 +5,7 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {SideNavService} from '../../services/side-nav/side-nav.service';
+import * as firebase from 'firebase/app';
 
 declare function require(moduleName: string): any;
 const { version: appVersion } = require('../../../../package.json');
@@ -19,7 +20,7 @@ export class SideNavComponent implements OnInit {
 
   public events: EventInterface[] = [];
   public appVersion = appVersion;
-
+  public analytics = firebase.analytics();
 
   constructor(public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router, private eventService: EventService, private route: ActivatedRoute) {
   }
@@ -28,6 +29,7 @@ export class SideNavComponent implements OnInit {
   }
 
   async logout() {
+    this.analytics.logEvent('logout', {});
     this.router.navigate(['/home']).then(async () => {
       await this.authService.signOut();
       this.snackBar.open('Signed out', null, {

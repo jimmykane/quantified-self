@@ -30,8 +30,9 @@ export class UserAgreementFormComponent implements OnInit {
   };
 
   public userFormGroup: FormGroup;
-  private serviceName?: string;
-  private serviceToken?: ServiceTokenInterface;
+  private readonly signInMethod: string;
+  private readonly serviceName?: string;
+  private readonly serviceToken?: ServiceTokenInterface;
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -45,7 +46,8 @@ export class UserAgreementFormComponent implements OnInit {
     this.user = data.user; // Perhaps move to service?
     this.serviceName = data.serviceName;
     this.serviceToken = data.serviceToken;
-    if (!this.user) {
+    this.signInMethod = data.signInMethod;
+    if (!this.user || !this.signInMethod) {
       throw new Error('Component needs user');
     }
   }
@@ -101,7 +103,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open(`Thanks for registering ${dbUser.displayName || 'Anonymous'}`, null, {
         duration: 2000,
       });
-      firebase.analytics().logEvent('sign_up', {});
+      firebase.analytics().logEvent('sign_up', {method: this.signInMethod});
     } catch (e) {
       // debugger;
       this.snackBar.open('Could not update user', null, {
