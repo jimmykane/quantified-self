@@ -65,7 +65,7 @@ export class UserSettingsComponent implements OnChanges {
     'Fitness Equipment': LapTypes.FitnessEquipment,
   };
 
-  public eventsPerPage = [5, 10, 25, 100];
+  public eventsPerPage = [10, 25, 50, 100, 250,  500, 1000, 2500, 5000];
 
   public mapTypes = MapTypes;
 
