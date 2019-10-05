@@ -1,10 +1,14 @@
 import {
-  AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef,
-  Component, HostListener,
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  HostListener,
   Input,
   OnChanges,
   OnDestroy,
-  OnInit, SimpleChanges,
+  OnInit,
+  SimpleChanges,
   ViewChild,
 } from '@angular/core';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
@@ -14,35 +18,34 @@ import {Router} from '@angular/router';
 import {MatCard} from '@angular/material/card';
 import {MatPaginator, MatPaginatorIntl, PageEvent} from '@angular/material/paginator';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {MatSort, MatSortable} from '@angular/material/sort';
-import {MatTable, MatTableDataSource} from '@angular/material/table';
+import {MatSort} from '@angular/material/sort';
+import {MatTableDataSource} from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {catchError, first, map, startWith, switchMap, take} from 'rxjs/operators';
+import {take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {merge, of, Subscription} from 'rxjs';
+import {Subscription} from 'rxjs';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
-import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {MatBottomSheet} from '@angular/material';
 import {animate, state, style, transition, trigger} from '@angular/animations';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
-import {LoadingAbstract} from '../loading/loading.abstract';
 import {UserService} from '../../services/app.user.service';
+import {ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
+import {LoadingAbstract} from '../loading/loading.abstract';
 
 
 @Component({
@@ -194,7 +197,8 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
 
 
   private processChanges() {
-    const data = this.events.reduce((EventRowElementsArray, event) => {
+    // this.data = new MatTableDataSource<any>(data);
+    this.data.data = this.events.reduce((EventRowElementsArray, event) => {
       if (!event) {
         return EventRowElementsArray;
       }
@@ -245,10 +249,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
 
       EventRowElementsArray.push(dataObject);
       return EventRowElementsArray;
-    }, []);
-
-    // this.data = new MatTableDataSource<any>(data);
-    this.data.data = data
+    }, [])
     // this.data.paginator = this.paginator;
     // this.data.sort = this.sort;
     //
@@ -386,7 +387,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       }, {});
   }
 
-  @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {
     let columns = ['expand'];
 
@@ -410,6 +410,8 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       'Device Names',
     ]);
 
+
+    // @todo convert to base calss usage
     if (window.innerWidth < 1120) {
       columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
     }

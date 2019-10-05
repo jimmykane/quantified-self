@@ -2,6 +2,7 @@ import {ChartAbstract} from './chart.abstract';
 import {Input, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {string} from '@amcharts/amcharts4/core';
+import {SummariesChartDataInterface} from '../summaries/summaries.component';
 
 
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges  {
@@ -39,5 +40,5 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     this.chart.data = this.generateChartData(this.data);
   }
 
-  protected abstract generateChartData(data): {type: string, value: number, id: number}[];
+  protected abstract generateChartData(data): SummariesChartDataInterface[];
 }
