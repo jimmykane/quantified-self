@@ -14,8 +14,8 @@ import {Log} from 'ng2-logger/browser';
 import {UserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
-import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
-import * as firebase from 'firebase';
+import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
+import * as firebase from 'firebase/app';
 
 
 @Component({
