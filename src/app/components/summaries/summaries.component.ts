@@ -197,7 +197,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
       const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-      if (!isNumber(activityTypeValue) || !isNumber(stat.getValue())) {
+      if (!isNumber(activityTypeValue) || !isNumber(stat.getValue()) || stat.getValue() === 0) { // Remove 0 values from sums for categories
         return valueByTypeMap;
       }
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
