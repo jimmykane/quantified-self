@@ -32,7 +32,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public user: User;
   public serviceTokens: ServiceTokenInterface[];
   private userSubscription: Subscription;
-  private clickCount = 10;
 
 
   @HostListener('window:tokensReceived', ['$event'])

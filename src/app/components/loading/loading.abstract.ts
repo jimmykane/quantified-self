@@ -1,11 +1,5 @@
-import {
-  ChangeDetectorRef,
-  Inject,
-  OnDestroy,
-} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
-import {FormControl, FormGroup} from '@angular/forms';
 import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
+import {ChangeDetectorRef} from '@angular/core';
 
 /**
  * Class for handling loading with no change detection
