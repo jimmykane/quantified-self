@@ -129,9 +129,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.snackBar.open('Activity download started', null, {
           duration: 2000,
         });
+        firebase.analytics().logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
       } else {
         const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
         await this.eventService.setEvent(this.user, newEvent);
+        firebase.analytics().logEvent('imported_fit_file', {method: ServiceNames.SuuntoApp});
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }
     } catch (e) {
@@ -175,6 +177,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,
       });
+      firebase.analytics().logEvent('disconnected_from_service', {serviceName: ServiceNames.SuuntoApp});
     } catch (e) {
       Sentry.captureException(e);
       this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
