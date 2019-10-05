@@ -26,6 +26,7 @@ import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
+import * as firebase from 'firebase/app';
 
 
 @Component({
@@ -319,6 +320,7 @@ export class EventsExportFormComponent extends FormsAbstract {
       this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
+      firebase.analytics().logEvent('download_csv', {});
     })
   }
 }
