@@ -152,8 +152,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
 
     // Create the map
-    const valueCountByType = new Map<string, number>();
-    const valueByType = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
+    const valueByType = this.events.reduce((valueByTypeMap: Map<string, number>, event) => {
       const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
       if (!eventTypeDisplay || !stat) {
@@ -165,13 +164,10 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (!isNumber(stat.getValue())){
         return valueByTypeMap;
       }
-      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value;
-      const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()],
-        {value: isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()), count: activityTypeValueCount +1 }); // @todo break the join (not use display value)
+      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]);
+      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], !isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue())); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string, {value: number, count: number}>());
+    }, new Map<string, number>());
     return this.convertToCategories(valueByType);
   }
 
@@ -191,8 +187,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
 
     // Create the map
-    const valueCountByType = new Map<string, number>();
-    const valueByType = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
+    const valueByType = this.events.reduce((valueByTypeMap: Map<string, number>, event) => {
       const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
       if (!eventTypeDisplay || !stat) {
@@ -201,16 +196,13 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
-      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) ? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : 0;
-      const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-      valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1)
-
+      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       if (!isNumber(activityTypeValue) || !isNumber(stat.getValue()) || stat.getValue() === 0) { // Remove 0 values from sums for categories
         return valueByTypeMap;
       }
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], {value: activityTypeValue + <number>stat.getValue(), count: activityTypeValueCount + 1}); // @todo break the join (not use display value)
+      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string, {value: number, count: number}>());
+    }, new Map<string, number>());
     return this.convertToCategories(valueByType);
   }
 
@@ -235,7 +227,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
     // Create the map with the sums and a map with the counts
     const valueCountByType = new Map<string, number>();
-    const valueSumByType = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
+    const valueSumByType = this.events.reduce((valueByTypeMap: Map<string, number>, event) => {
       const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
       if (!eventTypeDisplay || !stat) {
@@ -247,25 +239,24 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (!isNumber(stat.getValue())){
         return valueByTypeMap;
       }
-      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()])? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : 0;
+      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1)
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], {value: activityTypeValue + <number>stat.getValue(), count: activityTypeValueCount +1 }); // @todo break the join (not use display value)
+      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValue + <number>stat.getValue()); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string, {value: number, count: number}>());
+    }, new Map<string, number>());
 
-    // Calc avg
-    valueSumByType.forEach((item, type) => {
-      valueSumByType.set(type, {value: item.value / valueCountByType.get(type), count:  valueCountByType.get(type)});
+    valueSumByType.forEach((value, type) => {
+      valueSumByType.set(type, value / valueCountByType.get(type));
     });
 
     return this.convertToCategories(valueSumByType);
   }
 
-  private convertToCategories(valueByType: Map<string, {value: number, count: number}>): SummariesChartDataInterface[] {
+  private convertToCategories(valueByType: Map<string, number>): any[] {
     const data = [];
-    valueByType.forEach((item, type) => {
-      data.push({type: type, value: item.value, count: item.count})
+    valueByType.forEach((value, type) => {
+      data.push({type: type, value: value})
     });
     return data
       .filter(dataItem => isNumber(dataItem.value))
@@ -290,10 +281,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 }
 
-export interface SummariesChartDataInterface {
-
-  type: string, value: number, count: number
-}
 export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
-  data: SummariesChartDataInterface[]
+  data: any[]
 }

@@ -20,7 +20,6 @@ import {group} from '@angular/animations';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {string} from '@amcharts/amcharts4/core';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 
 
 @Component({
@@ -75,7 +74,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{category} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+      return `{category} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
@@ -137,13 +136,13 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     return chart;
   }
 
-  protected generateChartData(data): SummariesChartDataInterface[] {
+  protected generateChartData(data): {type: string, value: number, id: number}[] {
     const chartData = [];
     for (let i = 0; i < data.length; i++) {
         chartData.push({
           type: data[i].type,
           value: data[i].value,
-          count: data[i].count,
+          id: i
         });
       }
     return chartData;

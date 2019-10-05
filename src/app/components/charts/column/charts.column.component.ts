@@ -25,7 +25,6 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {concat} from 'rxjs';
 import {string} from '@amcharts/amcharts4/core';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 
 @Component({
   selector: 'app-column-chart',
@@ -94,17 +93,15 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
       categoryAxis.renderer.opposite = true;
     }
 
-    if( this.vertical ) {
-      // chart.marginBottom = 20;
-      categoryAxis.renderer.labels.template.adapter.add('dy',  (dy, target) => {
-        chart.paddingBottom = 20;
-        // tslint:disable-next-line:no-bitwise
-        if (chart.data.length > 5 && target.dataItem && target.dataItem.index%2) {
-          return dy + 20;
-        }
-        return dy;
-      });
-    }
+    // if(this.vertical ) {
+    //   categoryAxis.renderer.labels.template.adapter.add("dy",  (dy, target) => {
+    //     if (chart.data.length > 4 && target.dataItem && target.dataItem.index & true) {
+    //       return dy + 25;
+    //       chart.paddingBottom = 20;
+    //     }
+    //     return dy;
+    //   });
+    // }
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.extraMax = 0.20;
@@ -171,7 +168,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `${this.vertical ? `{categoryX}` : '{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
+      return `${this.vertical ? '{categoryX}' : '{categoryY}'} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
     // Add distinctive colors for each column using adapter
@@ -185,23 +182,22 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     return chart;
   }
 
-  protected generateChartData(data): SummariesChartDataInterface[] {
+  protected generateChartData(data): {type: string, value: number, id: number}[] {
     if (!this.filterLowValues) {
       return data;
     }
     const chartData = [];
-    let otherData: SummariesChartDataInterface;
+    let otherData: { type: string, value: number };
     const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    data.forEach((dataItem: SummariesChartDataInterface, index) => {
+    data.forEach((dataItem: { type: string, value: number }, index) => {
       const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
       if (percent < 5) {
+        /// @todo still not fixed
         if (!otherData) {
-          otherData = {type: 'Other', value: dataItem.value, count: 1};
+          otherData = {type: 'Other', value: dataItem.value};
           return;
         }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
-        otherData.count++;
-        return
+        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue() - dataItem.value; // Important the -dataItem.value
       }
       chartData.push(dataItem);
     });
