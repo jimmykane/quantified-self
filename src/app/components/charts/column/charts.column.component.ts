@@ -98,8 +98,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
       // chart.marginBottom = 20;
       categoryAxis.renderer.labels.template.adapter.add('dy',  (dy, target) => {
         chart.paddingBottom = 20;
-        // tslint:disable-next-line:no-bitwise
-        if (chart.data.length > 5 && target.dataItem && target.dataItem.index%2) {
+        if (chart.data.length > 5 && target.dataItem && target.dataItem.index % 2) {
           return dy + 20;
         }
         return dy;

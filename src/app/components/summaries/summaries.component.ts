@@ -168,8 +168,12 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
       const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) ? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : undefined;
       const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
+      valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1);
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()],
-        {value: !isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()), count: activityTypeValueCount +1 }); // @todo break the join (not use display value)
+        {
+          value: !isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()),
+          count: activityTypeValueCount + 1
+        }); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, {value: number, count: number}>());
     return this.convertToCategories(valueByType);
@@ -204,7 +208,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) ? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : 0;
       const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
       valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1)
-
       if (!isNumber(activityTypeValue) || !isNumber(stat.getValue()) || stat.getValue() === 0) { // Remove 0 values from sums for categories
         return valueByTypeMap;
       }
