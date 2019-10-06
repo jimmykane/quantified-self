@@ -4,6 +4,7 @@ mat-icon{
 }
 .active{
   font-weight: bold;
+  border: 0;
 }
 mat-toolbar-row{
   /*margin-bottom: 1em;*/
@@ -21,4 +22,8 @@ mat-toolbar-row{
 
 .fill-space {
   flex: 1 1 auto;
+}
+
+mat-card-title{
+  margin: 0;
 }

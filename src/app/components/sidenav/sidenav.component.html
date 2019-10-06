@@ -1,17 +1,22 @@
 <mat-toolbar>
   <mat-toolbar-row
-    class="mat-elevation-z6"
+    class="mat-elevation-z2"
     routerLink="/home"
     (click)="sideNav.close();">
-    <mat-icon>filter_hdr</mat-icon>
-    Quantified Self
+      <section style="margin-top: 1.2em;">
+        <h1>
+          <mat-icon>filter_hdr</mat-icon>
+          Quantified Self <mat-card-subtitle>{{appVersion}}</mat-card-subtitle>
+        </h1>
+      </section>
+
   </mat-toolbar-row>
 </mat-toolbar>
 
 <mat-nav-list>
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="mat-elevation-z2 active"
+    routerLinkActive="mat-elevation-z1 active"
     routerLink="/home"
     (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
@@ -20,7 +25,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z2 active"
+    routerLinkActive="mat-elevation-z1 active"
     routerLink="/dashboard"
     (click)="sideNav.close();">
     <mat-icon>dashboard</mat-icon>
@@ -29,7 +34,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z2 active"
+    routerLinkActive="mat-elevation-z1 active"
     [routerLink]="['/user/' + (authService.user | async)?.uid]"
     (click)="sideNav.close();">
     <mat-icon>account_circle</mat-icon>
@@ -38,48 +43,51 @@
 
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="mat-elevation-z2 active"
+    routerLinkActive="mat-elevation-z1 active"
     routerLink="/login" (click)="sideNav.close();">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>
   </mat-list-item>
 
   <mat-list-item
-    routerLinkActive="mat-elevation-z2 active"
+    routerLinkActive="mat-elevation-z1 active"
     routerLink="/services" (click)="sideNav.close();">
     <mat-icon>change_history</mat-icon>
     <span>Services</span>
   </mat-list-item>
 
-  <mat-list-item (click)="logout()"
-                 *ngIf="authService.authenticated()">
-    <mat-icon>power_settings_new</mat-icon>
-    <span>Logout</span>
-  </mat-list-item>
-
-  <mat-list-item>
-    <mat-icon>info</mat-icon>
-    <span>{{appVersion}}</span>
-  </mat-list-item>
+  <mat-divider></mat-divider>
 
   <mat-list-item onclick="window.open('https://www.facebook.com/groups/361026511083969/')">
     <mat-icon>forum</mat-icon>
-    <span>Community </span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
+    <span>Community </span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
   <mat-list-item onclick="window.open('mailto:jimmykane9@gmail.com')">
     <mat-icon>email</mat-icon>
-    <span>Contact</span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
+    <span>Contact</span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
   <mat-list-item (click)="donate()">
     <mat-icon>monetization_on</mat-icon>
-    <span>Donate via PayPal </span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
+    <span>Donate via PayPal </span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
   <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
-    <mat-icon>bug_report </mat-icon>
-    <span>File a bug</span><span class="fill-space"></span><mat-icon>open_in_new</mat-icon>
+    <mat-icon>bug_report</mat-icon>
+    <span>File a bug</span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
+
+  <mat-divider></mat-divider>
+
+  <mat-list-item (click)="logout()"
+                 *ngIf="authService.authenticated()">
+    <mat-icon>power_settings_new</mat-icon>
+    <span>Logout</span>
   </mat-list-item>
 
 </mat-nav-list>

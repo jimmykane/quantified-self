@@ -1,7 +1,7 @@
 <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" [rowHeight]="'fit'">
   <mat-grid-tile class="app-icon">
     <span>
-      <mat-icon>filter_hdr</mat-icon>
+      <mat-icon  (click)="authService.authenticated() ? router.navigate(['/dashboard']) : router.navigate(['/home']) ">filter_hdr</mat-icon>
       <br/>
       {{appVersion}}
     </span>

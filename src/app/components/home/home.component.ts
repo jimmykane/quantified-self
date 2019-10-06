@@ -1,7 +1,10 @@
 import {Component, HostListener} from '@angular/core';
+import {AppAuthService} from '../../authentication/app.auth.service';
+import {Router} from '@angular/router';
 
 declare function require(moduleName: string): any;
-const { version: appVersion } = require('../../../../package.json');
+
+const {version: appVersion} = require('../../../../package.json');
 
 
 @Component({
@@ -11,6 +14,10 @@ const { version: appVersion } = require('../../../../package.json');
 })
 export class HomeComponent {
   public appVersion = appVersion;
+
+  constructor(public authService: AppAuthService, public router: Router) {
+
+  }
 
   @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {
