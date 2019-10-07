@@ -3,13 +3,9 @@
     class="mat-elevation-z1"
     routerLink="/home"
     (click)="sideNav.close();">
-      <section>
-        <h1>
-          <mat-icon>filter_hdr</mat-icon>
-          Quantified Self <mat-card-subtitle style="font-size: 0.6em">{{appVersion}}</mat-card-subtitle>
-        </h1>
-      </section>
-
+      <mat-icon>filter_hdr</mat-icon>
+      Quantified Self &nbsp;
+      <span style="font-size: 0.6em;">{{appVersion}}</span>
   </mat-toolbar-row>
 </mat-toolbar>
 
