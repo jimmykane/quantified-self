@@ -18,6 +18,9 @@ export class EditInputComponent implements OnChanges{
   ngOnChanges(changes: SimpleChanges): void {
   }
 
+  returnZero(){
+    return 0;
+  }
 
   onChange() {
     this.editMode = false;

@@ -13,7 +13,7 @@
               (selectionChange)="onChange();"
               [(ngModel)]='data'
               [placeholder]="placeHolder">
-    <mat-option *ngFor="let selectOption of selectOptions | keyvalue : 0" [value]="selectOption.value">
+    <mat-option *ngFor="let selectOption of selectOptions | keyvalue : returnZero" [value]="selectOption.value">
       {{selectOption.key}}
     </mat-option>
   </mat-select>
