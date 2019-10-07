@@ -11,7 +11,7 @@ export class EditInputComponent implements OnChanges{
   @Input() data: string | number;
   @Input() placeHolder: string;
   @Input() type: 'text' | 'number' | 'textArea' | 'select' = 'text';
-  @Input() selectOptions: [] = [];
+  @Input() selectOptions: any;
   @Output() dataChange: EventEmitter<number|string> = new EventEmitter<number|string>();
   editMode = false;
 
