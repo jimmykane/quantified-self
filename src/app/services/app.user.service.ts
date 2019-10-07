@@ -278,12 +278,6 @@ export class UserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const events = await this.eventService.getEventsAndActivitiesForUserBy(user, [], 'startDate', false, 0).pipe(take(1)).toPromise();
-    const promises = [];
-    events.forEach((event) => {
-      promises.push(this.eventService.deleteAllEventData(user, event.getID()));
-    });
-
     const serviceToken = await this.getServiceAuthToken(user, ServiceNames.SuuntoApp);
     if (serviceToken) {
       try {
@@ -293,9 +287,6 @@ export class UserService implements OnDestroy {
         console.error(`Could not deauthorize Suunto app`)
       }
       try {
-        await Promise.all(promises);
-        await this.afs.collection('suuntoAppAccessTokens').doc(user.uid).delete();
-        await this.afs.collection('users').doc(user.uid).delete();
         return this.afAuth.auth.currentUser.delete();
       } catch (e) {
         Sentry.captureException(e);
