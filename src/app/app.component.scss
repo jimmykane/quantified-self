@@ -8,7 +8,7 @@ mat-card{
 
 .mat-tab-link{
   min-width: 10%;
-  padding-right: 1em;
+  //padding-right: 1em;
   font-size: 1.3em;
   //font-weight: 400;
 }
@@ -41,7 +41,8 @@ mat-icon{
 }
 
 mat-icon.app-icon{
-  margin-right: 1em;
+  //margin-right: 1em;
+  padding: 0;
 }
 
 .theme{
