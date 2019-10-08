@@ -1,6 +1,6 @@
 <mat-toolbar>
   <mat-toolbar-row
-    class="mat-elevation-z1"
+    class="mat-elevation-z0"
     routerLink="/home"
     (click)="sideNav.close();">
       <mat-icon>filter_hdr</mat-icon>
@@ -9,10 +9,12 @@
   </mat-toolbar-row>
 </mat-toolbar>
 
+<mat-divider></mat-divider>
+
 <mat-nav-list>
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="mat-elevation-z1 active"
+    routerLinkActive="mat-elevation-z0 active"
     routerLink="/home"
     (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
@@ -21,7 +23,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z1 active"
+    routerLinkActive="mat-elevation-z0 active"
     routerLink="/dashboard"
     (click)="sideNav.close();">
     <mat-icon>dashboard</mat-icon>
@@ -30,7 +32,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z1 active"
+    routerLinkActive="mat-elevation-z0 active"
     [routerLink]="['/user/' + (authService.user | async)?.uid]"
     (click)="sideNav.close();">
     <mat-icon>account_circle</mat-icon>
@@ -39,14 +41,14 @@
 
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="mat-elevation-z1 active"
+    routerLinkActive="mat-elevation-z0 active"
     routerLink="/login" (click)="sideNav.close();">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>
   </mat-list-item>
 
   <mat-list-item
-    routerLinkActive="mat-elevation-z1 active"
+    routerLinkActive="mat-elevation-z0 active"
     routerLink="/services" (click)="sideNav.close();">
     <mat-icon>change_history</mat-icon>
     <span>Services</span>

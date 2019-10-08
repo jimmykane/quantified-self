@@ -4,7 +4,7 @@ mat-icon{
 }
 .active{
   font-weight: bold;
-  border: 0;
+  background: rgba(239, 239, 239, 0.4);
 }
 mat-toolbar-row{
   /*margin-bottom: 1em;*/

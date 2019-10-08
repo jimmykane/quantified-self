@@ -93,6 +93,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       .pipe(map((event: RoutesRecognized) => {
         return event.state.root.firstChild.data['title'];
       })).subscribe(title => {
+        this.title = title;
         this.titleService.setTitle(`${title} - Quantified Self`);
       });
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
