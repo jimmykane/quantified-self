@@ -27,3 +27,9 @@ mat-toolbar-row{
 mat-card-title{
   margin: 0;
 }
+
+mat-icon.app-icon{
+  font-size: 32px;
+  height:32px;
+  width: 32px;
+}
