@@ -179,8 +179,8 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     return this.convertToCategories(valueByType);
   }
 
-  private getChartDataForDataTypeSum(events: EventInterface[], dataType: string) {
-    const valueSum = this.events.reduce((sum, event) => {
+  private getValueSum(events: EventInterface[], dataType: string): number{
+    return this.events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
       if (!stat || !isNumber(stat.getValue())) {
@@ -189,14 +189,15 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       sum += <number>stat.getValue();
       return sum;
     }, 0);
+  }
 
-    if (valueSum === 0) {
+  private getChartDataForDataTypeSum(events: EventInterface[], dataType: string) {
+    if (this.getValueSum(events, dataType) === 0) {
       return []
     }
 
     // Create the map
-    const valueCountByType = new Map<string, number>();
-    const valueByType = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
+    const valueByCategory = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
       const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
       if (!eventTypeDisplay || !stat) {
@@ -205,16 +206,20 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
-      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) ? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : 0;
-      const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-      valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1)
-      if (!isNumber(activityTypeValue) || !isNumber(stat.getValue()) || stat.getValue() === 0) { // Remove 0 values from sums for categories
+      const summariesChartDataInterface = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || { // see @todo
+        value: 0,
+        count: 0
+      };
+      // Bump em up
+      summariesChartDataInterface.count++;
+      summariesChartDataInterface.value += <number>stat.getValue();
+      if (!summariesChartDataInterface.value || !isNumber(stat.getValue()) || stat.getValue() === 0) { // Remove 0 values from sums for categories
         return valueByTypeMap;
       }
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], {value: activityTypeValue + <number>stat.getValue(), count: activityTypeValueCount + 1}); // @todo break the join (not use display value)
+      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, {value: number, count: number}>());
-    return this.convertToCategories(valueByType);
+    return this.convertToCategories(valueByCategory);
   }
 
   private getChartDataForDataTypeAvg(events: EventInterface[], dataType: string) {
@@ -265,6 +270,12 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     return this.convertToCategories(valueSumByType);
   }
 
+  /**
+   * Does nothing rather to convert a map to an obj pretty much and sorts them
+   * sorry
+   * @todo remove/simplify
+   * @param valueByType
+   */
   private convertToCategories(valueByType: Map<string, {value: number, count: number}>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
