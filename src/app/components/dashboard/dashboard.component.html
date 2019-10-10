@@ -12,5 +12,5 @@
                   [events]="events">
   </app-summaries>
 
-  <app-event-table [hasActions]="true" *ngIf="user" [user]="user" [events]="events"></app-event-table>
+  <app-event-table *ngIf="user" [user]="user" [events]="events"></app-event-table>
 </mat-card>

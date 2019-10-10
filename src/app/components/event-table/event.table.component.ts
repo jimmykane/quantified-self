@@ -68,7 +68,6 @@ import {LoadingAbstract} from '../loading/loading.abstract';
 export class EventTableComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
-  @Input() hasActions?: boolean;
   @ViewChild(MatSort, {static: true}) sort: MatSort;
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
   @ViewChild(MatCard, {static: true}) table: MatCard;
@@ -390,13 +389,10 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
   getColumnsToDisplayDependingOnScreenSize(event?) {
     let columns = ['expand'];
 
-    // Push the starting one
-    if (this.hasActions) {
-      columns.push('checkbox')
-    }
 
     // push all the rest
     columns.push(...[
+      'checkbox',
       // 'privacy',
       // 'name',
       'startDate',
@@ -437,9 +433,7 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     }
 
     // Push the last
-    if (this.hasActions) {
-      columns.push('actions')
-    }
+    columns.push('actions');
     return columns
   }
 

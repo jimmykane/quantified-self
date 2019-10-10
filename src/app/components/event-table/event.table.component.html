@@ -11,13 +11,13 @@
   <!--</mat-form-field>-->
   <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active" [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear multiTemplateDataRows>
     <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize(); first as isFirst; last as isLast; index as i;" [matColumnDef]="column">
-      <ng-container *ngIf="isFirst && hasActions">
+      <ng-container *ngIf="isFirst">
         <th mat-header-cell *matHeaderCellDef>
           <mat-icon *ngIf="!expandAll" (click)="expandAll = true;">unfold_more</mat-icon>
           <mat-icon *ngIf="expandAll" (click)="expandAll = false;">unfold_less</mat-icon>
         </th>
       </ng-container>
-      <ng-container *ngIf="i===1 && hasActions">
+      <ng-container *ngIf="i===1">
         <th mat-header-cell *matHeaderCellDef>
           <mat-checkbox
             (change)="$event ? masterToggle() : null"
@@ -26,11 +26,11 @@
           </mat-checkbox>
         </th>
       </ng-container>
-      <ng-container *ngIf="isLast && hasActions">
+      <ng-container *ngIf="isLast">
         <th mat-header-cell *matHeaderCellDef>
         </th>
       </ng-container>
-      <ng-container *ngIf="(!isFirst && !isLast) || !hasActions">
+      <ng-container *ngIf="(!isFirst && !isLast)">
 
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
             <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
@@ -73,7 +73,6 @@
             </td>
             <td>
               <app-edit-input
-                *ngIf="hasActions"
                 [(data)]='element.name'
                 [type]="'text'"
                 [placeHolder]="'Name'"
@@ -82,7 +81,6 @@
             </td>
             <td>
               <app-edit-input
-                *ngIf="hasActions"
                 [(data)]='element.description'
                 [type]="'textArea'"
                 [placeHolder]="'Add a description'"
@@ -96,7 +94,6 @@
             </td>
             <td>
               <app-edit-input
-                *ngIf="hasActions"
                 [(data)]='element.feeling'
                 [type]="'select'"
                 [placeHolder]="'Feeling'"
@@ -106,7 +103,6 @@
             </td>
             <td>
               <app-edit-input
-                *ngIf="hasActions"
                 [(data)]='element.rpe'
                 [type]="'select'"
                 [placeHolder]="'Rating of Perceived Exertion'"
