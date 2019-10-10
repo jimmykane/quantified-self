@@ -6,7 +6,8 @@ import {
   Input,
   OnChanges,
   OnDestroy,
-  OnInit, SimpleChanges,
+  OnInit,
+  SimpleChanges,
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Subscription} from 'rxjs';
@@ -21,13 +22,11 @@ import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-type
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import * as Sentry from '@sentry/browser';
 import {
-  ChartTypes,
   ChartDataValueTypes,
+  ChartTypes,
   UserDashboardChartSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {EventFormComponent} from '../event-form/event.form.component';
 import {MatDialog} from '@angular/material/dialog';
 import {LoadingAbstract} from '../loading/loading.abstract';
 
@@ -115,30 +114,11 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     if (!this.events) {
       return null;
     }
-    if (dataValueType === ChartDataValueTypes.Total) {
-      return this.getChartDataForDataTypeSum(events, dataType);
-    }
-    if (dataValueType === ChartDataValueTypes.Maximum) {
-      return this.getChartDataForDataTypeMax(events, dataType);
-    }
-    if (dataValueType === ChartDataValueTypes.Minimum) {
-      return this.getChartDataForDataTypeMin(events, dataType);
-    }
-    if (dataValueType === ChartDataValueTypes.Average) {
-      return this.getChartDataForDataTypeAvg(events, dataType);
-    }
+    return this.getChartData(events, dataType, dataValueType);
   }
 
-  private getChartDataForDataTypeMax(events: EventInterface[], dataType: string) {
-    return this.getChartDataForDataTypeMinOrMax(events, dataType, false);
-  }
-
-  private getChartDataForDataTypeMin(events: EventInterface[], dataType: string) {
-    return this.getChartDataForDataTypeMinOrMax(events, dataType, true);
-  }
-
-  private getChartDataForDataTypeMinOrMax(events: EventInterface[], dataType: string, min) {
-    const minOrMax = this.events.reduce((minOrMaxBuffer, event) => {
+  private getValueMinOrMax(events: EventInterface[], dataType: string, min = false): number {
+    return this.events.reduce((minOrMaxBuffer, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
       if (!stat || !isNumber(stat.getValue())) {
@@ -146,40 +126,23 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       }
       return !min ? (<number>stat.getValue() > minOrMaxBuffer ? <number>stat.getValue() : minOrMaxBuffer) : (<number>stat.getValue() <= minOrMaxBuffer ? <number>stat.getValue() : minOrMaxBuffer)
     }, !min ? -Infinity : Infinity);
-
-    if (!isNumber(minOrMax)) {
-      return []
-    }
-
-    // Create the map
-    const valueCountByType = new Map<string, number>();
-    const valueByType = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
-      const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-      const stat = event.getStat(dataType);
-      if (!eventTypeDisplay || !stat) {
-        return valueByTypeMap;
-      }
-      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
-        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
-      }
-      if (!isNumber(stat.getValue())){
-        return valueByTypeMap;
-      }
-
-      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) ? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : undefined;
-      const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-      valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1);
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()],
-        {
-          value: !isNumber(activityTypeValue) ? <number>stat.getValue() : !min ? (activityTypeValue > <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()) : (activityTypeValue <= <number>stat.getValue() ? activityTypeValue : <number>stat.getValue()),
-          count: activityTypeValueCount + 1
-        }); // @todo break the join (not use display value)
-      return valueByTypeMap
-    }, new Map<string, {value: number, count: number}>());
-    return this.convertToCategories(valueByType);
   }
 
-  private getValueSum(events: EventInterface[], dataType: string): number{
+  private getValueAvg(events: EventInterface[], dataType: string, min = false): number {
+    let totalAvgCount = 0;
+    const valueSum = this.events.reduce((sum, event) => {
+      const stat = event.getStat(dataType);
+      if (!stat || !isNumber(stat.getValue())) {
+        return sum;
+      }
+      totalAvgCount++;
+      sum += <number>stat.getValue();
+      return sum;
+    }, 0);
+    return valueSum / totalAvgCount;
+  }
+
+  private getValueSum(events: EventInterface[], dataType: string): number {
     return this.events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
@@ -191,83 +154,69 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }, 0);
   }
 
-  private getChartDataForDataTypeSum(events: EventInterface[], dataType: string) {
-    if (this.getValueSum(events, dataType) === 0) {
+  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes = ChartDataValueTypes.Total) {
+    // @todo can the below if be better ? we need return there for switch
+    // We care sums to ommit 0s
+    if (this.getValueSum(events, dataType) === 0 && valueType === ChartDataValueTypes.Total) {
       return []
+    }
+    // We care min max to ommit infinity etc no need to check for max, if NAN then abort (0 can be max)
+    if (!isNumber(this.getValueMinOrMax(events, dataType)) && (valueType === ChartDataValueTypes.Maximum || valueType === ChartDataValueTypes.Minimum)) {
+      return []
+    }
+    // @todo not sure if this is needed
+    if (!isNumber(this.getValueAvg(events, dataType)) && valueType === ChartDataValueTypes.Average){
+      return [];
     }
 
     // Create the map
-    const valueByCategory = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
+    const valueByCategory = this.events.reduce((valueByTypeMap: Map<string, { value: number, count: number }>, event) => {
       const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
       if (!eventTypeDisplay || !stat) {
         return valueByTypeMap;
       }
-      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
+      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()] || !isNumber(stat.getValue())) {
         Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
       }
       const summariesChartDataInterface = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || { // see @todo
-        value: 0,
+        value: null,
         count: 0
       };
       // Bump em up
       summariesChartDataInterface.count++;
-      summariesChartDataInterface.value += <number>stat.getValue();
-      if (!summariesChartDataInterface.value || !isNumber(stat.getValue()) || stat.getValue() === 0) { // Remove 0 values from sums for categories
+      switch (valueType) {
+        case ChartDataValueTypes.Maximum:
+          summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value > <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
+          break;
+        case ChartDataValueTypes.Minimum:
+          summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value < <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
+          break;
+        case ChartDataValueTypes.Average:
+        case ChartDataValueTypes.Total:
+          summariesChartDataInterface.value = summariesChartDataInterface.value ? summariesChartDataInterface.value + <number>stat.getValue() : <number>stat.getValue();
+          break;
+        default:
+          throw new Error('Not implemented');
+      }
+      // Last additional check here.
+      // If you want to pass nulls this should be removed
+      if (!isNumber(summariesChartDataInterface.value)) {
         return valueByTypeMap;
       }
       valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string, {value: number, count: number}>());
-    return this.convertToCategories(valueByCategory);
-  }
+    }, new Map<string, { value: number, count: number }>());
 
-  private getChartDataForDataTypeAvg(events: EventInterface[], dataType: string) {
-    let totalAvgCount = 0;
-    const valueSum = this.events.reduce((sum, event) => {
-      const stat = event.getStat(dataType);
-      if (!stat || !isNumber(stat.getValue())) {
-        return sum;
-      }
-      totalAvgCount++;
-      sum += <number>stat.getValue();
-      return sum;
-    }, 0);
 
-    if (totalAvgCount === 0) {
-      return []
+    if (valueType === ChartDataValueTypes.Average){
+      // Calc avg
+      valueByCategory.forEach((item, type) => {
+        valueByCategory.set(type, {value: item.value / item.count, count: item.count});
+      });
     }
 
-    const valueAvg = valueSum / totalAvgCount;
-
-
-    // Create the map with the sums and a map with the counts
-    const valueCountByType = new Map<string, number>();
-    const valueSumByType = this.events.reduce((valueByTypeMap: Map<string, {value: number, count: number}>, event) => {
-      const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-      const stat = event.getStat(dataType);
-      if (!eventTypeDisplay || !stat) {
-        return valueByTypeMap;
-      }
-      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()]) {
-        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
-      }
-      if (!isNumber(stat.getValue())){
-        return valueByTypeMap;
-      }
-      const activityTypeValue = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()])? valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]).value : 0;
-      const activityTypeValueCount = valueCountByType.get(ActivityTypes[eventTypeDisplay.getDisplayValue()]) || 0;
-      valueCountByType.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], activityTypeValueCount + 1)
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], {value: activityTypeValue + <number>stat.getValue(), count: activityTypeValueCount +1 }); // @todo break the join (not use display value)
-      return valueByTypeMap
-    }, new Map<string, {value: number, count: number}>());
-
-    // Calc avg
-    valueSumByType.forEach((item, type) => {
-      valueSumByType.set(type, {value: item.value / valueCountByType.get(type), count:  valueCountByType.get(type)});
-    });
-
-    return this.convertToCategories(valueSumByType);
+    return this.convertToCategories(valueByCategory);
   }
 
   /**
@@ -276,7 +225,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
    * @todo remove/simplify
    * @param valueByType
    */
-  private convertToCategories(valueByType: Map<string, {value: number, count: number}>): SummariesChartDataInterface[] {
+  private convertToCategories(valueByType: Map<string, { value: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
       data.push({type: type, value: item.value, count: item.count})
@@ -306,8 +255,11 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
 export interface SummariesChartDataInterface {
 
-  type: string, value: number, count: number
+  type: string,
+  value: number,
+  count: number
 }
+
 export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
   data: SummariesChartDataInterface[]
 }
