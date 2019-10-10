@@ -24,6 +24,8 @@ import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 
 
 @Component({
@@ -40,6 +42,7 @@ export class ActivityFormComponent implements OnInit {
   public activity: ActivityInterface;
   public event: EventInterface;
   public user: User;
+  public activityTypesArray = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
   public activityFormGroup: FormGroup;
 
@@ -87,6 +90,9 @@ export class ActivityFormComponent implements OnInit {
           value: this.getTimeFromDateAsString(this.activity.endDate),
           disabled: true
         }, [
+          Validators.required,
+        ]),
+        type: new FormControl(this.activity.type, [
           Validators.required,
         ]),
       }
@@ -212,6 +218,11 @@ export class ActivityFormComponent implements OnInit {
         }, 0)));
       }
 
+      if (this.activityFormGroup.get('type').dirty) {
+        this.activity.type = ActivityTypes[<keyof typeof ActivityTypes>this.activityFormGroup.get('type').value];
+        this.event.addStat(new DataActivityTypes(this.event.getActivities().map(activity => activity.type)));
+      }
+
       if (this.activity.hasStreamData(DataDistance.type) && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
         EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
         this.activity.clearStats();
@@ -271,3 +282,11 @@ export const activityDistanceValidator: ValidatorFn = (control: FormGroup): Vali
   }
   return null;
 };
+
+export const autocompleteSelectionValidator: ValidatorFn = (control: FormControl): ValidationErrors | null => {
+  const selection: any = control.value;
+  if (typeof selection === 'string') {
+    return {requireMatch: true};
+  }
+  return null;
+}

@@ -9,6 +9,18 @@
     <span class="mat-headline">Editing activity</span>
     <span class="mat-subheader">internal id {{ activity.getID() }}</span>
 
+
+    <section>
+      Type
+      <mat-form-field>
+        <mat-select placeholder="Type of the activity" formControlName="type">
+          <mat-option *ngFor="let activityType of activityTypesArray" [value]="activityType">
+            {{activityType}}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </section>
+
     <section>
       Device
 
