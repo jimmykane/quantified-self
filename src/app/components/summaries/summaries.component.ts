@@ -171,15 +171,15 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
     // Create the map
     const valueByCategory = this.events.reduce((valueByTypeMap: Map<string, { value: number, count: number }>, event) => {
-      const eventTypeDisplay = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+      const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
-      if (!eventTypeDisplay || !stat) {
+      if (!eventTypeDisplayStat || !stat) {
         return valueByTypeMap;
       }
-      if (eventTypeDisplay.getValue().length === 1 && !ActivityTypes[eventTypeDisplay.getDisplayValue()] || !isNumber(stat.getValue())) {
-        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplay.getDisplayValue()} is not known`));
+      if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()] || !isNumber(stat.getValue())) {
+        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
       }
-      const summariesChartDataInterface = valueByTypeMap.get(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()]) || { // see @todo
+      const summariesChartDataInterface = valueByTypeMap.get(eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) || { // see @todo
         value: null,
         count: 0
       };
@@ -204,7 +204,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (!isNumber(summariesChartDataInterface.value)) {
         return valueByTypeMap;
       }
-      valueByTypeMap.set(eventTypeDisplay.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplay.getDisplayValue()], summariesChartDataInterface); // @todo break the join (not use display value)
+      valueByTypeMap.set(eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()], summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, { value: number, count: number }>());
 
@@ -237,6 +237,8 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       });
   }
 
+
+  // @todo refactor
   private getRowHeight() {
     const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
     return (angle === 90 || angle === -90) ? '30vw' : '30vh';
