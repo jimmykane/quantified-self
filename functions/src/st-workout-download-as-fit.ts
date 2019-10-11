@@ -24,7 +24,7 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
       res.status(403).send('No activity ID provided.');
     }
 
-    const url = `https://api.sports-tracker.com/apiserver/v1/workout/exportFit/${activityID}?autogeneraterecords=true&generatefillerlaps=true&removesinglelocation=true`;
+    const url = `https://api.sports-tracker.com/apiserver/v1/workout/exportFit/${activityID}?autogeneraterecords=true&generatefillerlaps=true&removesinglelocation=true&removeRecordsDuringPauses=true`;
     const opts = {
       method: 'GET',
       headers: {
