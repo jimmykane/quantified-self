@@ -167,7 +167,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
             return position.latitudeDegrees !== 0 || position.longitudeDegrees !== 0
           });
 
-          if (!positions.length){
+          if (!positions.length) {
             this.isLoading = false;
             this.changeDetectorRef.detectChanges();
             return;
@@ -375,6 +375,9 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   }
 
   async changeMapType(mapType) {
+    if (!this.user) {
+      return;
+    }
     this.user.settings.mapSettings.mapType = mapType;
     await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
