@@ -114,7 +114,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     if (!this.events) {
       return null;
     }
-    return this.getChartData(events, dataType, dataValueType);
+    return this.getChartData(events.filter(event => !event.isMerge), dataType, dataValueType);
   }
 
   private getValueMinOrMax(events: EventInterface[], dataType: string, min = false): number {
@@ -170,7 +170,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
 
     // Create the map
-    const valueByCategory = this.events.reduce((valueByTypeMap: Map<string, { value: number, count: number }>, event) => {
+    const valueByCategory = events.reduce((valueByTypeMap: Map<string, { value: number, count: number }>, event) => {
       const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
       const stat = event.getStat(dataType);
       if (!eventTypeDisplayStat || !stat) {
