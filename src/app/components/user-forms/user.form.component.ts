@@ -8,6 +8,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
+import * as firebase from 'firebase/app';
 
 
 @Component({
@@ -120,8 +121,9 @@ export class UserFormComponent implements OnInit {
     this.isDeleting = true;
     try {
       await this.userService.deleteAllUserData(this.user);
-      await this.router.navigate(['home']);
+      firebase.analytics().logEvent('user_delete', {});
       await this.authService.signOut();
+      await this.router.navigate(['home']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {
         duration: 5000,
       });
