@@ -5,7 +5,7 @@ service cloud.firestore {
     // available in rules.
     match /users/{userID} {
       allow read: if resource.data.privacy == 'public';
-      allow read, update, delete: if request.auth.uid == userID;
+      allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
