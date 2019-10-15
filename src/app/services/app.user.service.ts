@@ -36,6 +36,7 @@ import {
   UserDashboardSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {
+  ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   UserDashboardChartSettingsInterface
@@ -85,6 +86,7 @@ export class UserService implements OnDestroy {
       name: 'Duration',
       order: 0,
       type: ChartTypes.Pie,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataType: DataDuration.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
@@ -93,12 +95,14 @@ export class UserService implements OnDestroy {
       order: 1,
       type: ChartTypes.Pie,
       dataType: DataDistance.type,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
     }, {
       name: 'Energy',
       order: 2,
       type: ChartTypes.ColumnsHorizontal,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataType: DataEnergy.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
@@ -106,6 +110,7 @@ export class UserService implements OnDestroy {
       name: 'Ascent',
       order: 3,
       type: ChartTypes.PyramidsVertical,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataType: DataAscent.type,
       dataValueType: ChartDataValueTypes.Maximum,
       filterLowValues: true,

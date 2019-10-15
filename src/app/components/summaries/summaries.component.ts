@@ -22,6 +22,7 @@ import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-type
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import * as Sentry from '@sentry/browser';
 import {
+  ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   UserDashboardChartSettingsInterface
@@ -154,7 +155,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }, 0);
   }
 
-  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes = ChartDataValueTypes.Total) {
+  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes = ChartDataValueTypes.Total, categoryType: ChartDataCategoryTypes = ChartDataCategoryTypes.ActivityType) {
     // @todo can the below if be better ? we need return there for switch
     // We care sums to ommit 0s
     if (this.getValueSum(events, dataType) === 0 && valueType === ChartDataValueTypes.Total) {
@@ -165,24 +166,21 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       return []
     }
     // @todo not sure if this is needed
-    if (!isNumber(this.getValueAvg(events, dataType)) && valueType === ChartDataValueTypes.Average){
+    if (!isNumber(this.getValueAvg(events, dataType)) && valueType === ChartDataValueTypes.Average) {
       return [];
     }
 
     // Create the map
-    const valueByCategory = events.reduce((valueByTypeMap: Map<string, { value: number, count: number }>, event) => {
-      const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+    const valueByCategory = events.reduce((valueByTypeMap: Map<string|number, { value: number, count: number }>, event) => {
       const stat = event.getStat(dataType);
-      if (!eventTypeDisplayStat || !stat) {
+      if (!stat) {
         return valueByTypeMap;
       }
-      if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()] || !isNumber(stat.getValue())) {
-        Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
-      }
-      const summariesChartDataInterface = valueByTypeMap.get(eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) || { // see @todo
-        value: null,
-        count: 0
-      };
+      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, categoryType)) ||
+        {
+          value: null,
+          count: 0
+        };
       // Bump em up
       summariesChartDataInterface.count++;
       switch (valueType) {
@@ -204,12 +202,12 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (!isNumber(summariesChartDataInterface.value)) {
         return valueByTypeMap;
       }
-      valueByTypeMap.set(eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()], summariesChartDataInterface); // @todo break the join (not use display value)
+      valueByTypeMap.set(this.getCategoryKey(event, categoryType), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, { value: number, count: number }>());
 
 
-    if (valueType === ChartDataValueTypes.Average){
+    if (valueType === ChartDataValueTypes.Average) {
       // Calc avg
       valueByCategory.forEach((item, type) => {
         valueByCategory.set(type, {value: item.value / item.count, count: item.count});
@@ -219,13 +217,33 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     return this.convertToCategories(valueByCategory);
   }
 
+  getCategoryKey(event: EventInterface, categoryType: ChartDataCategoryTypes): string|number {
+    switch (categoryType) {
+      case ChartDataCategoryTypes.ActivityType:
+        const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+        // Abort and crash if not found
+        if (!eventTypeDisplayStat) {
+          throw new Error(`No eventTypeDisplayStat found for event with id ${event.getID()}`);
+        }
+        // Log an error to notify us what is missing
+        if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) {
+          Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
+        }
+        return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
+      case ChartDataCategoryTypes.DateType:
+        return event.startDate.getTime();
+      default:
+        throw new Error(`Not implemented`);
+    }
+  }
+
   /**
    * Does nothing rather to convert a map to an obj pretty much and sorts them
    * sorry
    * @todo remove/simplify
    * @param valueByType
    */
-  private convertToCategories(valueByType: Map<string, { value: number, count: number }>): SummariesChartDataInterface[] {
+  private convertToCategories(valueByType: Map<string|number, { value: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
       data.push({type: type, value: item.value, count: item.count})
