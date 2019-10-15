@@ -223,7 +223,7 @@ export class ActivityFormComponent implements OnInit {
         this.event.addStat(new DataActivityTypes(this.event.getActivities().map(activity => activity.type)));
       }
 
-      if (this.activity.hasStreamData(DataDistance.type) && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
+      if (this.activity.hasStreamData(DataDistance.type) && this.activityFormGroup.get('startDistance') && this.activityFormGroup.get('endDistance') && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
         EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
         this.activity.clearStats();
         EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
