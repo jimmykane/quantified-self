@@ -42,10 +42,6 @@ import {DataVerticalSpeedMetersPerMinute} from 'quantified-self-lib/lib/data/dat
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {UserService} from '../../../../services/app.user.service';
 
-const DOWNSAMPLE_AFTER_X_HOURS = 10;
-const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
-const GROUP_AFTER_X_HOURS = 2;
-
 @Component({
   selector: 'app-event-card-chart',
   templateUrl: './event.card.chart.component.html',
@@ -136,10 +132,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private async processChanges(selectedDataTypes: string[] | null) {
     this.loading();
-    // Important for performance / or not?
-    // This is / will be needed when more performance needs to be achieved
-    // Leaving this here for the future. For now the groups of data do suffice and do it better
-    // am4core.options.minPolylineStep = this.dataSmoothingLevel;
+    am4core.options.minPolylineStep = this.dataSmoothingLevel;
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
         this.distanceAxesForActivitiesMap.set(
@@ -226,8 +219,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     } else {
       // Create a date axis
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
-      xAxis.groupData = true;
-      xAxis.groupCount = 60 * 60 * GROUP_AFTER_X_HOURS;
     }
     xAxis.title.text = this.xAxisType;
     // xAxis.renderer.grid.template.disabled = true;
@@ -560,7 +551,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       series.strokeWidth = this.userChartSettings.strokeWidth;
       series.strokeOpacity = this.userChartSettings.strokeOpacity;
       series.fillOpacity = this.userChartSettings.fillOpacity;
-    } else {
+    }else {
       series.strokeWidth = UserService.getDefaultChartStrokeWidth();
       series.strokeOpacity = UserService.getDefaultChartStrokeOpacity();
       series.fillOpacity = UserService.getDefaultChartFillOpacity();
@@ -712,26 +703,30 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       });
     } else {
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
-      data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
     }
-    this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
+    data = data
+      .filter((streamData) => streamData.value !== null)
+      .filter((streamData, index) => (index % this.getStreamSamplingRate(activity)) === 0);
+    // this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
 
-  private getStreamSamplingRateInSeconds(activity: ActivityInterface): number {
-    // Rate is minimum 1
-    const rate = this.dataSmoothingLevel || 1;
-    // If we do not need to strengthen the downsampling based on the DOWNSAMPLE_AFTER_X_HOURS
-    // then we just need to return the sampling rate the user has selected
-    if (this.getActivityHours(activity) < DOWNSAMPLE_AFTER_X_HOURS) {
-      return this.dataSmoothingLevel;
+  private getStreamSamplingRateInSeconds(stream: StreamInterface): number {
+    if (this.dataSmoothingLevel === 1) {
+      return 1;
     }
-    // If the activity needs a bump on downsampling > DOWNSAMPLE_AFTER_X_HOURS
-    return this.dataSmoothingLevel * Math.ceil((this.getActivityHours(activity) * DOWNSAMPLE_RATE_PER_X_HOURS_GREATER) / DOWNSAMPLE_AFTER_X_HOURS);
+    const numberOfSamples = stream.getNumericData().length;
+    let samplingRate;
+    const hoursToKeep1sSamplingRateForAllActivities = 2; // 2 hours
+    const numberOfSamplesToHours = numberOfSamples / 3600;
+    samplingRate = Math.ceil((numberOfSamplesToHours * this.dataSmoothingLevel * this.selectedActivities.length) / hoursToKeep1sSamplingRateForAllActivities);
+    // this.logger.info(`${numberOfSamples} for ${stream.type} are about ${numberOfSamplesToHours} hours. Sampling rate is ${samplingRate}`);
+    return samplingRate;
   }
 
-  private getActivityHours(activity: ActivityInterface): number {
-    return Math.ceil((activity.getDuration().getValue() / (60 * 60)));
+  private getStreamSamplingRate(activity: ActivityInterface): number {
+    const hours = Math.ceil((activity.getDuration().getValue() / (60 * 60)));
+    return Math.ceil(hours / 2);
   }
 
   private addDataToChart(data: any) {
