@@ -3,7 +3,6 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
-  HostListener,
   Input,
   OnChanges,
   OnDestroy,
@@ -44,8 +43,7 @@ import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {UserService} from '../../services/app.user.service';
-import {ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
-import {LoadingAbstract} from '../loading/loading.abstract';
+import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
 
 
 @Component({
@@ -65,7 +63,7 @@ import {LoadingAbstract} from '../loading/loading.abstract';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventTableComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventTableComponent extends ScreenSizeAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
   @ViewChild(MatSort, {static: true}) sort: MatSort;
@@ -393,8 +391,6 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
     // push all the rest
     columns.push(...[
       'checkbox',
-      // 'privacy',
-      // 'name',
       'startDate',
       'Activity Types',
       'Distance',
@@ -404,36 +400,37 @@ export class EventTableComponent extends LoadingAbstract implements OnChanges, O
       'Average Heart Rate',
       'Duration',
       'Device Names',
+      'Actions'
     ]);
 
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest){
+      return columns;
+    }
 
-    // @todo convert to base calss usage
-    if (window.innerWidth < 1120) {
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
       columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 1060) {
-      columns = columns.filter(column => ['Average Heart Rate'].indexOf(column) === -1)
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
+      columns = columns.filter(column => ['Energy', 'Average Heart Rate'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 960) {
-      columns = columns.filter(column => ['Descent'].indexOf(column) === -1)
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
+      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 850) {
-      columns = columns.filter(column => ['name'].indexOf(column) === -1)
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
+      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 740) {
-      columns = columns.filter(column => ['Device Names'].indexOf(column) === -1)
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
+      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
     }
 
-    if (window.innerWidth < 640) {
-      columns = columns.filter(column => ['Ascent'].indexOf(column) === -1)
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
+      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
     }
 
-    // Push the last
-    columns.push('actions');
     return columns
   }
 

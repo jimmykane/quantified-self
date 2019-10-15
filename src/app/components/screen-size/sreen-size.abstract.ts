@@ -11,8 +11,8 @@ import {LoadingAbstract} from '../loading/loading.abstract';
  */
 export abstract class ScreenSizeAbstract extends LoadingAbstract {
 
-  private screenWidth: number;
-  private screenHeight: number;
+  private screenWidth: number = window.innerWidth;
+  private screenHeight: number = window.innerHeight;
 
   constructor(changeDetector: ChangeDetectorRef) {
     super(changeDetector);
@@ -26,37 +26,39 @@ export abstract class ScreenSizeAbstract extends LoadingAbstract {
 
 
   protected getScreenWidthBreakPoint(): ScreenBreakPoints {
-    if (this.screenWidth < 1120) {
-      return ScreenBreakPoints.veryHigh
+    if (this.screenWidth > 1120) {
+      return ScreenBreakPoints.Highest
     }
 
-    if (this.screenWidth < 1060) {
-      return ScreenBreakPoints.high
+    if (this.screenWidth > 1060) {
+      return ScreenBreakPoints.VeryHigh
     }
 
-    if (this.screenWidth < 960) {
-      return ScreenBreakPoints.moderate
+    if (this.screenWidth > 960) {
+      return ScreenBreakPoints.High
     }
 
-    if (this.screenWidth < 850) {
-      return ScreenBreakPoints.low
+    if (this.screenWidth > 850) {
+      return ScreenBreakPoints.Moderate
     }
 
-    if (this.screenWidth < 740) {
-      return ScreenBreakPoints.veryLow
+    if (this.screenWidth > 740) {
+      return ScreenBreakPoints.Low
     }
 
-    if (this.screenWidth < 640) {
-      return ScreenBreakPoints.lowest
+    if (this.screenWidth > 640) {
+      return ScreenBreakPoints.Low
     }
+    return ScreenBreakPoints.Lowest;
   }
 }
 
 export enum ScreenBreakPoints {
-  veryHigh,
-  high,
-  moderate,
-  low,
-  veryLow,
-  lowest
+  Highest,
+  VeryHigh,
+  High,
+  Moderate,
+  Low,
+  VeryLow,
+  Lowest
 }
