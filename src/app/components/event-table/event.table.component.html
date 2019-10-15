@@ -49,7 +49,7 @@
                       (change)="$event ? checkBoxClick(row) : null"
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
-        <span *ngIf="column === 'actions'">
+        <span *ngIf="column === 'Actions'">
           <app-event-actions *ngIf="user" [user]="user" [event]="row.event"></app-event-actions>
         </span>
         <span *ngIf="column === 'Activity Types'">
