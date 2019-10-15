@@ -91,21 +91,24 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
 
-      if (!this.searchStartDate || !this.searchEndDate) {
+      if ((!this.searchStartDate || !this.searchEndDate) && this.user.settings.dashboardSettings.dateRange === DateRanges.custom) {
         return of([])
       }
-      // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
-      where.push({
-        fieldPath: 'startDate',
-        opStr: <WhereFilterOp>'>=',
-        value: this.searchStartDate.getTime() // Should remove mins from date
-      });
-      // this.searchEndDate.setHours(24, 0, 0, 0);
-      where.push({
-        fieldPath: 'startDate',
-        opStr: <WhereFilterOp>'<=', // Should remove mins from date
-        value: this.searchEndDate.getTime()
-      });
+      if (this.user.settings.dashboardSettings.dateRange !== DateRanges.all) {
+        // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
+        where.push({
+          fieldPath: 'startDate',
+          opStr: <WhereFilterOp>'>=',
+          value: this.searchStartDate.getTime() // Should remove mins from date
+        });
+        // this.searchEndDate.setHours(24, 0, 0, 0);
+        where.push({
+          fieldPath: 'startDate',
+          opStr: <WhereFilterOp>'<=', // Should remove mins from date
+          value: this.searchEndDate.getTime()
+        });
+      }
+
 
       // Get what is needed
       return this.shouldSearch ? this.eventService.getEventsForUserBy(this.user, where, 'startDate', false, limit) : of(this.events);
