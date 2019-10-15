@@ -3,10 +3,16 @@ import {Input, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {string} from '@amcharts/amcharts4/core';
 import {SummariesChartDataInterface} from '../summaries/summaries.component';
+import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 
 
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges  {
   @Input() data: any;
+
+
+  @Input() chartDataType: string;
+  @Input() chartDataValueType: ChartDataValueTypes;
+  @Input() filterLowValues: boolean;
 
   ngOnChanges(simpleChanges) {
     // If theme changes destroy the chart

@@ -34,15 +34,8 @@ import {SummariesChartDataInterface} from '../../summaries/summaries.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartsColumnComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @Input() data: any;
-  @Input() userChartSettings: UserChartSettingsInterface;
-  @Input() chartTheme: ChartThemes = ChartThemes.Material;
-  @Input() chartDataType: string;
-  @Input() chartDataValueType: ChartDataValueTypes;
   @Input() vertical = true;
-  @Input() filterLowValues: boolean;
 
-  protected chart: am4charts.XYChart;
   protected logger = Log.create('ChartColumnComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
@@ -120,8 +113,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
       return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
     });
     valueAxis.min = 0;
-
-
+    
     let series;
 
     if (this.vertical) {

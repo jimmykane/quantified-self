@@ -30,15 +30,7 @@ import {SummariesChartDataInterface} from '../../summaries/summaries.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @Input() data: any;
 
-  @Input() chartDataType: string;
-  @Input() chartDataValueType: ChartDataValueTypes;
-  @Input() filterLowValues: boolean;
-
-
-
-  protected chart: am4charts.PieChart;
   protected logger = Log.create('ChartPieComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
