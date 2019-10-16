@@ -32,7 +32,8 @@ import * as Sentry from '@sentry/browser';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
 import {
-  DateRanges, TableSettings,
+  DateRanges,
+  TableSettings,
   UserDashboardSettingsInterface
 } from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {
@@ -340,6 +341,8 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || UserService.getDefaultUserDashboardChartSettings();
+    // Patch missing defaults
+    settings.dashboardSettings.chartsSettings.forEach(chartSetting => chartSetting.dataCategoryType = chartSetting.dataCategoryType || ChartDataCategoryTypes.ActivityType)
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
     settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || UserService.getDefaultTableSettings();

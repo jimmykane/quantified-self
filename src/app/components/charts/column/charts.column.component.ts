@@ -15,15 +15,11 @@ import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 // Chart Themes
-import animated from '@amcharts/amcharts4/themes/animated';
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {ChartAbstract} from '../chart.abstract';
 import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {concat} from 'rxjs';
-import {string} from '@amcharts/amcharts4/core';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 
@@ -49,11 +45,15 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
   }
 
   protected createChart(): am4charts.XYChart {
-    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart)
-
+    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
+    // Disable the preloader
+    chart.preloader.disabled = true;
+    // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 0, 0, 20);
     chart.fontSize = '1.1em';
+    chart.paddingBottom = 20;
+
 
     // top container for labels
     const topContainer = chart.chartContainer.createChild(am4core.Container);
@@ -61,7 +61,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     topContainer.toBack();
     topContainer.paddingBottom = 5;
     topContainer.width = am4core.percent(100);
-
+    // Title
     const chartTitle = topContainer.createChild(am4core.Label);
     chartTitle.align = 'left';
     chartTitle.adapter.add('text', (text, target, key) => {
@@ -71,40 +71,28 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     });
 
 
-    // Disable the preloader
-    chart.preloader.disabled = true;
-    // chart.exporting.menu = this.getExportingMenu();
-
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis()) : chart.yAxes.push(this.getCategoryAxis());
-    categoryAxis.dataFields.category = 'type';
+    if (categoryAxis instanceof am4charts.CategoryAxis) {
+      categoryAxis.dataFields.category = 'type'
+    } else if (categoryAxis instanceof am4charts.DateAxis) {
+      categoryAxis.dataFields.date = 'time'
+    }
     categoryAxis.renderer.grid.template.location = 0;
     categoryAxis.renderer.cellStartLocation = 0.1;
     categoryAxis.renderer.cellEndLocation = 0.9;
-    if (this.vertical) {
-      categoryAxis.renderer.minGridDistance = 20;
-    } else {
-      categoryAxis.renderer.minGridDistance = 1;
-      categoryAxis.renderer.opposite = true;
-    }
+    categoryAxis.renderer.opposite = !this.vertical;
+    categoryAxis.renderer.minGridDistance = this.vertical ? 20 : 1;
+    categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
+      if (this.vertical && chart.data.length > 5 && target.dataItem && target.dataItem.index % 2) {
+        return dy + 20;
+      }
+      return dy;
+    });
 
-    if( this.vertical ) {
-      // chart.marginBottom = 20;
-      categoryAxis.renderer.labels.template.adapter.add('dy',  (dy, target) => {
-        chart.paddingBottom = 20;
-        if (chart.data.length > 5 && target.dataItem && target.dataItem.index % 2) {
-          return dy + 20;
-        }
-        return dy;
-      });
-    }
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
-    valueAxis.extraMax = 0.20;
-
-    if (this.vertical) {
-      valueAxis.renderer.opposite = true;
-      valueAxis.extraMax = 0.15;
-    }
+    valueAxis.renderer.opposite = this.vertical;
+    valueAxis.extraMax = this.vertical ? 0.15 : 0.20;
     valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
@@ -113,48 +101,49 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
       return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
     });
     valueAxis.min = 0;
-    
+
     let series;
 
+    series = this.vertical ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
+
+    const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
     if (this.vertical) {
-      series = chart.series.push(new am4charts.CurvedColumnSeries());
+      if (categoryAxis instanceof am4charts.CategoryAxis){
+        series.dataFields.categoryX = 'type';
+      }else if (categoryAxis instanceof am4charts.DateAxis){
+        series.dataFields.dateX = 'time';
+      }
       series.dataFields.valueY = 'value';
-      series.dataFields.categoryX = 'type';
-      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-      categoryLabel.label.adapter.add('text', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
-        return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
-      });
+      series.columns.template.tension = 1;
       categoryLabel.dy = -15;
-      categoryLabel.label.hideOversized = false;
-      categoryLabel.label.truncate = false;
-      categoryLabel.label.adapter.add('fill', (fill, target) => {
-        return chart.colors.getIndex(target.dataItem.index);
-      });
+
     } else {
-      series = chart.series.push(new am4charts.ColumnSeries());
+      if (categoryAxis instanceof am4charts.CategoryAxis){
+        series.dataFields.categoryY = 'type';
+      }else if (categoryAxis instanceof am4charts.DateAxis){
+        series.dataFields.dateY = 'time';
+      }
       series.dataFields.valueX = 'value';
-      series.dataFields.categoryY = 'type';
-      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-      categoryLabel.label.adapter.add('text', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
-        return `[bold font-size: 1.1em ]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
-      });
       categoryLabel.label.dx = 50;
-      categoryLabel.label.hideOversized = false;
-      categoryLabel.label.truncate = false;
-      categoryLabel.label.adapter.add('fill', (fill, target) => {
-        return chart.colors.getIndex(target.dataItem.index);
-      });
     }
 
+    categoryLabel.label.adapter.add('text', (text, target) => {
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
+      return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+    });
+
+    categoryLabel.label.hideOversized = false;
+    categoryLabel.label.truncate = false;
+    categoryLabel.label.adapter.add('fill', (fill, target) => {
+      return chart.colors.getIndex(target.dataItem.index);
+    });
+
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
+    // series.groupFields.valueY = "sum";
+    // series.groupFields.valueX = "sum";
     series.columns.template.strokeOpacity = 1;
     series.columns.template.strokeWidth = 0.4;
     series.columns.template.stroke = am4core.color('#175e84');
-    if (this.vertical) {
-      series.columns.template.tension = 1;
-    }
     // series.columns.template.fillOpacity = 1;
     series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
     series.columns.template.adapter.add('tooltipText', (text, target, key) => {
@@ -162,7 +151,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `${this.vertical ? `{categoryX}` : '{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
+      return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
     // Add distinctive colors for each column using adapter

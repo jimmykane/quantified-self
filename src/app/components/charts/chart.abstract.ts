@@ -84,7 +84,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     super(changeDetector);
   }
 
-  getCategoryAxis(): am4charts.CategoryAxis {
+  getCategoryAxis(): am4charts.CategoryAxis|am4charts.DateAxis {
     return new am4charts.CategoryAxis();
   }
 

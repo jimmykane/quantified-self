@@ -12,6 +12,7 @@ import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg
 import {DataEPOC} from 'quantified-self-lib/lib/data/data.epoc';
 import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
 import {
+  ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   UserDashboardChartSettingsInterface
@@ -48,12 +49,14 @@ export class ChartActionsComponent implements OnInit {
   @Input() chartType: ChartTypes;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
+  @Input() chartDataCategoryType: ChartDataCategoryTypes; // @todo take in use
   @Input() chartOrder: number;
   @Input() filterLowValues: boolean;
 
 
   public chartTypes = ChartTypes;
   public chartValueTypes = ChartDataValueTypes;
+  public chartCategoryTypes = ChartDataCategoryTypes;
 
   public dataGroups = [
     {
@@ -138,6 +141,11 @@ export class ChartActionsComponent implements OnInit {
 
   async changeChartDataValueType(event) {
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = event.value;
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async changeChartDataCategoryType(event) {
+    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 

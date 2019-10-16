@@ -96,7 +96,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
   private getChartsAndData(events: EventInterface[], userDashboardChartSettings: UserDashboardChartSettingsInterface[]): SummariesChartInterface[] {
     return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
-      chartsAndData.push({...chartSettings, ...{data: this.getChartDataForDataTypeAndDataValueType(events, chartSettings.dataType, chartSettings.dataValueType)}});
+      chartsAndData.push({...chartSettings, ...{data: this.getChartDataForDataTypeAndDataValueType(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)}});
       return chartsAndData;
     }, [])
   }
@@ -111,11 +111,11 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     this.unsubscribeFromAll();
   }
 
-  getChartDataForDataTypeAndDataValueType(events: EventInterface[], dataType: string, dataValueType: ChartDataValueTypes) {
+  getChartDataForDataTypeAndDataValueType(events: EventInterface[], dataType: string, dataValueType: ChartDataValueTypes, dataCategoryType: ChartDataCategoryTypes) {
     if (!this.events) {
       return null;
     }
-    return this.getChartData(events.filter(event => !event.isMerge), dataType, dataValueType);
+    return this.getChartData(events.filter(event => !event.isMerge), dataType, dataValueType, dataCategoryType);
   }
 
   private getValueMinOrMax(events: EventInterface[], dataType: string, min = false): number {
@@ -155,7 +155,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }, 0);
   }
 
-  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes = ChartDataValueTypes.Total, categoryType: ChartDataCategoryTypes = ChartDataCategoryTypes.ActivityType) {
+  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes) {
     // @todo can the below if be better ? we need return there for switch
     // We care sums to ommit 0s
     if (this.getValueSum(events, dataType) === 0 && valueType === ChartDataValueTypes.Total) {
@@ -171,12 +171,12 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
 
     // Create the map
-    const valueByCategory = events.reduce((valueByTypeMap: Map<string|number, { value: number, count: number }>, event) => {
+    const valueByCategory = events.reduce((valueByTypeMap: Map<string | number, { value: number, count: number }>, event) => {
       const stat = event.getStat(dataType);
       if (!stat) {
         return valueByTypeMap;
       }
-      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, categoryType)) ||
+      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, events, categoryType)) ||
         {
           value: null,
           count: 0
@@ -202,7 +202,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       if (!isNumber(summariesChartDataInterface.value)) {
         return valueByTypeMap;
       }
-      valueByTypeMap.set(this.getCategoryKey(event, categoryType), summariesChartDataInterface); // @todo break the join (not use display value)
+      valueByTypeMap.set(this.getCategoryKey(event, events, categoryType), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, { value: number, count: number }>());
 
@@ -217,7 +217,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     return this.convertToCategories(valueByCategory);
   }
 
-  getCategoryKey(event: EventInterface, categoryType: ChartDataCategoryTypes): string|number {
+  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes): string | number {
     switch (categoryType) {
       case ChartDataCategoryTypes.ActivityType:
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
@@ -231,7 +231,29 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
       case ChartDataCategoryTypes.DateType:
-        return event.startDate.getTime();
+        // Here comes on how this is summarized
+        // We do not base on the search range but on the data range to provide the user a more smart logic
+        // 1. First sort
+        this.events.sort((eventA: EventInterface, eventB: EventInterface) => {
+          return +eventA.startDate - +eventB.startDate;
+        });
+        const startDate = events[0].startDate;
+        const endDate = events[events.length - 1].startDate;
+        //  Not the same year ? create a year category
+        if (endDate.getFullYear() !== startDate.getFullYear()) {
+          return new Date(event.startDate.getFullYear(), 0).getTime()
+        }
+        // Not the same month ? create a monthly category
+        if (endDate.getMonth() !== startDate.getMonth()) {
+          return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
+        }
+        // Not the same day ? Return daily
+        if (endDate.getDay() !== startDate.getDay()) {
+          return new Date(event.startDate.toDateString()).getTime();
+        }
+        // Not the same hour ? Return hourly
+        // @todo implement the rest of the cases
+        return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours()).getTime(); // This is crucial. This is how it is groupped
       default:
         throw new Error(`Not implemented`);
     }
@@ -243,10 +265,10 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
    * @todo remove/simplify
    * @param valueByType
    */
-  private convertToCategories(valueByType: Map<string|number, { value: number, count: number }>): SummariesChartDataInterface[] {
+  private convertToCategories(valueByType: Map<string | number, { value: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
-      data.push({type: type, value: item.value, count: item.count})
+      data.push({time: type, type: type, value: item.value, count: item.count})
     });
     return data
       .filter(dataItem => isNumber(dataItem.value))
@@ -274,7 +296,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 }
 
 export interface SummariesChartDataInterface {
-
+  time?: number,
   type: string,
   value: number,
   count: number
