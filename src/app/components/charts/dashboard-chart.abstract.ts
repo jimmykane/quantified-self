@@ -54,6 +54,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
       case ChartDataCategoryTypes.DateType:
         const axis = new am4charts.DateAxis();
         axis.skipEmptyPeriods = true;
+        // axis.dateFormats.setKey("year", "[bold]yyyy[/]");
         // @todo is there a bug here ?
         // axis.groupData = true;
         // axis.groupCount = 30;

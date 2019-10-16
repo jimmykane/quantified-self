@@ -81,13 +81,14 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     categoryAxis.renderer.cellStartLocation = 0.1;
     categoryAxis.renderer.cellEndLocation = 0.9;
     categoryAxis.renderer.opposite = !this.vertical;
-    categoryAxis.renderer.minGridDistance = this.vertical ? 20 : 1;
+    categoryAxis.renderer.minGridDistance = this.vertical ? 1 : 1;
     categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
       if (this.vertical && chart.data.length > 5 && target.dataItem && target.dataItem.index % 2) {
         return dy + 20;
       }
       return dy;
     });
+
 
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());

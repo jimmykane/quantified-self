@@ -249,7 +249,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         }
         // Not the same day ? Return daily
         if (endDate.getDay() !== startDate.getDay()) {
-          return new Date(event.startDate.toDateString()).getTime();
+          return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
         }
         // Not the same hour ? Return hourly
         // @todo implement the rest of the cases
@@ -272,16 +272,16 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     });
     return data
       .filter(dataItem => isNumber(dataItem.value))
-      .sort((dataItemA, dataItemB) => {
-        return dataItemA.value - dataItemB.value;
-      });
+      // .sort((dataItemA, dataItemB) => {
+      //   return dataItemA.value - dataItemB.value;
+      // });
   }
 
 
   // @todo refactor
   private getRowHeight() {
     const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
-    return (angle === 90 || angle === -90) ? '30vw' : '30vh';
+    return (angle === 90 || angle === -90) ? '50vw' : '50vh';
   }
 
   private getNumberOfColumns() {
