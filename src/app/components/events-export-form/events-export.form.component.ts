@@ -58,11 +58,16 @@ export class EventsExportFormComponent extends FormsAbstract {
     super(dialogRef, data, snackBar);
     this.user = data.user;
     this.events = data.events;
-    this.startDate = data.startDate;
-    this.endDate = data.endDate;
-    if (!this.user || !this.events || !this.startDate || !this.endDate) {
+    if (!this.user || !this.events) {
       throw new Error('Component needs events, user, start date and end date')
     }
+
+    this.events.sort((eventA: EventInterface, eventB: EventInterface) => {
+      return +eventA.startDate - +eventB.startDate;
+    });
+
+    this.startDate = this.events[0].startDate;
+    this.endDate = this.events[this.events.length - 1].endDate;
 
     this.exportFromGroup = new FormGroup({
         startDate: new FormControl(this.user.settings.exportToCSVSettings.startDate, [

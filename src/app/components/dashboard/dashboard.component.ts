@@ -164,8 +164,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         data: {
           events: this.events,
           user: this.user,
-          startDate: this.searchStartDate,
-          endDate: this.searchEndDate,
         },
       });
     }));
