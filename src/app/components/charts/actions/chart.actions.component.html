@@ -51,7 +51,7 @@
       <mat-label>Base data on</mat-label>
       <mat-select placeholder="Category type" [value]="chartDataCategoryType"
                   (selectionChange)="changeChartDataCategoryType($event)">
-        <section *ngIf="chartType !== chartTypes.Pie">
+        <section>
           <mat-option *ngFor="let chartCategoryType of chartCategoryTypes | keyvalue"
                       [value]="chartCategoryType.value">
             {{chartCategoryType.value}}

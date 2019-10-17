@@ -134,6 +134,8 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
           count: data[i].count,
         });
       }
-    return chartData;
+    return chartData.sort((itemA, itemB) => {
+      return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ?  itemA.value - itemB.value :  -(itemB.time - itemA.time) ;
+    });
   }
 }

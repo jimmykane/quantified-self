@@ -275,10 +275,14 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
     // Not the same month ? create a monthly category
     if (endDate.getMonth() !== startDate.getMonth()) {
+      // First check if the date range is in 1 month and return daily
+      if (endDate.getDate() < startDate.getDate()){
+        return SummariesChartDataDateRages.Daily
+      }
       return SummariesChartDataDateRages.Monthly;
     }
     // Not the same day ? Return daily
-    if (endDate.getDay() !== startDate.getDay()) {
+    if (endDate.getDate() !== startDate.getDate()) {
       return SummariesChartDataDateRages.Daily;
     }
     // Not the same hour ? Return hourly
@@ -289,7 +293,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   // @todo refactor
   private getRowHeight() {
     const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
-    return (angle === 90 || angle === -90) ? '40vw' : '40vh';
+    return (angle === 90 || angle === -90) ? '50vw' : '50vh';
   }
 
   private getNumberOfColumns() {
