@@ -90,13 +90,17 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
-    this.charts = this.getChartsAndData(this.events, this.user.settings.dashboardSettings.chartsSettings);
+    this.charts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
     this.loaded();
   }
 
-  private getChartsAndData(events: EventInterface[], userDashboardChartSettings: UserDashboardChartSettingsInterface[]): SummariesChartInterface[] {
+  private getChartsAndData(userDashboardChartSettings: UserDashboardChartSettingsInterface[], events: EventInterface[]): SummariesChartInterface[] {
     return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
-      chartsAndData.push({...chartSettings, ...{data: this.getChartDataForDataTypeAndDataValueType(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)}});
+      chartsAndData.push({...chartSettings, ...{
+        data: events ?
+          this.getChartData(events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate), chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
+          : null
+      }});
       return chartsAndData;
     }, [])
   }
@@ -111,15 +115,8 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     this.unsubscribeFromAll();
   }
 
-  getChartDataForDataTypeAndDataValueType(events: EventInterface[], dataType: string, dataValueType: ChartDataValueTypes, dataCategoryType: ChartDataCategoryTypes) {
-    if (!this.events) {
-      return null;
-    }
-    return this.getChartData(events.filter(event => !event.isMerge), dataType, dataValueType, dataCategoryType);
-  }
-
   private getValueMinOrMax(events: EventInterface[], dataType: string, min = false): number {
-    return this.events.reduce((minOrMaxBuffer, event) => {
+    return events.reduce((minOrMaxBuffer, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
       if (!stat || !isNumber(stat.getValue())) {
@@ -131,7 +128,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
   private getValueAvg(events: EventInterface[], dataType: string, min = false): number {
     let totalAvgCount = 0;
-    const valueSum = this.events.reduce((sum, event) => {
+    const valueSum = events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
       if (!stat || !isNumber(stat.getValue())) {
         return sum;
@@ -144,7 +141,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   private getValueSum(events: EventInterface[], dataType: string): number {
-    return this.events.reduce((sum, event) => {
+    return events.reduce((sum, event) => {
       const stat = event.getStat(dataType);
       // if (!stat || typeof !stat.getValue() === 'number'){
       if (!stat || !isNumber(stat.getValue())) {
@@ -231,31 +228,18 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
       case ChartDataCategoryTypes.DateType:
-        // Here comes on how this is summarized
-        // We do not base on the search range but on the data range to provide the user a more smart logic
-        // 1. First sort
-        this.events.sort((eventA: EventInterface, eventB: EventInterface) => {
-          return +eventA.startDate - +eventB.startDate;
-        });
-        const startDate = events[0].startDate;
-        const endDate = events[events.length - 1].startDate;
-        //  Not the same year ? create a year category
-        if (endDate.getFullYear() !== startDate.getFullYear()) {
-          return new Date(event.startDate.getFullYear(), 0).getTime()
+        switch (this.getEventsDateRange(events)) {
+          case SummariesChartDataDateRages.Yearly:
+            return new Date(event.startDate.getFullYear(), 0).getTime();
+          case SummariesChartDataDateRages.Monthly:
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
+          case SummariesChartDataDateRages.Daily:
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
+          case SummariesChartDataDateRages.Hourly:
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours()).getTime(); // This is crucial. This is how it is groupped
+          default:
+            return event.startDate.getTime()
         }
-        // Not the same month ? create a monthly category
-        if (endDate.getMonth() !== startDate.getMonth()) {
-          return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
-        }
-        // Not the same day ? Return daily
-        if (endDate.getDay() !== startDate.getDay()) {
-          return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
-        }
-        // Not the same hour ? Return hourly
-        // @todo implement the rest of the cases
-        return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours()).getTime(); // This is crucial. This is how it is groupped
-      default:
-        throw new Error(`Not implemented`);
     }
   }
 
@@ -272,11 +256,34 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     });
     return data
       .filter(dataItem => isNumber(dataItem.value))
-      // .sort((dataItemA, dataItemB) => {
-      //   return dataItemA.value - dataItemB.value;
-      // });
+    // .sort((dataItemA, dataItemB) => {
+    //   return dataItemA.value - dataItemB.value;
+    // });
   }
 
+  private getEventsDateRange(events: EventInterface[]): SummariesChartDataDateRages {
+    // 1. First sort
+    events.sort((eventA: EventInterface, eventB: EventInterface) => {
+      return +eventA.startDate - +eventB.startDate;
+    });
+    const startDate = events[0].startDate;
+    const endDate = events[events.length - 1].startDate;
+    //  Not the same year ? create a year category
+    if (endDate.getFullYear() !== startDate.getFullYear()) {
+      return SummariesChartDataDateRages.Yearly;
+    }
+    // Not the same month ? create a monthly category
+    if (endDate.getMonth() !== startDate.getMonth()) {
+      return SummariesChartDataDateRages.Monthly;
+    }
+    // Not the same day ? Return daily
+    if (endDate.getDay() !== startDate.getDay()) {
+      return SummariesChartDataDateRages.Daily;
+    }
+    // Not the same hour ? Return hourly
+    // @todo implement the rest of the cases
+    return SummariesChartDataDateRages.Hourly;
+  }
 
   // @todo refactor
   private getRowHeight() {
@@ -304,4 +311,11 @@ export interface SummariesChartDataInterface {
 
 export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
   data: SummariesChartDataInterface[]
+}
+
+export enum SummariesChartDataDateRages {
+  Hourly,
+  Daily,
+  Monthly,
+  Yearly,
 }
