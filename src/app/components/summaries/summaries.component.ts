@@ -90,16 +90,20 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
+    if (this.events){
+      this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
+    }
     this.charts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
     this.loaded();
   }
 
-  private getChartsAndData(userDashboardChartSettings: UserDashboardChartSettingsInterface[], events: EventInterface[]): SummariesChartInterface[] {
+  private getChartsAndData(userDashboardChartSettings: UserDashboardChartSettingsInterface[], events?: EventInterface[]): SummariesChartInterface[] {
     return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
       chartsAndData.push({...chartSettings, ...{
-        data: events ?
-          this.getChartData(events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate), chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
-          : null
+        dataDateRange: events? this.getEventsDateRange(events) : null,
+        data: events ? // The below will create a new instance of this events due to filtering
+          this.getChartData(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
+          : null // We send null if there are no events for the input date range
       }});
       return chartsAndData;
     }, [])
@@ -261,11 +265,11 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     // });
   }
 
-  private getEventsDateRange(events: EventInterface[]): SummariesChartDataDateRages {
-    // 1. First sort
-    events.sort((eventA: EventInterface, eventB: EventInterface) => {
-      return +eventA.startDate - +eventB.startDate;
-    });
+  /**
+   * Expects the input to be sorted already
+   * @param events
+   */
+  private getEventsDateRange(events?: EventInterface[]): SummariesChartDataDateRages {
     const startDate = events[0].startDate;
     const endDate = events[events.length - 1].startDate;
     //  Not the same year ? create a year category
@@ -310,6 +314,7 @@ export interface SummariesChartDataInterface {
 }
 
 export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
+  dataDateRange: SummariesChartDataDateRages
   data: SummariesChartDataInterface[]
 }
 

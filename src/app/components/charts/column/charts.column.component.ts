@@ -73,9 +73,10 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
 
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis()) : chart.yAxes.push(this.getCategoryAxis());
     if (categoryAxis instanceof am4charts.CategoryAxis) {
-      categoryAxis.dataFields.category = 'type'
+      categoryAxis.dataFields.category = 'type';
     } else if (categoryAxis instanceof am4charts.DateAxis) {
-      categoryAxis.dataFields.date = 'time'
+      categoryAxis.dataFields.date = 'time';
+      chart.dateFormatter.dateFormat = categoryAxis.dateFormatter.dateFormat;
     }
     categoryAxis.renderer.grid.template.location = 0;
     categoryAxis.renderer.cellStartLocation = 0.1;
