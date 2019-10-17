@@ -1,8 +1,8 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
-  Input,
   NgZone,
   OnChanges,
   OnDestroy,
@@ -12,13 +12,12 @@ import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {ChartAbstract} from '../chart.abstract';
 import * as Sentry from '@sentry/browser';
-import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {
+  ChartDataCategoryTypes,
+  ChartDataValueTypes
+} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
-import {group} from '@angular/animations';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {string} from '@amcharts/amcharts4/core';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 
@@ -53,7 +52,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
 
     const pieSeries = chart.series.push(new am4charts.PieSeries());
     pieSeries.dataFields.value = 'value';
-    pieSeries.dataFields.category = 'type';
+    pieSeries.dataFields.category =  this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
     // pieSeries.interpolationDuration = 500;
     // pieSeries.rangeChangeDuration = 500;
     // pieSeries.sequencedInterpolation = true;
@@ -67,7 +66,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{category} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+      return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? ``: `.formatDate('${this.getDateFormat(this.chartDataDateRange)}')`}} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
@@ -76,13 +75,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       }
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        if (target.dataItem.values.value.percent <= 1 && this.filterLowValues) {
-          return null;
-        }
-        if (!target.dataItem.dataContext.type) {
-          return `???`;
-        }
-        return `[font-size: 1.1em]${target.dataItem.dataContext.type.slice(0, 40)}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+        return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getDateFormat(this.chartDataDateRange)}')}` || 'other'}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       } catch (e) {
         Sentry.captureException(e);
       }
@@ -116,13 +109,15 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     // Disable the preloader
     chart.preloader.disabled = true;
 
-    const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
-    grouper.threshold = 5;
-    grouper.groupName = 'Other';
-    grouper.clickBehavior = 'zoom';
-    grouper.zoomOutButton.align = 'left';
-    grouper.zoomOutButton.width = 35;
-    grouper.zoomOutButton.valign = 'top';
+    if (this.filterLowValues) {
+      const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
+      grouper.threshold = 5;
+      grouper.groupName = 'Other';
+      grouper.clickBehavior = 'zoom';
+      grouper.zoomOutButton.align = 'left';
+      grouper.zoomOutButton.width = 35;
+      grouper.zoomOutButton.valign = 'top';
+    }
 
     // Attach events
     this.attachEventListenersOnChart(chart);
@@ -134,6 +129,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     for (let i = 0; i < data.length; i++) {
         chartData.push({
           type: data[i].type,
+          time: new Date(data[i].time),
           value: data[i].value,
           count: data[i].count,
         });

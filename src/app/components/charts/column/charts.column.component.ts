@@ -71,7 +71,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     });
 
 
-    const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis()) : chart.yAxes.push(this.getCategoryAxis());
+    const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     if (categoryAxis instanceof am4charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';
     } else if (categoryAxis instanceof am4charts.DateAxis) {
@@ -178,7 +178,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
       const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
       if (percent < 5) {
         if (!otherData) {
-          otherData = {type: 'Other', value: dataItem.value, count: 1};
+          otherData = {type: 'Other',  value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
           return;
         }
         otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value

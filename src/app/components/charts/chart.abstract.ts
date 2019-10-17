@@ -56,6 +56,8 @@ import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataPowerLeft} from 'quantified-self-lib/lib/data/data.power-left';
 import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
 import {LoadingAbstract} from '../loading/loading.abstract';
+import {SummariesChartDataDateRages} from '../summaries/summaries.component';
+import {ChartDataCategoryTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 
 export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
@@ -84,9 +86,9 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     super(changeDetector);
   }
 
-  getCategoryAxis(): am4charts.CategoryAxis|am4charts.DateAxis {
-    return new am4charts.CategoryAxis();
-  }
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis|am4charts.DateAxis {
+    return new am4charts.CategoryAxis()
+  };
 
   protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
     return this.zone.runOutsideAngular(() => {

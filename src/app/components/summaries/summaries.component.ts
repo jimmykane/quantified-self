@@ -260,9 +260,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     });
     return data
       .filter(dataItem => isNumber(dataItem.value))
-    // .sort((dataItemA, dataItemB) => {
-    //   return dataItemA.value - dataItemB.value;
-    // });
   }
 
   /**

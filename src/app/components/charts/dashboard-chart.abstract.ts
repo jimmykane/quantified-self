@@ -49,59 +49,60 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     this.chart.data = this.generateChartData(this.data);
   }
 
-  getCategoryAxis(): am4charts.CategoryAxis | am4charts.DateAxis {
-    switch (this.chartDataCategoryType) {
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis {
+    switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
         const axis = new am4charts.DateAxis();
         axis.skipEmptyPeriods = true;
         switch (this.chartDataDateRange) {
           case SummariesChartDataDateRages.Yearly:
-            axis.dateFormatter.dateFormat = 'yyyy';
             axis.baseInterval = {
               'timeUnit': 'year',
               'count': 1
             };
             break;
           case SummariesChartDataDateRages.Monthly:
-            axis.dateFormatter.dateFormat = 'MMM yyyy';
             axis.baseInterval = {
               'timeUnit': 'month',
               'count': 1
             };
             break;
           case SummariesChartDataDateRages.Daily:
-            axis.dateFormatter.dateFormat = 'dd MMM yyyy';
             axis.baseInterval = {
               'timeUnit': 'day',
               'count': 1
             };
             break;
           case SummariesChartDataDateRages.Hourly:
-            axis.dateFormatter.dateFormat = 'HH:mm dd MMM yyyy';
             axis.baseInterval = {
               'timeUnit': 'hour',
               'count': 1
             };
             break;
           default:
-            break;
+            throw new Error(`Not implemented`);
         }
-        // @todo is there a bug here ?
-        // axis.groupData = true;
-        // axis.groupCount = 30;
-        //
-        // axis.groupIntervals.setAll([
-        //   { timeUnit: "day", count: 30 },
-        //   { timeUnit: "month", count: 1 },
-        //   { timeUnit: "month", count: 12 },
-        //   { timeUnit: "year", count: 1 },
-        //   { timeUnit: "year", count: 10 }
-        // ]);
+        axis.dateFormatter.dateFormat = this.getDateFormat(chartDateDateRange);
         return axis;
       case ChartDataCategoryTypes.ActivityType:
-        return super.getCategoryAxis();
+        return super.getCategoryAxis(chartDataCategoryType);
       default:
         throw new Error(`Not implemented`);
+    }
+  }
+
+  protected getDateFormat(dateRange: SummariesChartDataDateRages) {
+    switch (dateRange) {
+      case SummariesChartDataDateRages.Yearly:
+        return 'yyyy';
+      case SummariesChartDataDateRages.Monthly:
+        return'MMM yyyy';
+      case SummariesChartDataDateRages.Daily:
+        return 'dd MMM yyyy';
+      case SummariesChartDataDateRages.Hourly:
+        return 'HH:mm dd MMM yyyy';
+      default:
+        throw new Error(`Not implemented`)
     }
   }
 
