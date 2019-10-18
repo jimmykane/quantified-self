@@ -41,6 +41,7 @@ import {LoadingAbstract} from '../loading/loading.abstract';
 export class SummariesComponent extends LoadingAbstract implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
+  @Input() userChartsSettings: UserDashboardChartSettingsInterface[];
 
   public rowHeight;
   public numberOfCols;
@@ -78,7 +79,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    if (simpleChanges.events || simpleChanges.user) {
+    if (simpleChanges.events || simpleChanges.userChartsSettings) {
       this.loading();
       this.subscribeToAll();
     }
@@ -90,21 +91,23 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
-    if (this.events){
+    if (this.events) {
       this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
     }
-    this.charts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
+    this.charts = this.getChartsAndData(this.userChartsSettings, this.events);
     this.loaded();
   }
 
   private getChartsAndData(userDashboardChartSettings: UserDashboardChartSettingsInterface[], events?: EventInterface[]): SummariesChartInterface[] {
     return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
-      chartsAndData.push({...chartSettings, ...{
-        dataDateRange: events? this.getEventsDateRange(events) : null,
-        data: events ? // The below will create a new instance of this events due to filtering
-          this.getChartData(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
-          : null // We send null if there are no events for the input date range
-      }});
+      chartsAndData.push({
+        ...chartSettings, ...{
+          dataDateRange: events && events.length ? this.getEventsDateRange(events) : null,
+          data: events ? // The below will create a new instance of this events due to filtering
+            this.getChartData(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
+            : null // We send null if there are no events for the input date range
+        }
+      });
       return chartsAndData;
     }, [])
   }
@@ -276,7 +279,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     // Not the same month ? create a monthly category
     if (endDate.getMonth() !== startDate.getMonth()) {
       // First check if the date range is in 1 month and return daily
-      if (endDate.getDate() < startDate.getDate()){
+      if (endDate.getDate() < startDate.getDate()) {
         return SummariesChartDataDateRages.Daily
       }
       return SummariesChartDataDateRages.Monthly;
