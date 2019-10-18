@@ -47,8 +47,8 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
 
     // chart.hiddenState.properties.opacity = 0;
     // chart.padding(0, 0, 0, 0)
-    chart.radius = am4core.percent(70);
-    chart.innerRadius = am4core.percent(50);
+    chart.radius = am4core.percent(50);
+    chart.innerRadius = am4core.percent(35);
 
     const pieSeries = chart.series.push(new am4charts.PieSeries());
     pieSeries.dataFields.value = 'value';
