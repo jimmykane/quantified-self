@@ -106,6 +106,7 @@ import {PhoneFormComponent} from './components/login/phone-form/phone.form.compo
 import {WindowService} from './services/app.window.service';
 import {EventsExportFormComponent} from './components/events-export-form/events-export.form.component';
 import {AngularFirePerformanceModule} from '@angular/fire/performance';
+import {ChartsTimelineComponent} from './components/charts/timeline/charts.timeline.component';
 
 declare function require(moduleName: string): any;
 
@@ -231,7 +232,8 @@ export class SentryErrorHandler implements ErrorHandler {
     DeleteConfirmationComponent,
     EditInputComponent,
     PhoneFormComponent,
-    EventsExportFormComponent
+    EventsExportFormComponent,
+    ChartsTimelineComponent
   ],
   entryComponents: [
     EventFormComponent,

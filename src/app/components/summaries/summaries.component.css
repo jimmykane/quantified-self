@@ -23,6 +23,11 @@ app-column-chart{
   height: 100%;
 }
 
+app-timeline-chart{
+  width: 100%;
+  height: 100%;
+}
+
 app-chart-actions{
   position: absolute;
   top: -10px;

@@ -203,7 +203,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       }
       // Last additional check here.
       // If you want to pass nulls this should be removed
-      if (!isNumber(summariesChartDataInterface.value)) {
+      if (!isNumber(summariesChartDataInterface.value) || (summariesChartDataInterface.value === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
       valueByTypeMap.set(this.getCategoryKey(event, events, categoryType), summariesChartDataInterface); // @todo break the join (not use display value)

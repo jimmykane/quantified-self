@@ -17,7 +17,10 @@ import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/u
 // Chart Themes
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {ChartDataValueTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {
+  ChartDataCategoryTypes,
+  ChartDataValueTypes
+} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
@@ -100,7 +103,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
     valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+      return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
     valueAxis.min = 0;
 
@@ -131,20 +134,20 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
 
     categoryLabel.label.adapter.add('text', (text, target) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
-      return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+      return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
 
     categoryLabel.label.hideOversized = false;
     categoryLabel.label.truncate = false;
     categoryLabel.label.adapter.add('fill', (fill, target) => {
-      return chart.colors.getIndex(target.dataItem.index);
+      return this.getFillColor(chart, target.dataItem.index)
     });
 
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
     // series.groupFields.valueY = "sum";
     // series.groupFields.valueX = "sum";
-    series.columns.template.strokeOpacity = 1;
-    series.columns.template.strokeWidth = 0.4;
+    series.columns.template.strokeOpacity = this.getStrokeOpacity();
+    series.columns.template.strokeWidth = this.getStrokeWidth();
     series.columns.template.stroke = am4core.color('#175e84');
     // series.columns.template.fillOpacity = 1;
     series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
@@ -158,7 +161,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
 
     // Add distinctive colors for each column using adapter
     series.columns.template.adapter.add('fill', (fill, target) => {
-      return chart.colors.getIndex(target.dataItem.index);
+      return this.getFillColor(chart, target.dataItem.index);
     });
 
     // Attach events
@@ -190,7 +193,6 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     if (otherData && isNumber(otherData.value)) {
       chartData.unshift(otherData)
     }
-    return chartData;
   }
 
   private getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {

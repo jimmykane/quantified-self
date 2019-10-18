@@ -49,7 +49,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     this.chart.data = this.generateChartData(this.data);
   }
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis {
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
     switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
         const axis = new am4charts.DateAxis();

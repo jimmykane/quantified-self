@@ -69,6 +69,13 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? ``: `.formatDate('${this.getDateFormat(this.chartDataDateRange)}')`}} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
     });
 
+    pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {
+      if (!target.dataItem || !target.dataItem.values || ! target.dataItem.dataContext) {
+        return null;
+      }
+      return this.getFillColor(chart, target.dataItem.index);
+    });
+
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.values || !target.dataItem.dataContext) {
         return '';

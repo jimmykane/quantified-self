@@ -207,12 +207,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
       xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       // xAxis.tooltipText = '{valueX}'
       xAxis.adapter.add('getTooltipText', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}`
+        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       // xAxis.renderer.labels.template.marginRight = 10;
       xAxis.min = 0;

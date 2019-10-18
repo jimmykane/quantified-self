@@ -23,6 +23,17 @@
                     [chartDataDateRange]="chart.dataDateRange"
                     [userChartSettings]="user.settings.chartSettings">
             </app-column-chart>
+            <app-timeline-chart
+              *ngIf="chart.type === chartTypes.Spiral"
+              [data]="chart.data"
+              [chartTheme]="chartTheme"
+              [chartDataType]="chart.dataType"
+              [chartDataValueType]="chart.dataValueType"
+              [chartDataCategoryType]="chart.dataCategoryType"
+              [filterLowValues]="chart.filterLowValues"
+              [chartDataDateRange]="chart.dataDateRange"
+              [userChartSettings]="user.settings.chartSettings">
+            </app-timeline-chart>
             <app-chart-actions [user]="user"
                                [chartType]="chart.type"
                                [chartDataType]="chart.dataType"

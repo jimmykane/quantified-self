@@ -86,11 +86,12 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     super(changeDetector);
   }
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis|am4charts.DateAxis {
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis|am4charts.DateAxis|am4charts.Axis {
     return new am4charts.CategoryAxis()
   };
 
   protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
+    this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
       this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
 
@@ -323,6 +324,17 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     }
   }
 
+  getFillColor(chart: am4charts.XYChart|am4charts.PieChart, index: number){
+    return chart.colors.getIndex(index * 2);
+  }
+
+  getStrokeOpacity(){
+    return 1;
+  }
+
+  getStrokeWidth(){
+    return 0.4;
+  }
   getTextInitials(text: string) {
     return `${text.split(' ').map(x => x.slice(0, 1).toUpperCase()).join('. ')}.`
   }
