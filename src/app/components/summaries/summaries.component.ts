@@ -240,7 +240,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
           case SummariesChartDataDateRages.Daily:
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
           case SummariesChartDataDateRages.Hourly:
-            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours()).getTime(); // This is crucial. This is how it is groupped
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours(), event.startDate.getMinutes()).getTime();
           default:
             return event.startDate.getTime()
         }
