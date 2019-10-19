@@ -59,6 +59,15 @@ import {LoadingAbstract} from '../loading/loading.abstract';
 import {SummariesChartDataDateRages} from '../summaries/summaries.component';
 import {ChartDataCategoryTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 
+declare function require(moduleName: string): any;
+
+let am4ChartsTimeLineLicence;
+try {
+  am4ChartsTimeLineLicence = require('../../../../licenses.json').am4ChartsTimeline;
+} catch (e) {
+  // Noope
+}
+
 export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
@@ -86,7 +95,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     super(changeDetector);
   }
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis|am4charts.DateAxis|am4charts.Axis {
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
     return new am4charts.CategoryAxis()
   };
 
@@ -97,6 +106,9 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
 
       // Create a chart
       am4core.options.commercialLicense = true;
+      if (am4ChartsTimeLineLicence){
+        am4core.addLicense(am4ChartsTimeLineLicence);
+      }
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       chart.pixelPerfect = false;
@@ -324,17 +336,22 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     }
   }
 
-  getFillColor(chart: am4charts.XYChart|am4charts.PieChart, index: number){
+  getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
     return chart.colors.getIndex(index * 2);
   }
 
-  getStrokeOpacity(){
+  getFillOpacity() {
+    return 0.8
+  }
+
+  getStrokeOpacity() {
     return 1;
   }
 
-  getStrokeWidth(){
+  getStrokeWidth() {
     return 0.4;
   }
+
   getTextInitials(text: string) {
     return `${text.split(' ').map(x => x.slice(0, 1).toUpperCase()).join('. ')}.`
   }
