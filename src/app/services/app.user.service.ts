@@ -94,7 +94,7 @@ export class UserService implements OnDestroy {
     }, {
       name: 'Distance',
       order: 1,
-      type: ChartTypes.Pie,
+      type: ChartTypes.ColumnsHorizontal,
       dataType: DataDistance.type,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
@@ -102,7 +102,7 @@ export class UserService implements OnDestroy {
     }, {
       name: 'Energy',
       order: 2,
-      type: ChartTypes.ColumnsHorizontal,
+      type: ChartTypes.Spiral,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataType: DataEnergy.type,
       dataValueType: ChartDataValueTypes.Total,
@@ -111,7 +111,7 @@ export class UserService implements OnDestroy {
       name: 'Ascent',
       order: 3,
       type: ChartTypes.PyramidsVertical,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
+      dataCategoryType: ChartDataCategoryTypes.DateType,
       dataType: DataAscent.type,
       dataValueType: ChartDataValueTypes.Maximum,
       filterLowValues: true,
