@@ -57,3 +57,6 @@ functions/lib/*
 
 # Fonts
 src/assets/fonts/
+
+#Lisences
+licenses.json
