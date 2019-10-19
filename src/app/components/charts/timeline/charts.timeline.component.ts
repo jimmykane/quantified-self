@@ -13,20 +13,10 @@ import {
 import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-// Chart Themes
 import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {
-  ChartDataCategoryTypes,
-  ChartDataValueTypes
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {SummariesChartDataInterface} from '../../summaries/summaries.component';
-import * as Sentry from '@sentry/browser';
 
 @Component({
   selector: 'app-timeline-chart',
@@ -83,7 +73,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
 
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
-    valueAxis.renderer.minGridDistance = 90;
+    valueAxis.renderer.minGridDistance = 100;
 
     valueAxis.renderer.line.strokeDasharray = '1,0';
     valueAxis.renderer.line.strokeOpacity = this.getStrokeOpacity();
@@ -103,7 +93,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
     const labelTemplate = valueAxis.renderer.labels.template;
     labelTemplate.verticalCenter = 'middle';
-    labelTemplate.fillOpacity = 0.7;
+    labelTemplate.fillOpacity = this.getFillOpacity();
 
     const series = chart.series.push(new am4plugins_timeline.CurveColumnSeries());
     if (categoryAxis instanceof am4charts.CategoryAxis) {
@@ -115,8 +105,8 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
 
     // series.tooltipText = '{categoryY}: {valueX} kisses';
-    series.columns.template.strokeOpacity = 0;
-    series.columns.template.fillOpacity = 0.8;
+    series.columns.template.strokeOpacity = this.getStrokeOpacity();
+    series.columns.template.fillOpacity = this.getFillOpacity();
     series.columns.template.adapter.add('fill', (fill, target) => {
       return this.getFillColor(chart, target.dataItem.index);
     });
@@ -159,61 +149,5 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
 
     return chart;
-  }
-
-  protected generateChartData(data): SummariesChartDataInterface[] {
-    data.sort((itemA, itemB) => {
-      return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemB.value - itemA.value : -(itemB.time - itemA.time);
-    });
-    if (!this.filterLowValues) {
-      return data;
-    }
-    const chartData = [];
-    let otherData: SummariesChartDataInterface;
-    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    data.forEach((dataItem: SummariesChartDataInterface, index) => {
-      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
-      if (percent < 5) {
-        if (!otherData) {
-          otherData = {type: 'Other', value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
-          return;
-        }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
-        otherData.count++;
-        return
-      }
-      chartData.push(dataItem);
-    });
-    if (otherData && isNumber(otherData.value)) {
-      chartData.unshift(otherData)
-    }
-    return chartData
-  }
-
-  private getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
-    switch (chartDataValueType) {
-      case ChartDataValueTypes.Average:
-        let count = 0;
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          count++;
-          sum += dataItem.value;
-          return sum;
-        }, 0) / count);
-      case ChartDataValueTypes.Maximum:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem.value ? dataItem.value : min;
-          return min;
-        }, -Infinity));
-      case ChartDataValueTypes.Minimum:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem.value ? dataItem.value : min;
-          return min;
-        }, Infinity));
-      case ChartDataValueTypes.Total:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem.value;
-          return sum;
-        }, 0));
-    }
   }
 }

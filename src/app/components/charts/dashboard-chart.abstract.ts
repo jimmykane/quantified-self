@@ -6,6 +6,9 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
 } from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges {
@@ -46,7 +49,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     }
 
     // To create an animation here it has to update the values of the data items
-    this.chart.data = this.generateChartData(this.data);
+    this.chart.data = this.generateChartData(this.data).sort(this.sortData(this.chartDataCategoryType));
   }
 
   protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
@@ -106,5 +109,60 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     }
   }
 
-  protected abstract generateChartData(data): SummariesChartDataInterface[];
+  protected generateChartData(data): SummariesChartDataInterface[] {
+    if (!this.filterLowValues) {
+      return data;
+    }
+    const chartData = [];
+    let otherData: SummariesChartDataInterface;
+    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
+    data.forEach((dataItem: SummariesChartDataInterface, index) => {
+      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
+      if (percent < 5) {
+        if (!otherData) {
+          otherData = {type: 'Other',  value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
+          return;
+        }
+        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
+        otherData.count++;
+        return
+      }
+      chartData.push(dataItem);
+    });
+    if (otherData && isNumber(otherData.value)) {
+      chartData.unshift(otherData)
+    }
+    return chartData;
+  };
+
+  protected getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
+    switch (chartDataValueType) {
+      case ChartDataValueTypes.Average:
+        let count = 0;
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
+          count++;
+          sum += dataItem.value;
+          return sum;
+        }, 0) / count);
+      case ChartDataValueTypes.Maximum:
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
+          min = min <= dataItem.value ? dataItem.value : min;
+          return min;
+        }, -Infinity));
+      case ChartDataValueTypes.Minimum:
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
+          min = min > dataItem.value ? dataItem.value : min;
+          return min;
+        }, Infinity));
+      case ChartDataValueTypes.Total:
+        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
+          sum += dataItem.value;
+          return sum;
+        }, 0));
+    }
+  }
+
+  protected sortData(chartDataCategoryType: ChartDataCategoryTypes){
+    return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA.value - itemB.value : -(itemB.time - itemA.time);
+  }
 }

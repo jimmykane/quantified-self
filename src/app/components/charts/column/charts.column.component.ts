@@ -8,23 +8,14 @@ import {
   OnChanges,
   OnDestroy,
   OnInit,
-  ViewChild,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 // Chart Themes
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {
-  ChartDataCategoryTypes,
-  ChartDataValueTypes
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 
 @Component({
   selector: 'app-column-chart',
@@ -94,7 +85,6 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     });
 
 
-
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.renderer.opposite = this.vertical;
     valueAxis.extraMax = this.vertical ? 0.15 : 0.20;
@@ -113,9 +103,9 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
 
     const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
     if (this.vertical) {
-      if (categoryAxis instanceof am4charts.CategoryAxis){
+      if (categoryAxis instanceof am4charts.CategoryAxis) {
         series.dataFields.categoryX = 'type';
-      }else if (categoryAxis instanceof am4charts.DateAxis){
+      } else if (categoryAxis instanceof am4charts.DateAxis) {
         series.dataFields.dateX = 'time';
       }
       series.dataFields.valueY = 'value';
@@ -123,9 +113,9 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
       categoryLabel.dy = -15;
 
     } else {
-      if (categoryAxis instanceof am4charts.CategoryAxis){
+      if (categoryAxis instanceof am4charts.CategoryAxis) {
         series.dataFields.categoryY = 'type';
-      }else if (categoryAxis instanceof am4charts.DateAxis){
+      } else if (categoryAxis instanceof am4charts.DateAxis) {
         series.dataFields.dateY = 'time';
       }
       series.dataFields.valueX = 'value';
@@ -168,61 +158,5 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     // this.attachEventListenersOnChart(chart);
 
     return chart;
-  }
-
-  protected generateChartData(data): SummariesChartDataInterface[] {
-    data.sort((itemA, itemB) => {
-      return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA.value - itemB.value : -(itemB.time - itemA.time);
-    });
-    if (!this.filterLowValues) {
-      return data;
-    }
-    const chartData = [];
-    let otherData: SummariesChartDataInterface;
-    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    data.forEach((dataItem: SummariesChartDataInterface, index) => {
-      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
-      if (percent < 5) {
-        if (!otherData) {
-          otherData = {type: 'Other',  value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
-          return;
-        }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
-        otherData.count++;
-        return
-      }
-      chartData.push(dataItem);
-    });
-    if (otherData && isNumber(otherData.value)) {
-      chartData.unshift(otherData)
-    }
-    return chartData;
-  }
-
-  private getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
-    switch (chartDataValueType) {
-      case ChartDataValueTypes.Average:
-        let count = 0;
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          count++;
-          sum += dataItem.value;
-          return sum;
-        }, 0) / count);
-      case ChartDataValueTypes.Maximum:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem.value ? dataItem.value : min;
-          return min;
-        }, -Infinity));
-      case ChartDataValueTypes.Minimum:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem.value ? dataItem.value : min;
-          return min;
-        }, Infinity));
-      case ChartDataValueTypes.Total:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem.value;
-          return sum;
-        }, 0));
-    }
   }
 }
