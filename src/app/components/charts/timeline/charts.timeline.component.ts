@@ -56,7 +56,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       chart.dateFormatter.dateFormat = categoryAxis.dateFormatter.dateFormat;
     }
     categoryAxis.renderer.grid.template.disabled = true;
-    categoryAxis.renderer.minGridDistance = 10;
+    categoryAxis.renderer.minGridDistance = 1;
     categoryAxis.cursorTooltipEnabled = false;
 
 
