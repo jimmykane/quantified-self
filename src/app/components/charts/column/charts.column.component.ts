@@ -179,6 +179,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
     data.forEach((dataItem: SummariesChartDataInterface, index) => {
       const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
+      console.log(percent)
       if (percent < 5) {
         if (!otherData) {
           otherData = {type: 'Other',  value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
@@ -193,6 +194,7 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     if (otherData && isNumber(otherData.value)) {
       chartData.unshift(otherData)
     }
+    return chartData;
   }
 
   private getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {

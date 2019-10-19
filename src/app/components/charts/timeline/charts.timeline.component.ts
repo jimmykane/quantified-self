@@ -66,7 +66,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       chart.dateFormatter.dateFormat = categoryAxis.dateFormatter.dateFormat;
     }
     categoryAxis.renderer.grid.template.disabled = true;
-    categoryAxis.renderer.minGridDistance = 6;
+    categoryAxis.renderer.minGridDistance = 10;
     categoryAxis.cursorTooltipEnabled = false;
 
 
@@ -85,7 +85,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 90;
 
-    valueAxis.renderer.line.strokeDasharray = '1,1';
+    valueAxis.renderer.line.strokeDasharray = '1,0';
     valueAxis.renderer.line.strokeOpacity = this.getStrokeOpacity();
     valueAxis.renderer.line.strokeWidth = this.getStrokeWidth();
     valueAxis.renderer.grid.template.disabled = true;
