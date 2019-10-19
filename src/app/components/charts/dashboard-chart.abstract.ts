@@ -48,8 +48,11 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
       return;
     }
 
-    // To create an animation here it has to update the values of the data items
-    this.chart.data = this.generateChartData(this.data).sort(this.sortData(this.chartDataCategoryType));
+    this.data = this.data.sort(this.sortData(this.chartDataCategoryType));
+    if (this.filterLowValues) {
+      this.data = this.filterOutLowValues(this.data)
+    }
+    this.chart.data = this.data;
   }
 
   protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
@@ -99,7 +102,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
       case SummariesChartDataDateRages.Yearly:
         return 'yyyy';
       case SummariesChartDataDateRages.Monthly:
-        return'MMM yyyy';
+        return 'MMM yyyy';
       case SummariesChartDataDateRages.Daily:
         return 'dd MMM yyyy';
       case SummariesChartDataDateRages.Hourly:
@@ -108,32 +111,6 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
         throw new Error(`Not implemented`)
     }
   }
-
-  protected generateChartData(data): SummariesChartDataInterface[] {
-    if (!this.filterLowValues) {
-      return data;
-    }
-    const chartData = [];
-    let otherData: SummariesChartDataInterface;
-    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    data.forEach((dataItem: SummariesChartDataInterface, index) => {
-      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
-      if (percent < 5) {
-        if (!otherData) {
-          otherData = {type: 'Other',  value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
-          return;
-        }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
-        otherData.count++;
-        return
-      }
-      chartData.push(dataItem);
-    });
-    if (otherData && isNumber(otherData.value)) {
-      chartData.unshift(otherData)
-    }
-    return chartData;
-  };
 
   protected getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
     switch (chartDataValueType) {
@@ -162,7 +139,30 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     }
   }
 
-  protected sortData(chartDataCategoryType: ChartDataCategoryTypes){
+  protected filterOutLowValues(data: SummariesChartDataInterface[]): SummariesChartDataInterface[] {
+    const chartData = [];
+    let otherData: SummariesChartDataInterface;
+    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
+    data.forEach((dataItem: SummariesChartDataInterface, index) => {
+      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
+      if (percent < 5) {
+        if (!otherData) {
+          otherData = {type: 'Other', value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
+          return;
+        }
+        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
+        otherData.count++;
+        return
+      }
+      chartData.push(dataItem);
+    });
+    if (otherData && isNumber(otherData.value)) {
+      chartData.unshift(otherData)
+    }
+    return chartData;
+  }
+
+  protected sortData(chartDataCategoryType: ChartDataCategoryTypes) {
     return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA.value - itemB.value : -(itemB.time - itemA.time);
   }
 }

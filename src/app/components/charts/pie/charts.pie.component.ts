@@ -131,18 +131,11 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     return chart;
   }
 
-  protected generateChartData(data): SummariesChartDataInterface[] {
-    const chartData = [];
-    for (let i = 0; i < data.length; i++) {
-        chartData.push({
-          type: data[i].type,
-          time: new Date(data[i].time),
-          value: data[i].value,
-          count: data[i].count,
-        });
-      }
-    return chartData.sort((itemA, itemB) => {
-      return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ?  itemA.value - itemB.value :  -(itemB.time - itemA.time) ;
-    });
+  /**
+   * Noop here for this component
+   * @param data
+   */
+  filterOutLowValues(data: SummariesChartDataInterface[]): SummariesChartDataInterface[] {
+    return data;
   }
 }
