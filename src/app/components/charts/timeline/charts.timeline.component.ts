@@ -73,7 +73,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     const categoryAxisLabelTemplate = categoryAxis.renderer.labels.template;
     categoryAxisLabelTemplate.paddingLeft = 20;
     categoryAxisLabelTemplate.horizontalCenter = 'left';
-    categoryAxisLabelTemplate.adapter.add('rotation',  (rotation, target) => {
+    categoryAxisLabelTemplate.adapter.add('rotation', (rotation, target) => {
       const position = valueAxis.valueToPosition(valueAxis.min);
       return valueAxis.renderer.positionToAngle(position) + 90;
     });
@@ -106,9 +106,9 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     labelTemplate.fillOpacity = 0.7;
 
     const series = chart.series.push(new am4plugins_timeline.CurveColumnSeries());
-    if (categoryAxis instanceof am4charts.CategoryAxis){
+    if (categoryAxis instanceof am4charts.CategoryAxis) {
       series.dataFields.categoryY = 'type';
-    }else if (categoryAxis instanceof am4charts.DateAxis){
+    } else if (categoryAxis instanceof am4charts.DateAxis) {
       series.dataFields.dateY = 'time';
     }
     series.dataFields.valueX = 'value';
@@ -117,7 +117,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     // series.tooltipText = '{categoryY}: {valueX} kisses';
     series.columns.template.strokeOpacity = 0;
     series.columns.template.fillOpacity = 0.8;
-    series.columns.template.adapter.add('fill',  (fill, target) => {
+    series.columns.template.adapter.add('fill', (fill, target) => {
       return this.getFillColor(chart, target.dataItem.index);
     });
     series.columns.template.adapter.add('tooltipText', (text, target, key) => {
@@ -127,7 +127,6 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
       return `${'{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
-
 
 
     const label = series.createChild(am4core.Label);
@@ -163,19 +162,20 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
   }
 
   protected generateChartData(data): SummariesChartDataInterface[] {
-    const chartData  = data.sort((itemA, itemB) => {
-      return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ?  itemB.value - itemA.value :  -(itemB.time - itemA.time) ;
+    data.sort((itemA, itemB) => {
+      return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemB.value - itemA.value : -(itemB.time - itemA.time);
     });
     if (!this.filterLowValues) {
-      return chartData;
+      return data;
     }
+    const chartData = [];
     let otherData: SummariesChartDataInterface;
     const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
     data.forEach((dataItem: SummariesChartDataInterface, index) => {
       const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
       if (percent < 5) {
         if (!otherData) {
-          otherData = {type: 'Other',  value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
+          otherData = {type: 'Other', value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
           return;
         }
         otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
