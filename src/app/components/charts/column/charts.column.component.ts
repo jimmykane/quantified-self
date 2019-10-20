@@ -45,9 +45,8 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 0, 0, 0);
+    chart.paddingBottom = this.vertical ? 20 : 0;
     chart.fontSize = '1.1em';
-    // chart.paddingBottom = 20;
-
 
     // top container for labels
     const topContainer = chart.chartContainer.createChild(am4core.Container);
