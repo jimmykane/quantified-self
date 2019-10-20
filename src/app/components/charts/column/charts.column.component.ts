@@ -44,9 +44,9 @@ export class ChartsColumnComponent extends DashboardChartAbstract implements OnC
     chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
-    chart.padding(0, 0, 0, 20);
+    chart.padding(0, 0, 0, 0);
     chart.fontSize = '1.1em';
-    chart.paddingBottom = 20;
+    // chart.paddingBottom = 20;
 
 
     // top container for labels

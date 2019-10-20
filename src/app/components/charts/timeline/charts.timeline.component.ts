@@ -46,6 +46,9 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     chart.yAxisInnerRadius = am4core.percent(10);
     chart.yAxisRadius = am4core.percent(100);
     chart.innerRadius = am4core.percent(45);
+    chart.paddingTop = 0;
+    chart.paddingBottom = 0;
+
 
     const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     // categoryAxis.dataFields.category = 'time';
@@ -72,12 +75,13 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     });
 
 
+
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 100;
 
-    valueAxis.renderer.line.strokeDasharray = '1,0';
-    valueAxis.renderer.line.strokeOpacity = this.getStrokeOpacity();
-    valueAxis.renderer.line.strokeWidth = this.getStrokeWidth();
+    // valueAxis.renderer.line.strokeDasharray = '1,0';
+    // valueAxis.renderer.line.strokeOpacity = this.getStrokeOpacity();
+    valueAxis.renderer.line.strokeWidth = 0;
     valueAxis.renderer.grid.template.disabled = true;
     valueAxis.zIndex = 100;
     valueAxis.cursorTooltipEnabled = false;

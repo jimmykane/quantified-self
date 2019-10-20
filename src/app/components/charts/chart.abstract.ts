@@ -112,6 +112,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       chart.pixelPerfect = false;
+      // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
       return chart;
     });
