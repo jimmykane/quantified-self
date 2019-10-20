@@ -36,6 +36,8 @@ import {DataCadenceMin} from 'quantified-self-lib/lib/data/data.cadence-min';
 import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
 import {DataPeakEPOC} from 'quantified-self-lib/lib/data/data.peak-epoc';
 import * as firebase from 'firebase/app';
+import {DataFeeling} from 'quantified-self-lib/lib/data/data.feeling';
+import {DataRPE} from 'quantified-self-lib/lib/data/data.rpe';
 
 @Component({
   selector: 'app-chart-actions',
@@ -115,6 +117,8 @@ export class ChartActionsComponent implements OnInit {
     {
       name: 'Body',
       data: [
+        DataFeeling.type,
+        DataRPE.type,
         DataVO2Max.type,
         DataRecovery.type,
         DataTotalTrainingEffect.type,
