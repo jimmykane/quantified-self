@@ -108,9 +108,6 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     series.dataFields.valueX = 'value';
 
 
-    // series.tooltipText = '{categoryY}: {valueX} kisses';
-    series.columns.template.strokeOpacity = this.getStrokeOpacity();
-    series.columns.template.fillOpacity = this.getFillOpacity();
     series.columns.template.adapter.add('fill', (fill, target) => {
       return this.getFillColor(chart, target.dataItem.index);
     });
