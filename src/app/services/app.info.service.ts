@@ -14,8 +14,11 @@ export class AppInfoService {
     private userService: UserService,
     private afs: AngularFirestore
   ) {
-    this.afs.collection('appInfo').doc('version').valueChanges().subscribe((doc: {beta: string, production: string, localhost: string}) => {
-      this.appVersions.next(doc);
+    this.afs.collection('appInfo').doc('version').snapshotChanges().subscribe((snapshot) => {
+      if (snapshot.payload.metadata.fromCache){
+        return;
+      }
+      this.appVersions.next(<{beta: string, production: string, localhost: string}>snapshot.payload.data());
     })
   }
 
