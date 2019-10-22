@@ -227,11 +227,13 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
         // Abort and crash if not found
         if (!eventTypeDisplayStat) {
-          throw new Error(`No eventTypeDisplayStat found for event with id ${event.getID()}`);
+          Sentry.captureException(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
+          return '??'
         }
         // Log an error to notify us what is missing
         if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) {
           Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
+          return '??';
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
       case ChartDataCategoryTypes.DateType:
