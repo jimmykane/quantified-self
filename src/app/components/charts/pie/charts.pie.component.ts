@@ -70,7 +70,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     });
 
     pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {
-      return this.getFillColor(chart, target.dataItem.index >= 0 ? target.dataItem.index : 0);
+      return this.getFillColor(chart, target.dataItem.index);
     });
 
     pieSeries.labels.template.adapter.add('text', (text, target, key) => {
