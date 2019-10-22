@@ -74,15 +74,14 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       return `[bold font-size: 1.0em]${text}[/]`;
     });
 
-
-
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 100;
 
     // valueAxis.renderer.line.strokeDasharray = '1,0';
     // valueAxis.renderer.line.strokeOpacity = this.getStrokeOpacity();
-    valueAxis.renderer.line.strokeWidth = 0;
-    valueAxis.renderer.grid.template.disabled = true;
+    valueAxis.hidden = true;
+    // valueAxis.renderer.line.strokeWidth = 0;
+    // valueAxis.renderer.grid.template.disabled = true;
     valueAxis.zIndex = 100;
     valueAxis.cursorTooltipEnabled = false;
     valueAxis.min = 0;
@@ -90,10 +89,10 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
     valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
-    valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `[bold font-size: 1.2em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
-    });
+    // valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
+    //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
+    //   return `[bold font-size: 1.2em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+    // });
 
     const labelTemplate = valueAxis.renderer.labels.template;
     labelTemplate.verticalCenter = 'middle';
