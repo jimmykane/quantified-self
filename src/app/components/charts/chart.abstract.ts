@@ -355,6 +355,13 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return 0.4;
   }
 
+  getShadowFilter(): am4core.DropShadowFilter{
+    const shadow = new am4core.DropShadowFilter();
+    shadow.dx = 1;
+    shadow.dy = 1;
+    return shadow
+  }
+
   getTextInitials(text: string) {
     return `${text.split(' ').map(x => x.slice(0, 1).toUpperCase()).join('. ')}.`
   }

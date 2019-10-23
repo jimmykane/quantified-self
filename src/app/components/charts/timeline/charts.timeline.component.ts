@@ -121,6 +121,8 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     series.columns.template.adapter.add('fill', (fill, target) => {
       return this.getFillColor(chart, target.dataItem.index);
     });
+
+    series.strokeWidth = 0;
     series.columns.template.adapter.add('tooltipText', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';

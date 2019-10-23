@@ -125,19 +125,13 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       series.stroke = chart.colors.getIndex(0);
       series.tension = 0.5;
       const bullet = series.bullets.push(new am4charts.CircleBullet());
-      const shadow = new am4core.DropShadowFilter();
-      shadow.dx = 2;
-      shadow.dy = 2;
-      bullet.filters.push(shadow);
       const axisTooltip = series.tooltip;
-      // Add distinctive colors for each column using adapter
       bullet.adapter.add('fill', (fill, target) => {
         if (!target.dataItem) {
           return fill;
         }
         return this.getFillColor(chart, target.dataItem.index);
       });
-
 
       bullet.adapter.add('tooltipText', (text, target, key) => {
         if (!target.dataItem || !target.dataItem.dataContext) {
@@ -146,8 +140,10 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
+      series.filters.push(this.getShadowFilter());
 
     }
+
 
     const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
     if (this.vertical) {
