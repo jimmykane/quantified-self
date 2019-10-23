@@ -17,6 +17,7 @@ import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 
 @Component({
   selector: 'app-timeline-chart',
@@ -71,7 +72,17 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       return valueAxis.renderer.positionToAngle(position) + 90;
     });
     categoryAxisLabelTemplate.adapter.add('text', (text, target, key) => {
-      return `[bold font-size: 1.0em]${text}[/]`;
+      let chartDataItem;
+      if (target.dataItem instanceof am4charts.DateAxisDataItem && target.axis) {
+        chartDataItem = target.axis.chart.data.find((chartData: SummariesChartDataInterface) => chartData.time === (<am4charts.DateAxisDataItem>target.dataItem).value);
+      } else if (target.dataItem instanceof am4charts.CategoryAxisDataItem) {
+        chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
+      }
+      if (!chartDataItem) {
+        return `[bold font-size: 1.0em]${text}[/]`;
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem.value);
+      return `[bold font-size: 1.0em]${text} ${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`;
     });
 
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
