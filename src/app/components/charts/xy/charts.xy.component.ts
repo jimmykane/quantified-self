@@ -121,32 +121,32 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
     } else {
       series = chart.series.push(new am4charts.LineSeries());
+
       series.stroke = chart.colors.getIndex(0);
-      series.tension = 0.5
-      let bullet = series.bullets.push(new am4charts.Bullet());
-      let shape = bullet.createChild(am4core.Circle);
-      shape.width = 10;
-      shape.height = 10;
-      shape.horizontalCenter = 'middle';
-      shape.verticalCenter = 'middle';
-      // series.bullets.push(am4core.Rectangle);
-      // series.fillOpacity = this.getFillOpacity();
+      series.tension = 0.5;
+      const bullet = series.bullets.push(new am4charts.CircleBullet());
+      const shadow = new am4core.DropShadowFilter();
+      shadow.dx = 2;
+      shadow.dy = 2;
+      bullet.filters.push(shadow);
+      const axisTooltip = series.tooltip;
       // Add distinctive colors for each column using adapter
-      shape.adapter.add('fill', (fill, target) => {
+      bullet.adapter.add('fill', (fill, target) => {
         if (!target.dataItem) {
           return fill;
         }
         return this.getFillColor(chart, target.dataItem.index);
       });
 
-      shape.adapter.add('tooltipText', (text, target, key) => {
-        debugger;
+
+      bullet.adapter.add('tooltipText', (text, target, key) => {
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
         }
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
+
     }
 
     const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
@@ -169,10 +169,13 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       categoryLabel.label.dx = 50;
     }
 
-    categoryLabel.label.adapter.add('text', (text, target) => {
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
-      return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
-    });
+    // @todo refactor
+    if (this.type === 'columns') {
+      categoryLabel.label.adapter.add('text', (text, target) => {
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
+        return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+      });
+    }
 
     categoryLabel.label.hideOversized = false;
     categoryLabel.label.truncate = false;
