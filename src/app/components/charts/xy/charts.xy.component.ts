@@ -140,7 +140,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
-      series.filters.push(this.getShadowFilter());
+      bullet.filters.push(this.getShadowFilter());
 
     }
 
