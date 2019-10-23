@@ -11,18 +11,19 @@
                            [chartDataDateRange]="chart.dataDateRange"
                            [userChartSettings]="user.settings.chartSettings">
             </app-pie-chart>
-            <app-column-chart
-                    *ngIf="chart.type === chartTypes.ColumnsHorizontal || chart.type === chartTypes.PyramidsVertical"
+            <app-xy-chart
+                    *ngIf="chart.type === chartTypes.ColumnsHorizontal || chart.type === chartTypes.PyramidsVertical || chart.type === chartTypes.LinesHorizontal ||  chart.type === chartTypes.LinesVertical"
                     [data]="chart.data"
                     [chartTheme]="chartTheme"
-                    [vertical]="chart.type === chartTypes.PyramidsVertical"
+                    [type]="(chart.type === chartTypes.LinesHorizontal || chart.type === chartTypes.LinesVertical) ? 'lines' : 'columns'"
+                    [vertical]="(chart.type === chartTypes.PyramidsVertical || chart.type === chartTypes.LinesHorizontal)"
                     [chartDataType]="chart.dataType"
                     [chartDataValueType]="chart.dataValueType"
                     [chartDataCategoryType]="chart.dataCategoryType"
                     [filterLowValues]="chart.filterLowValues"
                     [chartDataDateRange]="chart.dataDateRange"
                     [userChartSettings]="user.settings.chartSettings">
-            </app-column-chart>
+            </app-xy-chart>
             <app-timeline-chart
               *ngIf="chart.type === chartTypes.Spiral"
               [data]="chart.data"

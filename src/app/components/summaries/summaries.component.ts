@@ -280,8 +280,8 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
     // Not the same month ? create a monthly category
     if (endDate.getMonth() !== startDate.getMonth()) {
-      // First check if the date range is in 1 month and return daily
-      if (endDate.getDate() < startDate.getDate()) {
+      // First check if the date range is in 30 day and return daily
+      if (endDate.getTime() <= startDate.getTime() + (1000 * 31 * 24 * 60 * 60)) {
         return SummariesChartDataDateRages.Daily
       }
       return SummariesChartDataDateRages.Monthly;
