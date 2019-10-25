@@ -152,13 +152,13 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     // chart.scrollbarX.width = am4core.percent(70);
 
 
-    const cursor = new am4plugins_timeline.CurveCursor();
-    chart.cursor = cursor;
-    cursor.xAxis = valueAxis;
-    cursor.yAxis = categoryAxis;
-    cursor.lineY.disabled = true;
-    cursor.lineX.strokeDasharray = '1,4';
-    cursor.lineX.strokeOpacity = 1;
+    // const cursor = new am4plugins_timeline.CurveCursor();
+    // chart.cursor = cursor;
+    // cursor.xAxis = valueAxis;
+    // cursor.yAxis = categoryAxis;
+    // cursor.lineY.disabled = true;
+    // cursor.lineX.strokeDasharray = '1,4';
+    // cursor.lineX.strokeOpacity = 1;
 
 
     return chart;
