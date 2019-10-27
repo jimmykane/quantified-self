@@ -199,7 +199,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
 
     chart.fontSize = '0.75em';
-    chart.padding(0, 10, 0, 0);
+    // chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
 
     // Add scrollbar
@@ -235,6 +235,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
     xAxis.title.text = this.xAxisType;
     xAxis.renderer.grid.template.disabled = true;
+
+    xAxis.renderer.ticks.template.disabled = false;
+    xAxis.renderer.ticks.template.strokeOpacity = 1;
+    xAxis.renderer.ticks.template.strokeWidth = 1;
+    xAxis.renderer.ticks.template.length = 10;
 
     xAxis.padding = 0;
 
@@ -491,15 +496,24 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis = sameTypeSeries.yAxis;
     }
 
-    yAxis.tooltip.disabled = true;
-    yAxis.interpolationDuration = 500;
-    yAxis.rangeChangeDuration = 500;
-    // yAxis.renderer.inside = true;
-    yAxis.renderer.minLabelPosition = 0.05;
-    yAxis.renderer.maxLabelPosition = 0.95;
-    yAxis.renderer.axisFills.template.disabled = true;
-    yAxis.renderer.ticks.template.disabled = true;
+    // yAxis.tooltip.disabled = true;
+    // yAxis.interpolationDuration = 500;
+    // yAxis.rangeChangeDuration = 500;
+    yAxis.renderer.inside = false;
+    // yAxis.renderer.minLabelPosition = -1;
+    // yAxis.renderer.maxLabelPosition = -1;
+    // yAxis.renderer.axisFills.template.disabled = true;
     yAxis.renderer.grid.template.disabled = true;
+
+    // yAxis.renderer.ticks.template.disabled = false;
+    // yAxis.renderer.ticks.template.strokeOpacity = 1;
+    // yAxis.renderer.ticks.template.strokeWidth = 1;
+    // yAxis.renderer.ticks.template.length = 2;
+
+    // yAxis.adapter.add('getTooltipText', (text, target) => {
+    //   return text;
+    // });
+
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());

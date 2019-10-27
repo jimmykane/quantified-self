@@ -10,7 +10,6 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
-
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges {
   @Input() data: any;
 

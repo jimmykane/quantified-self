@@ -16,6 +16,8 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+
 
 @Component({
   selector: 'app-xy-chart',
@@ -119,8 +121,13 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       series.columns.template.adapter.add('fill', (fill, target) => {
         return this.getFillColor(chart, target.dataItem.index);
       });
+
+
+      series.columns.template.filters.push(this.getShadowFilter())
+
     } else {
       series = chart.series.push(new am4charts.LineSeries());
+      series.filters.push(this.getShadowFilter())
 
       series.stroke = chart.colors.getIndex(0);
       series.tension = 0.5;
@@ -181,5 +188,12 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
 
     return chart;
+  }
+
+  protected applyChartStylesFromUserSettings(userChartSettings: UserChartSettingsInterface, chartTheme: ChartThemes) {
+    super.applyChartStylesFromUserSettings(userChartSettings, chartTheme);
+    this.zone.runOutsideAngular(() => {
+      // am4core.useTheme(patterns);
+    });
   }
 }
