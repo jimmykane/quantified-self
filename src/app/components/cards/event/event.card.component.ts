@@ -39,8 +39,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public selectedActivities: ActivityInterface[] = [];
 
   public showAllData: boolean;
+  public showChartLaps: boolean;
   public chartXAxisType = XAxisTypes.Duration;
   public mapLapTypes = UserService.getDefaultMapLapTypes();
+  public chartLapTypes = UserService.getDefaultChartLapTypes();
   public showMapLaps;
   public showMapArrows;
   public dataSmoothingLevel = 3.5;
@@ -97,8 +99,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
       this.showAllData = user.settings.chartSettings.showAllData;
       this.showMapLaps = user.settings.mapSettings.showLaps;
+      this.showChartLaps = user.settings.chartSettings.showLaps;
       this.showMapArrows = user.settings.mapSettings.showArrows;
       this.mapLapTypes = user.settings.mapSettings.lapTypes;
+      this.chartLapTypes = user.settings.chartSettings.lapTypes;
     });
 
     // Subscribe to the chartTheme changes

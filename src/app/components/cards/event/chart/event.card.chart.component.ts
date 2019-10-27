@@ -34,13 +34,12 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
-import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
-import {DataVerticalSpeedMetersPerMinute} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {UserService} from '../../../../services/app.user.service';
+import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 @Component({
   selector: 'app-event-card-chart',
@@ -56,6 +55,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
+  @Input() showLaps: boolean;
+  @Input() lapTypes: LapTypes[];
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
   @Input() waterMark: string;
@@ -111,6 +112,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if (simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.showAllData
+      || simpleChanges.showLaps
+      || simpleChanges.lapTypes
       || simpleChanges.userChartSettings
       || simpleChanges.dataSmoothingLevel
       || simpleChanges.xAxisType
@@ -169,6 +172,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
+
+      if (this.showLaps) {
+        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+      }
+
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
@@ -182,6 +190,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // })
       //   this.chart.xAxes.getIndex(0).strictMinMax = true;
       // }
+
+
     });
   }
 
@@ -206,7 +216,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       xAxis.numberFormatter.numberFormat = `#`;
       // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
       xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
+        if (!target.dataItem.value) {
+          return '';
+        }
+        const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, target.dataItem.value);
         return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       // xAxis.tooltipText = '{valueX}'
@@ -384,6 +397,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     watermark.marginRight = 25;
     watermark.marginBottom = 5;
     watermark.zIndex = 100;
+    watermark.filters.push(this.getShadowFilter());
+
     // watermark.fontWeight = 'bold';
 
 
@@ -557,7 +572,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       series.strokeWidth = this.userChartSettings.strokeWidth;
       series.strokeOpacity = this.userChartSettings.strokeOpacity;
       series.fillOpacity = this.userChartSettings.fillOpacity;
-    }else {
+    } else {
       series.strokeWidth = UserService.getDefaultChartStrokeWidth();
       series.strokeOpacity = UserService.getDefaultChartStrokeOpacity();
       series.fillOpacity = UserService.getDefaultChartFillOpacity();
@@ -871,6 +886,72 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return `rangeLabelContainer${series.id}`;
   }
 
+  private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
+    selectedActivities
+      .forEach((activity, activityIndex) => {
+        // Filter on lapTypes
+        lapTypes
+          .forEach(lapType => {
+            activity
+              .getLaps()
+              .filter(lap => lap.type === lapType)
+              .forEach((lap, lapIndex) => {
+                if (lapIndex === activity.getLaps().length - 1) {
+                  return;
+                }
+                const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
+                const range = xAxis.axisRanges.create();
+                if (xAxisType === XAxisTypes.Time) {
+                  range.value = lap.endDate.getTime();
+                } else if (xAxisType === XAxisTypes.Duration) {
+                  range.value = (new Date(0).getTimezoneOffset() * 60000) + +lap.endDate - +activity.startDate;
+                } else {
+                  const data = this.distanceAxesForActivitiesMap
+                    .get(activity.getID())
+                    .getStreamDataByTime(activity.startDate)
+                    .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
+                  range.value = data[0].value
+                }
+                range.grid.stroke = am4core.color('#396478');
+                range.grid.strokeWidth = 2;
+                range.grid.strokeOpacity = 0.8;
+                range.grid.above = true;
+                range.grid.zIndex = 1;
+                range.grid.tooltipText = `[bold font-size: 1em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
+                range.grid.tooltipPosition = 'pointer'
+                range.label.inside = true;
+                range.label.adapter.add('text', () => {
+                  return `${lapIndex + 1}`;
+                });
+                range.label.zIndex = 2;
+                range.label.paddingTop = 2;
+                range.label.paddingBottom = 2;
+                // range.label.margin(2,12,12,2)
+                // range.label.margin(0,0,0,0)
+                range.label.fontSize = '1em';
+                // range.label.background.fill =  am4core.color('#d9d9d9');
+                range.label.background.fillOpacity = 0.9;
+                range.label.background.stroke = am4core.color('#396478'); // @todo group colors
+                range.label.background.strokeWidth = 1;
+                // range.label.tooltipText = range.grid.tooltipText;
+                // range.label.interactionsEnabled = true;
+
+                range.label.background.width = 1;
+                // range.label.fill = range.grid.stroke;
+                range.label.horizontalCenter = 'middle';
+                range.label.valign = 'bottom';
+                range.label.textAlign = 'middle';
+                range.label.dy = 6;
+
+                // range.grid.filters.push(this.getShadowFilter())
+              })
+          });
+      })
+  }
+
+  private removeLapGuides(chart: am4charts.XYChart) {
+    chart.xAxes.getIndex(0).axisRanges.clear();
+  }
 }
 
 export interface LabelData {

@@ -122,6 +122,10 @@ export class UserService implements OnDestroy {
     return [LapTypes.AutoLap, LapTypes.Distance];
   }
 
+  static getDefaultChartLapTypes(): LapTypes[] {
+    return [LapTypes.AutoLap, LapTypes.Distance];
+  }
+
   static getDefaultSmoothingLevel(): number {
     return 3.5;
   }
@@ -327,6 +331,8 @@ export class UserService implements OnDestroy {
     settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || UserService.getDefaultChartStrokeWidth();
     settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : UserService.getDefaultChartStrokeOpacity();
     settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : UserService.getDefaultChartFillOpacity();
+    settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || UserService.getDefaultChartLapTypes();
+    settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

@@ -138,24 +138,25 @@
           </mat-select>
           <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
         </mat-form-field>
+
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="showMapLaps">
+            <span matTooltip="Show laps on map?">Show laps</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> laps can help in the route analysis</mat-hint>
+        </section>
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="showMapArrows">
+            <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
+        </section>
       </mat-card-content>
 
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="showMapLaps">
-          <span matTooltip="Show laps on map?">Show laps</span>
-        </mat-slide-toggle>
-        <mat-hint><b>Tip:</b> laps can help in the route analysis</mat-hint>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="showMapArrows">
-          <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
-        </mat-slide-toggle>
-        <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
-      </section>
     </mat-card>
 
     <mat-card>
@@ -265,6 +266,24 @@
             [thumbLabel]="true"
             formControlName="chartFillOpacity">
           </mat-slider>
+        </section>
+
+        <mat-form-field>
+          <mat-select placeholder="Lap types to show on the chart" formControlName="chartLapTypes" multiple>
+            <mat-option *ngFor="let lapType of lapTypes | keyvalue" [value]="lapType.value">
+              {{lapType.key}}
+            </mat-option>
+          </mat-select>
+          <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
+        </mat-form-field>
+
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="showChartLaps">
+            <span matTooltip="Show laps on chart?">Show laps</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> laps can help in the data analysis</mat-hint>
         </section>
 
       </mat-card-content>

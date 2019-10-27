@@ -179,13 +179,15 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   protected unsubscribeAndClearChart() {
     this.unSubscribeFromAll();
     this.clearChart();
-
   }
 
   protected clearChart() {
     if (this.chart) {
       this.chart.series.clear();
       this.chart.colors.reset();
+      if (this.chart instanceof am4charts.XYChart){
+        this.chart.xAxes.each(axis => axis.axisRanges.clear())
+      }
     }
   }
 

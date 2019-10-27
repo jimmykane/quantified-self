@@ -71,6 +71,7 @@
           <app-event-card-chart-actions
             [(xAxisType)]="chartXAxisType"
             [(showAllData)]="showAllData"
+            [(showLaps)]="showChartLaps"
             [(dataSmoothingLevel)]="dataSmoothingLevel"
             [user]="currentUser"
             align="end">
@@ -79,6 +80,8 @@
         <app-event-card-chart
           *ngIf="currentUser !== undefined"
           [showAllData]="showAllData"
+          [showLaps]="showChartLaps"
+          [lapTypes]="chartLapTypes"
           [xAxisType]="chartXAxisType"
           [isVisible]="tabIndex === 2"
           [selectedActivities]="selectedActivities"

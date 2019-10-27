@@ -24,8 +24,10 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Input() user: User;
   @Input() xAxisType: XAxisTypes;
   @Input() showAllData: boolean;
+  @Input() showLaps: boolean;
   @Input() dataSmoothingLevel: number;
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
   @Output() dataSmoothingLevelChange: EventEmitter<number> = new EventEmitter<number>();
 
@@ -41,10 +43,12 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.user.settings.chartSettings.xAxisType = this.xAxisType;
       this.user.settings.chartSettings.dataSmoothingLevel = this.dataSmoothingLevel;
       this.user.settings.chartSettings.showAllData = this.showAllData;
+      this.user.settings.chartSettings.showLaps = this.showLaps;
       await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
     }
     this.xAxisTypeChange.emit(this.xAxisType);
     this.showAllDataChange.emit(this.showAllData);
+    this.showLapsChange.emit(this.showLaps);
     this.dataSmoothingLevelChange.emit(this.dataSmoothingLevel);
   }
 
