@@ -355,10 +355,10 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return 0.4;
   }
 
-  getShadowFilter(): am4core.DropShadowFilter{
+  getShadowFilter(size: number = 2): am4core.DropShadowFilter{
     const shadow = new am4core.DropShadowFilter();
-    shadow.dx = 1;
-    shadow.dy = 1;
+    shadow.dx = size;
+    shadow.dy = size;
     return shadow
   }
 
