@@ -302,7 +302,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   private getNumberOfColumns() {
-    if (window.innerWidth < 900) {
+    if (window.innerWidth < 1080) {
       return 1;
     }
     if (window.innerWidth < 1500) {
