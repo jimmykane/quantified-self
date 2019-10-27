@@ -234,13 +234,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
     }
     xAxis.title.text = this.xAxisType;
-    // xAxis.renderer.grid.template.disabled = true;
-    xAxis.renderer.grid.template.strokeOpacity = 0.5;
-    xAxis.renderer.grid.template.strokeWidth = 0.5;
+    xAxis.renderer.grid.template.disabled = true;
 
     xAxis.padding = 0;
 
-    // Create a value axis
 
     // Create a Legend
     chart.legend = new am4charts.Legend();
@@ -913,12 +910,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                   range.value = data[0].value
                 }
                 range.grid.stroke = am4core.color('#396478');
-                range.grid.strokeWidth = 2;
-                range.grid.strokeOpacity = 0.8;
+                range.grid.strokeWidth = 1;
+                range.grid.strokeOpacity = 0.5;
+
                 range.grid.above = true;
                 range.grid.zIndex = 1;
                 range.grid.tooltipText = `[bold font-size: 1em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
-                range.grid.tooltipPosition = 'pointer'
+                range.grid.tooltipPosition = 'pointer';
                 range.label.inside = true;
                 range.label.adapter.add('text', () => {
                   return `${lapIndex + 1}`;
