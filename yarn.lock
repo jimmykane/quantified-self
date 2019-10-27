@@ -7,10 +7,10 @@
   resolved "https://registry.yarnpkg.com/@agm/core/-/core-1.0.0-beta.7.tgz#5ceb024a7ffaa6a1648f010392684c06905ef656"
   integrity sha512-NXJqB2wCahWGSqvQazLHbVrg3Dhg5zTdhG9yP7EVVGfIft5lbY83KLVpbYFeVI/l+ggeJWAC9nVUr7CeDS96uQ==
 
-"@amcharts/amcharts4@4.7.4":
-  version "4.7.4"
-  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.7.4.tgz#565436d924d019077637eb644a9811cb27a93ce7"
-  integrity sha512-q64Ppd2kQrOy/vtdulJIDEtZEBnA2zQDGYMiWMI8b1n7W5oC1ESgNr0mJvaHE0hsv/m+g8H3HCZtxktg2JjH9Q==
+"@amcharts/amcharts4@4.7.5":
+  version "4.7.5"
+  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.7.5.tgz#98c8ab409076c7c61ee603263fe4b963a48824a2"
+  integrity sha512-d9t3/gn0zhoWZ85WgjlXNf4noh9k1GH+iGptGg49sOkq6RaGfm0wz5yrk1bbUGx1r9/TwW6XtQE5XxlrSpNPMw==
   dependencies:
     "@types/regression" "^2.0.0"
     canvg "^2.0.0"
