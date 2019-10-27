@@ -125,7 +125,6 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       series.stroke = chart.colors.getIndex(0);
       series.tension = 0.5;
       const bullet = series.bullets.push(new am4charts.CircleBullet());
-      const axisTooltip = series.tooltip;
       bullet.adapter.add('fill', (fill, target) => {
         if (!target.dataItem) {
           return fill;
