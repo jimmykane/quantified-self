@@ -397,7 +397,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     watermark.fontSize = '2.1em';
     watermark.opacity = 0.8;
     watermark.marginRight = 25;
-    watermark.marginBottom = 5;
+    watermark.marginBottom = 10;
     watermark.zIndex = 100;
     watermark.filters.push(this.getShadowFilter());
 
