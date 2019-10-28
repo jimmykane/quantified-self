@@ -394,12 +394,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.plotContainer.children.push(watermark);
     watermark.align = 'right';
     watermark.valign = 'bottom';
-    watermark.fontSize = '2.1em';
+    watermark.fontSize = '1.8em';
     watermark.opacity = 0.8;
-    watermark.marginRight = 25;
-    watermark.marginBottom = 10;
-    watermark.zIndex = 100;
+    watermark.marginRight = 15;
+    watermark.marginBottom = 15;
     watermark.filters.push(this.getShadowFilter());
+    watermark.zIndex = 100;
 
     // watermark.fontWeight = 'bold';
 
@@ -924,23 +924,25 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                   range.value = data[0].value
                 }
                 range.grid.stroke = am4core.color('#396478');
-                range.grid.strokeWidth = 1;
-                range.grid.strokeOpacity = 0.5;
+                range.grid.strokeWidth = 2;
+                range.grid.strokeOpacity = 0.9;
+                range.grid.strokeDasharray =  '1';
 
                 range.grid.above = true;
                 range.grid.zIndex = 1;
                 range.grid.tooltipText = `[bold font-size: 1em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
                 range.grid.tooltipPosition = 'pointer';
+                range.label.tooltipText = range.grid.tooltipText;
                 range.label.inside = true;
                 range.label.adapter.add('text', () => {
                   return `${lapIndex + 1}`;
                 });
-                range.label.zIndex = 2;
                 range.label.paddingTop = 2;
                 range.label.paddingBottom = 2;
+                range.label.zIndex = 11
                 // range.label.margin(2,12,12,2)
                 // range.label.margin(0,0,0,0)
-                range.label.fontSize = '1em';
+                range.label.fontSize = '1.2em';
                 // range.label.background.fill =  am4core.color('#d9d9d9');
                 range.label.background.fillOpacity = 0.9;
                 range.label.background.stroke = am4core.color('#396478'); // @todo group colors
