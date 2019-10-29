@@ -923,14 +923,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   range.value = data[0].value
                 }
-                range.grid.stroke = am4core.color('#396478');
+                range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 2;
                 range.grid.strokeOpacity = 0.9;
-                range.grid.strokeDasharray =  '1';
+                range.grid.strokeDasharray =  '2';
 
                 range.grid.above = true;
                 range.grid.zIndex = 1;
-                range.grid.tooltipText = `[bold font-size: 1em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
+                range.grid.tooltipText = `[${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
                 range.grid.tooltipPosition = 'pointer';
                 range.label.tooltipText = range.grid.tooltipText;
                 range.label.inside = true;
@@ -939,15 +939,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 });
                 range.label.paddingTop = 2;
                 range.label.paddingBottom = 2;
-                range.label.zIndex = 11
-                // range.label.margin(2,12,12,2)
-                // range.label.margin(0,0,0,0)
+                range.label.zIndex = 11;
                 range.label.fontSize = '1.2em';
-                // range.label.background.fill =  am4core.color('#d9d9d9');
-                range.label.background.fillOpacity = 0.9;
-                range.label.background.stroke = am4core.color('#396478'); // @todo group colors
+                range.label.background.fillOpacity = 1;
+                range.label.background.stroke = range.grid.stroke;
                 range.label.background.strokeWidth = 1;
-                // range.label.tooltipText = range.grid.tooltipText;
+                range.label.tooltipText = range.grid.tooltipText;
+
                 // range.label.interactionsEnabled = true;
 
                 range.label.background.width = 1;
