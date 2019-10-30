@@ -1,12 +1,7 @@
 import {NgModule} from '@angular/core';
 import {RouterModule, Routes} from '@angular/router';
-import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {HomeComponent} from './components/home/home.component';
-import {EventCardComponent} from './components/cards/event/event.card.component';
 import {AppAuthGuard} from './authentication/app.auth.guard';
-import {LoginComponent} from './components/login/login.component';
-import {UserComponent} from './components/user/user.component';
-import {ServicesComponent} from './components/services/services.component';
 
 const routes: Routes = [
   {path: 'home', component: HomeComponent, data: {title: 'Home', animation: 'Home'}},
