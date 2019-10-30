@@ -926,7 +926,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 2;
                 range.grid.strokeOpacity = 0.9;
-                range.grid.strokeDasharray =  '2';
+                range.grid.strokeDasharray =  '5,5';
 
                 range.grid.above = true;
                 range.grid.zIndex = 1;
