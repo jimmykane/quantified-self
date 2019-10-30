@@ -198,7 +198,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected createChart(): am4charts.XYChart {
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
 
-    chart.fontSize = '0.75em';
+    chart.fontSize = '1.0em';
     // chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
 
@@ -242,11 +242,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     xAxis.renderer.ticks.template.length = 10;
 
     xAxis.padding = 0;
+    // xAxis.renderer.labels.template.fontSize = '1.2em';
 
 
     // Create a Legend
     chart.legend = new am4charts.Legend();
-    chart.legend.fontSize = '0.9em';
+    chart.legend.fontSize = '1em';
     chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
     chart.legend.parent.width = am4core.percent(100);
     chart.legend.parent.height = am4core.percent(100);
@@ -394,7 +395,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.plotContainer.children.push(watermark);
     watermark.align = 'right';
     watermark.valign = 'bottom';
-    watermark.fontSize = '1.8em';
+    watermark.fontSize = '1.6em';
     watermark.opacity = 0.8;
     watermark.marginRight = 15;
     watermark.marginBottom = 15;
@@ -659,15 +660,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const label = labelContainer.createChild(am4core.Label);
     label.align = 'center';
     label.text = `
-      [bold font-size: 1.4em ${series.stroke}]${labelData.name}[/]\n
-      [bold font-size: 1.25em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.min.value}[/][${am4core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
-      [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.4em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      [bold font-size: 1.2em ${series.stroke}]${labelData.name}[/]\n
+      [bold font-size: 1.15em ${am4core.color(this.eventColorService.getActivityColor(this.event, series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.min.value}[/][${am4core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
+      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
 
     // Important! disable it after the creation of the child label
@@ -681,7 +682,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.label.text = chart.cursor.behavior === 'selectX' ? 'Selecting' : 'Zooming';
     button.padding(10, 10, 10, 10);
     // button.width = 20;
-    button.fontSize = '1.4em';
+    button.fontSize = '1.2em';
     button.align = 'left';
     button.marginLeft = 15;
     button.opacity = 0.5;
@@ -701,7 +702,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.padding(10, 10, 10, 10);
     // button.width = 20;
     button.y = 50;
-    button.fontSize = '1.4em';
+    button.fontSize = '1.2em';
     button.align = 'left';
     button.marginLeft = 15;
     button.zIndex = 100;
@@ -940,7 +941,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 range.label.paddingTop = 2;
                 range.label.paddingBottom = 2;
                 range.label.zIndex = 11;
-                range.label.fontSize = '1.2em';
+                range.label.fontSize = '1em';
                 range.label.background.fillOpacity = 1;
                 range.label.background.stroke = range.grid.stroke;
                 range.label.background.strokeWidth = 1;
