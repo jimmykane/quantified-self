@@ -132,8 +132,8 @@
 
         <mat-form-field>
           <mat-select placeholder="Lap types to show on the map" formControlName="mapLapTypes" multiple>
-            <mat-option *ngFor="let lapType of lapTypes | keyvalue" [value]="lapType.value">
-              {{lapType.key}}
+            <mat-option *ngFor="let lapType of lapTypes" [value]="lapType">
+              {{lapType}}
             </mat-option>
           </mat-select>
           <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
@@ -270,8 +270,8 @@
 
         <mat-form-field>
           <mat-select placeholder="Lap types to show on the chart" formControlName="chartLapTypes" multiple>
-            <mat-option *ngFor="let lapType of lapTypes | keyvalue" [value]="lapType.value">
-              {{lapType.key}}
+            <mat-option *ngFor="let lapType of lapTypes" [value]="lapType">
+              {{lapType}}
             </mat-option>
           </mat-select>
           <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>

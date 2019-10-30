@@ -24,9 +24,9 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {UserDashboardSettingsInterface} from "quantified-self-lib/lib/users/user.dashboard.settings.interface";
-import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib/lib/users/user.map.settings.interface";
-import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {UserDashboardSettingsInterface} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
+import {MapThemes, MapTypes, UserMapSettingsInterface} from 'quantified-self-lib/lib/users/user.map.settings.interface';
+import {LapTypesHelper} from 'quantified-self-lib/lib/laps/lap.types';
 
 @Component({
   selector: 'app-user-settings',
@@ -36,7 +36,6 @@ import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 export class UserSettingsComponent implements OnChanges {
 
   @Input() user: User;
-  public currentUser: User;
   public isSaving: boolean;
   public errorSaving;
   public xAxisTypes = XAxisTypes;
@@ -57,13 +56,7 @@ export class UserSettingsComponent implements OnChanges {
   public appThemes = AppThemes;
   public chartThemes = ChartThemes;
   public mapThemes = MapThemes;
-  public lapTypes = {
-    'AutoLap': LapTypes.AutoLap,
-    'Distance': LapTypes.Distance,
-    'Manual': LapTypes.Manual,
-    'Interval': LapTypes.Interval,
-    'Fitness Equipment': LapTypes.FitnessEquipment,
-  };
+  public lapTypes = LapTypesHelper.getLapTypesAsUniqueArray();
 
   public eventsPerPage = [10, 25, 50, 100, 250,  500, 1000, 2500, 5000];
 
