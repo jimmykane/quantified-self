@@ -19,10 +19,7 @@ import {ThemeService} from '../services/app.theme.service';
 import {AppInfoService} from '../services/app.info.service';
 import {WindowService} from '../services/app.window.service';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {UserActionsComponent} from '../components/user-actions/user.actions.component';
 import {PrivacyIconComponent} from '../components/privacy-icon/privacy-icon.component';
-import {UserSettingsComponent} from '../components/user-settings/user-settings.component';
-import {UserFormComponent} from '../components/user-forms/user.form.component';
 import {EventActionsComponent} from '../components/event-actions/event.actions.component';
 
 
@@ -36,7 +33,6 @@ import {EventActionsComponent} from '../components/event-actions/event.actions.c
     ShadeComponent,
     PrivacyIconComponent,
     EventActionsComponent,
-
   ],
   providers: [
     AppAuthService,
