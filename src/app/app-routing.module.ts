@@ -15,7 +15,7 @@ const routes: Routes = [
   {path: 'login', component: LoginComponent, data: {title: 'Login', animation: 'Login'}},
   {path: 'dashboard', component: DashboardComponent, data: {title: 'Dashboard', animation: 'Dashboard'}, canActivate: [AppAuthGuard]},
   {path: 'user/:userID/event/:eventID', component: EventCardComponent, data: {title: 'Event Details', animation: 'Event'}},
-  {path: 'user/:userID', component: UserComponent, data: {title: 'Profile', animation: 'User'}},
+  {path: 'user/:userID', loadChildren: () => import('./modules/user.module').then(module => module.UserModule), data: {title: 'Profile', animation: 'User'}},
   {path: '**', redirectTo: 'home', pathMatch: 'full' },
 ];
 

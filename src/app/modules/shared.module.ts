@@ -1,5 +1,5 @@
-import { NgModule } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {NgModule} from '@angular/core';
+import {CommonModule} from '@angular/common';
 import {ShadeComponent} from '../components/loading/shade.component';
 import {MaterialModule} from './material.module';
 import {AppAuthService} from '../authentication/app.auth.service';
@@ -19,7 +19,10 @@ import {ThemeService} from '../services/app.theme.service';
 import {AppInfoService} from '../services/app.info.service';
 import {WindowService} from '../services/app.window.service';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-
+import {UserActionsComponent} from '../components/user-actions/user.actions.component';
+import {PrivacyIconComponent} from '../components/privacy-icon/privacy-icon.component';
+import {UserSettingsComponent} from '../components/user-settings/user-settings.component';
+import {UserFormComponent} from '../components/user-forms/user.form.component';
 
 
 @NgModule({
@@ -28,7 +31,10 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
     MaterialModule
   ],
 
-  declarations: [ShadeComponent],
+  declarations: [
+    ShadeComponent,
+    PrivacyIconComponent,
+  ],
   providers: [
     AppAuthService,
     AppAuthGuard,
@@ -47,8 +53,13 @@ import {FormsModule, ReactiveFormsModule} from '@angular/forms';
     AppInfoService,
     WindowService,
   ],
-  exports: [ShadeComponent,
+
+  exports: [
+    ShadeComponent,
+    PrivacyIconComponent,
     ReactiveFormsModule,
     FormsModule]
+
 })
-export class SharedModule { }
+export class SharedModule {
+}
