@@ -4,7 +4,6 @@ import {AppComponent} from './app.component';
 import {AppRoutingModule} from './app-routing.module';
 import {UploadComponent} from './components/upload/upload.component';
 import {AgmCoreModule} from '@agm/core';
-import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {HomeComponent} from './components/home/home.component';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
@@ -101,44 +100,26 @@ export class SentryErrorHandler implements ErrorHandler {
   declarations: [
     AppComponent,
     SideNavComponent,
-    DashboardComponent,
-    UploadComponent,
     ActivityIconComponent,
     ActivitiesCheckboxesComponent,
     EventCardComponent,
-    EventActionsComponent,
-    EventTableComponent,
     EventCardMapComponent,
     EventCardStatsComponent,
-    EventActionsComponent,
     EventCardLapsComponent,
     EventCardToolsComponent,
     HomeComponent,
-    UploadInfoComponent,
     ActivityHeaderComponent,
     EventFormComponent,
     ActivityFormComponent,
     ActivityActionsComponent,
     MapActionsComponent,
     EventCardChartComponent,
-    UploadErrorComponent,
-    ActivityMetadataComponent,
     EventCardChartActionsComponent,
-    EventSearchComponent,
     EventCardDevicesComponent,
-    ChartsPieComponent,
-    ChartsXYComponent,
-    SummariesComponent,
-    ChartActionsComponent,
-    EditInputComponent,
-    EventsExportFormComponent,
-    ChartsTimelineComponent
   ],
   entryComponents: [
     EventFormComponent,
     ActivityFormComponent,
-    UploadErrorComponent,
-    EventsExportFormComponent
   ],
   providers: [
     // {provide: ErrorHandler, useClass: SentryErrorHandler}

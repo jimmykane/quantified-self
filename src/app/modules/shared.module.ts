@@ -23,6 +23,7 @@ import {UserActionsComponent} from '../components/user-actions/user.actions.comp
 import {PrivacyIconComponent} from '../components/privacy-icon/privacy-icon.component';
 import {UserSettingsComponent} from '../components/user-settings/user-settings.component';
 import {UserFormComponent} from '../components/user-forms/user.form.component';
+import {EventActionsComponent} from '../components/event-actions/event.actions.component';
 
 
 @NgModule({
@@ -34,6 +35,8 @@ import {UserFormComponent} from '../components/user-forms/user.form.component';
   declarations: [
     ShadeComponent,
     PrivacyIconComponent,
+    EventActionsComponent,
+
   ],
   providers: [
     AppAuthService,
@@ -52,11 +55,13 @@ import {UserFormComponent} from '../components/user-forms/user.form.component';
     ThemeService,
     AppInfoService,
     WindowService,
+
   ],
 
   exports: [
     ShadeComponent,
     PrivacyIconComponent,
+    EventActionsComponent,
     ReactiveFormsModule,
     FormsModule]
 
