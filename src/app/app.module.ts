@@ -31,19 +31,10 @@ import {EventCardChartComponent} from './components/cards/event/chart/event.card
 import {UploadErrorComponent} from './components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from './components/activity-metadata/activity-metadata.component';
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
-import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
-import {UserSettingsService} from './services/app.user.settings.service';
 import {AngularFireModule} from '@angular/fire';
 import {AngularFirestoreModule} from '@angular/fire/firestore';
 import {AngularFireAuthModule} from '@angular/fire/auth';
 import {AngularFireStorageModule} from '@angular/fire/storage';
-import {LoginComponent} from './components/login/login.component';
-import {PrivacyIconComponent} from './components/privacy-icon/privacy-icon.component';
-import {UserComponent} from './components/user/user.component';
-import {UserActionsComponent} from './components/user-actions/user.actions.component';
-import {UserFormComponent} from './components/user-forms/user.form.component';
-import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
-import {UserSettingsComponent} from './components/user-settings/user-settings.component';
 import {EventSearchComponent} from './components/event-search/event-search.component';
 import {EventCardDevicesComponent} from './components/cards/event/devices/event.card.devices.component';
 import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
@@ -54,9 +45,7 @@ import * as Sentry from '@sentry/browser';
 import {ChartActionsComponent} from './components/charts/actions/chart.actions.component';
 import {EventCardChartActionsComponent} from './components/cards/event/chart/actions/event.card.chart.actions.component';
 import {EventCardMapComponent} from './components/cards/event/map/event.card.map.component';
-import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
 import {EditInputComponent} from './components/edit-input/edit-input.component';
-import {PhoneFormComponent} from './components/login/phone-form/phone.form.component';
 import {EventsExportFormComponent} from './components/events-export-form/events-export.form.component';
 import {AngularFirePerformanceModule} from '@angular/fire/performance';
 import {ChartsTimelineComponent} from './components/charts/timeline/charts.timeline.component';
@@ -125,7 +114,6 @@ export class SentryErrorHandler implements ErrorHandler {
     EventCardLapsComponent,
     EventCardToolsComponent,
     HomeComponent,
-    LoginComponent,
     UploadInfoComponent,
     ActivityHeaderComponent,
     EventFormComponent,
@@ -136,28 +124,20 @@ export class SentryErrorHandler implements ErrorHandler {
     UploadErrorComponent,
     ActivityMetadataComponent,
     EventCardChartActionsComponent,
-    UserAgreementFormComponent,
     EventSearchComponent,
     EventCardDevicesComponent,
-    HistoryImportFormComponent,
     ChartsPieComponent,
     ChartsXYComponent,
     SummariesComponent,
     ChartActionsComponent,
-    DeleteConfirmationComponent,
     EditInputComponent,
-    PhoneFormComponent,
     EventsExportFormComponent,
     ChartsTimelineComponent
   ],
   entryComponents: [
     EventFormComponent,
-    UserAgreementFormComponent,
     ActivityFormComponent,
     UploadErrorComponent,
-    HistoryImportFormComponent,
-    DeleteConfirmationComponent,
-    PhoneFormComponent,
     EventsExportFormComponent
   ],
   providers: [
