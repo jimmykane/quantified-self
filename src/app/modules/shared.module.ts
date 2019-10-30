@@ -1,4 +1,7 @@
 import { NgModule } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import {ShadeComponent} from '../components/loading/shade.component';
+import {MaterialModule} from './material.module';
 import {AppAuthService} from '../authentication/app.auth.service';
 import {AppAuthGuard} from '../authentication/app.auth.guard';
 import {MapSettingsLocalStorageService} from '../services/storage/app.map.settings.local.storage.service';
@@ -15,12 +18,17 @@ import {SideNavService} from '../services/side-nav/side-nav.service';
 import {ThemeService} from '../services/app.theme.service';
 import {AppInfoService} from '../services/app.info.service';
 import {WindowService} from '../services/app.window.service';
+import {FormsModule, ReactiveFormsModule} from '@angular/forms';
+
+
 
 @NgModule({
-  imports: [],
-  exports: [
+  imports: [
+    CommonModule,
+    MaterialModule
   ],
-  declarations: [],
+
+  declarations: [ShadeComponent],
   providers: [
     AppAuthService,
     AppAuthGuard,
@@ -38,7 +46,9 @@ import {WindowService} from '../services/app.window.service';
     ThemeService,
     AppInfoService,
     WindowService,
-  ]
+  ],
+  exports: [ShadeComponent,
+    ReactiveFormsModule,
+    FormsModule]
 })
-
-export class SharedServicesModule { }
+export class SharedModule { }

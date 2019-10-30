@@ -3,54 +3,21 @@ import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
 import {AppRoutingModule} from './app-routing.module';
 import {UploadComponent} from './components/upload/upload.component';
-import {EventService} from './services/app.event.service';
 import {AgmCoreModule} from '@agm/core';
 import {DashboardComponent} from './components/dashboard/dashboard.component';
 import {HomeComponent} from './components/home/home.component';
 import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
-import {MatBadgeModule} from '@angular/material/badge';
-import {MatButtonModule} from '@angular/material/button';
-import {MatButtonToggleModule} from '@angular/material/button-toggle';
-import {MatCardModule} from '@angular/material/card';
-import {MatCheckboxModule} from '@angular/material/checkbox';
-import {MatChipsModule} from '@angular/material/chips';
-import {MatCommonModule, MatNativeDateModule} from '@angular/material/core';
-import {MatDatepickerModule} from '@angular/material/datepicker';
-import {MatDialogModule} from '@angular/material/dialog';
-import {MatExpansionModule} from '@angular/material/expansion';
-import {MatGridListModule} from '@angular/material/grid-list';
-import {MatIconModule} from '@angular/material/icon';
-import {MatInputModule} from '@angular/material/input';
-import {MatListModule} from '@angular/material/list';
-import {MatMenuModule} from '@angular/material/menu';
 import {MatPaginatorModule, MatPaginatorIntl} from '@angular/material/paginator';
-import {MatProgressBarModule} from '@angular/material/progress-bar';
-import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
-import {MatRadioModule} from '@angular/material/radio';
-import {MatSelectModule} from '@angular/material/select';
-import {MatSidenavModule} from '@angular/material/sidenav';
-import {MatSlideToggleModule} from '@angular/material/slide-toggle';
-import {MatSliderModule} from '@angular/material/slider';
-import {MatSnackBarModule} from '@angular/material/snack-bar';
-import {MatSortModule} from '@angular/material/sort';
-import {MatStepperModule} from '@angular/material/stepper';
-import {MatTableModule} from '@angular/material/table';
-import {MatTabsModule} from '@angular/material/tabs';
-import {MatToolbarModule} from '@angular/material/toolbar';
-import {MatTooltipModule} from '@angular/material/tooltip';
 import 'hammerjs';
 import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
-import {CdkTableModule} from '@angular/cdk/table';
 import {EventTableComponent, MatPaginatorIntlFireStore} from './components/event-table/event.table.component';
-import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
 import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
-import {EventColorService} from './services/color/app.event.color.service';
 import {UploadInfoComponent} from './components/upload-info/upload-info.component';
 import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
 import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
@@ -70,28 +37,17 @@ import {AngularFireModule} from '@angular/fire';
 import {AngularFirestoreModule} from '@angular/fire/firestore';
 import {AngularFireAuthModule} from '@angular/fire/auth';
 import {AngularFireStorageModule} from '@angular/fire/storage';
-import {AppAuthService} from './authentication/app.auth.service';
-import {AppAuthGuard} from './authentication/app.auth.guard';
 import {LoginComponent} from './components/login/login.component';
 import {PrivacyIconComponent} from './components/privacy-icon/privacy-icon.component';
-import {ClipboardService} from './services/app.clipboard.service';
-import {SharingService} from './services/app.sharing.service';
-import {FileService} from './services/app.file.service';
 import {UserComponent} from './components/user/user.component';
-import {UserService} from './services/app.user.service';
 import {UserActionsComponent} from './components/user-actions/user.actions.component';
 import {UserFormComponent} from './components/user-forms/user.form.component';
 import {UserAgreementFormComponent} from './components/user-forms/user-agreement.form.component';
-import {ShadeComponent} from './components/loading/shade.component';
-import {SideNavService} from './services/side-nav/side-nav.service';
 import {UserSettingsComponent} from './components/user-settings/user-settings.component';
 import {EventSearchComponent} from './components/event-search/event-search.component';
 import {EventCardDevicesComponent} from './components/cards/event/devices/event.card.devices.component';
-import {ServicesComponent} from './components/services/services.component';
 import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
 import {HistoryImportFormComponent} from './components/history-import-form/history-import.form.component';
-import {ThemeService} from './services/app.theme.service';
-import {AppInfoService} from './services/app.info.service';
 import {ChartsPieComponent} from './components/charts/pie/charts.pie.component';
 import {SummariesComponent} from './components/summaries/summaries.component';
 import * as Sentry from '@sentry/browser';
@@ -99,16 +55,14 @@ import {ChartActionsComponent} from './components/charts/actions/chart.actions.c
 import {EventCardChartActionsComponent} from './components/cards/event/chart/actions/event.card.chart.actions.component';
 import {EventCardMapComponent} from './components/cards/event/map/event.card.map.component';
 import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
-import {MatBottomSheetModule} from '@angular/material';
 import {EditInputComponent} from './components/edit-input/edit-input.component';
 import {PhoneFormComponent} from './components/login/phone-form/phone.form.component';
-import {WindowService} from './services/app.window.service';
 import {EventsExportFormComponent} from './components/events-export-form/events-export.form.component';
 import {AngularFirePerformanceModule} from '@angular/fire/performance';
 import {ChartsTimelineComponent} from './components/charts/timeline/charts.timeline.component';
 import {ChartsXYComponent} from './components/charts/xy/charts.xy.component';
-import {SharedServicesModule} from './modules/shared-services.module';
 import {MaterialModule} from './modules/material.module';
+import {SharedModule} from './modules/shared.module';
 
 declare function require(moduleName: string): any;
 
@@ -137,7 +91,7 @@ export class SentryErrorHandler implements ErrorHandler {
 
 @NgModule({
   imports: [
-    SharedServicesModule,
+    SharedModule,
     BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
@@ -154,8 +108,6 @@ export class SentryErrorHandler implements ErrorHandler {
       apiVersion: 'weekly'
     }),
     MaterialModule,
-    ReactiveFormsModule,
-    FormsModule,
   ],
   declarations: [
     AppComponent,
@@ -189,11 +141,9 @@ export class SentryErrorHandler implements ErrorHandler {
     UserActionsComponent,
     UserFormComponent,
     UserAgreementFormComponent,
-    ShadeComponent,
     UserSettingsComponent,
     EventSearchComponent,
     EventCardDevicesComponent,
-    ServicesComponent,
     HistoryImportFormComponent,
     ChartsPieComponent,
     ChartsXYComponent,
