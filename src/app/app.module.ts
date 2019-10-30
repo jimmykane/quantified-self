@@ -107,6 +107,8 @@ import {EventsExportFormComponent} from './components/events-export-form/events-
 import {AngularFirePerformanceModule} from '@angular/fire/performance';
 import {ChartsTimelineComponent} from './components/charts/timeline/charts.timeline.component';
 import {ChartsXYComponent} from './components/charts/xy/charts.xy.component';
+import {SharedServicesModule} from './modules/shared-services.module';
+import {MaterialModule} from './modules/material.module';
 
 declare function require(moduleName: string): any;
 
@@ -135,6 +137,7 @@ export class SentryErrorHandler implements ErrorHandler {
 
 @NgModule({
   imports: [
+    SharedServicesModule,
     BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
@@ -150,42 +153,9 @@ export class SentryErrorHandler implements ErrorHandler {
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
       apiVersion: 'weekly'
     }),
+    MaterialModule,
     ReactiveFormsModule,
-    MatExpansionModule,
-    MatButtonModule,
-    MatButtonToggleModule,
-    MatCardModule,
-    MatIconModule,
-    MatCommonModule,
-    MatMenuModule,
-    MatTabsModule,
-    MatSidenavModule,
-    MatToolbarModule,
-    MatGridListModule,
-    MatTableModule,
-    CdkTableModule,
-    MatChipsModule,
-    MatCheckboxModule,
-    MatSliderModule,
-    MatSnackBarModule,
-    MatInputModule,
-    MatListModule,
     FormsModule,
-    MatProgressBarModule,
-    MatTableModule,
-    MatSortModule,
-    MatTooltipModule,
-    MatDialogModule,
-    MatSlideToggleModule,
-    MatDatepickerModule,
-    MatNativeDateModule,
-    MatRadioModule,
-    MatPaginatorModule,
-    MatProgressSpinnerModule,
-    MatSelectModule,
-    MatBadgeModule,
-    MatStepperModule,
-    MatBottomSheetModule,
   ],
   declarations: [
     AppComponent,
@@ -247,22 +217,6 @@ export class SentryErrorHandler implements ErrorHandler {
     EventsExportFormComponent
   ],
   providers: [
-    AppAuthService,
-    AppAuthGuard,
-    MapSettingsLocalStorageService,
-    ChartSettingsLocalStorageService,
-    UserSettingsService,
-    EventService,
-    ActionButtonService,
-    EventColorService,
-    ClipboardService,
-    SharingService,
-    FileService,
-    UserService,
-    SideNavService,
-    ThemeService,
-    AppInfoService,
-    WindowService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? SentryErrorHandler : ErrorHandler},
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
