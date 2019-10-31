@@ -25,10 +25,7 @@ import {AgmCoreModule} from '@agm/core';
     SharedModule,
     MaterialModule,
     EventRoutingModule,
-    AgmCoreModule.forRoot({
-      apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-      apiVersion: 'weekly'
-    }),
+    AgmCoreModule
   ],
   exports: [
   ],
