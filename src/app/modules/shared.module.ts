@@ -21,6 +21,11 @@ import {WindowService} from '../services/app.window.service';
 import {FormsModule, ReactiveFormsModule} from '@angular/forms';
 import {PrivacyIconComponent} from '../components/privacy-icon/privacy-icon.component';
 import {EventActionsComponent} from '../components/event-actions/event.actions.component';
+import {ChartAbstract} from '../components/charts/chart.abstract';
+import {ChartsTimelineComponent} from '../components/charts/timeline/charts.timeline.component';
+import {ChartsPieComponent} from '../components/charts/pie/charts.pie.component';
+import {ChartsXYComponent} from '../components/charts/xy/charts.xy.component';
+import {EventCardChartComponent} from '../components/cards/event/chart/event.card.chart.component';
 
 
 @NgModule({
@@ -33,31 +38,22 @@ import {EventActionsComponent} from '../components/event-actions/event.actions.c
     ShadeComponent,
     PrivacyIconComponent,
     EventActionsComponent,
+    ChartsTimelineComponent,
+    ChartsPieComponent,
+    ChartsXYComponent,
+    EventCardChartComponent,
   ],
   providers: [
-    AppAuthService,
-    AppAuthGuard,
-    MapSettingsLocalStorageService,
-    ChartSettingsLocalStorageService,
-    UserSettingsService,
-    EventService,
-    ActionButtonService,
-    EventColorService,
-    ClipboardService,
-    SharingService,
-    FileService,
-    UserService,
-    SideNavService,
-    ThemeService,
-    AppInfoService,
-    WindowService,
-
   ],
 
   exports: [
     ShadeComponent,
     PrivacyIconComponent,
     EventActionsComponent,
+    ChartsTimelineComponent,
+    ChartsPieComponent,
+    ChartsXYComponent,
+    EventCardChartComponent,
     ReactiveFormsModule,
     FormsModule]
 

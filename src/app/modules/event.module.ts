@@ -1,4 +1,4 @@
-import { NgModule } from '@angular/core';
+import {NgModule} from '@angular/core';
 import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
@@ -17,6 +17,8 @@ import {EventCardChartActionsComponent} from '../components/cards/event/chart/ac
 import {EventCardDevicesComponent} from '../components/cards/event/devices/event.card.devices.component';
 import {ActivityHeaderComponent} from '../components/activity-header/activity-header.component';
 import {AgmCoreModule} from '@agm/core';
+import {MatPaginatorIntl} from '@angular/material/paginator';
+import {MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
 
 
 @NgModule({
@@ -28,17 +30,15 @@ import {AgmCoreModule} from '@agm/core';
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
       apiVersion: 'weekly'
-    }),
+    })
   ],
-  exports: [
-  ],
+  exports: [],
   declarations: [
     EventCardComponent,
     EventCardMapComponent,
     EventCardStatsComponent,
     EventCardLapsComponent,
     EventCardToolsComponent,
-    EventCardChartComponent,
     EventCardChartActionsComponent,
     EventCardDevicesComponent,
     ActivityIconComponent,
@@ -46,14 +46,13 @@ import {AgmCoreModule} from '@agm/core';
     ActivityActionsComponent,
     ActivityHeaderComponent,
     MapActionsComponent,
-
   ],
-  entryComponents: [
-  ],
+  entryComponents: [],
   providers: [
-  ]
+    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
+  ],
 })
 
 
-
-export class EventModule { }
+export class EventModule {
+}

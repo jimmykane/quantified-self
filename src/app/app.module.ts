@@ -2,55 +2,39 @@ import {ErrorHandler, Injectable, NgModule} from '@angular/core';
 import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
 import {AppRoutingModule} from './app-routing.module';
-import {UploadComponent} from './components/upload/upload.component';
-import {AgmCoreModule} from '@agm/core';
 import {HomeComponent} from './components/home/home.component';
-import {EventActionsComponent} from 'app/components/event-actions/event.actions.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
-import {EventCardLapsComponent} from './components/cards/event/laps/event.card.laps.component';
-import {MatPaginatorModule, MatPaginatorIntl} from '@angular/material/paginator';
 import 'hammerjs';
-import {EventCardComponent} from './components/cards/event/event.card.component';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
-import {EventTableComponent, MatPaginatorIntlFireStore} from './components/event-table/event.table.component';
-import {EventCardStatsComponent} from './components/cards/event/stats/event.card.stats.component';
-import {FormsModule, ReactiveFormsModule} from '@angular/forms';
-import {ActivityIconComponent} from './components/activity-icon/activity-icon.component';
-import {ActivitiesCheckboxesComponent} from './components/acitvities-checkboxes/activities-checkboxes.component';
-import {UploadInfoComponent} from './components/upload-info/upload-info.component';
-import {EventCardToolsComponent} from './components/cards/event/tools/event.card.tools.component';
-import {ActivityHeaderComponent} from './components/activity-header/activity-header.component';
 import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
 import {EventFormComponent} from './components/event-form/event.form.component';
-import {ActivityActionsComponent} from './components/activity-actions/activity.actions.component';
-import {MapActionsComponent} from './components/map-actions/map.actions.component';
-import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
-import {EventCardChartComponent} from './components/cards/event/chart/event.card.chart.component';
-import {UploadErrorComponent} from './components/upload-error/upload-error.component';
-import {ActivityMetadataComponent} from './components/activity-metadata/activity-metadata.component';
 import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 import {AngularFireModule} from '@angular/fire';
 import {AngularFirestoreModule} from '@angular/fire/firestore';
 import {AngularFireAuthModule} from '@angular/fire/auth';
 import {AngularFireStorageModule} from '@angular/fire/storage';
-import {EventSearchComponent} from './components/event-search/event-search.component';
-import {EventCardDevicesComponent} from './components/cards/event/devices/event.card.devices.component';
 import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
-import {HistoryImportFormComponent} from './components/history-import-form/history-import.form.component';
-import {ChartsPieComponent} from './components/charts/pie/charts.pie.component';
-import {SummariesComponent} from './components/summaries/summaries.component';
 import * as Sentry from '@sentry/browser';
-import {ChartActionsComponent} from './components/charts/actions/chart.actions.component';
-import {EventCardChartActionsComponent} from './components/cards/event/chart/actions/event.card.chart.actions.component';
-import {EventCardMapComponent} from './components/cards/event/map/event.card.map.component';
-import {EditInputComponent} from './components/edit-input/edit-input.component';
-import {EventsExportFormComponent} from './components/events-export-form/events-export.form.component';
 import {AngularFirePerformanceModule} from '@angular/fire/performance';
-import {ChartsTimelineComponent} from './components/charts/timeline/charts.timeline.component';
-import {ChartsXYComponent} from './components/charts/xy/charts.xy.component';
 import {MaterialModule} from './modules/material.module';
 import {SharedModule} from './modules/shared.module';
+import {AppAuthService} from './authentication/app.auth.service';
+import {AppAuthGuard} from './authentication/app.auth.guard';
+import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
+import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
+import {UserSettingsService} from './services/app.user.settings.service';
+import {EventService} from './services/app.event.service';
+import {ActionButtonService} from './services/action-buttons/app.action-button.service';
+import {EventColorService} from './services/color/app.event.color.service';
+import {ClipboardService} from './services/app.clipboard.service';
+import {SharingService} from './services/app.sharing.service';
+import {FileService} from './services/app.file.service';
+import {UserService} from './services/app.user.service';
+import {SideNavService} from './services/side-nav/side-nav.service';
+import {ThemeService} from './services/app.theme.service';
+import {AppInfoService} from './services/app.info.service';
+import {WindowService} from './services/app.window.service';
 
 declare function require(moduleName: string): any;
 
@@ -79,7 +63,6 @@ export class SentryErrorHandler implements ErrorHandler {
 
 @NgModule({
   imports: [
-    SharedModule,
     BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
@@ -105,9 +88,24 @@ export class SentryErrorHandler implements ErrorHandler {
     ActivityFormComponent,
   ],
   providers: [
+    AppAuthService,
+    AppAuthGuard,
+    MapSettingsLocalStorageService,
+    ChartSettingsLocalStorageService,
+    UserSettingsService,
+    EventService,
+    ActionButtonService,
+    EventColorService,
+    ClipboardService,
+    SharingService,
+    FileService,
+    UserService,
+    SideNavService,
+    ThemeService,
+    AppInfoService,
+    WindowService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: environment.production ? SentryErrorHandler : ErrorHandler},
-    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'}
   ],
   bootstrap: [AppComponent],

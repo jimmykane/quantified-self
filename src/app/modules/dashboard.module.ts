@@ -17,6 +17,7 @@ import {UploadErrorComponent} from '../components/upload-error/upload-error.comp
 import {ActivityMetadataComponent} from '../components/activity-metadata/activity-metadata.component';
 import {UploadComponent} from '../components/upload/upload.component';
 import {EventTableComponent} from '../components/event-table/event.table.component';
+import {ChartAbstract} from '../components/charts/chart.abstract';
 
 
 @NgModule({
@@ -32,9 +33,9 @@ import {EventTableComponent} from '../components/event-table/event.table.compone
     DashboardComponent,
     UploadComponent,
     UploadInfoComponent,
-    ChartsPieComponent,
-    ChartsXYComponent,
-    ChartsTimelineComponent,
+    // ChartsPieComponent,
+    // ChartsXYComponent,
+    // ChartsTimelineComponent,
     SummariesComponent,
     ChartActionsComponent,
     EventSearchComponent,
