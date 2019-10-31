@@ -9,9 +9,6 @@ import {
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import am4themes_patterns from '@amcharts/amcharts4/themes/patterns';
-import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-import * as am4core from '@amcharts/amcharts4/core';
 
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges {
   @Input() data: any;
