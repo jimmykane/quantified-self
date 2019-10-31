@@ -27,7 +27,7 @@ import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/u
 })
 export class ChartsXYComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() vertical = true;
-  @Input() type: 'columns' | 'lines';
+  @Input() type: 'columns' | 'lines' | 'pyramids';
 
   protected logger = Log.create('ChartColumnComponent');
 
@@ -101,9 +101,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     let series;
 
-    if (this.type === 'columns') {
-      series = this.vertical ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
-      series.columns.template.tension = this.vertical  ?  1 : 0;
+    if (this.type === 'columns' || this.type === 'pyramids') {
+      series = this.vertical && this.type === 'pyramids' ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
+      series.columns.template.tension = this.vertical && this.type === 'pyramids'  ?  1 : 0;
       series.columns.template.strokeOpacity = this.getStrokeOpacity();
       series.columns.template.strokeWidth = this.getStrokeWidth();
       series.columns.template.stroke = am4core.color('#175e84');
@@ -127,7 +127,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     } else {
       series = chart.series.push(new am4charts.LineSeries());
-      series.filters.push(this.getShadowFilter())
+      series.filters.push(this.getShadowFilter());
 
       series.stroke = chart.colors.getIndex(0);
       series.tension = 0.5;
