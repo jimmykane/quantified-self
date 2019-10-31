@@ -2,7 +2,7 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
-  Component,
+  Component, Injectable,
   Input,
   OnChanges,
   OnDestroy,
@@ -487,6 +487,7 @@ export interface EventRowElement {
   feeling?: Feelings,
 }
 
+@Injectable()
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
   itemsPerPageLabel = 'Items';
   nextPageLabel = 'Next';
