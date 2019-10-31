@@ -80,7 +80,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     categoryAxis.renderer.opposite = !this.vertical;
     categoryAxis.renderer.minGridDistance = this.vertical ? 1 : 1;
     categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
-      if (this.vertical && chart.data.length > 5 && target.dataItem && target.dataItem.index % 2) {
+      if (this.vertical && target.dataItem && target.dataItem.index % 2) {
         return dy + 20;
       }
       return dy;

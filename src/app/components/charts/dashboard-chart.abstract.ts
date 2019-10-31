@@ -80,6 +80,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
               'timeUnit': 'day',
               'count': 1
             };
+            // axis.dateFormats.setKey('day', 'dd/MM');
             break;
           case SummariesChartDataDateRages.Hourly:
             axis.baseInterval = {
