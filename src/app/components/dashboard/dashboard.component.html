@@ -8,7 +8,7 @@
                     (searchChange)="search($event)">
   </app-event-search>
 
-  <app-summaries  *ngIf="user && !this.authService.isCurrentUserAnonymous() && user.settings.dashboardSettings.showSummaries"
+  <app-summaries  *ngIf="user && user.settings.dashboardSettings.showSummaries"
                   [user]="user"
                   [userChartsSettings]="user.settings.dashboardSettings.chartsSettings"
                   [events]="events">
