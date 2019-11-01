@@ -21,12 +21,10 @@ import {PhoneFormComponent} from '../components/login/phone-form/phone.form.comp
   declarations: [
     LoginComponent,
     UserAgreementFormComponent,
-    DeleteConfirmationComponent,
     PhoneFormComponent,
   ],
   entryComponents: [
     UserAgreementFormComponent,
-    DeleteConfirmationComponent,
     PhoneFormComponent,
   ],
   providers: [

@@ -8,8 +8,8 @@ import {MatBottomSheetRef} from '@angular/material';
 export class DeleteConfirmationComponent {
   constructor(private _bottomSheetRef: MatBottomSheetRef<DeleteConfirmationComponent>) {}
 
-  shouldDelete(shouldDelete): void {
-    this._bottomSheetRef.dismiss(shouldDelete);
+  shouldDelete(shouldDelete, event): void {
     event.preventDefault();
+    this._bottomSheetRef.dismiss(shouldDelete);
   }
 }

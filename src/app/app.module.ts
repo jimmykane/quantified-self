@@ -35,6 +35,7 @@ import {SideNavService} from './services/side-nav/side-nav.service';
 import {ThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
 import {WindowService} from './services/app.window.service';
+import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
 
 declare function require(moduleName: string): any;
 
@@ -82,10 +83,12 @@ export class SentryErrorHandler implements ErrorHandler {
     HomeComponent,
     EventFormComponent,
     ActivityFormComponent,
+    DeleteConfirmationComponent,
   ],
   entryComponents: [
     EventFormComponent,
     ActivityFormComponent,
+    DeleteConfirmationComponent,
   ],
   providers: [
     AppAuthService,

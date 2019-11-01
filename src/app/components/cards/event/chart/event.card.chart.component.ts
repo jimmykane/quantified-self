@@ -41,9 +41,9 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {UserService} from '../../../../services/app.user.service';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
-const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
+const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 6;
 const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
-const GROUP_AFTER_X_HOURS = 4;
+const GROUP_AFTER_X_HOURS = 2;
 
 @Component({
   selector: 'app-event-card-chart',
@@ -727,6 +727,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
+    this.logger.info(`Stream data for ${stream.type} ${stream.data.length}`);
     let data = [];
     // this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
@@ -757,7 +758,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // If we do not need to strengthen the downsampling based on the FORCE_DOWNSAMPLE_AFTER_X_HOURS
     // then we just need to return the sampling rate the user has selected
     if (this.getActivityHours(activity) < FORCE_DOWNSAMPLE_AFTER_X_HOURS) {
-      return rate;
+      return 1;
     }
     // If the activity needs a bump on downsampling > FORCE_DOWNSAMPLE_AFTER_X_HOURS
     return rate * Math.ceil((this.getActivityHours(activity) / FORCE_DOWNSAMPLE_AFTER_X_HOURS)*DOWNSAMPLE_RATE_PER_X_HOURS_GREATER);

@@ -99,7 +99,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     });
     valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
       // console.log(target.dataItem.index);
-      return (target.dataItem.index === 2 && !this.vertical) ? 10 : 0;
+      return (target.dataItem.index === 2 && !this.vertical) ? 15 : 0;
     });
     // valueAxis.renderer.minLabelPosition = this.vertical ? 0 : 0.005;
     // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
