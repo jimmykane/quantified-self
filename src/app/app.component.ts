@@ -13,8 +13,15 @@ import {MatIconRegistry} from '@angular/material/icon';
 import {MatSidenav} from '@angular/material/sidenav';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Subscription} from 'rxjs';
-import {Router, RoutesRecognized} from '@angular/router';
-import {filter,  map} from 'rxjs/operators';
+import {
+  NavigationCancel,
+  NavigationEnd,
+  NavigationError,
+  NavigationStart,
+  Router, RouterEvent,
+  RoutesRecognized
+} from '@angular/router';
+import {filter, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
 import {DomSanitizer, Title} from '@angular/platform-browser';
@@ -27,6 +34,7 @@ import {slideInAnimation} from './animations/animations';
 import * as firebase from 'firebase/app'
 
 declare function require(moduleName: string): any;
+
 const {version: appVersion} = require('../../package.json');
 
 
@@ -34,7 +42,7 @@ const {version: appVersion} = require('../../package.json');
   selector: 'app-root',
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
-  animations: [ slideInAnimation]
+  animations: [slideInAnimation]
   // changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
@@ -47,6 +55,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private appVersionSubscription: Subscription;
   private userSubscription: Subscription;
   public user: User;
+  public loading: boolean;
 
   constructor(
     public authService: AppAuthService,
@@ -88,6 +97,25 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     firebase.analytics();
 
     this.sideNavService.setSidenav(this.sideNav);
+    this.router.events.subscribe((event: RouterEvent) => {
+      switch (true) {
+        case event instanceof RoutesRecognized:
+          this.title = (<RoutesRecognized>event).state.root.firstChild.data['title'];
+          this.titleService.setTitle(`${this.title} - Quantified Self`);
+          break;
+        case event instanceof NavigationStart:
+          this.loading = true;
+          break;
+        case event instanceof NavigationEnd:
+        case event instanceof NavigationCancel:
+        case event instanceof NavigationError:
+          this.loading = false;
+          break;
+        default: {
+          break;
+        }
+      }
+    });
     this.routerEventSubscription = this.router.events
       .pipe(filter(event => event instanceof RoutesRecognized))
       .pipe(map((event: RoutesRecognized) => {

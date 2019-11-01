@@ -27,6 +27,9 @@
 
   <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData
       && routerOutlet.activatedRouteData['animation']">
+    <mat-progress-bar
+      *ngIf="loading" color="primary" mode="indeterminate">
+    </mat-progress-bar>
     <router-outlet #routerOutlet="outlet"></router-outlet>
   </div>
 
