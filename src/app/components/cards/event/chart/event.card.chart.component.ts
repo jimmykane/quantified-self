@@ -41,7 +41,7 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {UserService} from '../../../../services/app.user.service';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
-const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 6;
+const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
 const GROUP_AFTER_X_HOURS = 2;
 
