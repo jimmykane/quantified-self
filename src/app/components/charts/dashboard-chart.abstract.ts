@@ -58,37 +58,31 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
         const axis = new am4charts.DateAxis();
+        let key;
         axis.skipEmptyPeriods = true;
         switch (this.chartDataDateRange) {
           case SummariesChartDataDateRages.Yearly:
-            axis.baseInterval = {
-              'timeUnit': 'year',
-              'count': 1
-            };
+            key = 'year';
             break;
           case SummariesChartDataDateRages.Monthly:
-            axis.baseInterval = {
-              'timeUnit': 'month',
-              'count': 1
-            };
+            key = 'month';
             break;
           case SummariesChartDataDateRages.Daily:
-            axis.baseInterval = {
-              'timeUnit': 'day',
-              'count': 1
-            };
-            // axis.dateFormats.setKey('day', 'dd/MM');
+            key = 'day';
             break;
           case SummariesChartDataDateRages.Hourly:
-            axis.baseInterval = {
-              'timeUnit': 'hour',
-              'count': 1
-            };
+            key = 'hour';
             break;
           default:
             throw new Error(`Not implemented`);
         }
-        axis.dateFormatter.dateFormat = this.getDateFormat(chartDateDateRange);
+        axis.baseInterval = {
+          'timeUnit': key,
+          'count': 1
+        };
+        axis.dateFormatter.dateFormat = this.getChartDateFormat(chartDateDateRange);
+        axis.dateFormats.setKey(key, this.getAxisDateFormat(chartDateDateRange));
+        axis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(chartDateDateRange));
         return axis;
       case ChartDataCategoryTypes.ActivityType:
         return super.getCategoryAxis(chartDataCategoryType);
@@ -97,7 +91,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     }
   }
 
-  protected getDateFormat(dateRange: SummariesChartDataDateRages) {
+  protected getChartDateFormat(dateRange: SummariesChartDataDateRages) {
     switch (dateRange) {
       case SummariesChartDataDateRages.Yearly:
         return 'yyyy';
@@ -107,6 +101,21 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
         return 'dd MMM yyyy';
       case SummariesChartDataDateRages.Hourly:
         return 'HH:mm dd MMM yyyy';
+      default:
+        throw new Error(`Not implemented`)
+    }
+  }
+
+  protected getAxisDateFormat(dateRange: SummariesChartDataDateRages) {
+    switch (dateRange) {
+      case SummariesChartDataDateRages.Yearly:
+        return 'yyyy';
+      case SummariesChartDataDateRages.Monthly:
+        return 'MMM';
+      case SummariesChartDataDateRages.Daily:
+        return 'dd';
+      case SummariesChartDataDateRages.Hourly:
+        return 'HH:mm';
       default:
         throw new Error(`Not implemented`)
     }
