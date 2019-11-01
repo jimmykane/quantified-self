@@ -856,9 +856,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.getSeriesRangeLabelContainer(series).disabled = false;
       this.getSeriesRangeLabelContainer(series).deepInvalidate();
     }
-    if (this.xAxisType === XAxisTypes.Distance){
-      series.chart.cursor.snapToSeries = series;
-    }
     if (save) {
       this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
     }
