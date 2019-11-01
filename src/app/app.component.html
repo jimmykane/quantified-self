@@ -5,9 +5,9 @@
   </mat-sidenav>
 
   <nav mat-tab-nav-bar>
-    <a matTabLink (click)="sidenav.toggle()">
-      <mat-icon class="larger_icon">menu</mat-icon>
-    </a>
+<!--    <a matTabLink (click)="sidenav.toggle()">-->
+<!--      <mat-icon class="larger_icon">menu</mat-icon>-->
+<!--    </a>-->
     <a matTabLink  [routerLink]="authService.authenticated() ? ['dashboard'] : ['login']">
       <mat-icon class="app-icon">{{authService.authenticated()? 'dashboard' : 'filter_hdr' }}</mat-icon>
     </a>
