@@ -97,6 +97,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
       return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
+    valueAxis.renderer.minLabelPosition = !this.vertical ?  0.005 : 0;
     valueAxis.min = 0;
 
     let series;
