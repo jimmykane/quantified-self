@@ -47,7 +47,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
-    chart.padding(0, 0, 0, 0);
+    chart.padding(0, 0, 0, 1);
     chart.paddingBottom = this.vertical ? 20 : 0;
     chart.fontSize = '1.1em';
 
@@ -97,7 +97,12 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
       return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
-    valueAxis.renderer.minLabelPosition = !this.vertical ?  0.005 : 0;
+    valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
+      // console.log(target.dataItem.index);
+      return (target.dataItem.index === 2 && !this.vertical) ? 10 : 0;
+    });
+    // valueAxis.renderer.minLabelPosition = this.vertical ? 0 : 0.005;
+    // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
     valueAxis.min = 0;
 
     let series;
