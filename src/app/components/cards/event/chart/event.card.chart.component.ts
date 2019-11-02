@@ -931,7 +931,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                   range.value = lap.endDate.getTime();
                 } else if (xAxisType === XAxisTypes.Duration) {
                   range.value = (new Date(0).getTimezoneOffset() * 60000) + +lap.endDate - +activity.startDate;
-                } else {
+                } else  if (xAxisType === XAxisTypes.Distance) {
                   const data = this.distanceAxesForActivitiesMap
                     .get(activity.getID())
                     .getStreamDataByTime(activity.startDate)
