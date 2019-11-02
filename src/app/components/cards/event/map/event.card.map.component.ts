@@ -15,12 +15,6 @@ import {EventColorService} from '../../../../services/color/app.event.color.serv
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
-import {
-  ControlPosition,
-  MapTypeControlOptions,
-  MapTypeControlStyle, MapTypeId, RotateControlOptions,
-  ZoomControlOptions
-} from '@agm/core/services/google-maps-types';
 import {Log} from 'ng2-logger/browser';
 import {EventService} from '../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
@@ -63,19 +57,19 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeControlOptions: MapTypeControlOptions = {
+  public mapTypeControlOptions = {
     // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
     mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
-    position: ControlPosition.LEFT_TOP,
-    style: MapTypeControlStyle.DEFAULT
+    position: 5,
+    style: 0
   };
 
-  public rotateControlOptions: RotateControlOptions = {
-    position: ControlPosition.LEFT_BOTTOM,
+  public rotateControlOptions = {
+    position: 6,
   };
 
-  public zoomControlOptions: ZoomControlOptions = {
-    position: ControlPosition.RIGHT_TOP
+  public zoomControlOptions = {
+    position: 7
   };
 
   private logger = Log.create('EventCardMapAGMComponent');
