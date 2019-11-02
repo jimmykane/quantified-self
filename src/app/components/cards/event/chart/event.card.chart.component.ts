@@ -931,12 +931,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                   range.value = lap.endDate.getTime();
                 } else if (xAxisType === XAxisTypes.Duration) {
                   range.value = (new Date(0).getTimezoneOffset() * 60000) + +lap.endDate - +activity.startDate;
-                } else  if (xAxisType === XAxisTypes.Distance) {
+                } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
                   const data = this.distanceAxesForActivitiesMap
                     .get(activity.getID())
                     .getStreamDataByTime(activity.startDate)
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   range.value = data[0].value
+                } else {
+                  return;
                 }
                 range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 1;
