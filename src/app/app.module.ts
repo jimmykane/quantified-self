@@ -36,6 +36,7 @@ import {ThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
 import {WindowService} from './services/app.window.service';
 import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
+import {AgmCoreModule} from '@agm/core';
 
 declare function require(moduleName: string): any;
 
@@ -76,6 +77,10 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFireAuthModule,
     AngularFirePerformanceModule,
     MaterialModule,
+    AgmCoreModule.forRoot({
+      apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
+      apiVersion: 'weekly'
+    })
   ],
   declarations: [
     AppComponent,
