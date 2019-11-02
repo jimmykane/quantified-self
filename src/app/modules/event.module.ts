@@ -27,7 +27,7 @@ import {MatPaginatorIntlFireStore} from '../components/event-table/event.table.c
     SharedModule,
     MaterialModule,
     EventRoutingModule,
-    // AgmCoreModule
+    AgmCoreModule
   ],
   exports: [],
   declarations: [
