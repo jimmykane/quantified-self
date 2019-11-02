@@ -1,5 +1,4 @@
 import { NgModule } from '@angular/core';
-import {MatExpansionModule} from '@angular/material/expansion';
 import {MatButtonModule} from '@angular/material/button';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatCardModule} from '@angular/material/card';
@@ -34,7 +33,6 @@ import {MatBottomSheetModule} from '@angular/material/bottom-sheet';
 @NgModule({
   imports: [],
   exports: [
-    MatExpansionModule,
     MatButtonModule,
     MatButtonToggleModule,
     MatCardModule,
