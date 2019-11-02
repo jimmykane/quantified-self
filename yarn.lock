@@ -7056,10 +7056,10 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.3.16:
-  version "3.3.16"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.3.16.tgz#37af0e47eb5f285364140289813fc0cf415d88cf"
-  integrity sha512-iQ7Q0GBrS2xbgjX/h/n9I82gEzM8ys/8P7x7mUJp34w3QUFGmlEOCFMA9SMph3JZmNrBzpjDuIeE7gP3Y2clqg==
+quantified-self-lib@^3.3.17:
+  version "3.3.17"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.3.17.tgz#189029bbd9cd26c9ec061bb5f8776e1eb29516cf"
+  integrity sha512-DkqmVnVvZsCBNFpvGJColiSXo/dvyc36AHdp4wvL8+Uzjm78peyiOSMwQYIGvMR21o0KTCNvgWo0JRs7AFX80g==
   dependencies:
     "@types/node" "^12.7.1"
     fast-xml-parser "^3.12.19"
