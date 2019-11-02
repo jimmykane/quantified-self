@@ -46,7 +46,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
 
     // chart.hiddenState.properties.opacity = 0;
-    // chart.padding(0, 0, 0, 0)
+    chart.padding(0, 20, 0, 15)
     chart.radius = am4core.percent(50);
     chart.innerRadius = am4core.percent(35);
 
@@ -81,7 +81,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       }
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/] [bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+        return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       } catch (e) {
         Sentry.captureException(e);
       }
