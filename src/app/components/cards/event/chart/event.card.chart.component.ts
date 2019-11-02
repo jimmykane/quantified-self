@@ -181,10 +181,17 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
 
+
+      // Move all this to ng changes
       if (this.showLaps) {
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
 
+      if (this.showGrid) {
+        this.addGrid()
+      } else {
+        this.removeGrid();
+      }
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
@@ -244,7 +251,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       xAxis.groupCount = 60 * 60 * GROUP_AFTER_X_HOURS;
     }
     xAxis.title.text = this.xAxisType;
-    xAxis.renderer.grid.template.disabled = this.showGrid === false;
+    // xAxis.renderer.grid.template.disabled = this.addGrid === false;
 
     xAxis.renderer.ticks.template.disabled = false;
     xAxis.renderer.ticks.template.strokeOpacity = 1;
@@ -514,7 +521,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // yAxis.renderer.minLabelPosition = -1;
     // yAxis.renderer.maxLabelPosition = -1;
     // yAxis.renderer.axisFills.template.disabled = true;
-    yAxis.renderer.grid.template.disabled = this.showGrid === false;
+    // yAxis.renderer.grid.template.disabled = true;
 
     // yAxis.renderer.ticks.template.disabled = false;
     // yAxis.renderer.ticks.template.strokeOpacity = 1;
@@ -762,7 +769,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return 1;
     }
     // If the activity needs a bump on downsampling > FORCE_DOWNSAMPLE_AFTER_X_HOURS
-    return rate * Math.ceil((this.getActivityHours(activity) / FORCE_DOWNSAMPLE_AFTER_X_HOURS)*DOWNSAMPLE_RATE_PER_X_HOURS_GREATER);
+    return rate * Math.ceil((this.getActivityHours(activity) / FORCE_DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_RATE_PER_X_HOURS_GREATER);
   }
 
   private getActivityHours(activity: ActivityInterface): number {
@@ -934,7 +941,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 1;
                 range.grid.strokeOpacity = 0.8;
-                range.grid.strokeDasharray =  '2,5';
+                range.grid.strokeDasharray = '2,5';
 
                 range.grid.above = true;
                 range.grid.zIndex = 1;
@@ -971,6 +978,16 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private removeLapGuides(chart: am4charts.XYChart) {
     chart.xAxes.getIndex(0).axisRanges.clear();
+  }
+
+  private removeGrid() {
+    this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+    this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
+  }
+
+  private addGrid() {
+    this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = false);
+    this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
   }
 }
 
