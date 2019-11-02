@@ -72,6 +72,7 @@
             [(xAxisType)]="chartXAxisType"
             [(showAllData)]="showAllData"
             [(showLaps)]="showChartLaps"
+            [(showGrid)]="showChartGrid"
             [(dataSmoothingLevel)]="dataSmoothingLevel"
             [user]="currentUser"
             align="end">
@@ -81,6 +82,7 @@
           *ngIf="currentUser !== undefined"
           [showAllData]="showAllData"
           [showLaps]="showChartLaps"
+          [showGrid]="showChartGrid"
           [lapTypes]="chartLapTypes"
           [xAxisType]="chartXAxisType"
           [isVisible]="tabIndex === 2"

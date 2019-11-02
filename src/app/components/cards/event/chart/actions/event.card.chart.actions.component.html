@@ -18,6 +18,18 @@
       [color]="'accent'"
       (change)="somethingChanged($event)"
       (click)="$event.stopPropagation();"
+      [(ngModel)]="showGrid">
+      <span matTooltip="Show grid on the chart">
+        Show grid
+      </span>
+    </mat-slide-toggle>
+  </section>
+
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="somethingChanged($event)"
+      (click)="$event.stopPropagation();"
       [(ngModel)]="showLaps">
       <span matTooltip="When enabled auto lap markers will be added to the chart">
         Show laps
@@ -38,8 +50,8 @@
   </section>
 
   <section mat-menu-item class="smoothing">
-    <mat-hint matTooltip="Down sampling to improve performance or get the best out of detail">
-      Down sampling: <b>{{formatLabel(dataSmoothingLevel)}}</b>
+    <mat-hint matTooltip="Down sampling is applied after 6h activity long">
+      Down sampling <b>{{formatLabel(dataSmoothingLevel)}}</b>
     </mat-hint>
     <mat-slider
       [max]="20"

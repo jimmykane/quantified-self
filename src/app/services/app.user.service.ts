@@ -333,6 +333,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : UserService.getDefaultChartFillOpacity();
     settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || UserService.getDefaultChartLapTypes();
     settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
+    settings.chartSettings.showGrid = settings.chartSettings.showGrid === true;
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

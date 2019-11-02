@@ -60,6 +60,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() isVisible: boolean;
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
+  @Input() showGrid: boolean;
   @Input() lapTypes: LapTypes[];
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
@@ -243,7 +244,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       xAxis.groupCount = 60 * 60 * GROUP_AFTER_X_HOURS;
     }
     xAxis.title.text = this.xAxisType;
-    xAxis.renderer.grid.template.disabled = true;
+    xAxis.renderer.grid.template.disabled = this.showGrid === false;
 
     xAxis.renderer.ticks.template.disabled = false;
     xAxis.renderer.ticks.template.strokeOpacity = 1;
@@ -513,7 +514,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // yAxis.renderer.minLabelPosition = -1;
     // yAxis.renderer.maxLabelPosition = -1;
     // yAxis.renderer.axisFills.template.disabled = true;
-    yAxis.renderer.grid.template.disabled = true;
+    yAxis.renderer.grid.template.disabled = this.showGrid === false;
 
     // yAxis.renderer.ticks.template.disabled = false;
     // yAxis.renderer.ticks.template.strokeOpacity = 1;
