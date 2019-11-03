@@ -1,5 +1,5 @@
 import {ChartAbstract} from './chart.abstract';
-import {Input, OnChanges} from '@angular/core';
+import {ChangeDetectorRef, Input, NgZone, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summaries/summaries.component';
 import {
@@ -9,6 +9,8 @@ import {
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import * as am4core from '@amcharts/amcharts4/core';
+
 
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges {
   @Input() data: any;
@@ -19,6 +21,11 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() filterLowValues: boolean;
   @Input() chartDataDateRange?: SummariesChartDataDateRages;
+
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+    super(zone, changeDetector);
+    // am4core.options.queue = true;
+  }
 
   ngOnChanges(simpleChanges) {
     // If theme changes destroy the chart

@@ -32,7 +32,6 @@ import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
-import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 import {
@@ -93,6 +92,11 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(changeDetector);
+    am4core.options.commercialLicense = true;
+    if (am4ChartsTimeLineLicence) {
+      am4core.addLicense(am4ChartsTimeLineLicence);
+    }
+    am4core.options.onlyShowOnViewport = true;
   }
 
   protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
@@ -105,10 +109,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
 
       // Create a chart
-      am4core.options.commercialLicense = true;
-      if (am4ChartsTimeLineLicence){
-        am4core.addLicense(am4ChartsTimeLineLicence);
-      }
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       chart.pixelPerfect = false;
