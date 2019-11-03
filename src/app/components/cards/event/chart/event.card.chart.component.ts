@@ -937,8 +937,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                     .getStreamDataByTime(activity.startDate)
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   range.value = data[0].value
-                } else {
-                  return;
                 }
                 range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 1;

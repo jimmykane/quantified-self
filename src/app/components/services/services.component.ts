@@ -139,7 +139,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', null, {
         duration: 5000,
       });
-      Sentry.captureException(e);
+      Sentry.captureException(e.message);
     } finally {
       this.isLoading = false;
     }
