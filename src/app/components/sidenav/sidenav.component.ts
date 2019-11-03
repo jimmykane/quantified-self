@@ -6,6 +6,8 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {SideNavService} from '../../services/side-nav/side-nav.service';
 import * as firebase from 'firebase/app';
+import Firestore = firebase.firestore.Firestore;
+import {AngularFirestore} from '@angular/fire/firestore';
 
 declare function require(moduleName: string): any;
 
@@ -23,7 +25,7 @@ export class SideNavComponent implements OnInit {
   public appVersion = appVersion;
   public analytics = firebase.analytics();
 
-  constructor(public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router, private eventService: EventService, private route: ActivatedRoute) {
+  constructor(public afs: AngularFirestore, public authService: AppAuthService, public sideNav: SideNavService, private snackBar: MatSnackBar, private router: Router, private eventService: EventService, private route: ActivatedRoute) {
   }
 
   ngOnInit() {
@@ -38,6 +40,8 @@ export class SideNavComponent implements OnInit {
     this.analytics.logEvent('logout', {});
     this.router.navigate(['/home']).then(async () => {
       await this.authService.signOut();
+      await this.afs.firestore.terminate();
+      await this.afs.firestore.clearPersistence();
       this.snackBar.open('Signed out', null, {
         duration: 2000,
       });
