@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "4.9.10-Matt",
+  "version": "4.9.11-Matt",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -20,7 +20,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.0.0",
-    "@amcharts/amcharts4": "4.7.6",
+    "@amcharts/amcharts4": "4.7.7",
     "@angular/animations": "8.2.13",
     "@angular/cdk": "^8.2.3",
     "@angular/common": "8.2.13",

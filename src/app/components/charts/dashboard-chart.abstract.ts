@@ -24,7 +24,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
-    am4core.options.onlyShowOnViewport = true;
+    // am4core.options.onlyShowOnViewport = true;
     // am4core.options.queue = true;
   }
 
