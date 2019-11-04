@@ -18,6 +18,18 @@
       [color]="'accent'"
       (change)="somethingChanged($event)"
       (click)="$event.stopPropagation();"
+      [(ngModel)]="stackYAxes">
+      <span matTooltip="Show charts on top of each other">
+        Stack Y Axes
+      </span>
+    </mat-slide-toggle>
+  </section>
+
+  <section mat-menu-item>
+    <mat-slide-toggle
+      [color]="'accent'"
+      (change)="somethingChanged($event)"
+      (click)="$event.stopPropagation();"
       [(ngModel)]="showGrid">
       <span matTooltip="Show grid on the chart">
         Show grid

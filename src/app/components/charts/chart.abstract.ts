@@ -74,6 +74,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
 
+
   protected chart: am4charts.PieChart | am4charts.XYChart;
   protected logger = Log.create('ChartAbstract');
   protected subscriptions: Subscription[] = [];
@@ -228,7 +229,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
 
   protected hideSeriesYAxis(series: am4charts.XYSeries) {
     series.yAxis.disabled = true;
-    // series.yAxis.renderer.grid.template.disabled = true;
   }
 
   protected showSeriesYAxis(series: am4charts.XYSeries) {

@@ -286,6 +286,15 @@
           <mat-hint><b>Tip:</b> laps can help in the data analysis</mat-hint>
         </section>
 
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="stackYAxes">
+            <span matTooltip="Stack Y axes?">Stack Y Axes</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> this will stack the charts on top of each other</mat-hint>
+        </section>
+
       </mat-card-content>
     </mat-card>
 

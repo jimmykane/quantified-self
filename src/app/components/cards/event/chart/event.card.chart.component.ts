@@ -66,6 +66,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() dataSmoothingLevel: number;
   @Input() waterMark: string;
   @Input() chartCursorBehaviour: ChartCursorBehaviours;
+  @Input() stackYAxes: boolean = false;
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -193,6 +194,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       } else {
         this.removeGrid();
       }
+
+      if (this.stackYAxes) {
+        this.setYAxesToStack();
+      } else {
+        this.unsetYAxesToStack();
+      }
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
@@ -220,6 +227,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Add scrollbar
     chart.scrollbarX = new am4core.Scrollbar();
+
 
     let xAxis;
     if (this.xAxisType === XAxisTypes.Distance) {
@@ -253,11 +261,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
     xAxis.title.text = this.xAxisType;
     // xAxis.renderer.grid.template.disabled = this.addGrid === false;
+    xAxis.renderer.line.strokeOpacity = 1;
 
     xAxis.renderer.ticks.template.disabled = false;
     xAxis.renderer.ticks.template.strokeOpacity = 1;
     xAxis.renderer.ticks.template.strokeWidth = 1;
     xAxis.renderer.ticks.template.length = 10;
+
+    // valueAxis.renderer.minLabelPosition = this.vertical ? 0 : 0.005;
+    // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
 
     xAxis.padding = 0;
     // xAxis.renderer.labels.template.fontSize = '1.2em';
@@ -505,6 +517,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(stream.type));
     if (!sameTypeSeries) {
       yAxis = this.chart.yAxes.push(this.getYAxisForSeries(stream.type));
+      if (this.stackYAxes) {
+        // yAxis.marginTop = 10;
+        // yAxis.marginBottom = 10;
+        yAxis.align = 'right';
+        yAxis.renderer.line.strokeOpacity = 1;
+      }
     } else {
       // Share
       yAxis = sameTypeSeries.yAxis;
@@ -514,7 +532,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // yAxis.interpolationDuration = 500;
     // yAxis.rangeChangeDuration = 500;
     yAxis.renderer.inside = false;
-    // yAxis.renderer.minLabelPosition = -1;
+
+    // yAxis.renderer.minLabelPosition = 0.005;
     // yAxis.renderer.maxLabelPosition = -1;
     // yAxis.renderer.axisFills.template.disabled = true;
     // yAxis.renderer.grid.template.disabled = true;
@@ -546,8 +565,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return 0;
     });
 
+
     // Set the axis
     series.yAxis = yAxis;
+
 
     // Setup the series
 
@@ -887,6 +908,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return `rangeLabelContainer${series.id}`;
   }
 
+  protected setYAxesToStack() {
+    this.chart.leftAxesContainer.layout = 'vertical';
+  }
+
+  protected unsetYAxesToStack() {
+    this.chart.leftAxesContainer.layout = 'horizontal';
+  }
+
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     selectedActivities
       .forEach((activity, activityIndex) => {
@@ -912,6 +941,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                     .getStreamDataByTime(activity.startDate)
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   range.value = data[0].value
+                }
+                if (!range.grid) {
+                  return;
                 }
                 range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 1;
@@ -967,6 +999,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
 
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
+    // Shown
     super.attachSeriesEventListeners(series);
     series.events.on('shown', async () => {
       if (this.getSeriesRangeLabelContainer(series)) {
@@ -977,14 +1010,26 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         (await this.userSettingsService.selectedDataTypes(this.event)).concat([series.id])
       );
       // Snap to the shown series
-      if (this.xAxisType === XAxisTypes.Distance){
+      if (this.xAxisType === XAxisTypes.Distance) {
         series.chart.cursor.snapToSeries = series;
       }
+      if (this.stackYAxes) {
+        series.yAxis.renderer.line.strokeOpacity = 1;
+      } else {
+        series.yAxis.renderer.line.strokeOpacity = 0.3
+      }
+      series.yAxis.renderer.minLabelPosition = 0.05;
+      series.yAxis.height = am4core.percent(100);
+      series.yAxis.align = 'right';
     });
+    // Hidden
     series.events.on('hidden', async () => {
       if (this.getSeriesRangeLabelContainer(series)) {
         this.getSeriesRangeLabelContainer(series).disabled = true;
       }
+      series.yAxis.height = 0;
+      // series.yAxis.disabled = true;
+      // series.yAxis.invalidate();
       this.userSettingsService.setSelectedDataTypes(
         this.event,
         (await this.userSettingsService.selectedDataTypes(this.event)).filter(dataType => dataType !== series.id));

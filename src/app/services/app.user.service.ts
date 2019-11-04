@@ -334,6 +334,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || UserService.getDefaultChartLapTypes();
     settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
     settings.chartSettings.showGrid = settings.chartSettings.showGrid === true;
+    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes === true;
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

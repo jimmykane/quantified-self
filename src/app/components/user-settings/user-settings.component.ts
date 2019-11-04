@@ -118,6 +118,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      stackYAxes: new FormControl(this.user.settings.chartSettings.stackYAxes, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       xAxisType: new FormControl(this.user.settings.chartSettings.xAxisType, [
         Validators.required,
         // Validators.minLength(1),
@@ -237,6 +242,7 @@ export class UserSettingsComponent implements OnChanges {
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
+        stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
       });
 
       await this.userService.updateUserProperties(this.user, {
