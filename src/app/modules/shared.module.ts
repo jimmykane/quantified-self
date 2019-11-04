@@ -26,12 +26,17 @@ import {ChartsTimelineComponent} from '../components/charts/timeline/charts.time
 import {ChartsPieComponent} from '../components/charts/pie/charts.pie.component';
 import {ChartsXYComponent} from '../components/charts/xy/charts.xy.component';
 import {EventCardChartComponent} from '../components/cards/event/chart/event.card.chart.component';
+import {EventFormComponent} from '../components/event-form/event.form.component';
+import {ActivityFormComponent} from '../components/activity-form/activity.form.component';
+import {DeleteConfirmationComponent} from '../components/delete-confirmation/delete-confirmation.component';
 
 
 @NgModule({
   imports: [
     CommonModule,
-    MaterialModule
+    MaterialModule,
+    ReactiveFormsModule,
+    FormsModule
   ],
 
   declarations: [
@@ -42,10 +47,16 @@ import {EventCardChartComponent} from '../components/cards/event/chart/event.car
     ChartsPieComponent,
     ChartsXYComponent,
     EventCardChartComponent,
+    EventFormComponent,
+    ActivityFormComponent,
+    DeleteConfirmationComponent,
   ],
-  providers: [
+  providers: [],
+  entryComponents: [
+    EventFormComponent,
+    ActivityFormComponent,
+    DeleteConfirmationComponent,
   ],
-
   exports: [
     ShadeComponent,
     PrivacyIconComponent,
@@ -54,6 +65,9 @@ import {EventCardChartComponent} from '../components/cards/event/chart/event.car
     ChartsPieComponent,
     ChartsXYComponent,
     EventCardChartComponent,
+    EventFormComponent,
+    ActivityFormComponent,
+    DeleteConfirmationComponent,
     ReactiveFormsModule,
     FormsModule]
 

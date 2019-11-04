@@ -86,14 +86,8 @@ export class SentryErrorHandler implements ErrorHandler {
     AppComponent,
     SideNavComponent,
     HomeComponent,
-    EventFormComponent,
-    ActivityFormComponent,
-    DeleteConfirmationComponent,
   ],
   entryComponents: [
-    EventFormComponent,
-    ActivityFormComponent,
-    DeleteConfirmationComponent,
   ],
   providers: [
     AppAuthService,
