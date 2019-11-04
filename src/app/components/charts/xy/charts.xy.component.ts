@@ -178,7 +178,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     }
 
     // @todo refactor
-    if (this.type === 'columns') {
+    if (this.type === 'columns' || this.type === 'pyramids') {
       categoryLabel.label.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
