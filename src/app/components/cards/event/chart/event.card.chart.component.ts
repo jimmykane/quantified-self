@@ -119,6 +119,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.showAllData
       || simpleChanges.showLaps
       || simpleChanges.lapTypes
+      || simpleChanges.showGrid
       || simpleChanges.userChartSettings
       || simpleChanges.dataSmoothingLevel
       || simpleChanges.xAxisType
@@ -975,7 +976,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.userSettingsService.setSelectedDataTypes(this.event,
         (await this.userSettingsService.selectedDataTypes(this.event)).concat([series.id])
       );
-      // Snap to the shown series 
+      // Snap to the shown series
       if (this.xAxisType === XAxisTypes.Distance){
         series.chart.cursor.snapToSeries = series;
       }
