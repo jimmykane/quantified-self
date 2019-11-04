@@ -277,10 +277,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     marker.strokeOpacity = 1;
     marker.stroke = am4core.color('#0a97ee');
 
-    // chart.legend.itemContainers.template.events.on('toggled', (ev) => {
-    //   const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-    //   Getting visible...
-    // });
+    chart.legend.itemContainers.template.events.on('toggled', (ev) => {
+      const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
+      // Getting visible...
+      if (!ev.target.readerChecked === true) {
+        this.showSeries(series, true)
+      } else {
+        this.hideSeries(series, true)
+      }
+    });
 
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
@@ -534,8 +539,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
 
-    this.attachSeriesEventListeners(series);
-
     this.chart.series.sort((left, right) => {
       if (left.name < right.name) {
         return -1;
@@ -616,10 +619,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Show an hide on condition
     if (selectedDataTypes && selectedDataTypes.length) {
       if (selectedDataTypes.indexOf(series.id) === -1) {
-        series.hidden = true;
+        this.hideSeries(series);
+      } else {
+        this.showSeries(series);
       }
     } else if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
-      series.hidden = true;
+      this.hideSeries(series);
     }
 
     // Attach events
@@ -845,6 +850,27 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
   }
 
+  protected hideSeries(series: am4charts.XYSeries, save?: boolean) {
+    super.hideSeries(series);
+    if (this.getSeriesRangeLabelContainer(series)) {
+      this.getSeriesRangeLabelContainer(series).disabled = true;
+    }
+    if (save) {
+      this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
+    }
+  }
+
+  protected showSeries(series: am4charts.XYSeries, save?: boolean) {
+    super.showSeries(series);
+    if (this.getSeriesRangeLabelContainer(series)) {
+      this.getSeriesRangeLabelContainer(series).disabled = false;
+      this.getSeriesRangeLabelContainer(series).deepInvalidate();
+    }
+    if (save) {
+      this.userSettingsService.setSelectedDataTypes(this.event, this.getVisibleSeries(series.chart).map(series => series.id));
+    }
+  }
+
   // @todo move to data class
   protected doesDataTypeSupportGainOrLoss(dataType: string): boolean {
     switch (dataType) {
@@ -963,32 +989,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private addGrid() {
     this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = false);
     this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
-  }
-
-
-  protected attachSeriesEventListeners(series: am4charts.XYSeries) {
-    super.attachSeriesEventListeners(series);
-    series.events.on('shown', async () => {
-      if (this.getSeriesRangeLabelContainer(series)) {
-        this.getSeriesRangeLabelContainer(series).disabled = false;
-        this.getSeriesRangeLabelContainer(series).deepInvalidate();
-      }
-      this.userSettingsService.setSelectedDataTypes(this.event,
-        (await this.userSettingsService.selectedDataTypes(this.event)).concat([series.id])
-      );
-      // Snap to the shown series
-      if (this.xAxisType === XAxisTypes.Distance){
-        series.chart.cursor.snapToSeries = series;
-      }
-    });
-    series.events.on('hidden', async () => {
-      if (this.getSeriesRangeLabelContainer(series)) {
-        this.getSeriesRangeLabelContainer(series).disabled = true;
-      }
-      this.userSettingsService.setSelectedDataTypes(
-        this.event,
-        (await this.userSettingsService.selectedDataTypes(this.event)).filter(dataType => dataType !== series.id));
-    });
   }
 }
 
