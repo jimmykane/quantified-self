@@ -185,7 +185,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     if (this.chart) {
       this.chart.series.clear();
       this.chart.colors.reset();
-      if (this.chart instanceof am4charts.XYChart){
+      if (this.chart instanceof am4charts.XYChart) {
         this.chart.xAxes.each(axis => axis.axisRanges.clear())
       }
     }
@@ -246,21 +246,31 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       .filter(series => !series.hidden);
   }
 
-  protected hideSeries(series: am4charts.XYSeries) {
-    // series.disabled = true;
-    series.hidden = true;
-    // series.hide();
-    if (!this.getVisibleSeriesWithSameYAxis(series).length) {
-      this.hideSeriesYAxis(series)
-    }
+  protected attachSeriesEventListeners(series: am4charts.XYSeries) {
+    series.events.on('shown', () => {
+      this.showSeriesYAxis(series);
+      // console.log(series.appeared);
+      // if (series.appeared) {
+        // valueAxis2.height = 0;
+        // valueAxis2.disabled = true;
+        // valueAxis.invalidate();
+      // }
+    });
+
+    series.events.on('hidden', () => {
+      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
+        this.hideSeriesYAxis(series)
+      }
+      // console.log(series.appeared);
+      // if (series.appeared) {
+        // valueAxis2.height = 0;
+        // valueAxis2.disabled = true;
+        // valueAxis.invalidate();
+      // }
+    })
   }
 
-  protected showSeries(series: am4charts.XYSeries) {
-    // series.disabled = false;
-    series.hidden = false;
-    // series.show();
-    this.showSeriesYAxis(series);
-  }
+
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
   protected getSeriesName(name: string) {
@@ -357,7 +367,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return 0.4;
   }
 
-  getShadowFilter(size: number = 1): am4core.DropShadowFilter{
+  getShadowFilter(size: number = 1): am4core.DropShadowFilter {
     const shadow = new am4core.DropShadowFilter();
     shadow.dx = size;
     shadow.dy = size;

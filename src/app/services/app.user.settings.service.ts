@@ -23,8 +23,8 @@ export class UserSettingsService {
     return defaultValue === 'true';
   }
 
-  public async selectedDataTypes(event: EventInterface): Promise<string[]|null> {
-    let defaultValue = null;
+  public async selectedDataTypes(event: EventInterface): Promise<string[]> {
+    let defaultValue = [];
     try {
       const stringValue = await this.chartSettingsLocalStorageService.getItem(`selectedDataTypes${event.getID()}`);
       defaultValue = stringValue !== 'null' ? stringValue.split(',') : defaultValue;
