@@ -96,7 +96,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     if (am4ChartsTimeLineLicence) {
       am4core.addLicense(am4ChartsTimeLineLicence);
     }
-    am4core.options.onlyShowOnViewport = true;
   }
 
   protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
