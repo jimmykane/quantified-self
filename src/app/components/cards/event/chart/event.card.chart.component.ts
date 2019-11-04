@@ -975,8 +975,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.userSettingsService.setSelectedDataTypes(this.event,
         (await this.userSettingsService.selectedDataTypes(this.event)).concat([series.id])
       );
-    });
-    series.events.on('visibilitychanged', () => {
+      // Snap to the shown series 
+      if (this.xAxisType === XAxisTypes.Distance){
+        series.chart.cursor.snapToSeries = series;
+      }
     });
     series.events.on('hidden', async () => {
       if (this.getSeriesRangeLabelContainer(series)) {
