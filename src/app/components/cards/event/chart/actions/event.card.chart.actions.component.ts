@@ -6,8 +6,6 @@ import {
   OnChanges,
   Output,
 } from '@angular/core';
-import {Router} from '@angular/router';
-import {EventService} from '../../../../../services/app.event.service';
 import {UserSettingsService} from '../../../../../services/app.user.settings.service';
 import {XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {User} from 'quantified-self-lib/lib/users/user';

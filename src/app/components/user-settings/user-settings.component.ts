@@ -27,6 +27,7 @@ import {
 import {UserDashboardSettingsInterface} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {MapThemes, MapTypes, UserMapSettingsInterface} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {LapTypesHelper} from 'quantified-self-lib/lib/laps/lap.types';
+import * as firebase from 'firebase/app';
 
 @Component({
   selector: 'app-user-settings',
@@ -282,6 +283,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
+      firebase.analytics().logEvent('user_settings_update');
     } catch (e) {
       this.logger.error(e);
       this.snackBar.open('Could not update user', null, {
