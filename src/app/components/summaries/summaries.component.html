@@ -8,8 +8,7 @@
                      [chartDataValueType]="chart.dataValueType"
                      [chartDataCategoryType]="chart.dataCategoryType"
                      [filterLowValues]="chart.filterLowValues"
-                     [chartDataDateRange]="chart.dataDateRange"
-                     [userChartSettings]="user.settings.chartSettings">
+                     [chartDataDateRange]="chart.dataDateRange">
       </app-pie-chart>
       <app-xy-chart
         *ngIf="
@@ -29,8 +28,7 @@
         [chartDataValueType]="chart.dataValueType"
         [chartDataCategoryType]="chart.dataCategoryType"
         [filterLowValues]="chart.filterLowValues"
-        [chartDataDateRange]="chart.dataDateRange"
-        [userChartSettings]="user.settings.chartSettings">
+        [chartDataDateRange]="chart.dataDateRange">
       </app-xy-chart>
       <app-timeline-chart
         *ngIf="chart.type === chartTypes.Spiral"
@@ -40,8 +38,7 @@
         [chartDataValueType]="chart.dataValueType"
         [chartDataCategoryType]="chart.dataCategoryType"
         [filterLowValues]="chart.filterLowValues"
-        [chartDataDateRange]="chart.dataDateRange"
-        [userChartSettings]="user.settings.chartSettings">
+        [chartDataDateRange]="chart.dataDateRange">
       </app-timeline-chart>
       <app-chart-actions [user]="user"
                          [chartType]="chart.type"

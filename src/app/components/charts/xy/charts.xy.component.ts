@@ -2,7 +2,6 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy, ChangeDetectorRef,
   Component,
-  ElementRef,
   Input,
   NgZone,
   OnChanges,
@@ -12,11 +11,9 @@ import {
 import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-// Chart Themes
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 
 
 @Component({

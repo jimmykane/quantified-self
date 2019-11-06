@@ -1,4 +1,4 @@
-import {Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
 import {EventColorService} from '../../../services/color/app.event.color.service';
@@ -45,6 +45,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartXAxisType = XAxisTypes.Duration;
   public mapLapTypes = UserService.getDefaultMapLapTypes();
   public chartLapTypes = UserService.getDefaultChartLapTypes();
+  public chartStrokeWidth: number = UserService.getDefaultChartStrokeWidth();
+  public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
+  public chartFillOpacity: number = UserService.getDefaultChartFillOpacity() ;
+  public chartDataTypesToUse: string[];
   public showMapLaps;
   public showMapArrows;
   public dataSmoothingLevel = 3.5;
@@ -107,6 +111,15 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.showMapArrows = user.settings.mapSettings.showArrows;
       this.mapLapTypes = user.settings.mapSettings.lapTypes;
       this.chartLapTypes = user.settings.chartSettings.lapTypes;
+      this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
+      this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
+      this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
+      this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+        if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
+          dataTypesToUse.push(dataTypeSettingsKey);
+        }
+        return dataTypesToUse;
+      }, []);
     });
 
     // Subscribe to the chartTheme changes

@@ -71,8 +71,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() waterMark: string;
   @Input() chartCursorBehaviour: ChartCursorBehaviours;
   @Input() stackYAxes = false;
-  @Input() userChartSettings: UserChartSettingsInterface;
-
+  @Input() strokeWidth: number;
+  @Input() strokeOpacity: number;
+  @Input() fillOpacity: number;
+  @Input() dataTypesToUse: string[];
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -128,7 +130,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.lapTypes
       || simpleChanges.showGrid
       || simpleChanges.stackYAxes
-      || simpleChanges.userChartSettings
+      || simpleChanges.strokeWidth
+      || simpleChanges.fillOpacity
+      || simpleChanges.dataTypesToUse
+      || simpleChanges.stackYAxes
       || simpleChanges.dataSmoothingLevel
       || simpleChanges.xAxisType
       || simpleChanges.chartTheme) {
@@ -631,15 +636,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.adapter.add('stroke', (fill, target) => {
       return this.getFillColor(target.chart, target.chart.series.indexOf(target));
     });
-    if (this.userChartSettings) {
-      series.strokeWidth = this.userChartSettings.strokeWidth;
-      series.strokeOpacity = this.userChartSettings.strokeOpacity;
-      series.fillOpacity = this.userChartSettings.fillOpacity;
-    } else {
-      series.strokeWidth = UserService.getDefaultChartStrokeWidth();
-      series.strokeOpacity = UserService.getDefaultChartStrokeOpacity();
-      series.fillOpacity = UserService.getDefaultChartFillOpacity();
-    }
+
+    series.strokeWidth = this.strokeWidth;
+    series.strokeOpacity = this.strokeOpacity;
+    series.fillOpacity = this.fillOpacity;
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
@@ -832,22 +832,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
    * There are no unit specific datatypes here so if the user has selected pace it implies metric
    */
   private getNonUnitBasedDataTypes(): string[] {
-    let dataTypes = DynamicDataLoader.basicDataTypes;
+    // let dataTypes = DynamicDataLoader.basicDataTypes;
     // Set the datatypes to show if all is selected
     if (this.showAllData) {
-      dataTypes = DynamicDataLoader.allDataTypes;
+      return DynamicDataLoader.allDataTypes;
     }
-    // If there is a change in the user chart settings and its valid update settings
-    if (this.userChartSettings && !this.showAllData) {
-      // Set the datatypes to use
-      dataTypes = Object.keys(this.userChartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
-        if (this.userChartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-          dataTypesToUse.push(dataTypeSettingsKey);
-        }
-        return dataTypesToUse;
-      }, []);
+    if (!this.dataTypesToUse) {
+      return DynamicDataLoader.basicDataTypes;
     }
-    return dataTypes;
+    return this.dataTypesToUse;
   }
 
   protected disposeRangeLabelsContainer(chart: am4charts.XYChart) {
@@ -1043,7 +1036,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.getSeriesRangeLabelContainer(series).disabled = true;
       }
       // @todo should check for same visibel might need -1
-      if (!this.getVisibleSeriesWithSameYAxis(series).length){
+      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
         series.yAxis.height = 0;
       }
       // series.yAxis.disabled = true;

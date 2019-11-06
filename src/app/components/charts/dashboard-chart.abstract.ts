@@ -9,20 +9,15 @@ import {
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import * as am4core from '@amcharts/amcharts4/core';
-import {UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 
 
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges {
   @Input() data: any;
-
-
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() filterLowValues: boolean;
   @Input() chartDataDateRange?: SummariesChartDataDateRages;
-  @Input() userChartSettings: UserChartSettingsInterface;
 
   protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
