@@ -600,7 +600,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Set the axis
     series.yAxis = yAxis;
 
-    yAxis.title.text = series.name;
+    yAxis.title.text = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '');
 
     // Setup the series
 
