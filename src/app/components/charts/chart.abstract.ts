@@ -71,8 +71,8 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
 
-  @Input() userChartSettings: UserChartSettingsInterface;
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() useAnimations: boolean;
 
 
   protected chart: am4charts.PieChart | am4charts.XYChart;
@@ -91,7 +91,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     'kelly': kelly,
   };
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(changeDetector);
     am4core.options.commercialLicense = true;
     if (am4ChartsTimeLineLicence) {
@@ -106,7 +106,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
     this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings(this.userChartSettings, this.chartTheme);
+      this.applyChartStylesFromUserSettings(this.chartTheme, this.useAnimations);
 
       // Create a chart
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
@@ -325,11 +325,11 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return name;
   }
 
-  protected applyChartStylesFromUserSettings(userChartSettings: UserChartSettingsInterface, chartTheme: ChartThemes) {
+  protected applyChartStylesFromUserSettings(chartTheme: ChartThemes, useAnimations: boolean) {
     this.zone.runOutsideAngular(() => {
       am4core.unuseAllThemes();
       am4core.useTheme(this.themes[chartTheme]);
-      if (userChartSettings && userChartSettings.useAnimations) {
+      if (useAnimations !== false) {
         am4core.useTheme(animated);
       }
     });

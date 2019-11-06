@@ -195,11 +195,4 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     return chart;
   }
-
-  protected applyChartStylesFromUserSettings(userChartSettings: UserChartSettingsInterface, chartTheme: ChartThemes) {
-    super.applyChartStylesFromUserSettings(userChartSettings, chartTheme);
-    this.zone.runOutsideAngular(() => {
-      // am4core.useTheme(patterns);
-    });
-  }
 }

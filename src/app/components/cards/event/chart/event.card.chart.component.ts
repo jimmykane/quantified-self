@@ -23,7 +23,11 @@ import {map, take} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
-import {ChartCursorBehaviours, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {
+  ChartCursorBehaviours,
+  UserChartSettingsInterface,
+  XAxisTypes
+} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {UserSettingsService} from '../../../../services/app.user.settings.service';
 import {ThemeService} from '../../../../services/app.theme.service';
@@ -67,6 +71,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() waterMark: string;
   @Input() chartCursorBehaviour: ChartCursorBehaviours;
   @Input() stackYAxes = false;
+  @Input() userChartSettings: UserChartSettingsInterface;
+
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -535,6 +541,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
       // categoryLabel.label.text = '123';
       yAxis.align = 'right';
+      yAxis.marginTop = 5;
     } else {
       yAxis.renderer.line.strokeOpacity = 0.9;
       yAxis.renderer.labels.template.marginLeft = 10;
