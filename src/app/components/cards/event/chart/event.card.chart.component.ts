@@ -44,6 +44,7 @@ import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {UserService} from '../../../../services/app.user.service';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+import {AppDataColors} from '../../../../services/color/app.data.colors';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
@@ -207,11 +208,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.removeGrid();
       }
 
-      if (this.stackYAxes) {
-        this.setYAxesToStack();
-      } else {
-        this.unsetYAxesToStack();
-      }
+
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
@@ -239,7 +236,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Add scrollbar
     chart.scrollbarX = new am4core.Scrollbar();
 
-
+    if (this.stackYAxes) {
+      this.setYAxesToStack(chart);
+    } else {
+      this.unsetYAxesToStack(chart);
+    }
     let xAxis;
     if (this.xAxisType === XAxisTypes.Distance) {
       xAxis = chart.xAxes.push(new am4charts.ValueAxis());
@@ -580,7 +581,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     yAxis.renderer.ticks.template.strokeOpacity = 1;
     yAxis.renderer.ticks.template.strokeWidth = 1;
     yAxis.renderer.ticks.template.length = 5;
-    yAxis.renderer.minGridDistance = 30;
+    yAxis.renderer.minGridDistance = 20;
 
 
     // @todo on the other axis the min grid distance
@@ -631,10 +632,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
 
     series.adapter.add('fill', (fill, target) => {
-      return this.getFillColor(target.chart, target.chart.series.indexOf(target));
+      return AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target));
     });
     series.adapter.add('stroke', (fill, target) => {
-      return this.getFillColor(target.chart, target.chart.series.indexOf(target));
+      return AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target));
     });
 
     series.strokeWidth = this.strokeWidth;
@@ -919,14 +920,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return `rangeLabelContainer${series.id}`;
   }
 
-  protected setYAxesToStack() {
-    this.chart.leftAxesContainer.layout = 'vertical';
-    this.chart.leftAxesContainer.reverseOrder = false;
+  protected setYAxesToStack(chart) {
+    chart.leftAxesContainer.layout = 'vertical';
+    chart.leftAxesContainer.reverseOrder = false;
   }
 
-  protected unsetYAxesToStack() {
-    this.chart.leftAxesContainer.layout = 'horizontal';
-    this.chart.leftAxesContainer.reverseOrder = true;
+  protected unsetYAxesToStack(chart) {
+    chart.leftAxesContainer.layout = 'horizontal';
+    chart.leftAxesContainer.reverseOrder = true;
   }
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
