@@ -43,7 +43,7 @@ import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
-const GROUP_AFTER_X_HOURS = 2;
+const GROUP_ON_X_HOURS = 1;
 
 @Component({
   selector: 'app-event-card-chart',
@@ -257,10 +257,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Create a date axis
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
       xAxis.groupData = true;
-      xAxis.groupCount = 60 * 60 * GROUP_AFTER_X_HOURS;
+      xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
     }
     xAxis.title.text = this.xAxisType;
-    xAxis.title.fontSize = '1.1em';
+    xAxis.title.fontSize = '1.0em';
     xAxis.title.fontWeight = '600';
     // xAxis.renderer.grid.template.disabled = this.addGrid === false;
     xAxis.renderer.line.strokeOpacity = 1;
@@ -485,7 +485,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     chart.events.on('maxsizechanged', (ev) => {
       this.logger.info('maxsizechanged');
-      // ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
+      ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
     });
 
     chart.events.on('visibilitychanged', (ev) => {
@@ -557,7 +557,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     yAxis.renderer.minLabelPosition = 0.05;
     yAxis.renderer.maxLabelPosition = 0.95;
-    yAxis.title.fontSize = '1.1em';
+    yAxis.title.fontSize = '1.0em';
     yAxis.title.fontWeight = '600';
     // yAxis.renderer.minLabelPosition = 0.005;
     // yAxis.renderer.maxLabelPosition = -1;
@@ -779,7 +779,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       });
     } else {
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
-      data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
+      // filter if needed (this operation costs)
+      if (this.getStreamSamplingRateInSeconds(activity) !== 1) {
+        data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
+      }
     }
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
