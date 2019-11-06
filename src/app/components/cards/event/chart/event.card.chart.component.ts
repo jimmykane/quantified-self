@@ -632,10 +632,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event, activity)).toString()}]${activity.creator.name}[/]`;
 
     series.adapter.add('fill', (fill, target) => {
-      return AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target));
+      return this.selectedActivities.length === 1 ?
+        AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target))
+        : this.getFillColor(target.chart, target.chart.series.indexOf(target));
     });
     series.adapter.add('stroke', (fill, target) => {
-      return AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target));
+      return this.selectedActivities.length === 1 ?
+        AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target))
+        : this.getFillColor(target.chart, target.chart.series.indexOf(target));
     });
 
     series.strokeWidth = this.strokeWidth;

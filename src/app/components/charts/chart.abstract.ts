@@ -11,7 +11,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import {Log} from 'ng2-logger/browser';
 import {Subscription} from 'rxjs';
 import {DataPaceMinutesPerMile, DataPace} from 'quantified-self-lib/lib/data/data.pace';
-import {ChartThemes, UserChartSettingsInterface} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {ChartThemes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 
 
 // Chart Themes
