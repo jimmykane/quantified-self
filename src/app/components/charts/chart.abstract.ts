@@ -67,6 +67,7 @@ try {
   // Noope
 }
 
+// @todo should dectate to implement on screen change
 export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;

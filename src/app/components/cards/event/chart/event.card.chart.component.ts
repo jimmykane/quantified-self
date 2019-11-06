@@ -48,7 +48,7 @@ import {AppDataColors} from '../../../../services/color/app.data.colors';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
-const GROUP_ON_X_HOURS = 1;
+const GROUP_ON_X_HOURS = 1.5; // This should depend on screen size
 
 @Component({
   selector: 'app-event-card-chart',
