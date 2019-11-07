@@ -41,7 +41,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showAllData: boolean;
   public showChartLaps: boolean;
   public showChartGrid: boolean;
-  public stackChartYAxes: boolean;
+  public stackChartYAxes = true;
   public chartXAxisType = XAxisTypes.Duration;
   public mapLapTypes = UserService.getDefaultMapLapTypes();
   public chartLapTypes = UserService.getDefaultChartLapTypes();
