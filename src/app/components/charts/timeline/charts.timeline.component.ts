@@ -46,9 +46,9 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     chart.endAngle = -85;
     chart.yAxisInnerRadius = am4core.percent(10);
     chart.yAxisRadius = am4core.percent(100);
-    chart.innerRadius = am4core.percent(45);
-    chart.paddingTop = 0;
-    chart.paddingBottom = 0;
+    chart.innerRadius = am4core.percent(40);
+    chart.paddingTop = -15;
+    chart.paddingBottom = -60;
 
 
     const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
@@ -60,7 +60,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       chart.dateFormatter.dateFormat = categoryAxis.dateFormatter.dateFormat;
     }
     categoryAxis.renderer.grid.template.disabled = true;
-    categoryAxis.renderer.minGridDistance = 1;
+    categoryAxis.renderer.minGridDistance = 5;
     categoryAxis.cursorTooltipEnabled = false;
 
 
@@ -79,10 +79,10 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
         chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
       }
       if (!chartDataItem) {
-        return `[bold font-size: 1.0em]${text}[/]`;
+        return `[bold font-size: 0.8em]${text}[/]`;
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem.value);
-      return `[bold font-size: 1.0em]${text} ${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`;
+      return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`;
     });
 
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
@@ -131,7 +131,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       return `${'{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
-    series.columns.template.filters.push(this.getShadowFilter())
+    series.columns.template.filters.push(this.getShadowFilter());
 
 
     const label = series.createChild(am4core.Label);
