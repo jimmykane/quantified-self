@@ -10,7 +10,6 @@
 
   <app-summaries  *ngIf="user && user.settings.dashboardSettings.showSummaries"
                   [user]="user"
-                  [userChartsSettings]="user.settings.dashboardSettings.chartsSettings"
                   [events]="events">
   </app-summaries>
 

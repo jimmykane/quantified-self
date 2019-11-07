@@ -42,7 +42,6 @@ import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
-import {UserService} from '../../../../services/app.user.service';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {AppDataColors} from '../../../../services/color/app.data.colors';
 

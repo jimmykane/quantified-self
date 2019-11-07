@@ -385,8 +385,8 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   }
 
   ngOnDestroy() {
-    this.destroyChart();
     this.unSubscribeFromAll();
+    this.destroyChart();
   }
 
 }

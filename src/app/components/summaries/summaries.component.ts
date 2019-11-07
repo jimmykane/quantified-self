@@ -30,6 +30,7 @@ import {
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {MatDialog} from '@angular/material/dialog';
 import {LoadingAbstract} from '../loading/loading.abstract';
+import * as equal from 'fast-deep-equal';
 
 @Component({
   selector: 'app-summaries',
@@ -41,7 +42,6 @@ import {LoadingAbstract} from '../loading/loading.abstract';
 export class SummariesComponent extends LoadingAbstract implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
-  @Input() userChartsSettings: UserDashboardChartSettingsInterface[];
 
   public rowHeight;
   public numberOfCols;
@@ -79,7 +79,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    if (simpleChanges.events || simpleChanges.userChartsSettings) {
+    if (simpleChanges.events || simpleChanges.user) {
       this.loading();
       this.subscribeToAll();
     }
@@ -94,7 +94,36 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     if (this.events) {
       this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
     }
-    this.charts = this.getChartsAndData(this.userChartsSettings, this.events);
+
+    const newCharts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
+    // if there are no current charts get and asign and get done
+    if (!this.charts.length && newCharts.length) {
+      this.charts = newCharts;
+      this.loaded();
+      return;
+    }
+
+
+    // Here we need to update:
+    // 1. Go over the new ones
+    // 2. If there is a current one and differs update it
+    // 3. If not leave it alone so no change detection is triggered to the children
+    newCharts.forEach(newChart => {
+      // Find one with the same order
+      const sameOrderChart = this.charts.find(chart => chart.order === newChart.order);
+      // If none of the same order then its new so only push
+      if (!sameOrderChart) {
+        this.charts.push(newChart);
+        return;
+      }
+      // If we found one with the same order then compare for changes
+      // if its equal then noop / no equal replace the current index
+      if (!equal(sameOrderChart, newChart)) {
+        this.charts[this.charts.findIndex(chart => chart === sameOrderChart)] = newChart;
+      }
+    });
+    // Here we need to remove non existing ones
+    this.charts = this.charts.filter(chart => newCharts.find(newChart=> newChart.order === chart.order));
     this.loaded();
   }
 
@@ -217,7 +246,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
         valueByCategory.set(type, {value: item.value / item.count, count: item.count});
       });
     }
-
     return this.convertToCategories(valueByCategory);
   }
 
@@ -253,7 +281,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   /**
-   * Does nothing rather to convert a map to an obj pretty much and sorts them
+   * Does nothing rather to convert a map to an obj
    * sorry
    * @todo remove/simplify
    * @param valueByType

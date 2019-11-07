@@ -52,7 +52,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
       return;
     }
 
-    this.data = this.data.sort(this.sortData(this.chartDataCategoryType));
+    this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType));
     if (this.filterLowValues) {
       this.data = this.filterOutLowValues(this.data)
     }
