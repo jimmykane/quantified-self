@@ -82,7 +82,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
         return `[bold font-size: 0.8em]${text}[/]`;
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem.value);
-      return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`;
+      return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
     });
 
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
