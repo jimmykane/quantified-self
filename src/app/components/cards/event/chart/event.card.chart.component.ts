@@ -194,19 +194,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-
-
-      // Move all this to ng changes
-      if (this.showLaps) {
-        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
-      }
-
+      // @todo
       if (this.showGrid) {
         this.addGrid()
       } else {
         this.removeGrid();
       }
-
+      if (this.showLaps) {
+        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+      }
 
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
@@ -934,6 +930,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
+    const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
+    xAxis.renderer.grid.template.disabled = false;
     selectedActivities
       .forEach((activity, activityIndex) => {
         // Filter on lapTypes
@@ -946,7 +944,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 if (lapIndex === activity.getLaps().length - 1) {
                   return;
                 }
-                const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
                 const range = xAxis.axisRanges.create();
                 if (xAxisType === XAxisTypes.Time) {
                   range.value = lap.endDate.getTime();
@@ -993,7 +990,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 range.label.valign = 'bottom';
                 range.label.textAlign = 'middle';
                 range.label.dy = 6;
-
                 // range.grid.filters.push(this.getShadowFilter())
               })
           });
