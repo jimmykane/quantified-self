@@ -46,7 +46,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     chart.endAngle = -85;
     chart.yAxisInnerRadius = am4core.percent(10);
     chart.yAxisRadius = am4core.percent(100);
-    chart.innerRadius = am4core.percent(40);
+    chart.innerRadius = am4core.percent(45);
     chart.paddingTop = -15;
     chart.paddingBottom = -60;
 
@@ -136,6 +136,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
     const label = series.createChild(am4core.Label);
     label.horizontalCenter = 'middle';
+    label.paddingLeft = 20;
     label.verticalCenter = 'middle';
     label.adapter.add('text', (text, target, key) => {
       const data = this.getAggregateData((<am4charts.Series>target.parent).chart.data, this.chartDataValueType);

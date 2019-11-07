@@ -1023,9 +1023,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         (await this.userSettingsService.selectedDataTypes(this.event)).concat([series.id])
       );
       // Snap to the shown series
-      if (this.xAxisType === XAxisTypes.Distance) {
-        series.chart.cursor.snapToSeries = series;
-      }
+      // if (this.xAxisType === XAxisTypes.Distance) {
+      //   series.chart.cursor.snapToSeries = series;
+      // }
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
 
