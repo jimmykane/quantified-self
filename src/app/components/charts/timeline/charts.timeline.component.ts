@@ -48,7 +48,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     chart.yAxisRadius = am4core.percent(100);
     chart.innerRadius = am4core.percent(45);
     chart.paddingTop = -15;
-    chart.paddingBottom = -60;
+    chart.paddingBottom = -55;
 
     const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     // categoryAxis.dataFields.category = 'time';
