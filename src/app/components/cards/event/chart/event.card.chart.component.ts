@@ -1017,24 +1017,35 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
     // Shown
     super.attachSeriesEventListeners(series);
-    series.events.on('shown', async () => {
+    // series.events.on('visibilitychanged', () => {
+    //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
+    // });
+    series.events.on('shown', () => {
+      if (series.appeared) {
+        series.hidden = false;
+      }
+      // console.log(series.name + ' shown stat: ' + series.hidden )
       if (this.getSeriesRangeLabelContainer(series)) {
         this.getSeriesRangeLabelContainer(series).disabled = false;
         this.getSeriesRangeLabelContainer(series).deepInvalidate();
       }
-      this.userSettingsService.setSelectedDataTypes(this.event,
-        (await this.userSettingsService.selectedDataTypes(this.event)).concat([series.id])
-      );
+
       // Snap to the shown series
       // if (this.xAxisType === XAxisTypes.Distance) {
       //   series.chart.cursor.snapToSeries = series;
       // }
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
-
+      this.userSettingsService.selectedDataTypes(this.event).then((selectedDataTypes) => {
+        this.userSettingsService.setSelectedDataTypes(this.event, selectedDataTypes.concat([series.id]));
+      });
     });
     // Hidden
-    series.events.on('hidden', async () => {
+    series.events.on('hidden', () => {
+      if (series.appeared){
+        series.hidden = true;
+      }
+      // console.log(series.name + ' hidden state: ' + series.visible)
       if (this.getSeriesRangeLabelContainer(series)) {
         this.getSeriesRangeLabelContainer(series).disabled = true;
       }
@@ -1044,9 +1055,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
       // series.yAxis.disabled = true;
       series.yAxis.invalidate();
-      this.userSettingsService.setSelectedDataTypes(
-        this.event,
-        (await this.userSettingsService.selectedDataTypes(this.event)).filter(dataType => dataType !== series.id));
+      this.userSettingsService.selectedDataTypes(this.event).then((selectedDataTypes) => {
+        this.userSettingsService.setSelectedDataTypes(this.event, selectedDataTypes.filter(dataType => dataType !== series.id))
+      });
     });
   }
 }
