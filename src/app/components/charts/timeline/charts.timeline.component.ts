@@ -50,7 +50,6 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     chart.paddingTop = -15;
     chart.paddingBottom = -60;
 
-
     const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     // categoryAxis.dataFields.category = 'time';
     if (categoryAxis instanceof am4charts.CategoryAxis) {

@@ -307,7 +307,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
-    chart.cursor.interactions.hitOptions.hitTolerance = 1;
+    chart.cursor.interactions.hitOptions.hitTolerance = 50;
 
     chart.cursor.behavior = this.chartCursorBehaviour;
     chart.cursor.zIndex = 10;
@@ -318,6 +318,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
+      // console.log('selectended')
       this.disposeRangeLabelsContainer(ev.target.chart);
       this.disposeClearSelectionButton(ev.target.chart);
       this.addClearSelectionButton(ev.target.chart);
@@ -376,7 +377,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         }
 
         // Here we have all the data we need
-
         const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
         const labelData = <LabelData>{
           name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
@@ -786,10 +786,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       });
     } else {
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
-      // filter if needed (this operation costs)
-      if (this.getStreamSamplingRateInSeconds(activity) !== 1) {
-        data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
-      }
+    }
+
+    // Remove nulls
+    data =  data.filter((streamData) => streamData.value !== null);
+    // filter if needed (this operation costs)
+    if (this.getStreamSamplingRateInSeconds(activity) !== 1) {
+      data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
     }
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
