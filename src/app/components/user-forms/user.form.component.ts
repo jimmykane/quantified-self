@@ -9,6 +9,7 @@ import {UserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import * as firebase from 'firebase/app';
+import {AngularFirestore} from '@angular/fire/firestore';
 
 
 @Component({
@@ -35,6 +36,7 @@ export class UserFormComponent implements OnInit {
   public userFormGroup: FormGroup;
 
   constructor(
+    public afs: AngularFirestore,
     public dialogRef: MatDialogRef<UserFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     private userService: UserService,
@@ -123,6 +125,8 @@ export class UserFormComponent implements OnInit {
       await this.userService.deleteAllUserData(this.user);
       firebase.analytics().logEvent('user_delete', {});
       await this.authService.signOut();
+      await this.afs.firestore.terminate();
+      await this.afs.firestore.clearPersistence();
       await this.router.navigate(['home']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {
         duration: 5000,
