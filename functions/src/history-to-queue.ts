@@ -170,7 +170,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
         continue; // Unnecessary but clear to the user that it will continue
       }
     }
-    console.log(`${processedBatchesCount} out of ${batchesToProcess.length +1} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
   }
 
   console.log(`${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${decodedIdToken.uid}`);
