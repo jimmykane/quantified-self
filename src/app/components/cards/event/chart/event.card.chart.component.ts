@@ -47,8 +47,7 @@ import {AppDataColors} from '../../../../services/color/app.data.colors';
 import {WindowService} from '../../../../services/app.window.service';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
-const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
-const GROUP_ON_X_HOURS = 1; // This should depend on screen size
+const DOWNSAMPLE_FACTOR_PER_HOUR = 1;
 
 @Component({
   selector: 'app-event-card-chart',
@@ -87,6 +86,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventCardChartComponent');
 
+  @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
   resizeOROrientationChange(event?) {
     this.viewHeight = this.getViewHeight();
@@ -273,7 +273,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Create a date axis
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
       xAxis.groupData = true;
-      xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
+      // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
+      xAxis.groupCount = this.windowService.windowRef.screen.availWidth;
     }
     xAxis.title.text = this.xAxisType;
     xAxis.title.fontSize = '1.0em';
@@ -817,7 +818,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return 1;
     }
     // If the activity needs a bump on downsampling > FORCE_DOWNSAMPLE_AFTER_X_HOURS
-    return rate * Math.ceil((this.getActivityHours(activity) / FORCE_DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_RATE_PER_X_HOURS_GREATER);
+    return rate * Math.ceil((this.getActivityHours(activity) / FORCE_DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_FACTOR_PER_HOUR);
   }
 
   private getActivityHours(activity: ActivityInterface): number {
