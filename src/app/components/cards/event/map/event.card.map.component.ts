@@ -22,7 +22,6 @@ import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-
 import {Subscription} from 'rxjs';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
-import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../../services/app.user.service';
@@ -351,8 +350,8 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     }
   }
 
-  getStyles(appTheme: MapThemes) {
-    return mapStyles[appTheme]
+  getStyles(mapTheme: MapThemes) {
+    return mapStyles[mapTheme]
   }
 
   // lineClick(event: PolyMouseEvent, points: PointInterface[]) {

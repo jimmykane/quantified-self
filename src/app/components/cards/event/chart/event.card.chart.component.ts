@@ -2,7 +2,7 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
-  Component,
+  Component, HostListener,
   Input,
   NgZone,
   OnChanges,
@@ -79,11 +79,17 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
   public isLoading: boolean;
+  public viewHeight: any;
+
 
   private streamsSubscription: Subscription;
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventCardChartComponent');
 
+  @HostListener('window:orientationchange', ['$event'])
+  resizeOROrientationChange(event?) {
+    this.viewHeight = this.getViewHeight();
+  }
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
@@ -92,6 +98,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               private themeService: ThemeService,
               private eventColorService: EventColorService) {
     super(zone, changeDetector);
+    this.viewHeight = this.getViewHeight();
   }
 
   async ngAfterViewInit() {
@@ -1059,6 +1066,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.userSettingsService.setSelectedDataTypes(this.event, selectedDataTypes.filter(dataType => dataType !== series.id))
       });
     });
+  }
+
+  private getViewHeight() {
+    const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
+    return (angle === 90 || angle === -90) ? '100vw' : '100vh';
   }
 }
 
