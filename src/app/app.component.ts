@@ -32,6 +32,7 @@ import {environment} from '../environments/environment';
 import {slideInAnimation} from './animations/animations';
 
 import * as firebase from 'firebase/app'
+import {WindowService} from './services/app.window.service';
 
 declare function require(moduleName: string): any;
 
@@ -68,6 +69,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public themeService: ThemeService,
     public appInfoService: AppInfoService,
     private titleService: Title,
+    private windowService: WindowService,
     private snackBar: MatSnackBar) {
 
     this.matIconRegistry.addSvgIcon(
@@ -168,7 +170,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private showUpdateAppVersionSnackMessage(version) {
     const snackBarRef = this.snackBar.open(`New version found!`, 'Reload', {duration: 5000});
     snackBarRef.onAction().subscribe(() => {
-      window.location.reload(true);
+      this.windowService.windowRef.location.reload(true);
     });
   }
 

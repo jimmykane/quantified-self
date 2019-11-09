@@ -10,6 +10,7 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import * as firebase from 'firebase/app';
 import {AngularFirestore} from '@angular/fire/firestore';
+import {WindowService} from '../../services/app.window.service';
 
 
 @Component({
@@ -43,6 +44,7 @@ export class UserFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
+    private windowService: WindowService,
   ) {
     this.user = data.user; // Perhaps move to service?
     if (!this.user) {
@@ -125,13 +127,12 @@ export class UserFormComponent implements OnInit {
       await this.userService.deleteAllUserData(this.user);
       firebase.analytics().logEvent('user_delete', {});
       await this.authService.signOut();
-      await this.afs.firestore.terminate();
-      await this.afs.firestore.clearPersistence();
       await this.router.navigate(['home']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {
         duration: 5000,
       });
-      this.dialogRef.close();
+      this.dialogRef.close(); // Not sure if needed
+      this.windowService.windowRef.location.reload();
     } catch (e) {
       Sentry.captureException(e);
       this.errorDeleting = e;

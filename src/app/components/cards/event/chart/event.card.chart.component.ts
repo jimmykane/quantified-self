@@ -44,6 +44,7 @@ import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {AppDataColors} from '../../../../services/color/app.data.colors';
+import {WindowService} from '../../../../services/app.window.service';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_RATE_PER_X_HOURS_GREATER = 1;
@@ -93,6 +94,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
+              private windowService: WindowService,
               private eventService: EventService,
               private userSettingsService: UserSettingsService,
               private themeService: ThemeService,
@@ -1069,7 +1071,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getViewHeight() {
-    const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
+    const angle =
+      (this.windowService.windowRef.screen
+      && this.windowService.windowRef.screen.orientation
+      && this.windowService.windowRef.screen.orientation.angle)
+      || this.windowService.windowRef.orientation
+      || 0;
     return (angle === 90 || angle === -90) ? '100vw' : '100vh';
   }
 }

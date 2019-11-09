@@ -10,6 +10,7 @@ import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../services/app.user.service';
+import {WindowService} from '../services/app.window.service';
 
 @Injectable()
 export class AppAuthService implements OnDestroy {
@@ -22,6 +23,7 @@ export class AppAuthService implements OnDestroy {
     private afs: AngularFirestore,
     private userService: UserService,
     private snackBar: MatSnackBar,
+    private windowService: WindowService,
   ) {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
@@ -123,7 +125,9 @@ export class AppAuthService implements OnDestroy {
   }
 
   async signOut(): Promise<void> {
-    return this.afAuth.auth.signOut();
+    await this.afAuth.auth.signOut();
+    await this.afs.firestore.terminate();
+    return this.afs.firestore.clearPersistence();
   }
 
   private async getOrInsertUser(user: User) {
