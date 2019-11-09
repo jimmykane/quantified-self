@@ -1052,7 +1052,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
     // Hidden
     series.events.on('hidden', () => {
-      if (series.appeared){
+      if (series.appeared) {
         series.hidden = true;
       }
       if (!this.getVisibleSeriesWithSameYAxis(series).length) {
@@ -1077,12 +1077,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private getViewHeight() {
     const angle =
       (this.windowService.windowRef.screen
-      && this.windowService.windowRef.screen.orientation
-      && this.windowService.windowRef.screen.orientation.angle)
+        && this.windowService.windowRef.screen.orientation
+        && this.windowService.windowRef.screen.orientation.angle)
       || this.windowService.windowRef.orientation
       || 0;
     return (angle === 90 || angle === -90) ? '100vh' : '100vh';
   }
+
   //
   // private setViewHeight(chart: am4charts.XYChart) {
   //   // this.viewHeight = `${100 + 20 * extraFactor}vh`
