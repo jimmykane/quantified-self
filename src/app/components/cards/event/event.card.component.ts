@@ -49,8 +49,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
   public chartFillOpacity: number = UserService.getDefaultChartFillOpacity() ;
   public chartDataTypesToUse: string[];
-  public showMapLaps;
-  public showMapArrows;
+  public showMapLaps = true;
+  public showMapArrows = true;
   public dataSmoothingLevel = 3.5;
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
