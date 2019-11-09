@@ -29,7 +29,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() showAllDataChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showGridChange: EventEmitter<boolean> = new EventEmitter<boolean>();
-  @Output() showStackYAxesChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() stackYAxesChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
   @Output() dataSmoothingLevelChange: EventEmitter<number> = new EventEmitter<number>();
 
@@ -54,7 +54,7 @@ export class EventCardChartActionsComponent implements OnChanges {
     this.showAllDataChange.emit(this.showAllData);
     this.showLapsChange.emit(this.showLaps);
     this.showGridChange.emit(this.showGrid);
-    this.showStackYAxesChange.emit(this.stackYAxes);
+    this.stackYAxesChange.emit(this.stackYAxes);
     this.dataSmoothingLevelChange.emit(this.dataSmoothingLevel);
   }
 

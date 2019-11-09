@@ -1077,7 +1077,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       && this.windowService.windowRef.screen.orientation.angle)
       || this.windowService.windowRef.orientation
       || 0;
-    return (angle === 90 || angle === -90) ? '100vw' : '100vh';
+    return (angle === 90 || angle === -90) ? '100vh' : '100vh';
   }
 }
 
