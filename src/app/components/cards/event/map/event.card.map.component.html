@@ -29,7 +29,7 @@
       <!-- Polyline for the activity -->
       <agm-polyline
         [strokeColor]="eventColorService.getActivityColor(event, activityMapData.activity)"
-        [strokeWeight]="4">
+        [strokeWeight]="strokeWidth">
         <!-- Points -->
         <agm-polyline-point
           *ngFor="let position of activityMapData.positions"

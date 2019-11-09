@@ -55,6 +55,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
+  public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
 
   private userSubscription: Subscription;
@@ -109,6 +110,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.showChartGrid = user.settings.chartSettings.showGrid;
       this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
       this.showMapArrows = user.settings.mapSettings.showArrows;
+      this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
       this.mapLapTypes = user.settings.mapSettings.lapTypes;
       this.chartLapTypes = user.settings.chartSettings.lapTypes;
       this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;

@@ -73,6 +73,10 @@ export class UserService implements OnDestroy {
     return ChartCursorBehaviours.ZoomX;
   }
 
+  static getDefaultMapStrokeWidth(): number {
+    return 4;
+  }
+
   // @todo move other calls to this
 
   static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
@@ -352,6 +356,7 @@ export class UserService implements OnDestroy {
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || UserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || UserService.getDefaultMapType();
+    settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || UserService.getDefaultMapStrokeWidth();
 
     // Export to CSV
     settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};

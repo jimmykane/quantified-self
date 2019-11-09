@@ -48,6 +48,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   @Input() theme: MapThemes;
   @Input() showLaps: boolean;
   @Input() showArrows: boolean;
+  @Input() strokeWidth: number;
   @Input() lapTypes: LapTypes[] = [];
 
 

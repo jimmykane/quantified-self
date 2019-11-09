@@ -189,6 +189,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      mapStrokeWidth: new FormControl(this.user.settings.mapSettings.strokeWidth, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       showMapLaps: new FormControl(this.user.settings.mapSettings.showLaps, [
         // Validators.required,
         // Validators.minLength(1),
@@ -255,7 +260,8 @@ export class UserSettingsComponent implements OnChanges {
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
             lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value,
-            mapType: this.userSettingsFormGroup.get('mapType').value
+            mapType: this.userSettingsFormGroup.get('mapType').value,
+            strokeWidth: this.userSettingsFormGroup.get('mapStrokeWidth').value
           },
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,

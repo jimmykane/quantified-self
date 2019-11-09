@@ -544,7 +544,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis.align = 'right';
       yAxis.marginTop = 5;
     } else {
-      yAxis.renderer.line.strokeOpacity = 0.9;
+      yAxis.renderer.line.strokeOpacity = 1;
       yAxis.renderer.labels.template.marginLeft = 10;
       yAxis.paddingLeft = 5;
       yAxis.paddingRight = 0;
