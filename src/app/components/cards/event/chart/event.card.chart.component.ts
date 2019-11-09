@@ -788,17 +788,18 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         }
         return dataMap;
       }, new Map<number, number>()).forEach((value, distance) => {
+        if (value === null) {
+          return;
+        }
         data.push({
           axisValue: distance,
           value: value
         }) // @todo if needed sort here by distance
       });
     } else {
-      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000); // Default unix timestamp is at 1 hours its kinda hacky but easy
+      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000, true); // Default unix timestamp is at 1 hours its kinda hacky but easy
     }
 
-    // Remove nulls
-    data =  data.filter((streamData) => streamData.value !== null);
     // filter if needed (this operation costs)
     if (this.getStreamSamplingRateInSeconds(activity) !== 1) {
       data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
@@ -964,7 +965,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
                   const data = this.distanceAxesForActivitiesMap
                     .get(activity.getID())
-                    .getStreamDataByTime(activity.startDate)
+                    .getStreamDataByTime(activity.startDate, true)
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   range.value = data[0].value
                 }
@@ -1079,6 +1080,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || 0;
     return (angle === 90 || angle === -90) ? '100vh' : '100vh';
   }
+  //
+  // private setViewHeight(chart: am4charts.XYChart) {
+  //   // this.viewHeight = `${100 + 20 * extraFactor}vh`
+  // }
 }
 
 export interface LabelData {
