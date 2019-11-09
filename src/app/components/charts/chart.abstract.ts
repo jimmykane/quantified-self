@@ -246,32 +246,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       .filter(series => !series.hidden);
   }
 
-  protected attachSeriesEventListeners(series: am4charts.XYSeries) {
-    series.events.on('shown', () => {
-      this.showSeriesYAxis(series);
-      // console.log(series.appeared);
-      // if (series.appeared) {
-        // valueAxis2.height = 0;
-        // valueAxis2.disabled = true;
-        // valueAxis.invalidate();
-      // }
-    });
-
-    series.events.on('hidden', () => {
-      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
-        this.hideSeriesYAxis(series)
-      }
-      // console.log(series.appeared);
-      // if (series.appeared) {
-        // valueAxis2.height = 0;
-        // valueAxis2.disabled = true;
-        // valueAxis.invalidate();
-      // }
-    })
-  }
-
-
-
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
   protected getSeriesName(name: string) {
     if ([DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type].indexOf(name) !== -1) {

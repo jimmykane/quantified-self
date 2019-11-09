@@ -1026,7 +1026,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
     // Shown
-    super.attachSeriesEventListeners(series);
     // series.events.on('visibilitychanged', () => {
     //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
     // });
@@ -1034,6 +1033,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (series.appeared) {
         series.hidden = false;
       }
+      this.showSeriesYAxis(series);
       // console.log(series.name + ' shown stat: ' + series.hidden )
       if (this.getSeriesRangeLabelContainer(series)) {
         this.getSeriesRangeLabelContainer(series).disabled = false;
@@ -1054,6 +1054,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.events.on('hidden', () => {
       if (series.appeared){
         series.hidden = true;
+      }
+      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
+        this.hideSeriesYAxis(series)
       }
       // console.log(series.name + ' hidden state: ' + series.visible)
       if (this.getSeriesRangeLabelContainer(series)) {
