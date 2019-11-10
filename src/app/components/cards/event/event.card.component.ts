@@ -42,6 +42,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showChartLaps: boolean;
   public showChartGrid: boolean;
   public stackChartYAxes = true;
+  public useChartAnimations = true;
   public chartXAxisType = XAxisTypes.Duration;
   public mapLapTypes = UserService.getDefaultMapLapTypes();
   public chartLapTypes = UserService.getDefaultChartLapTypes();
@@ -105,6 +106,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.dataSmoothingLevel = user.settings.chartSettings.dataSmoothingLevel;
       this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
       this.showAllData = user.settings.chartSettings.showAllData;
+      this.useChartAnimations = user.settings.chartSettings.useAnimations;
       this.showMapLaps = user.settings.mapSettings.showLaps;
       this.showChartLaps = user.settings.chartSettings.showLaps;
       this.showChartGrid = user.settings.chartSettings.showGrid;
