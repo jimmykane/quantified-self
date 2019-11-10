@@ -309,6 +309,21 @@
           <mat-hint><b>Tip:</b> this will stack the charts on top of each other</mat-hint>
         </section>
 
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="chartDisableGrouping">
+            <span matTooltip="Disable grouping of data?">Disable grouping</span>
+          </mat-slide-toggle>
+          <mat-hint>
+          <b>Grouping</b> "groups" the data to fit at the available screen pixel size.<br/>
+          This creates a more readable chart and improves performance by not calculating "those extra pixels"<br/>
+          The more you zoom on the chart, the more data is unfold on the chart.<br/>
+          However, if you use QS to mainly compare activities, eg heart rate or power from more than once device, you might experiment with this setting.<br/>
+          Disabling grouping it will load on the screen all available data and will impact performance.
+          </mat-hint>
+        </section>
+
       </mat-card-content>
     </mat-card>
 

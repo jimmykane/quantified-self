@@ -139,6 +139,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      chartDisableGrouping: new FormControl(this.user.settings.chartSettings.disableGrouping, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       chartCursorBehaviour: new FormControl(this.user.settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, [
         // Validators.required,
         // Validators.minLength(1),
@@ -249,6 +254,7 @@ export class UserSettingsComponent implements OnChanges {
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
+        disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
       });
 
       await this.userService.updateUserProperties(this.user, {

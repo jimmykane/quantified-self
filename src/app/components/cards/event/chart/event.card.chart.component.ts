@@ -65,6 +65,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
   @Input() showGrid: boolean;
+  @Input() disableGrouping: boolean;
   @Input() lapTypes: LapTypes[];
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
@@ -120,7 +121,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return;
     }
 
-    if (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour) {
+    if (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour || simpleChanges.disableGrouping) {
       this.destroyChart();
     }
 
@@ -144,6 +145,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.dataTypesToUse
       || simpleChanges.stackYAxes
       || simpleChanges.dataSmoothingLevel
+      || simpleChanges.disableGrouping
       || simpleChanges.xAxisType
       || simpleChanges.chartTheme) {
       if (!this.event || !this.selectedActivities.length) {
@@ -272,9 +274,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     } else {
       // Create a date axis
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
-      xAxis.groupData = true;
-      // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
-      xAxis.groupCount = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
+      if (!this.disableGrouping) {
+        const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio
+        this.logger.info(`Grouping data on ${screenPixes}`);
+        xAxis.groupData = true;
+        // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
+        xAxis.groupCount = screenPixes
+      }
     }
     xAxis.title.text = this.xAxisType;
     xAxis.title.fontSize = '1.0em';

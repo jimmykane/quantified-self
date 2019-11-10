@@ -330,6 +330,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
     settings.chartSettings.showGrid = settings.chartSettings.showGrid === true;
     settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes === true;
+    settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
