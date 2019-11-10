@@ -274,7 +274,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
       xAxis.groupData = true;
       // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
-      xAxis.groupCount = this.windowService.windowRef.screen.availWidth;
+      xAxis.groupCount = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
     }
     xAxis.title.text = this.xAxisType;
     xAxis.title.fontSize = '1.0em';
