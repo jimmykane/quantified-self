@@ -276,7 +276,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Create a date axis
       xAxis = chart.xAxes.push(new am4charts.DateAxis());
       if (!this.disableGrouping) {
-        const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio
+        const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
         this.logger.info(`Grouping data on ${screenPixes}`);
         xAxis.groupData = true;
         // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
@@ -324,7 +324,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
-    chart.cursor.interactions.hitOptions.hitTolerance = 50;
+    chart.cursor.interactions.hitOptions.hitTolerance = 10;
 
     chart.cursor.behavior = this.chartCursorBehaviour;
     chart.cursor.zIndex = 10;
@@ -358,6 +358,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           end = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(range.end));
           break;
       }
+
       // alert('Selected start ' + start + ' end ' + end);
       // Now since we know the actual start end we need end iterate over the visible series and calculate AVG, Max,Min, Gain and loss not an easy job I suppose
       this.chart.series.values.forEach(series => {
@@ -751,10 +752,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.fontSize = '1.2em';
     button.align = 'left';
     button.marginLeft = 15;
-    button.opacity = 0.5;
+    button.opacity = 0.8;
 
-    button.zIndex = 100;
+    button.zIndex = 20;
     button.events.on('hit', (ev) => {
+      // debugger;
       chart.cursor.behavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? ChartCursorBehaviours.ZoomX : ChartCursorBehaviours.SelectX;
       ev.target.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
     });
@@ -771,8 +773,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.fontSize = '1.2em';
     button.align = 'left';
     button.marginLeft = 15;
-    button.zIndex = 100;
-    button.opacity = 0.5;
+    button.zIndex = 30;
+    button.opacity = 0.8;
     button.events.on('hit', (ev) => {
       this.disposeRangeLabelsContainer(chart);
       this.disposeCursorSelection(chart);
@@ -884,7 +886,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // const a = cursor;
       // debugger;
       // @todo clear selection
-      cursor.selection.hide();
+      cursor.xRange = null;
+      cursor.yRange = null;
+      cursor.invalidate();
     }
   }
 
