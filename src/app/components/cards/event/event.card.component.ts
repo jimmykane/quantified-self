@@ -50,6 +50,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartStrokeWidth: number = UserService.getDefaultChartStrokeWidth();
   public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
   public chartFillOpacity: number = UserService.getDefaultChartFillOpacity() ;
+  public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold() ;
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
   public showMapArrows = true;
@@ -105,6 +106,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
       this.dataSmoothingLevel = user.settings.chartSettings.dataSmoothingLevel;
+      this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
       this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
       this.showAllData = user.settings.chartSettings.showAllData;
       this.useChartAnimations = user.settings.chartSettings.useAnimations;

@@ -69,6 +69,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() lapTypes: LapTypes[];
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
+  @Input() gainAndLossThreshold: number;
   @Input() waterMark: string;
   @Input() chartCursorBehaviour: ChartCursorBehaviours;
   @Input() stackYAxes = false;
@@ -145,14 +146,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.dataTypesToUse
       || simpleChanges.stackYAxes
       || simpleChanges.dataSmoothingLevel
+      || simpleChanges.gainAndLossThreshold
       || simpleChanges.disableGrouping
       || simpleChanges.xAxisType
       || simpleChanges.chartTheme) {
+      this.unsubscribeAndClearChart();
       if (!this.event || !this.selectedActivities.length) {
-        this.unsubscribeAndClearChart();
         return;
       }
-      this.unsubscribeAndClearChart();
       await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
       return;
     }
@@ -415,12 +416,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         };
         if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
           labelData.gain = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, 1)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, 1)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
           };
           labelData.loss = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, 1)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, 1)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
           };
         }
         if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {

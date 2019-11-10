@@ -134,6 +134,10 @@ export class UserService implements OnDestroy {
     return 3.5;
   }
 
+  static getDefaultGainAndLossThreshold(): number {
+    return 1;
+  }
+
   static getDefaultMapType(): MapTypes {
     return MapTypes.RoadMap;
   }
@@ -331,6 +335,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.showGrid = settings.chartSettings.showGrid === true;
     settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes === true;
     settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
+    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold()
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

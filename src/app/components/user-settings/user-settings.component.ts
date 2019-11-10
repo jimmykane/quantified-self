@@ -98,6 +98,10 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
         // Validators.minLength(1),
       ]),
+      chartGainAndLossThreshold: new FormControl(this.user.settings.chartSettings.gainAndLossThreshold, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
 
       chartStrokeOpacity: new FormControl(this.user.settings.chartSettings.strokeOpacity, [
         Validators.required,
@@ -255,6 +259,7 @@ export class UserSettingsComponent implements OnChanges {
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
+        gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
       });
 
       await this.userService.updateUserProperties(this.user, {
