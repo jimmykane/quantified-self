@@ -187,7 +187,9 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       this.chart.series.clear();
       this.chart.colors.reset();
       if (this.chart instanceof am4charts.XYChart) {
-        this.chart.xAxes.each(axis => axis.axisRanges.clear())
+        this.chart.xAxes.each(axis => axis.axisRanges.clear());
+        this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+        this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
       }
     }
   }

@@ -154,6 +154,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (!this.event || !this.selectedActivities.length) {
         return;
       }
+      if (this.showLaps) {
+        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+      }
       await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
       return;
     }
@@ -206,15 +209,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-      // @todo
-      if (this.showGrid) {
-        this.addGrid()
-      } else {
-        this.removeGrid();
-      }
-      if (this.showLaps) {
-        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
-      }
 
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
@@ -289,6 +283,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // xAxis.renderer.grid.template.disabled = this.addGrid === false;
     xAxis.renderer.line.strokeOpacity = 1;
     xAxis.renderer.line.strokeWidth = 1;
+
+    xAxis.renderer.grid.template.disabled = !this.showGrid;
 
     xAxis.renderer.ticks.template.disabled = false;
     xAxis.renderer.ticks.template.strokeOpacity = 1;
@@ -554,6 +550,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // yAxis.interpolationDuration = 500;
     // yAxis.rangeChangeDuration = 500;
     yAxis.renderer.inside = false;
+    yAxis.renderer.grid.template.disabled = !this.showGrid;
     if (this.stackYAxes) {
       yAxis.renderer.line.strokeOpacity = 1;
 
@@ -1025,15 +1022,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.xAxes.getIndex(0).axisRanges.clear();
   }
 
-  private removeGrid() {
-    this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
-    this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
-  }
+  // private removeGrid() {
+  //   this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+  //   this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
+  // }
 
-  private addGrid() {
-    this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = false);
-    this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
-  }
+  // private addGrid() {
+  //   this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = false);
+  //   this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
+  // }
 
 
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
