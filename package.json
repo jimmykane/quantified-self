@@ -34,7 +34,7 @@
     "@angular/platform-browser-dynamic": "8.2.13",
     "@angular/platform-server": "8.2.13",
     "@angular/router": "8.2.13",
-    "@sentry/browser": "^5.7.1",
+    "@sentry/browser": "^5.8.0",
     "@types/pako": "^1.0.1",
     "@types/uuid": "^3.4.6",
     "buffer": "^5.4.3",
@@ -64,7 +64,7 @@
     "karma-jasmine": "~2.0.1",
     "karma-jasmine-html-reporter": "^1.4.2",
     "protractor": "~6.0.0",
-    "ts-node": "~8.4.1",
+    "ts-node": "~8.5.0",
     "tslint": "~5.20.1",
     "typescript": "3.5.3"
   }
