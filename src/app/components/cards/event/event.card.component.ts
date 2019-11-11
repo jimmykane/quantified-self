@@ -1,4 +1,4 @@
-import {Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
 import {EventColorService} from '../../../services/color/app.event.color.service';

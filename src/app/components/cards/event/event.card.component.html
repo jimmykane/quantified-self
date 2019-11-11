@@ -30,7 +30,7 @@
   </mat-card-header>
 
   <mat-card-content>
-    <mat-tab-group
+    <mat-tab-group animationDuration="500ms"
       [dynamicHeight]="true"
       [selectedIndex]="tabIndex"
       (selectedIndexChange)="router.navigate(['/user', targetUserID, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">
