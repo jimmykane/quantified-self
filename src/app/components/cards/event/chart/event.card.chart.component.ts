@@ -67,6 +67,7 @@ import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-
 import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
+import {ChartHelper} from './chart-helper';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1;
@@ -92,7 +93,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() xAxisType: XAxisTypes;
   @Input() dataSmoothingLevel: number;
   @Input() gainAndLossThreshold: number;
-  @Input() waterMark: string;
+  @Input() waterMark?: string;
   @Input() chartCursorBehaviour: ChartCursorBehaviours;
   @Input() stackYAxes = false;
   @Input() strokeWidth: number;
@@ -103,18 +104,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
   public isLoading: boolean;
-  public viewHeight: any;
-
 
   private streamsSubscription: Subscription;
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventCardChartComponent');
-
-  @HostListener('window:resize', ['$event'])
-  @HostListener('window:orientationchange', ['$event'])
-  resizeOROrientationChange(event?) {
-    this.viewHeight = this.getViewHeight();
-  }
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
@@ -124,7 +117,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               private themeService: ThemeService,
               private eventColorService: EventColorService) {
     super(zone, changeDetector);
-    this.viewHeight = this.getViewHeight();
   }
 
   async ngAfterViewInit() {
@@ -247,6 +239,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
 
     });
+  }
+
+  protected setupChart(chart: am4charts.XYChart){
+
   }
 
   protected createChart(): am4charts.XYChart {
@@ -461,17 +457,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
 
     // Add watermark
-    const watermark = new am4core.Label();
-    watermark.text = this.waterMark || 'Quantified-Self.io';
-    chart.plotContainer.children.push(watermark);
-    watermark.align = 'right';
-    watermark.valign = 'bottom';
-    watermark.fontSize = '1.6em';
-    watermark.opacity = 0.8;
-    watermark.marginRight = 15;
-    watermark.marginBottom = 15;
-    watermark.filters.push(this.getShadowFilter());
-    watermark.zIndex = 100;
+    chart.plotContainer.children.push(ChartHelper.getWaterMark(this.waterMark));
 
     // watermark.fontWeight = 'bold';
 
@@ -1040,7 +1026,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                 range.label.valign = 'bottom';
                 range.label.textAlign = 'middle';
                 range.label.dy = 6;
-                // range.grid.filters.push(this.getShadowFilter())
+                // range.grid.filters.push(ChartHelper.getShadowFilter())
               })
           });
       })
@@ -1209,21 +1195,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.unSubscribeFromAll();
     super.ngOnDestroy();
   }
-
-  private getViewHeight() {
-    const angle =
-      (this.windowService.windowRef.screen
-        && this.windowService.windowRef.screen.orientation
-        && this.windowService.windowRef.screen.orientation.angle)
-      || this.windowService.windowRef.orientation
-      || 0;
-    return (angle === 90 || angle === -90) ? '100vh' : '100vh';
-  }
-
-  //
-  // private setViewHeight(chart: am4charts.XYChart) {
-  //   // this.viewHeight = `${100 + 20 * extraFactor}vh`
-  // }
 }
 
 export interface LabelData {

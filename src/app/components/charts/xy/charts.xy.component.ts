@@ -14,6 +14,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {ChartHelper} from '../../cards/event/chart/chart-helper';
 
 
 @Component({
@@ -126,11 +127,11 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
 
 
-      series.columns.template.filters.push(this.getShadowFilter())
+      series.columns.template.filters.push(ChartHelper.getShadowFilter())
 
     } else {
       series = chart.series.push(new am4charts.LineSeries());
-      series.filters.push(this.getShadowFilter());
+      series.filters.push(ChartHelper.getShadowFilter());
 
       series.stroke = chart.colors.getIndex(0);
       series.tension = 0.5;
@@ -149,7 +150,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
-      bullet.filters.push(this.getShadowFilter());
+      bullet.filters.push(ChartHelper.getShadowFilter());
 
     }
 

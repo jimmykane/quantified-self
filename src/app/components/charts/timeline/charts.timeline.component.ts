@@ -18,6 +18,7 @@ import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
+import {ChartHelper} from '../../cards/event/chart/chart-helper';
 
 @Component({
   selector: 'app-timeline-chart',
@@ -130,7 +131,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       return `${'{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
-    series.columns.template.filters.push(this.getShadowFilter());
+    series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
 
     const label = series.createChild(am4core.Label);

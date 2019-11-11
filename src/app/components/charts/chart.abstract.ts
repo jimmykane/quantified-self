@@ -236,12 +236,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return 0.4;
   }
 
-  getShadowFilter(size: number = 1): am4core.DropShadowFilter {
-    const shadow = new am4core.DropShadowFilter();
-    shadow.dx = size;
-    shadow.dy = size;
-    return shadow
-  }
+
 
   ngOnDestroy() {
     this.destroyChart();
