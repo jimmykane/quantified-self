@@ -43,7 +43,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   @Input() targetUserID: string;
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
-  @Input() isVisible: boolean;
   @Input() theme: MapThemes;
   @Input() showLaps: boolean;
   @Input() showArrows: boolean;
@@ -86,6 +85,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
+    this.logger.info(`Initialized`);
   }
 
   ngAfterViewInit(): void {
@@ -103,8 +103,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     }
 
     this.resizeMapToBounds();
-
-    // if (simpleChanges.isVisible)
 
     // // Get the new activityMapData
     // this.activitiesMapData = this.cacheNewData();

@@ -100,10 +100,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     }
   }
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange?: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
-    return new am4charts.CategoryAxis()
-  };
-
   protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
     this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
@@ -210,7 +206,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       this.zone.runOutsideAngular(() => {
         if (this.chart) {
           this.chart.dispose();
-          delete this.chart
+          // delete this.chart
         }
       });
     } catch (e) {
@@ -235,8 +231,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   getStrokeWidth() {
     return 0.4;
   }
-
-
 
   ngOnDestroy() {
     this.destroyChart();

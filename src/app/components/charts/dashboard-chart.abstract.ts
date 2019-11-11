@@ -59,6 +59,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     this.chart.data = this.data;
   }
 
+
   protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
     switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
@@ -90,7 +91,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
         axis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(chartDateDateRange));
         return axis;
       case ChartDataCategoryTypes.ActivityType:
-        return super.getCategoryAxis(chartDataCategoryType);
+        return new am4charts.CategoryAxis();
       default:
         throw new Error(`Not implemented`);
     }

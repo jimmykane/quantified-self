@@ -7,7 +7,7 @@ import {
   NgZone,
   OnChanges,
   OnDestroy,
-  OnInit,
+  OnInit, SimpleChanges,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
@@ -67,7 +67,7 @@ import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-
 import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
-import {ChartHelper} from './chart-helper';
+import {ChartHelper, LabelData} from './chart-helper';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1;
@@ -120,22 +120,21 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   async ngAfterViewInit() {
+    this.logger.info(`ViewInit`);
+    // this.chart = this.createChart();
   }
 
   async ngOnInit() {
+    this.logger.info(`Init`);
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and users');
     }
   }
 
-  async ngOnChanges(simpleChanges) {
-    // WARNING DO NOT ALLOW READS IF NOT VISIBLE! //
+  async ngOnChanges(simpleChanges: SimpleChanges) {
+    this.logger.info(`Change`);
 
     // If not visible and no data is bound do nothing
-    if (!this.isVisible && (!this.streamsSubscription || this.streamsSubscription.closed)) {
-      return;
-    }
-
     if (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour || simpleChanges.disableGrouping) {
       this.destroyChart();
     }
@@ -144,8 +143,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if (!this.chart) {
       this.chart = this.createChart();
     }
-
-    // Beyond here component is visible and data is not bound //
 
     // 3. If something changed then do the needed
     if (simpleChanges.event
@@ -256,65 +253,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.scrollbarX = new am4core.Scrollbar();
 
     if (this.stackYAxes) {
-      this.setYAxesToStack(chart);
+      ChartHelper.setYAxesToStack(chart);
     } else {
-      this.unsetYAxesToStack(chart);
+      ChartHelper.unsetYAxesToStack(chart);
     }
-    let xAxis;
-    if (this.xAxisType === XAxisTypes.Distance) {
-      xAxis = chart.xAxes.push(new am4charts.ValueAxis());
-      // xAxis.extraMax = 0.01;
-      xAxis.renderer.minGridDistance = 40;
-      xAxis.strictMinMax = true;
 
-      xAxis.numberFormatter = new am4core.NumberFormatter();
-      xAxis.numberFormatter.numberFormat = `#`;
-      // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
-      xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-        if (!target.dataItem.value) {
-          return '';
-        }
-        const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, target.dataItem.value);
-        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
-      });
-      // xAxis.tooltipText = '{valueX}'
-      xAxis.adapter.add('getTooltipText', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-        return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
-      });
-      // xAxis.renderer.labels.template.marginRight = 10;
-      xAxis.min = 0;
-    } else {
-      // Create a date axis
-      xAxis = chart.xAxes.push(new am4charts.DateAxis());
-      if (!this.disableGrouping) {
-        const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
-        this.logger.info(`Grouping data on ${screenPixes}`);
-        xAxis.groupData = true;
-        // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
-        xAxis.groupCount = screenPixes
-      }
-    }
-    xAxis.title.text = this.xAxisType;
-    xAxis.title.fontSize = '1.0em';
-    xAxis.title.fontWeight = '600';
-    // xAxis.renderer.grid.template.disabled = this.addGrid === false;
-    xAxis.renderer.line.strokeOpacity = 1;
-    xAxis.renderer.line.strokeWidth = 1;
-
-    xAxis.renderer.grid.template.disabled = !this.showGrid;
-
-    xAxis.renderer.ticks.template.disabled = false;
-    xAxis.renderer.ticks.template.strokeOpacity = 1;
-    xAxis.renderer.ticks.template.strokeWidth = 1;
-    xAxis.renderer.ticks.template.length = 10;
-    xAxis.renderer.minGridDistance = 50;
-
-    // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
-
-    xAxis.padding = 0;
-    // xAxis.renderer.labels.template.fontSize = '1.2em';
-
+    chart.xAxes.push(this.addXAxis(chart, this.xAxisType));
 
     // Create a Legend
     chart.legend = new am4charts.Legend();
@@ -329,11 +273,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     marker.strokeWidth = 4;
     marker.strokeOpacity = 1;
     marker.stroke = am4core.color('#0a97ee');
-
-    // chart.legend.itemContainers.template.events.on('toggled', (ev) => {
-    //   const series = <am4charts.LineSeries>ev.target.dataItem.dataContext;
-    //   Getting visible...
-    // });
 
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
@@ -955,15 +894,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return `rangeLabelContainer${series.id}`;
   }
 
-  protected setYAxesToStack(chart) {
-    chart.leftAxesContainer.layout = 'vertical';
-    chart.leftAxesContainer.reverseOrder = false;
-  }
 
-  protected unsetYAxesToStack(chart) {
-    chart.leftAxesContainer.layout = 'horizontal';
-    chart.leftAxesContainer.reverseOrder = true;
-  }
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
@@ -1195,15 +1126,68 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.unSubscribeFromAll();
     super.ngOnDestroy();
   }
-}
 
-export interface LabelData {
-  name: string,
-  average: { value: string, unit: string },
-  min: { value: string, unit: string },
-  max: { value: string, unit: string },
-  gain?: { value: string, unit: string },
-  loss?: { value: string, unit: string },
-  minToMaxDiff?: { value: string, unit: string },
-  slopePercentage?: { value: string, unit: string },
+  private addXAxis(chart: am4charts.XYChart, xAxisType: XAxisTypes): am4charts.ValueAxis | am4charts.DateAxis {
+    let xAxis;
+    switch (xAxisType) {
+      case XAxisTypes.Distance:
+        xAxis = chart.xAxes.push(new am4charts.ValueAxis());
+        // xAxis.extraMax = 0.01;
+        xAxis.renderer.minGridDistance = 40;
+        xAxis.strictMinMax = true;
+
+        xAxis.numberFormatter = new am4core.NumberFormatter();
+        xAxis.numberFormatter.numberFormat = `#`;
+        // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
+        xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
+          if (!target.dataItem.value) {
+            return '';
+          }
+          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, target.dataItem.value);
+          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+        });
+        // xAxis.tooltipText = '{valueX}'
+        xAxis.adapter.add('getTooltipText', (text, target) => {
+          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
+          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+        });
+        // xAxis.renderer.labels.template.marginRight = 10;
+        xAxis.min = 0;
+        break;
+      case XAxisTypes.Duration:
+      case XAxisTypes.Time:
+        xAxis = chart.xAxes.push(new am4charts.DateAxis());
+        if (!this.disableGrouping) {
+          const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
+          this.logger.info(`Grouping data on ${screenPixes}`);
+          xAxis.groupData = true;
+          // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
+          xAxis.groupCount = screenPixes
+        }
+        break;
+      default:
+        throw new Error(`Not implemented`)
+    }
+
+    xAxis.title.text = this.xAxisType;
+    xAxis.title.fontSize = '1.0em';
+    xAxis.title.fontWeight = '600';
+    // xAxis.renderer.grid.template.disabled = this.addGrid === false;
+    xAxis.renderer.line.strokeOpacity = 1;
+    xAxis.renderer.line.strokeWidth = 1;
+
+    xAxis.renderer.grid.template.disabled = !this.showGrid;
+
+    xAxis.renderer.ticks.template.disabled = false;
+    xAxis.renderer.ticks.template.strokeOpacity = 1;
+    xAxis.renderer.ticks.template.strokeWidth = 1;
+    xAxis.renderer.ticks.template.length = 10;
+    xAxis.renderer.minGridDistance = 50;
+
+    // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
+
+    xAxis.padding = 0;
+    // xAxis.renderer.labels.template.fontSize = '1.2em';
+    return xAxis;
+  }
 }

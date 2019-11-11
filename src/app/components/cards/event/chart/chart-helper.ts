@@ -1,4 +1,6 @@
 import * as am4core from '@amcharts/amcharts4/core';
+import * as am4charts from '@amcharts/amcharts4/charts';
+
 
 export abstract class ChartHelper {
   static getWaterMark(waterMarkText: string): am4core.Label {
@@ -21,4 +23,25 @@ export abstract class ChartHelper {
     shadow.dy = size;
     return shadow
   }
+
+  static setYAxesToStack(chart: am4charts.XYChart) {
+    chart.leftAxesContainer.layout = 'vertical';
+    chart.leftAxesContainer.reverseOrder = false;
+  }
+
+  static unsetYAxesToStack(chart) {
+    chart.leftAxesContainer.layout = 'horizontal';
+    chart.leftAxesContainer.reverseOrder = true;
+  }
+}
+
+export interface LabelData {
+  name: string,
+  average: { value: string, unit: string },
+  min: { value: string, unit: string },
+  max: { value: string, unit: string },
+  gain?: { value: string, unit: string },
+  loss?: { value: string, unit: string },
+  minToMaxDiff?: { value: string, unit: string },
+  slopePercentage?: { value: string, unit: string },
 }
