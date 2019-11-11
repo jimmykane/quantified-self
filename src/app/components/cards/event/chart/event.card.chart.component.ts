@@ -41,10 +41,32 @@ import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/dat
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
 import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
 import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
-import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {
+  DataSpeed,
+  DataSpeedFeetPerMinute,
+  DataSpeedFeetPerSecond, DataSpeedKilometersPerHour,
+  DataSpeedMetersPerMinute, DataSpeedMilesPerHour
+} from 'quantified-self-lib/lib/data/data.speed';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {AppDataColors} from '../../../../services/color/app.data.colors';
 import {WindowService} from '../../../../services/app.window.service';
+import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
+import {
+  DataVerticalSpeed, DataVerticalSpeedFeetPerHour, DataVerticalSpeedFeetPerMinute,
+  DataVerticalSpeedFeetPerSecond, DataVerticalSpeedKilometerPerHour, DataVerticalSpeedMetersPerHour,
+  DataVerticalSpeedMetersPerMinute, DataVerticalSpeedMilesPerHour
+} from 'quantified-self-lib/lib/data/data.vertical-speed';
+import {DataPower} from 'quantified-self-lib/lib/data/data.power';
+import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
+import {DataPowerLeft} from 'quantified-self-lib/lib/data/data.power-left';
+import {DataLeftBalance} from 'quantified-self-lib/lib/data/data.left-balance';
+import {DataRightBalance} from 'quantified-self-lib/lib/data/data.right-balance';
+import {DataStrydDistance} from 'quantified-self-lib/lib/data/data.stryd-distance';
+import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
+import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
+import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
+import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
+import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 
 const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1;
@@ -890,12 +912,18 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   protected clearChart() {
-    super.clearChart();
     if (this.chart) {
-      this.chart.yAxes.clear();
+      this.chart.series.clear();
+      this.chart.colors.reset();
+      if (this.chart.yAxes.length) {
+        this.chart.yAxes.clear();
+      }
       this.disposeRangeLabelsContainer(this.chart);
       this.disposeCursorSelection(this.chart);
       this.disposeClearSelectionButton(this.chart);
+      this.chart.xAxes.each(axis => axis.axisRanges.clear());
+      this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+      this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
     }
   }
 
@@ -1081,6 +1109,105 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.userSettingsService.setSelectedDataTypes(this.event, selectedDataTypes.filter(dataType => dataType !== series.id))
       });
     });
+  }
+
+  protected getYAxisForSeries(streamType: string) {
+    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
+    if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
+      yAxis = new am4charts.DurationAxis()
+    } else {
+      yAxis = new am4charts.ValueAxis();
+    }
+    return yAxis;
+  }
+
+  protected hideSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = true;
+  }
+
+  protected showSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = false;
+    // series.yAxis.renderer.grid.template.disabled = false;
+  }
+
+  protected getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
+    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
+  }
+
+  protected getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
+    return chart.series.values
+      .filter(series => !series.hidden);
+  }
+
+  // This helps to goup series vy providing the same name (type) for things that should have the same axis
+  protected getSeriesName(name: string) {
+    if ([DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type].indexOf(name) !== -1) {
+      return DataAltitude.type;
+    }
+    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
+      return 'Positional Error'
+    }
+    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
+      return 'Pressure'
+    }
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
+      return 'Pace'
+    }
+    if ([
+      DataSpeed.type,
+      DataStrydSpeed.type,
+      DataSpeedMetersPerMinute.type,
+      DataSpeedFeetPerMinute.type,
+      DataSpeedFeetPerSecond.type,
+      DataSpeedMilesPerHour.type,
+      DataSpeedKilometersPerHour.type
+    ].indexOf(name) !== -1) {
+      return 'Speed'
+    }
+    if ([DataVerticalSpeed.type,
+      DataVerticalSpeedFeetPerSecond.type,
+      DataVerticalSpeedMetersPerMinute.type,
+      DataVerticalSpeedFeetPerMinute.type,
+      DataVerticalSpeedMetersPerHour.type,
+      DataVerticalSpeedFeetPerHour.type,
+      DataVerticalSpeedKilometerPerHour.type,
+      DataVerticalSpeedMilesPerHour.type].indexOf(name) !== -1) {
+      return 'Vertical Speed'
+    }
+    if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
+      return 'Swim Pace'
+    }
+    if ([DataPower.type,
+      DataPowerRight.type,
+      DataPowerLeft.type].indexOf(name) !== -1) {
+      return 'Left/Right Balance'
+    }
+    if ([DataLeftBalance.type,
+      DataRightBalance.type].indexOf(name) !== -1) {
+      return 'Left/Right Balance'
+    }
+    if ([DataDistance.type,
+      DataStrydDistance.type].indexOf(name) !== -1) {
+      return 'Distance'
+    }
+    return name;
+  }
+
+
+  protected unsubscribeAndClearChart() {
+    this.unSubscribeFromAll();
+    this.clearChart();
+  }
+
+
+  private unSubscribeFromAll() {
+    this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
+    this.logger.info(`Unsubscribed from ${this.getSubscriptions().length} subscriptions`);
+  }
+
+  ngOnDestroy() {
+    this.unSubscribeFromAll();
+    super.ngOnDestroy();
   }
 
   private getViewHeight() {

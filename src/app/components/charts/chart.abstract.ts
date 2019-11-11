@@ -177,31 +177,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   }
 
 
-  protected unsubscribeAndClearChart() {
-    this.unSubscribeFromAll();
-    this.clearChart();
-  }
-
-  protected clearChart() {
-    if (this.chart) {
-      this.chart.series.clear();
-      this.chart.colors.reset();
-      if (this.chart instanceof am4charts.XYChart) {
-        this.chart.xAxes.each(axis => axis.axisRanges.clear());
-        this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
-        this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
-      }
-    }
-  }
-
-  private unSubscribeFromAll() {
-    this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
-    this.logger.info(`Unsubscribed from ${this.getSubscriptions().length} subscriptions`);
-  }
-
-  protected getSubscriptions(): Subscription[] {
-    return this.subscriptions;
-  }
 
   protected getExportingMenu(): am4core.ExportMenu {
     const exportingMenu = new am4core.ExportMenu();
@@ -218,88 +193,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       ],
     }];
     return exportingMenu;
-  }
-
-  protected getYAxisForSeries(streamType: string) {
-    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
-      yAxis = new am4charts.DurationAxis()
-    } else {
-      yAxis = new am4charts.ValueAxis();
-    }
-    return yAxis;
-  }
-
-  protected hideSeriesYAxis(series: am4charts.XYSeries) {
-    series.yAxis.disabled = true;
-  }
-
-  protected showSeriesYAxis(series: am4charts.XYSeries) {
-    series.yAxis.disabled = false;
-    // series.yAxis.renderer.grid.template.disabled = false;
-  }
-
-  protected getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
-    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
-  }
-
-  protected getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
-    return chart.series.values
-      .filter(series => !series.hidden);
-  }
-
-  // This helps to goup series vy providing the same name (type) for things that should have the same axis
-  protected getSeriesName(name: string) {
-    if ([DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type].indexOf(name) !== -1) {
-      return DataAltitude.type;
-    }
-    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
-      return 'Positional Error'
-    }
-    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
-      return 'Pressure'
-    }
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
-      return 'Pace'
-    }
-    if ([
-      DataSpeed.type,
-      DataStrydSpeed.type,
-      DataSpeedMetersPerMinute.type,
-      DataSpeedFeetPerMinute.type,
-      DataSpeedFeetPerSecond.type,
-      DataSpeedMilesPerHour.type,
-      DataSpeedKilometersPerHour.type
-    ].indexOf(name) !== -1) {
-      return 'Speed'
-    }
-    if ([DataVerticalSpeed.type,
-      DataVerticalSpeedFeetPerSecond.type,
-      DataVerticalSpeedMetersPerMinute.type,
-      DataVerticalSpeedFeetPerMinute.type,
-      DataVerticalSpeedMetersPerHour.type,
-      DataVerticalSpeedFeetPerHour.type,
-      DataVerticalSpeedKilometerPerHour.type,
-      DataVerticalSpeedMilesPerHour.type].indexOf(name) !== -1) {
-      return 'Vertical Speed'
-    }
-    if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
-      return 'Swim Pace'
-    }
-    if ([DataPower.type,
-      DataPowerRight.type,
-      DataPowerLeft.type].indexOf(name) !== -1) {
-      return 'Left/Right Balance'
-    }
-    if ([DataLeftBalance.type,
-      DataRightBalance.type].indexOf(name) !== -1) {
-      return 'Left/Right Balance'
-    }
-    if ([DataDistance.type,
-      DataStrydDistance.type].indexOf(name) !== -1) {
-      return 'Distance'
-    }
-    return name;
   }
 
   protected applyChartStylesFromUserSettings(chartTheme: ChartThemes, useAnimations: boolean) {
@@ -350,18 +243,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return shadow
   }
 
-  getTextInitials(text: string) {
-    return `${text.split(' ').map(x => x.slice(0, 1).toUpperCase()).join('. ')}.`
-  }
-
-  getTextDependingOnSizeToSaveHorizontalSpace(text: string) {
-    if (text.length > 15) {
-      return `${text.slice(0, 15)}...`
-    }
-  }
-
   ngOnDestroy() {
-    this.unSubscribeFromAll();
     this.destroyChart();
   }
 
