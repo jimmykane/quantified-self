@@ -214,10 +214,10 @@
   dependencies:
     tslib "^1.9.0"
 
-"@angular/fire@^5.2.1":
-  version "5.2.1"
-  resolved "https://registry.yarnpkg.com/@angular/fire/-/fire-5.2.1.tgz#4b966aaed10cda0b430c9d80769b39d08032004d"
-  integrity sha512-pS4zWhLLANzMbYVIKNtebDQKhm9+KANUDvDV6DwKP24XHzkZdvazKe1HC6uXWlf7QmDxSPFleCSBkn0tnQQzdQ==
+"@angular/fire@^5.2.3":
+  version "5.2.3"
+  resolved "https://registry.yarnpkg.com/@angular/fire/-/fire-5.2.3.tgz#a4be89ef7684f0af41a430ba41436f99e9178f68"
+  integrity sha512-bDxjnsUkPmWi2Tmk6Jq/veUi+Ot1FX/Rr+tQYYHk7E2XD2F+et3Bz8UNvLMliMf9NRIUzmR7Br92ZBUBNvd2UA==
 
 "@angular/forms@8.2.13":
   version "8.2.13"
@@ -2921,9 +2921,9 @@ copy-webpack-plugin@5.0.4:
     webpack-log "^2.0.0"
 
 core-js-compat@^3.1.1:
-  version "3.4.0"
-  resolved "https://registry.yarnpkg.com/core-js-compat/-/core-js-compat-3.4.0.tgz#2a47c51d3dc026d290018cacd987495f68a47c75"
-  integrity sha512-pgQUcgT2+v9/yxHgMynYjNj7nmxLRXv3UC39rjCjDwpe63ev2rioQTju1PKLYUBbPCQQvZNWvQC8tBJd65q11g==
+  version "3.4.1"
+  resolved "https://registry.yarnpkg.com/core-js-compat/-/core-js-compat-3.4.1.tgz#e12c5a3ef9fcb50fd9d9a32805bfe674f9139246"
+  integrity sha512-YdeJI26gLc0CQJ9asLE5obEgBz2I0+CIgnoTbS2T0d5IPQw/OCgCIFR527RmpduxjrB3gSEHoGOCTq9sigOyfw==
   dependencies:
     browserslist "^4.7.2"
     semver "^6.3.0"
@@ -3076,11 +3076,6 @@ d3-array@1:
   resolved "https://registry.yarnpkg.com/d3-array/-/d3-array-1.2.4.tgz#635ce4d5eea759f6f605863dbcfc30edc737f71f"
   integrity sha512-KHW6M86R+FUPYGb3R5XiYjXPq7VzwxZ22buHhAEVG5ztoEcZZMLov530mmccaqA1GghZArjQV46fuc8kUqhhHw==
 
-"d3-array@1 - 2":
-  version "2.4.0"
-  resolved "https://registry.yarnpkg.com/d3-array/-/d3-array-2.4.0.tgz#87f8b9ad11088769c82b5ea846bcb1cc9393f242"
-  integrity sha512-KQ41bAF2BMakf/HdKT865ALd4cgND6VcIztVQZUTt0+BH3RWy6ZYnHghVXf6NFjt2ritLr8H1T8LreAAlfiNcw==
-
 d3-dispatch@1:
   version "1.0.5"
   resolved "https://registry.yarnpkg.com/d3-dispatch/-/d3-dispatch-1.0.5.tgz#e25c10a186517cd6c82dd19ea018f07e01e39015"
@@ -3096,9 +3091,9 @@ d3-force@^2.0.1:
     d3-timer "1"
 
 d3-geo-projection@^2.6.0:
-  version "2.7.0"
-  resolved "https://registry.yarnpkg.com/d3-geo-projection/-/d3-geo-projection-2.7.0.tgz#a881871004a892f51424ca649b09977b1dbd5ee6"
-  integrity sha512-G8C/8gvUQVwuLloW88d/NGbyh5CLONowQzU6gB7cczfGbSjMrQHFbaCqipWUqUWaBdqpyfTlLE3GPGy0RMpKYw==
+  version "2.7.1"
+  resolved "https://registry.yarnpkg.com/d3-geo-projection/-/d3-geo-projection-2.7.1.tgz#bcac6a9ac9d77786c97dab3f3f556913fd6db202"
+  integrity sha512-qT9Msnb6c1AUgIbOML7DrCj5anaoy/WVrCCoN5iFTa5YX/VH53Xpv2W5DHMQsemabi66BmJ94wCamHGssnIQWA==
   dependencies:
     commander "2"
     d3-array "1"
@@ -3106,11 +3101,11 @@ d3-geo-projection@^2.6.0:
     resolve "^1.1.10"
 
 d3-geo@^1.10.0, d3-geo@^1.11.3:
-  version "1.11.7"
-  resolved "https://registry.yarnpkg.com/d3-geo/-/d3-geo-1.11.7.tgz#715c9e754725854b2ab64fb053b0971baf4a7273"
-  integrity sha512-txFQRpNnspGn0cmR5h1otHZO495IfC+8ytwb9R8sGT0NivlfGzpT0sErKuWsLbQ4d45na6Qg/t/u12g5Lw1ypg==
+  version "1.11.8"
+  resolved "https://registry.yarnpkg.com/d3-geo/-/d3-geo-1.11.8.tgz#46f8ba5a68ead5e26512ec8d9d7cc36f6e522acc"
+  integrity sha512-F3pQWcgN/dChcXDrQzH0ZSkz14aAesitITc6CNzt7ZhOKj41LElZrhAM6P5EBEv/sliKBIZJl+gmY/jKgtmrxA==
   dependencies:
-    d3-array "1 - 2"
+    d3-array "1"
 
 d3-quadtree@1:
   version "1.0.6"
@@ -7076,10 +7071,10 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.3.24:
-  version "3.3.24"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.3.24.tgz#1128838b9a85f8ab66bbeae66561b4c2ae16843e"
-  integrity sha512-ocmLS/OY/m7TvN2cmkp41evBS7SAO7/FaeMrmGPyiD6m47J2Yj8AnBNEmP8W7U1dnuG1FRhvHSKZN7Ke5yEARw==
+quantified-self-lib@^3.3.26:
+  version "3.3.26"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.3.26.tgz#9f18df649b9e7bf99bd4248ea4434a9a950c2419"
+  integrity sha512-lw2eutuq/DqBorahmprClqsNm6uhQvsLN74cqpxLJpei2gGgglyTP/kKaasonYOjXPXW8dyvV+ChYDMKvOYkaQ==
   dependencies:
     "@types/node" "^12.7.1"
     fast-xml-parser "^3.12.19"
