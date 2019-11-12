@@ -48,7 +48,7 @@ export class AppAuthService implements OnDestroy {
     return this.authState;
   }
 
-  googleLogiWwithRedirect() {
+  googleLoginWithRedirect() {
     const provider = new auth.GoogleAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }

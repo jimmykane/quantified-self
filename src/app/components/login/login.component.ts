@@ -73,7 +73,7 @@ export class LoginComponent implements OnInit {
           await this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
           break;
         case SignInProviders.Google:
-          await this.authService.googleLogiWwithRedirect();
+          await this.authService.googleLoginWithRedirect();
           break;
         case SignInProviders.Facebook:
           await this.authService.facebookLoginWithRedirect();
