@@ -130,8 +130,8 @@ export class UserService implements OnDestroy {
     return [LapTypes.AutoLap, LapTypes.Distance];
   }
 
-  static getDefaultSmoothingLevel(): number {
-    return 3.5;
+  static getDefaultDownSamplingLevel(): number {
+    return 4;
   }
 
   static getDefaultGainAndLossThreshold(): number {
@@ -325,7 +325,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || UserService.getDefaultXAxisType();
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
-    settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || UserService.getDefaultSmoothingLevel();
+    settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || UserService.getDefaultDownSamplingLevel();
     settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || UserService.getDefaultChartCursorBehaviour();
     settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || UserService.getDefaultChartStrokeWidth();
     settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : UserService.getDefaultChartStrokeOpacity();

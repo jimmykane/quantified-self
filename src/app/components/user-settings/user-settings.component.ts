@@ -93,7 +93,10 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
         // Validators.minLength(1),
       ]),
-
+      chartDownSamplingLevel: new FormControl(this.user.settings.chartSettings.downSamplingLevel, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
       chartStrokeWidth: new FormControl(this.user.settings.chartSettings.strokeWidth, [
         Validators.required,
         // Validators.minLength(1),
@@ -260,6 +263,7 @@ export class UserSettingsComponent implements OnChanges {
         stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
+        downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
       });
 
       await this.userService.updateUserProperties(this.user, {

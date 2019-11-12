@@ -54,7 +54,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
   public showMapArrows = true;
-  public dataSmoothingLevel = 3.5;
+  public chartDownSamplingLevel = UserService.getDefaultDownSamplingLevel()
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
@@ -105,7 +105,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return;
       }
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
-      this.dataSmoothingLevel = user.settings.chartSettings.dataSmoothingLevel;
+      this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
       this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
       this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
       this.showAllData = user.settings.chartSettings.showAllData;

@@ -60,21 +60,4 @@
       </span>
     </mat-slide-toggle>
   </section>
-
-  <section mat-menu-item class="smoothing">
-    <mat-hint matTooltip="Down sampling is applied after 6h activity long">
-      Down sampling <b>{{formatLabel(dataSmoothingLevel)}}</b>
-    </mat-hint>
-    <mat-slider
-      [max]="20"
-      [min]="0.5"
-      [step]="0.5"
-      [thumbLabel]="true"
-      [displayWith]="formatLabel"
-      [(ngModel)]="dataSmoothingLevel"
-      (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();"
-      [vertical]="false">
-    </mat-slider>
-  </section>
 </mat-menu>

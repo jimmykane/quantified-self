@@ -69,7 +69,7 @@ import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 import {ChartHelper, LabelData} from './chart-helper';
 
-const FORCE_DOWNSAMPLE_AFTER_X_HOURS = 10;
+const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1;
 
 @Component({
@@ -91,7 +91,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() disableGrouping: boolean;
   @Input() lapTypes: LapTypes[];
   @Input() xAxisType: XAxisTypes;
-  @Input() dataSmoothingLevel: number;
+  @Input() downSamplingLevel: number;
   @Input() gainAndLossThreshold: number;
   @Input() waterMark?: string;
   @Input() chartCursorBehaviour: ChartCursorBehaviours;
@@ -156,7 +156,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.fillOpacity
       || simpleChanges.dataTypesToUse
       || simpleChanges.stackYAxes
-      || simpleChanges.dataSmoothingLevel
+      || simpleChanges.downSamplingLevel
       || simpleChanges.gainAndLossThreshold
       || simpleChanges.disableGrouping
       || simpleChanges.xAxisType
@@ -183,7 +183,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Important for performance / or not?
     // This is / will be needed when more performance needs to be achieved
     // Leaving this here for the future. For now the groups of data do suffice and do it better
-    // am4core.options.minPolylineStep = this.dataSmoothingLevel;
+    // am4core.options.minPolylineStep = this.downSamplingLevel;
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
         this.distanceAxesForActivitiesMap.set(
@@ -764,14 +764,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private getStreamSamplingRateInSeconds(activity: ActivityInterface): number {
     // Rate is minimum 1
-    const rate = this.dataSmoothingLevel || 1;
-    // If we do not need to strengthen the downsampling based on the FORCE_DOWNSAMPLE_AFTER_X_HOURS
+    const rate = this.downSamplingLevel || 1;
+    // If we do not need to strengthen the downsampling based on the DOWNSAMPLE_AFTER_X_HOURS
     // then we just need to return the sampling rate the user has selected
-    if (this.getActivityHours(activity) < FORCE_DOWNSAMPLE_AFTER_X_HOURS) {
+    if (this.getActivityHours(activity) < DOWNSAMPLE_AFTER_X_HOURS) {
       return 1;
     }
-    // If the activity needs a bump on downsampling > FORCE_DOWNSAMPLE_AFTER_X_HOURS
-    return rate * Math.ceil((this.getActivityHours(activity) / FORCE_DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_FACTOR_PER_HOUR);
+    return rate;
+    // If the activity needs a bump on downsampling > DOWNSAMPLE_AFTER_X_HOURS
+    return rate * Math.ceil(Math.ceil(this.getActivityHours(activity) / DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_FACTOR_PER_HOUR);
   }
 
   private getActivityHours(activity: ActivityInterface): number {

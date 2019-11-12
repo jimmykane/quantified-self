@@ -78,7 +78,6 @@
             [(showLaps)]="showChartLaps"
             [(stackYAxes)]="stackChartYAxes"
             [(showGrid)]="showChartGrid"
-            [(dataSmoothingLevel)]="dataSmoothingLevel"
             [user]="currentUser"
             align="end">
           </app-event-card-chart-actions>
@@ -101,7 +100,7 @@
             [targetUserID]="targetUserID"
             [dataTypesToUse]="chartDataTypesToUse"
             [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
-            [dataSmoothingLevel]="dataSmoothingLevel"
+            [downSamplingLevel]="chartDownSamplingLevel"
             [chartCursorBehaviour]="chartCursorBehaviour"
             [chartTheme]="chartTheme"
             [waterMark]="currentUser ? currentUser.brandText : null"
