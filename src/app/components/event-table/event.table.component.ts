@@ -86,7 +86,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
 
   // isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
 
-
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
               private actionButtonService: ActionButtonService,
@@ -98,9 +97,9 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   }
 
 
-
   ngOnChanges(simpleChanges: SimpleChanges): void {
-    if (!this.events || !this.user) {
+    this.logger.info(`ngOnChanges`);
+    if (!this.events) {
       this.loading();
       return;
     }
@@ -114,6 +113,9 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   }
 
   ngOnInit(): void {
+    if (!this.user) {
+      throw new Error(`Component needs user`)
+    }
   }
 
   ngAfterViewInit() {
@@ -194,6 +196,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
 
 
   private processChanges() {
+    this.logger.info(`Processing changes`)
     // this.data = new MatTableDataSource<any>(data);
     this.data.data = this.events.reduce((EventRowElementsArray, event) => {
       if (!event) {
@@ -246,14 +249,14 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
 
       EventRowElementsArray.push(dataObject);
       return EventRowElementsArray;
-    }, [])
+    }, []);
     // this.data.paginator = this.paginator;
     // this.data.sort = this.sort;
     //
     // this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
     //   return eventRowElement[`sort.${header}`];
     // };
-
+    this.logger.info(`Changes processed`);
   }
 
   private updateActionButtonService() {
@@ -403,7 +406,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
       'Actions'
     ]);
 
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest){
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
       return columns;
     }
 

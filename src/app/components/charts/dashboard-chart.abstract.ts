@@ -1,5 +1,5 @@
 import {ChartAbstract} from './chart.abstract';
-import {ChangeDetectorRef, Input, NgZone, OnChanges} from '@angular/core';
+import {AfterViewInit, ChangeDetectorRef, Input, NgZone, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summaries/summaries.component';
 import {
@@ -11,7 +11,7 @@ import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 
-export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges {
+export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges, AfterViewInit {
   @Input() data: any;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
@@ -25,10 +25,19 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     // am4core.options.queue = true;
   }
 
+  ngAfterViewInit(): void {
+    this.chart = <am4charts.XYChart>this.createChart();
+    this.chart.data = this.data || [];
+  }
+
   ngOnChanges(simpleChanges) {
+
+    // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
-    if (simpleChanges.chartTheme) {
+    if (simpleChanges.chartTheme && this.chart) {
       this.destroyChart();
+      this.chart = <am4charts.XYChart>this.createChart();
+      this.chart.data = this.data || [];
     }
 
     if (!this.data) {
@@ -36,27 +45,13 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
       return;
     }
 
+    if (simpleChanges.data) {
+      this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType));
+      if (this.filterLowValues) {
+        this.data = this.filterOutLowValues(this.data)
+      }
+    }
     this.loaded();
-    if (!this.data.length) {
-      return;
-    }
-
-    // 1. If there is no chart create
-    if (!this.chart) {
-      this.chart = <am4charts.XYChart>this.createChart();
-      this.chart.data = [];
-    }
-
-
-    if (!simpleChanges.data && !simpleChanges.chartTheme) {
-      return;
-    }
-
-    this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType));
-    if (this.filterLowValues) {
-      this.data = this.filterOutLowValues(this.data)
-    }
-    this.chart.data = this.data;
   }
 
 

@@ -12,7 +12,7 @@ import {UserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
-import {map, switchMap} from 'rxjs/operators';
+import {map, mergeMap, switchMap} from 'rxjs/operators';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {MatDialog} from '@angular/material/dialog';
 import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
@@ -54,7 +54,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.router.navigate(['home']).then(() => {
           this.snackBar.open('Logged out')
         });
-        return of(null);
+        return of({user: null, events: null});
       }
 
       if (this.user && (
@@ -67,6 +67,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.shouldSearch = true;
       }
 
+      // this.user = user;
       // Setup the ranges to search depending on pref
       if (user.settings.dashboardSettings.dateRange === DateRanges.custom && user.settings.dashboardSettings.startDate && user.settings.dashboardSettings.endDate) {
         this.searchStartDate = new Date(user.settings.dashboardSettings.startDate);
@@ -89,7 +90,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       if ((!this.searchStartDate || !this.searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
-        return of([])
+        return of({events: [], user: user})
       }
       if (user.settings.dashboardSettings.dateRange !== DateRanges.all) {
         // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
@@ -106,6 +107,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
 
+      // If this user is not set here there is a bug (again that makes a memory leak with big data) for the table component
+      this.user = user;
 
       // Get what is needed
       const returnObservable = this.shouldSearch ?
