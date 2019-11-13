@@ -6,8 +6,8 @@
     "types": []
   },
   "angularCompilerOptions": {
-    "preserveWhitespaces": false,
-    "enableIvy": true
+    "preserveWhitespaces": false
+//    "enableIvy": true
   },
   "exclude": [
     "test.ts",
