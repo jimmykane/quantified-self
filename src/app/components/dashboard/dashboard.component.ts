@@ -61,7 +61,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange
         || this.user.settings.dashboardSettings.startDate !== user.settings.dashboardSettings.startDate
         || this.user.settings.dashboardSettings.endDate !== user.settings.dashboardSettings.endDate
-        || user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
+        || this.user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
       )) {
         this.events = null;
         this.shouldSearch = true;
