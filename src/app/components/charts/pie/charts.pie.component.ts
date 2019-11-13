@@ -126,8 +126,6 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       grouper.zoomOutButton.valign = 'top';
     }
 
-    // Attach events
-    this.attachEventListenersOnChart(chart);
     return chart;
   }
 

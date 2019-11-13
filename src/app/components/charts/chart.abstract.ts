@@ -117,63 +117,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     });
   }
 
-  protected attachEventListenersOnChart(chart: am4charts.PieChart | am4charts.XYChart) {
-    chart.events.on('validated', (ev) => {
-      this.logger.info('validated');
-    });
-
-    chart.events.on('globalscalechanged', (ev) => {
-      this.logger.info('globalscalechanged');
-    });
-
-    chart.events.on('dataitemsvalidated', (ev) => {
-      this.logger.info('dataitemsvalidated');
-    });
-
-
-    chart.events.on('datavalidated', (ev) => {
-      this.logger.info('datavalidated');
-    });
-
-    chart.events.on('datarangechanged', (ev) => {
-      this.logger.info('datarangechanged');
-    });
-
-    chart.events.on('ready', (ev) => {
-      this.logger.info('ready');
-    });
-
-
-    chart.events.on('shown', (ev) => {
-      this.logger.info('shown');
-    });
-
-    chart.events.on('transformed', (ev) => {
-      this.logger.info('transformed');
-    });
-
-    chart.events.on('maxsizechanged', (ev) => {
-      this.logger.info('maxsizechanged');
-    });
-
-    chart.events.on('visibilitychanged', (ev) => {
-      this.logger.info('visibilitychanged');
-    });
-
-    chart.events.on('hidden', (ev) => {
-      this.logger.info('hidden');
-    });
-    chart.events.on('shown', (ev) => {
-      this.logger.info('shown');
-    });
-
-    chart.events.on('inited', (ev) => {
-      this.logger.info('inited');
-    });
-  }
-
-
-
   protected getExportingMenu(): am4core.ExportMenu {
     const exportingMenu = new am4core.ExportMenu();
     exportingMenu.align = 'right';
