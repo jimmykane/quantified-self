@@ -55,7 +55,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.3em]${value.getDisplayType()}[/] [bold font-size: 1.4em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
+      return `[font-size: 1.2em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
     });
 
 

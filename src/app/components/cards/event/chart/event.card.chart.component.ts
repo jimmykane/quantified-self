@@ -251,6 +251,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Add scrollbar
     chart.scrollbarX = new am4core.Scrollbar();
+    chart.scrollbarX.startGrip.disabled = true;
+    chart.scrollbarX.endGrip.disabled = true;
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);

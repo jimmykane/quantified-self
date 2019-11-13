@@ -1,7 +1,7 @@
 mat-card {
-  margin: 0;
+  /*margin: 0;*/
   padding: 16px 0 0;
-  min-height: calc(100vh - 48px);
+  min-height: calc(30vh);
 }
 
 mat-card-header mat-icon {
