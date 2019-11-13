@@ -23,7 +23,7 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
   styleUrls: ['./charts.xy.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsXYComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsXYComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
   @Input() vertical = true;
   @Input() type: 'columns' | 'lines' | 'pyramids';
 
@@ -31,12 +31,6 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
-  }
-
-  async ngAfterViewInit() {
-  }
-
-  async ngOnInit() {
   }
 
   protected createChart(): am4charts.XYChart {

@@ -29,18 +29,12 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
   protected logger = Log.create('ChartPieComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
-  }
-
-  async ngAfterViewInit() {
-  }
-
-  async ngOnInit() {
   }
 
   protected createChart(): am4charts.PieChart {
