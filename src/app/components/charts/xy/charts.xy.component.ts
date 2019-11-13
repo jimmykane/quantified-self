@@ -27,7 +27,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
   @Input() vertical = true;
   @Input() type: 'columns' | 'lines' | 'pyramids';
 
-  protected logger = Log.create('ChartColumnComponent');
+  protected logger = Log.create('ChartsXYComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);

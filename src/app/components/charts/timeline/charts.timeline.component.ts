@@ -28,7 +28,7 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
 })
 export class ChartsTimelineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
-  protected logger = Log.create('ChartColumnComponent');
+  protected logger = Log.create('ChartsTimelineComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);

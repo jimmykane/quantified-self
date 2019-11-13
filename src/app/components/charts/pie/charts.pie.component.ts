@@ -31,7 +31,7 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
 })
 export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
-  protected logger = Log.create('ChartPieComponent');
+  protected logger = Log.create('ChartsPieComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
