@@ -899,7 +899,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
-    xAxis.renderer.grid.template.disabled = false;
+    // xAxis.renderer.grid.template.disabled = false;
     selectedActivities
       .forEach((activity, activityIndex) => {
         // Filter on lapTypes
