@@ -238,7 +238,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
   }
 
-  protected setupChart(chart: am4charts.XYChart){
+  protected setupChart(chart: am4charts.XYChart) {
 
   }
 
@@ -290,11 +290,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
-      // console.log('selectended')
+      const range = ev.target.xRange;
       this.disposeRangeLabelsContainer(ev.target.chart);
       this.disposeClearSelectionButton(ev.target.chart);
+      // Noop if there is no selection its a click so just clear?
+      if (!range) {
+        return;
+      }
       this.addClearSelectionButton(ev.target.chart);
-      const range = ev.target.xRange;
+
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
       const axis = ev.target.chart.xAxes.getIndex(0);
       let start;
@@ -896,7 +900,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private getSeriesRangeLabelContainerID(series): string {
     return `rangeLabelContainer${series.id}`;
   }
-
 
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
