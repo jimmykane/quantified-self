@@ -28,6 +28,7 @@ import {UserDashboardSettingsInterface} from 'quantified-self-lib/lib/users/user
 import {MapThemes, MapTypes, UserMapSettingsInterface} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {LapTypesHelper} from 'quantified-self-lib/lib/laps/lap.types';
 import * as firebase from 'firebase/app';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Component({
   selector: 'app-user-settings',
@@ -69,7 +70,13 @@ export class UserSettingsComponent implements OnChanges {
   public swimPaceUnits = SwimPaceUnits;
   public userSettingsFormGroup: FormGroup;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog) {
+  constructor(private authService: AppAuthService,
+              private route: ActivatedRoute,
+              private userService: UserService,
+              private router: Router,
+              private snackBar: MatSnackBar,
+              private afa: AngularFireAnalytics,
+              private dialog: MatDialog) {
   }
 
   ngOnChanges(): void {
@@ -304,7 +311,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      firebase.analytics().logEvent('user_settings_update');
+      this.afa.logEvent('user_settings_update');
     } catch (e) {
       this.logger.error(e);
       this.snackBar.open('Could not update user', null, {

@@ -16,6 +16,7 @@ import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.servi
 import {Subscription} from 'rxjs';
 import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
 import * as firebase from 'firebase/app';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
@@ -47,6 +48,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private userService: UserService,
     private snackBar: MatSnackBar,
+    private afa: AngularFireAnalytics,
   ) {
     this.user = data.user;
   }
@@ -130,7 +132,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
-      firebase.analytics().logEvent('imported_history', {method: ServiceNames.SuuntoApp});
+      this.afa.logEvent('imported_history', {method: ServiceNames.SuuntoApp});
       this.dialogRef.close();
     } catch (e) {
       // debugger;

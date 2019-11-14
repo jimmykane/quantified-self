@@ -19,6 +19,7 @@ import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interfac
 import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
 import {environment} from '../../../environments/environment';
 import * as firebase from 'firebase/app';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
@@ -41,7 +42,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.snackBar.open(`Connected successfully`, null, {
       duration: 2000,
     });
-    firebase.analytics().logEvent('connected_to_service', {serviceName: event.detail.serviceName});
+    this.afa.logEvent('connected_to_service', {serviceName: event.detail.serviceName});
   }
   @HostListener('window:authError', ['$event'])
   async authError(event) {
@@ -53,7 +54,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   constructor(private http: HttpClient, private fileService: FileService,
-              private fns: AngularFireFunctions,
+              private afa: AngularFireAnalytics,
               private eventService: EventService,
               public authService: AppAuthService,
               private userService: UserService,
@@ -128,11 +129,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.snackBar.open('Activity download started', null, {
           duration: 2000,
         });
-        firebase.analytics().logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
+        this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
       } else {
         const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
         await this.eventService.setEvent(this.user, newEvent);
-        firebase.analytics().logEvent('imported_fit_file', {method: ServiceNames.SuuntoApp});
+        this.afa.logEvent('imported_fit_file', {method: ServiceNames.SuuntoApp});
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }
     } catch (e) {
@@ -176,7 +177,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,
       });
-      firebase.analytics().logEvent('disconnected_from_service', {serviceName: ServiceNames.SuuntoApp});
+      this.afa.logEvent('disconnected_from_service', {serviceName: ServiceNames.SuuntoApp});
     } catch (e) {
       Sentry.captureException(e);
       this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {

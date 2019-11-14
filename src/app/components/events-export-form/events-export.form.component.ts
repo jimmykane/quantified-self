@@ -27,6 +27,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import * as firebase from 'firebase/app';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
@@ -54,6 +55,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     private userService: UserService,
     private fileService: FileService,
     private sharingService: SharingService,
+    private afa: AngularFireAnalytics,
   ) {
     super(dialogRef, data, snackBar);
     this.user = data.user;
@@ -325,7 +327,7 @@ export class EventsExportFormComponent extends FormsAbstract {
       this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
-      firebase.analytics().logEvent('download_csv', {});
+      this.afa.logEvent('download_csv', {});
     })
   }
 }

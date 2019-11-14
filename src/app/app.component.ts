@@ -95,9 +95,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
-    // Init analytics
-    firebase.analytics();
-
     this.sideNavService.setSidenav(this.sideNav);
     this.router.events.subscribe((event: RouterEvent) => {
       switch (true) {

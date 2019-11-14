@@ -11,6 +11,7 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import * as firebase from 'firebase/app';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
@@ -41,7 +42,7 @@ export class UserAgreementFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private formBuilder: FormBuilder,
+    private afa: AngularFireAnalytics,
   ) {
     this.user = data.user; // Perhaps move to service?
     this.serviceName = data.serviceName;
@@ -103,7 +104,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open(`Thanks for registering ${dbUser.displayName || 'Anonymous'}`, null, {
         duration: 2000,
       });
-      firebase.analytics().logEvent('sign_up', {method: this.signInMethod});
+      this.afa.logEvent('sign_up', {method: this.signInMethod});
     } catch (e) {
       // debugger;
       this.snackBar.open('Could not update user', null, {

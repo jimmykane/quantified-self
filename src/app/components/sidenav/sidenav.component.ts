@@ -9,6 +9,7 @@ import * as firebase from 'firebase/app';
 import Firestore = firebase.firestore.Firestore;
 import {AngularFirestore} from '@angular/fire/firestore';
 import {WindowService} from '../../services/app.window.service';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 declare function require(moduleName: string): any;
 
@@ -24,16 +25,14 @@ export class SideNavComponent implements OnInit {
 
   public events: EventInterface[] = [];
   public appVersion = appVersion;
-  public analytics = firebase.analytics();
 
   constructor(
     public authService: AppAuthService,
     public sideNav: SideNavService,
     private windowService: WindowService,
+    private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar,
-    private router: Router,
-    private eventService: EventService,
-    private route: ActivatedRoute) {
+    private router: Router) {
   }
 
   ngOnInit() {
@@ -41,11 +40,11 @@ export class SideNavComponent implements OnInit {
 
   donate() {
     window.open('https://paypal.me/DKanellopoulos');
-    this.analytics.logEvent('donate_click', {method: 'PayPal'});
+    this.afa.logEvent('donate_click', {method: 'PayPal'});
   }
 
   async logout() {
-    this.analytics.logEvent('logout', {});
+    this.afa.logEvent('logout', {});
     this.router.navigate(['/home']).then(async () => {
       await this.authService.signOut();
       this.windowService.windowRef.location.reload();
