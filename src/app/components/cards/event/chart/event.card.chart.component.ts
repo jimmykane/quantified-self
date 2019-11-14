@@ -121,6 +121,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   async ngAfterViewInit() {
     this.logger.info(`ViewInit`);
+    this.chart = this.createChart();
+    await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
     // this.chart = this.createChart();
   }
 
@@ -134,17 +136,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   async ngOnChanges(simpleChanges: SimpleChanges) {
     this.logger.info(`Change`);
 
-    // If not visible and no data is bound do nothing
-    if (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour || simpleChanges.disableGrouping) {
+    if (this.chart && (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour || simpleChanges.disableGrouping)) {
       this.destroyChart();
-    }
-
-    // 1. If there is no chart create
-    if (!this.chart) {
       this.chart = this.createChart();
     }
 
-    // 3. If something changed then do the needed
     if (simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.showAllData
@@ -155,12 +151,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.strokeWidth
       || simpleChanges.fillOpacity
       || simpleChanges.dataTypesToUse
-      || simpleChanges.stackYAxes
       || simpleChanges.downSamplingLevel
-      || simpleChanges.gainAndLossThreshold
-      || simpleChanges.disableGrouping
-      || simpleChanges.xAxisType
-      || simpleChanges.chartTheme) {
+      || simpleChanges.gainAndLossThreshold) {
+      if (!this.chart) {
+        return;
+      }
       this.unsubscribeAndClearChart();
       if (!this.event || !this.selectedActivities.length) {
         return;
@@ -168,14 +163,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (this.showLaps) {
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
+      // show grid ?
       await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
       return;
     }
 
-    // 4. If nothing has changed but we do not have data binding then bind
-    if (!this.streamsSubscription || this.streamsSubscription.closed) {
-      await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
-    }
   }
 
   private async processChanges(selectedDataTypes: string[] | null) {

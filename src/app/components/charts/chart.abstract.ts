@@ -26,37 +26,7 @@ import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
 import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
 import kelly from '@amcharts/amcharts4/themes/kelly';
 import * as am4core from '@amcharts/amcharts4/core';
-import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
-import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
-import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
-import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
-import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
-import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
-import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
-import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
-import {
-  DataSpeed,
-  DataSpeedFeetPerMinute,
-  DataSpeedFeetPerSecond, DataSpeedKilometersPerHour,
-  DataSpeedMetersPerMinute, DataSpeedMilesPerHour
-} from 'quantified-self-lib/lib/data/data.speed';
-import {
-  DataVerticalSpeed, DataVerticalSpeedFeetPerHour, DataVerticalSpeedFeetPerMinute,
-  DataVerticalSpeedFeetPerSecond, DataVerticalSpeedKilometerPerHour, DataVerticalSpeedMetersPerHour,
-  DataVerticalSpeedMetersPerMinute, DataVerticalSpeedMilesPerHour
-} from 'quantified-self-lib/lib/data/data.vertical-speed';
-import {DataStrydDistance} from 'quantified-self-lib/lib/data/data.stryd-distance';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataLeftBalance} from 'quantified-self-lib/lib/data/data.left-balance';
-import {DataRightBalance} from 'quantified-self-lib/lib/data/data.right-balance';
-import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
-import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
-import {DataPower} from 'quantified-self-lib/lib/data/data.power';
-import {DataPowerLeft} from 'quantified-self-lib/lib/data/data.power-left';
-import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
 import {LoadingAbstract} from '../loading/loading.abstract';
-import {SummariesChartDataDateRages} from '../summaries/summaries.component';
-import {ChartDataCategoryTypes} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
 
 declare function require(moduleName: string): any;
 

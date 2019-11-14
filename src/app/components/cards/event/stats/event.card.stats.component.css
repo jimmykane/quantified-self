@@ -4,11 +4,16 @@ mat-icon {
   margin-left: 0.5em;
 }
 
-mat-card{
-  min-height: 100vh;
-  padding: 0;
+/*mat-card{*/
+/*  min-height: 100vh;*/
+/*  padding: 0;*/
+/*}*/
+
+mat-form-field {
+  padding: 0 1em;
 }
 
-mat-form-field{
-  padding: 1em;
+mat-table{
+  overflow: scroll;
+  height: 20vh;
 }

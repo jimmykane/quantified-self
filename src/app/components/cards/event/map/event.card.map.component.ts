@@ -60,7 +60,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
     mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
     position: 5,
-    style: 0
+    style: 2
   };
 
   public rotateControlOptions = {
@@ -68,7 +68,8 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   };
 
   public zoomControlOptions = {
-    position: 7
+    position: 7,
+    style: 0
   };
 
   private logger = Log.create('EventCardMapAGMComponent');

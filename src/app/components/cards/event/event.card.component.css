@@ -1,7 +1,12 @@
 mat-card {
-  /*margin: 0;*/
-  padding: 16px 0 0;
+  margin-top: 0.1em;
+  margin-bottom: 0.8em;
+  /*padding: 16px 0 0;*/
   min-height: calc(30vh);
+}
+
+mat-card-content{
+  max-height: 20vh;
 }
 
 mat-card-header mat-icon {
@@ -11,6 +16,10 @@ mat-card-header mat-icon {
 ::ng-deep .mat-card-header-text{
   width: 100%;
   /*margin: 0;*/
+}
+
+app-event-card-stats{
+  max-height: 30vh;
 }
 
 .title {

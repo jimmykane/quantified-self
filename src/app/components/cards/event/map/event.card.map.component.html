@@ -1,5 +1,3 @@
-<mat-card>
-
   <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
   <!-- Map -->
   <agm-map *ngIf="activitiesMapData.length > 0"
@@ -177,4 +175,3 @@
     <!--</agm-marker>-->
     <!--</ng-container>-->
   </agm-map>
-</mat-card>

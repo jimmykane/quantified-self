@@ -1,11 +1,9 @@
 agm-map {
   width: 100%;
-  height:30vh;
+  min-height:30vh;
+  height: 40vh;
 }
+
 mat-icon{
   vertical-align: middle;
-}
-mat-card{
-  min-height: 30vh;
-  padding: 0;
 }

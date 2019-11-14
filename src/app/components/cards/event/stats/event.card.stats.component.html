@@ -1,16 +1,15 @@
-<mat-card>
-  <mat-form-field>
-    <input matInput (keyup)="applyFilter($event)" placeholder="Filter">
-  </mat-form-field>
-  <mat-table [dataSource]="data">
-    <ng-container *ngFor="let column of columns" [matColumnDef]="column">
-      <mat-header-cell *matHeaderCellDef>
+<mat-form-field>
+  <input matInput (keyup)="applyFilter($event)" placeholder="Filter">
+</mat-form-field>
+<mat-table [dataSource]="data">
+  <ng-container *ngFor="let column of columns" [matColumnDef]="column">
+    <mat-header-cell *matHeaderCellDef>
       {{ column }}
       <span *ngIf="column == 'Difference'">
         <mat-icon matTooltip="Up to 2% of difference is acceptable, up to 5% it gets worse and more than 5% it's bad">info</mat-icon>
       </span>
-      </mat-header-cell>
-      <mat-cell *matCellDef="let row">
+    </mat-header-cell>
+    <mat-cell *matCellDef="let row">
       <span *ngIf="column == 'Difference' && row[column]">
         {{ row[column].display }}
         <span *ngIf="row[column].percent <= 2" [ngStyle]="{'color': appColors.Green}">
@@ -23,11 +22,10 @@
         {{ row[column].percent.toFixed(1) }}%
         </span>
       </span>
-        <span *ngIf="column !== 'Difference'">{{ row[column] }}</span>
-      </mat-cell>
-    </ng-container>
-    <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: columns;">
-    </mat-row>
-  </mat-table>
-</mat-card>
+      <span *ngIf="column !== 'Difference'">{{ row[column] }}</span>
+    </mat-cell>
+  </ng-container>
+  <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
+  <mat-row *matRowDef="let row; columns: columns;">
+  </mat-row>
+</mat-table>
