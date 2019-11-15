@@ -70,7 +70,7 @@ import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-p
 import {ChartHelper, LabelData} from './chart-helper';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
-const DOWNSAMPLE_FACTOR_PER_HOUR = 1;
+const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
 
 @Component({
   selector: 'app-event-card-chart',
@@ -160,10 +160,17 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (!this.event || !this.selectedActivities.length) {
         return;
       }
+      if (this.showGrid) {
+        this.addGrid();
+      }else {
+        this.removeGrid();
+      }
       if (this.showLaps) {
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
+
       // show grid ?
+
       await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
       return;
     }
@@ -761,6 +768,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getStreamSamplingRateInSeconds(activity: ActivityInterface): number {
+    if (this.downSamplingLevel === 1){
+      return 1;
+    }
     // Rate is minimum 1
     const rate = this.downSamplingLevel || 1;
     // If we do not need to strengthen the downsampling based on the DOWNSAMPLE_AFTER_X_HOURS
@@ -768,7 +778,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if (this.getActivityHours(activity) < DOWNSAMPLE_AFTER_X_HOURS) {
       return 1;
     }
-    return rate;
+    // return rate * (this.getActivityHours(activity) / DOWNSAMPLE_AFTER_X_HOURS);
     // If the activity needs a bump on downsampling > DOWNSAMPLE_AFTER_X_HOURS
     return rate * Math.ceil(Math.ceil(this.getActivityHours(activity) / DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_FACTOR_PER_HOUR);
   }
@@ -965,15 +975,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.xAxes.getIndex(0).axisRanges.clear();
   }
 
-  // private removeGrid() {
-  //   this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
-  //   this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
-  // }
+  private removeGrid() {
+    this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+    this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
+  }
 
-  // private addGrid() {
-  //   this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = false);
-  //   this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
-  // }
+  private addGrid() {
+    this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = false);
+    this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
+  }
 
 
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
