@@ -1,8 +1,13 @@
 mat-card {
   margin-top: 0.0em;
   margin-bottom: 0.8em;
+  margin-left: 0.8em;
+  margin-right: 0.8em;
   /*padding: 16px 0 0;*/
-  min-height: calc(30vh);
+  /*min-height: calc(30vh);*/
+}
+mat-card:first-of-type{
+  margin-top: 0.8em;
 }
 
 mat-card-content{

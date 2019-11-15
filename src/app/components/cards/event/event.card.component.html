@@ -11,6 +11,24 @@
         <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
         <span class="mat-body-2"> {{ event.name.slice(0, 70) }}</span>
       </mat-card-subtitle>
+      <mat-card-subtitle>
+        <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser"
+                                   [event]="event" [(selectedActivities)]="selectedActivities">
+        </app-activities-checkboxes>
+        <app-activity-header
+          *ngIf="event.getActivities().length === 1"
+          [user]="currentUser"
+          [showIcon]="true"
+          [event]="event"
+          [activity]="selectedActivities[0]"
+          [showType]="true"
+          [showActions]="isOwner()"
+          [showDistance]="true"
+          [showSerialNumber]="true"
+          [showSWInfo]="true"
+          [showDuration]="true">
+        </app-activity-header>
+      </mat-card-subtitle>
 <!--      <mat-card-subtitle>-->
 <!--        <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser"-->
 <!--                                   [event]="event" [(selectedActivities)]="selectedActivities">-->
@@ -33,29 +51,11 @@
   </mat-card>
 
   <mat-card class="mat-elevation-z2">
-    <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser"
-                               [event]="event" [(selectedActivities)]="selectedActivities">
-    </app-activities-checkboxes>
-    <app-activity-header
-      *ngIf="event.getActivities().length === 1"
-      [user]="currentUser"
-      [showIcon]="true"
-      [event]="event"
-      [activity]="selectedActivities[0]"
-      [showType]="true"
-      [showActions]="isOwner()"
-      [showDistance]="true"
-      [showSerialNumber]="true"
-      [showSWInfo]="true"
-      [showDuration]="true">
-    </app-activity-header>
-    <mat-card-content>
       <app-event-card-stats
         [selectedActivities]="selectedActivities"
         [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
         [event]="event">
       </app-event-card-stats>
-    </mat-card-content>
   </mat-card>
   <mat-card class="mat-elevation-z2">
 
