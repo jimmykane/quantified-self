@@ -21,6 +21,7 @@ export class ActivityHeaderComponent {
   @Input() showSWInfo: boolean;
   @Input() showSerialNumber: boolean;
   @Input() showActions: boolean;
+  @Input() showDevice: boolean;
 
   constructor(public eventColorService: EventColorService) {
   }

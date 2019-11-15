@@ -2,7 +2,7 @@
   <mat-icon *ngIf="showIcon" [ngStyle]="{'color':  eventColorService.getActivityColor(event, activity)}">
     watch
   </mat-icon>
-  <span>
+  <span *ngIf="showDevice">
     {{ activity.creator.name }}
     <span *ngIf="showSWInfo &&  activity.creator.swInfo">
       <span class="mat-small">
@@ -10,7 +10,6 @@
       </span>
     </span>
   </span>
-  &nbsp;
   <span *ngIf="showType"><b>{{ activity.type }}</b>
   </span>
   <span *ngIf="showDuration">
