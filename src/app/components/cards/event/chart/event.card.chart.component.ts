@@ -238,7 +238,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
 
     chart.fontSize = '1em';
-    // chart.padding(0, 10, 0, 0);
+    chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
 
     // Add scrollbar

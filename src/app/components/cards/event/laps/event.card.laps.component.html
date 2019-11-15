@@ -1,5 +1,5 @@
-<mat-card *ngFor="let activity of selectedActivities">
-  <section>
+<ng-container *ngFor="let activity of selectedActivities">
+  <section *ngIf="getData(activity).data.length">
     <app-activity-header
       [activity]="activity"
       [event]="event"
@@ -15,4 +15,4 @@
     <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
     <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
   </mat-table>
-</mat-card>
+</ng-container>
