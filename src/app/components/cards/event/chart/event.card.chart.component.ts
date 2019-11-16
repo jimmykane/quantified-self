@@ -162,7 +162,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
       if (this.showGrid) {
         this.addGrid();
-      }else {
+      } else {
         this.removeGrid();
       }
       if (this.showLaps) {
@@ -262,19 +262,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.xAxes.push(this.addXAxis(chart, this.xAxisType));
 
     // Create a Legend
-    chart.legend = new am4charts.Legend();
-    chart.legend.fontSize = '1em';
-    chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-    chart.legend.parent.width = am4core.percent(100);
-    chart.legend.parent.height = am4core.percent(100);
-
-    chart.legend.useDefaultMarker = true;
-    const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
-    marker.cornerRadius(14, 14, 14, 14);
-    marker.strokeWidth = 4;
-    marker.strokeOpacity = 1;
-    marker.stroke = am4core.color('#0a97ee');
-
+    chart.legend = this.createChartLegend(chart);
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
@@ -768,7 +756,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getStreamSamplingRateInSeconds(activity: ActivityInterface): number {
-    if (this.downSamplingLevel === 1){
+    if (this.downSamplingLevel === 1) {
       return 1;
     }
     // Rate is minimum 1
@@ -1197,5 +1185,39 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     xAxis.padding = 0;
     // xAxis.renderer.labels.template.fontSize = '1.2em';
     return xAxis;
+  }
+
+  private createChartLegend(): am4charts.Legend {
+    return this.zone.runOutsideAngular(() => {
+      // Create a Legend
+      const legend = new am4charts.Legend();
+      legend.fontSize = '1em';
+
+      legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+      this.logger.info(`created laged ${legend.parent.uid}`);
+      legend.parent.width = am4core.percent(100);
+      legend.parent.height = am4core.percent(100);
+
+      legend.useDefaultMarker = true;
+      const marker = <am4core.RoundedRectangle>legend.markers.template.children.getIndex(0);
+      marker.cornerRadius(14, 14, 14, 14);
+      marker.strokeWidth = 4;
+      marker.strokeOpacity = 1;
+      marker.stroke = am4core.color('#0a97ee');
+      return legend;
+    });
+  }
+
+  private destroyLegendParent() {
+    return this.zone.runOutsideAngular(() => {
+      if (this.chart && this.chart.legend) {
+        this.chart.legend.dispose();
+      }
+    });
+  }
+
+  protected destroyChart() {
+    this.destroyLegendParent();
+    super.destroyChart();
   }
 }
