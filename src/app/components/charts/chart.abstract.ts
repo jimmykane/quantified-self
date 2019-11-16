@@ -64,7 +64,8 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
 
   protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(changeDetector);
-    am4core.options.commercialLicense = true;
+    am4core.options.onlyShowOnViewport = true;
+    // am4core.options.commercialLicense = true;
     if (am4ChartsTimeLineLicence) {
       am4core.addLicense(am4ChartsTimeLineLicence);
     }
