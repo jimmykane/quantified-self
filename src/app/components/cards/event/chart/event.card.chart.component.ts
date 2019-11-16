@@ -260,7 +260,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.xAxes.push(this.addXAxis(chart, this.xAxisType));
 
     // Create a Legend
-    chart.legend = this.createChartLegend(chart);
+    chart.legend = this.createChartLegend();
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
