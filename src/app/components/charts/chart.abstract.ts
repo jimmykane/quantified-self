@@ -69,18 +69,17 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     if (am4ChartsTimeLineLicence) {
       am4core.addLicense(am4ChartsTimeLineLicence);
     }
-    this.applyChartStylesFromUserSettings(this.chartTheme, this.useAnimations);
   }
 
   protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
     this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
+      this.applyChartStylesFromUserSettings(this.chartTheme, this.useAnimations);
       // Create a chart
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       this.logger.info(`Created outsize of zone chart with id ${chart.uid}`);
       chart.pixelPerfect = false;
-
       // chart.colors.step = 2;
       // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
