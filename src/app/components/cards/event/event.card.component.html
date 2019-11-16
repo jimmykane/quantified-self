@@ -3,11 +3,11 @@
     <mat-card-header>
       <div mat-card-avatar>
         <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
-        <mat-icon>access_time</mat-icon>
+<!--        <mat-icon>access_time</mat-icon>-->
       </div>
       <mat-card-title>
         {{ event.startDate | date:'medium' }}</mat-card-title>
-      <mat-card-subtitle><b>Name:</b> {{ event.name.slice(0, 70) }}</mat-card-subtitle>
+      <mat-card-subtitle>{{ event.name.slice(0, 70) }}</mat-card-subtitle>
       <app-event-actions *ngIf="isOwner()" [user]="currentUser" [event]="event" align="end"></app-event-actions>
     </mat-card-header>
     <mat-card-content>

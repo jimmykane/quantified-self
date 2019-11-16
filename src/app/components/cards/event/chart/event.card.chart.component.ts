@@ -260,7 +260,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.xAxes.push(this.addXAxis(chart, this.xAxisType));
 
     // Create a Legend
-    chart.legend = this.createChartLegend();
+    this.attachChartLegendToChart(chart);
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
@@ -473,7 +473,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return series
     }
 
-    let yAxis: am4charts.Axis;
+    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
 
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(stream.type));
@@ -481,9 +481,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis = this.chart.yAxes.push(this.getYAxisForSeries(stream.type));
     } else {
       // Share
-      yAxis = sameTypeSeries.yAxis;
+      yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
     }
 
+    // yAxis.extraMax = 0.20;
     // yAxis.tooltip.disabled = true;
     // yAxis.interpolationDuration = 500;
     // yAxis.rangeChangeDuration = 500;
@@ -1019,7 +1020,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
   }
 
-  protected getYAxisForSeries(streamType: string) {
+  protected getYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis  {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
       yAxis = new am4charts.DurationAxis()
@@ -1182,24 +1183,23 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return xAxis;
   }
 
-  private createChartLegend(): am4charts.Legend {
+  private attachChartLegendToChart(chart) {
     return this.zone.runOutsideAngular(() => {
       // Create a Legend
-      const legend = new am4charts.Legend();
-      legend.fontSize = '1em';
+      chart.legend = new am4charts.Legend();
+      // legend.fontSize = '1em';
 
-      legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-      this.logger.info(`created laged ${legend.parent.uid}`);
-      legend.parent.width = am4core.percent(100);
-      legend.parent.height = am4core.percent(100);
+      chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+      this.logger.info(`Created legend with id ${chart.legend.parent.uid}`);
+      chart.legend.parent.width = am4core.percent(100);
+      chart.legend.parent.height = am4core.percent(100);
 
-      legend.useDefaultMarker = true;
-      const marker = <am4core.RoundedRectangle>legend.markers.template.children.getIndex(0);
+      chart.legend.useDefaultMarker = true;
+      const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
       marker.cornerRadius(14, 14, 14, 14);
       marker.strokeWidth = 4;
       marker.strokeOpacity = 1;
       marker.stroke = am4core.color('#0a97ee');
-      return legend;
     });
   }
 
