@@ -29,6 +29,7 @@ import {EventCardChartComponent} from '../components/cards/event/chart/event.car
 import {EventFormComponent} from '../components/event-form/event.form.component';
 import {ActivityFormComponent} from '../components/activity-form/activity.form.component';
 import {DeleteConfirmationComponent} from '../components/delete-confirmation/delete-confirmation.component';
+import {EditInputComponent} from '../components/edit-input/edit-input.component';
 
 
 @NgModule({
@@ -50,6 +51,8 @@ import {DeleteConfirmationComponent} from '../components/delete-confirmation/del
     EventFormComponent,
     ActivityFormComponent,
     DeleteConfirmationComponent,
+    EditInputComponent,
+
   ],
   providers: [],
   entryComponents: [
@@ -68,9 +71,10 @@ import {DeleteConfirmationComponent} from '../components/delete-confirmation/del
     EventFormComponent,
     ActivityFormComponent,
     DeleteConfirmationComponent,
+    EditInputComponent,
     ReactiveFormsModule,
-    FormsModule]
-
+    FormsModule
+  ]
 })
 export class SharedModule {
 }

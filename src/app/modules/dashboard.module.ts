@@ -40,7 +40,6 @@ import {ChartAbstract} from '../components/charts/chart.abstract';
     ChartActionsComponent,
     EventSearchComponent,
     EventsExportFormComponent,
-    EditInputComponent,
     UploadErrorComponent,
     ActivityMetadataComponent,
     EventTableComponent,

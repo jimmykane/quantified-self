@@ -1,18 +1,77 @@
 <mat-card *ngIf="event" class="outer">
   <mat-card class="mat-elevation-z2 inner">
+    <!-- Event details -->
     <mat-card-header>
       <div mat-card-avatar>
         <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
-<!--        <mat-icon>access_time</mat-icon>-->
+        <!--        <mat-icon>access_time</mat-icon>-->
       </div>
       <mat-card-title>
-        {{ event.startDate | date:'medium' }}</mat-card-title>
-      <mat-card-subtitle>{{ event.name.slice(0, 70) }}</mat-card-subtitle>
+        {{ event.startDate | date:"MMM d, y 'at' h:mm:ss a" }}</mat-card-title>
+      <mat-card-subtitle>
+        <app-edit-input
+          [(data)]='event.name'
+          [type]="'text'"
+          [placeHolder]="event.name ? 'Name': 'Add a name'"
+          (dataChange)="saveEventDescription(event.description, event)">
+        </app-edit-input>
+      </mat-card-subtitle>
       <app-event-actions *ngIf="isOwner()" [user]="currentUser" [event]="event" align="end"></app-event-actions>
     </mat-card-header>
-    <mat-card-content>
-      {{event.description}}
-    </mat-card-content>
+
+    <!-- Content -->
+    <app-edit-input
+      [(data)]='event.description'
+      [type]="'textArea'"
+      [placeHolder]="event.description ? 'Description': 'Add a description'"
+      (dataChange)="saveEventDescription(event.description, event)">
+    </app-edit-input>
+
+    <!-- Activity details -->
+    <mat-card-header *ngFor="let activity of event.getActivities()">
+      <mat-card-title>
+        <b>{{ activity.type }}</b>&nbsp;
+        <span>
+          <b>{{ activity.getDistance().getDisplayValue() }}</b>
+          {{ activity.getDistance().getDisplayUnit() }}
+        </span>
+      </mat-card-title>
+      <mat-card-subtitle>
+         <span>
+           <b>{{ activity.getDuration().getDisplayValue() }}</b>
+         </span>
+      </mat-card-subtitle>
+      <div mat-card-avatar>
+        <app-activity-actions *ngIf="isOwner()" [user]="currentUser" [event]="event"
+                              [activity]="activity"></app-activity-actions>
+      </div>
+    </mat-card-header>
+
+    <mat-card-header>
+      <div mat-card-avatar>
+        <mat-icon>map</mat-icon>
+      </div>
+      <mat-card-title>Title</mat-card-title>
+      <mat-card-subtitle>Subtitle</mat-card-subtitle>
+      <app-map-actions
+        [(showLaps)]="showMapLaps"
+        [(showArrows)]="showMapArrows"
+        [user]="currentUser"
+        align="end">
+      </app-map-actions>
+    </mat-card-header>
+    <app-event-card-map
+      *ngIf="event && targetUserID"
+      [selectedActivities]="selectedActivities"
+      [targetUserID]="targetUserID"
+      [user]="currentUser"
+      [event]="event"
+      [showLaps]="showMapLaps"
+      [lapTypes]="mapLapTypes"
+      [showArrows]="showMapArrows"
+      [strokeWidth]="mapStrokeWidth"
+      [theme]="mapTheme">
+    </app-event-card-map>
   </mat-card>
 
   <mat-card class="mat-elevation-z2 inner">
@@ -30,9 +89,9 @@
          </span>
 
       </mat-card-subtitle>
-      <div mat-card-avatar align="end">
-        <app-activity-actions *ngIf="isOwner()" [user]="currentUser" [event]="event" [activity]="activity"
-                              align="end"></app-activity-actions>
+      <div mat-card-avatar>
+        <app-activity-actions *ngIf="isOwner()" [user]="currentUser" [event]="event"
+                              [activity]="activity"></app-activity-actions>
       </div>
     </mat-card-header>
     <mat-card-content>
