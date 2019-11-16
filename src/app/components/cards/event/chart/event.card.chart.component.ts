@@ -169,8 +169,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
 
-      // show grid ?
-
       await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
       return;
     }
@@ -844,8 +842,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.disposeCursorSelection(this.chart);
       this.disposeClearSelectionButton(this.chart);
       this.chart.xAxes.each(axis => axis.axisRanges.clear());
-      this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
-      this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
+      // this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+      // this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
     }
   }
 
@@ -894,7 +892,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
-    // xAxis.renderer.grid.template.disabled = false;
+    xAxis.axisRanges.template.grid.disabled = false;
     selectedActivities
       .forEach((activity, activityIndex) => {
         // Filter on lapTypes
@@ -918,9 +916,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
                     .getStreamDataByTime(activity.startDate, true)
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   range.value = data[0].value
-                }
-                if (!range.grid) {
-                  return;
                 }
                 range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event, activity));
                 range.grid.strokeWidth = 1;
