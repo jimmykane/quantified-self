@@ -20,7 +20,6 @@
     </app-edit-input>
   </mat-card-subtitle>
   <mat-card-subtitle style="margin-bottom: 0">
-
     <app-edit-input
       [disabled]="!user"
       [(data)]='event.description'
@@ -29,6 +28,23 @@
       (dataChange)="saveEventDescription(event.description, event)">
     </app-edit-input>
   </mat-card-subtitle>
+  <mat-card-subtitle style="margin-bottom: 0;">
+    <app-edit-input style="width: 50%; display: inline-block;"
+      [(data)]="feeling"
+      [type]="'select'"
+      [placeHolder]="'Feeling'"
+      [selectOptions]="feelings"
+      (dataChange)="saveEventFeeling(feeling, event)">
+    </app-edit-input>
+    <app-edit-input style="width: 50%; display: inline-block;"
+      [(data)]='rpe'
+      [type]="'select'"
+      [placeHolder]="'Rating of Perceived Exertion'"
+      [selectOptions]="rpeBorgCR10SCale"
+      (dataChange)="saveEventRPE(rpe, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
+
 
   <mat-card-subtitle>
     <section class="container">
@@ -37,7 +53,7 @@
         {{event.getDuration().getDisplayValue()}}
       </section>
       <section class="item">
-        <mat-icon >trending_flat</mat-icon>
+        <mat-icon>trending_flat</mat-icon>
         {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
       </section>
       <section class="item">

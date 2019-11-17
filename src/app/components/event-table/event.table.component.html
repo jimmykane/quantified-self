@@ -97,7 +97,7 @@
                 [(data)]='element.feeling'
                 [type]="'select'"
                 [placeHolder]="'Feeling'"
-                [selectOptions]="getEnumKeyValue(feelings)"
+                [selectOptions]="feelings"
                 (dataChange)="saveEventFeeling(element.feeling, element.event)">
               </app-edit-input>
             </td>
@@ -106,7 +106,7 @@
                 [(data)]='element.rpe'
                 [type]="'select'"
                 [placeHolder]="'Rating of Perceived Exertion'"
-                [selectOptions]="getEnumKeyValue(rpeBorgCR10SCale)"
+                [selectOptions]="rpeBorgCR10SCale"
                 (dataChange)="saveEventRPE(element.rpe, element.event)">
               </app-edit-input>
             </td>

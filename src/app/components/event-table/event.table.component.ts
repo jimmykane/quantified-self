@@ -79,8 +79,11 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   selection = new SelectionModel(true, []);
   expandedElement: EventRowElement | null;
   expandAll: boolean;
-  rpeBorgCR10SCale = RPEBorgCR10SCale;
-  feelings = Feelings;
+
+  feeling: Feelings;
+  rpe: RPEBorgCR10SCale;
+  feelings = this.getNumericEnumKeyValue(Feelings);
+  rpeBorgCR10SCale = this.getNumericEnumKeyValue(RPEBorgCR10SCale);
 
   eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
@@ -377,14 +380,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
-  }
-
-  getEnumKeyValue(enumerator) {
-    return Object.keys(enumerator).slice(Object.keys(enumerator).length / 2)
-      .reduce((obj, key) => {
-        obj[`${enumerator[key]} - ${key}`] = enumerator[key];
-        return obj
-      }, {});
   }
 
   getColumnsToDisplayDependingOnScreenSize(event?) {
