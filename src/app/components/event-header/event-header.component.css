@@ -1,20 +1,28 @@
 mat-card {
-  margin-top: 0.0em;
-  margin-bottom: 0.8em;
-  margin-left: 0.8em;
-  margin-right: 0.8em;
+  /*margin-top: 0.0em;*/
+  /*margin-bottom: 0.8em;*/
+  /*margin-left: 0.8em;*/
+  /*margin-right: 0.8em;*/
   /*padding: 16px 0 0;*/
   /*min-height: calc(30vh);*/
 }
 
 section.item{
   white-space:nowrap;
+  display: inline-block;
 }
 section.item mat-icon{
   font-size: 16px;width: 18px;height: 20px;vertical-align: sub;
+}
+section.item{
+  margin-right: 1em;
 }
 .mat-card-avatar{
   text-align: center;
   height: auto;
   width: auto;
+}
+
+mat-card-header .mat-card-title{
+  font-size: 1.3em;
 }

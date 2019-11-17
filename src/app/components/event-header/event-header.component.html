@@ -1,4 +1,4 @@
-<mat-card class="mat-elevation-z1">
+<mat-card class="mat-elevation-z0">
   <!-- Event details -->
   <mat-card-header>
     <div mat-card-avatar>
@@ -7,6 +7,26 @@
     <mat-card-title>
       {{ event.startDate | date:"d MMM, yy 'at' h:mm:ss a" }}
     </mat-card-title>
+    <mat-card-subtitle>
+      <section class="container">
+        <section class="item">
+          <mat-icon>access_time</mat-icon>
+          {{event.getDuration().getDisplayValue()}}
+        </section>
+        <section class="item">
+          <mat-icon>trending_flat</mat-icon>
+          {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
+        </section>
+        <section class="item">
+          <mat-icon svgIcon="heart_rate"></mat-icon>
+          {{ event.getStat('Average Heart Rate')?.getDisplayValue()}}{{event.getStat('Average Heart Rate')?.getDisplayUnit()}}
+        </section>
+        <section class="item">
+          <mat-icon svgIcon="energy"></mat-icon>
+          {{ event.getStat('Average Power')?.getDisplayValue()}}{{event.getStat('Average Power')?.getDisplayUnit()}}
+        </section>
+      </section>
+    </mat-card-subtitle>
 
     <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
   </mat-card-header>
@@ -45,21 +65,4 @@
     </app-edit-input>
   </mat-card-subtitle>
 
-
-  <mat-card-subtitle>
-    <section class="container">
-      <section class="item">
-        <mat-icon>access_time</mat-icon>
-        {{event.getDuration().getDisplayValue()}}
-      </section>
-      <section class="item">
-        <mat-icon>trending_flat</mat-icon>
-        {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
-      </section>
-      <section class="item">
-        <mat-icon svgIcon="heart_rate"></mat-icon>
-        {{ event.getStat('Average Heart Rate')?.getDisplayValue()}}{{event.getStat('Average Heart Rate')?.getDisplayUnit()}}
-      </section>
-    </section>
-  </mat-card-subtitle>
 </mat-card>

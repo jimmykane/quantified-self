@@ -6,13 +6,13 @@
 
   </app-event-header>
 
-  <mat-card>
+  <mat-card class="mat-elevation-z0">
     <!-- Activity details -->
     <mat-card-header *ngFor="let activity of event.getActivities()">
       <div mat-card-avatar>
         <mat-icon>visibility</mat-icon>
       </div>
-      <mat-card-title>
+      <mat-card-title style="font-size: 1.2em;">
         <b>{{ activity.type }}</b>&nbsp;
         <span>
           <b>{{ activity.getDistance().getDisplayValue() }}</b>
@@ -30,31 +30,31 @@
     <mat-accordion>
       <mat-expansion-panel class="mat-elevation-z0">
         <mat-expansion-panel-header>
-          <mat-panel-title>
-            Personal data
+          <mat-panel-title style="font-size: 1.1em">
+            <span><mat-icon style="vertical-align: bottom;">insert_chart</mat-icon>
+            Summaries</span>
           </mat-panel-title>
           <mat-panel-description>
-            Type your name and age
+            Tap to expand
           </mat-panel-description>
         </mat-expansion-panel-header>
-
-        <mat-form-field>
-          <input matInput placeholder="First name">
-        </mat-form-field>
-
-        <mat-form-field>
-          <input matInput placeholder="Age">
-        </mat-form-field>
+        <app-event-card-stats
+          [selectedActivities]="selectedActivities"
+          [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
+          [event]="event">
+        </app-event-card-stats>
       </mat-expansion-panel>
     </mat-accordion>
+    <mat-divider></mat-divider>
+
   </mat-card>
-  <mat-card>
+  <mat-card  class="mat-elevation-z0">
     <mat-card-header>
       <div mat-card-avatar>
         <mat-icon>map</mat-icon>
       </div>
-      <mat-card-title>Title</mat-card-title>
-      <mat-card-subtitle>Subtitle</mat-card-subtitle>
+      <mat-card-title>Map</mat-card-title>
+      <mat-card-subtitle>What to put here ?</mat-card-subtitle>
       <app-map-actions
         [(showLaps)]="showMapLaps"
         [(showArrows)]="showMapArrows"
@@ -151,7 +151,7 @@
   <!--      [theme]="mapTheme">-->
   <!--    </app-event-card-map>-->
   <!--  </mat-card>-->
-  <mat-card class="mat-elevation-z1 inner">
+  <mat-card class="mat-elevation-z0 inner">
     <mat-card-header>
       <div mat-card-avatar>
         <mat-icon>show_chart</mat-icon>
