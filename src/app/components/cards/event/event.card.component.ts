@@ -160,10 +160,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
-  async toggleEventPrivacy() {
-    return this.eventService.setEventPrivacy(this.currentUser, this.event.getID(), this.event.privacy === Privacy.Private ? Privacy.Public : Privacy.Private);
-  }
-
   isOwner() {
     return !!(this.targetUserID && this.currentUser && (this.targetUserID === this.currentUser.uid));
   }

@@ -16,8 +16,9 @@ import {EditInputComponent} from '../components/edit-input/edit-input.component'
 import {UploadErrorComponent} from '../components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from '../components/activity-metadata/activity-metadata.component';
 import {UploadComponent} from '../components/upload/upload.component';
-import {EventTableComponent} from '../components/event-table/event.table.component';
+import {EventTableComponent, MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
 import {ChartAbstract} from '../components/charts/chart.abstract';
+import {MatPaginatorIntl} from '@angular/material/paginator';
 
 
 @NgModule({
@@ -49,7 +50,8 @@ import {ChartAbstract} from '../components/charts/chart.abstract';
     EventsExportFormComponent,
   ],
   providers: [
-  ]
+    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
+  ],
 })
 
 

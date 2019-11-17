@@ -28,6 +28,7 @@ import kelly from '@amcharts/amcharts4/themes/kelly';
 import * as am4core from '@amcharts/amcharts4/core';
 import {LoadingAbstract} from '../loading/loading.abstract';
 
+
 declare function require(moduleName: string): any;
 
 let am4ChartsTimeLineLicence;

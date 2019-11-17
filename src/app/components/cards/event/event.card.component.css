@@ -16,9 +16,12 @@ mat-card {
   /*min-height: calc(30vh);*/
 }
 
-.mat-card-header .mat-card-title {
-  font-size: 1.2em;
+.mat-card-avatar{
+  text-align: center;
+  height: auto;
+  width: auto;
 }
+
 
 mat-card-content{
   /*max-height: 20vh;*/
@@ -30,7 +33,10 @@ mat-card-header mat-icon {
 
 ::ng-deep .mat-card-header-text{
   width: 100%;
-  /*margin: 0;*/
+}
+
+::ng-deep .no-margin .mat-card-header-text{
+  margin: 0 !important;
 }
 
 app-event-card-stats{
@@ -41,8 +47,4 @@ app-event-card-stats{
   display: flex;
   align-content: center;
   align-items: center;
-}
-
-mat-chip-list {
-  display: inline-block;
 }

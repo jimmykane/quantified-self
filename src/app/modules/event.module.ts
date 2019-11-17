@@ -19,6 +19,7 @@ import {ActivityHeaderComponent} from '../components/activity-header/activity-he
 import {AgmCoreModule} from '@agm/core';
 import {MatPaginatorIntl} from '@angular/material/paginator';
 import {MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
+import {EventHeaderComponent} from '../components/event-header/event-header.component';
 
 
 @NgModule({
@@ -38,6 +39,7 @@ import {MatPaginatorIntlFireStore} from '../components/event-table/event.table.c
     EventCardToolsComponent,
     EventCardChartActionsComponent,
     EventCardDevicesComponent,
+    EventHeaderComponent,
     ActivityIconComponent,
     ActivitiesCheckboxesComponent,
     ActivityActionsComponent,
@@ -45,9 +47,6 @@ import {MatPaginatorIntlFireStore} from '../components/event-table/event.table.c
     MapActionsComponent,
   ],
   entryComponents: [],
-  providers: [
-    {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
-  ],
 })
 
 

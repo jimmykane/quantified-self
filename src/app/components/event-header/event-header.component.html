@@ -1,0 +1,49 @@
+<mat-card class="mat-elevation-z1">
+  <!-- Event details -->
+  <mat-card-header>
+    <div mat-card-avatar>
+      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
+    </div>
+    <mat-card-title>
+      {{ event.startDate | date:"d MMM, yy 'at' h:mm:ss a" }}
+    </mat-card-title>
+
+    <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
+  </mat-card-header>
+  <mat-card-subtitle style="margin-bottom: 0">
+    <app-edit-input
+      [disabled]="!user"
+      [(data)]='event.name'
+      [type]="'text'"
+      [placeHolder]="event.name ? 'Name': 'Add a name'"
+      (dataChange)="saveEventDescription(event.description, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
+  <mat-card-subtitle style="margin-bottom: 0">
+
+    <app-edit-input
+      [disabled]="!user"
+      [(data)]='event.description'
+      [type]="'textArea'"
+      [placeHolder]="event.description ? 'Description': 'Add a description'"
+      (dataChange)="saveEventDescription(event.description, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
+
+  <mat-card-subtitle>
+    <section class="container">
+      <section class="item">
+        <mat-icon>access_time</mat-icon>
+        {{event.getDuration().getDisplayValue()}}
+      </section>
+      <section class="item">
+        <mat-icon >trending_flat</mat-icon>
+        {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
+      </section>
+      <section class="item">
+        <mat-icon svgIcon="heart_rate"></mat-icon>
+        {{ event.getStat('Average Heart Rate')?.getDisplayValue()}}{{event.getStat('Average Heart Rate')?.getDisplayUnit()}}
+      </section>
+    </section>
+  </mat-card-subtitle>
+</mat-card>

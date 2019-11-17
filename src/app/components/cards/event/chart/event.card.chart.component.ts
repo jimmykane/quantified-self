@@ -68,6 +68,7 @@ import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitud
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 import {ChartHelper, LabelData} from './chart-helper';
+import * as am4plugins_annotation from "@amcharts/amcharts4/plugins/annotation";
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
@@ -403,6 +404,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       'position': 'bottom',
       'marginTop': 20
     });
+
+    // Add the anotation
+    chart.plugins.push(new am4plugins_annotation.Annotation());
 
     // Disable the preloader
     chart.preloader.disabled = true;
@@ -1206,7 +1210,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   private destroyLegendParent() {
     return this.zone.runOutsideAngular(() => {
       if (this.chart && this.chart.legend) {
-        this.chart.legend.dispose();
+        this.chart.legend.parent.dispose();
       }
     });
   }
