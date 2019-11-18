@@ -3,7 +3,6 @@ import {
   HostListener,
   Inject,
 } from '@angular/core';
-import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 import {LoadingAbstract} from '../loading/loading.abstract';
 
 /**

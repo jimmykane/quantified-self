@@ -8,7 +8,6 @@ import {EventService} from '../../services/app.event.service';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
@@ -16,6 +15,7 @@ import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {DataPaceAvg} from 'quantified-self-lib/lib/data/data.pace-avg';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
+import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
 
 @Component({
   selector: 'app-event-header',
@@ -24,7 +24,7 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventHeaderComponent extends UnitBasedAbstract implements OnChanges{
+export class EventHeaderComponent implements OnChanges{
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() showType = true;
@@ -32,8 +32,8 @@ export class EventHeaderComponent extends UnitBasedAbstract implements OnChanges
 
   feeling: Feelings;
   rpe: RPEBorgCR10SCale;
-  feelings = this.getNumericEnumKeyValue(Feelings);
-  rpeBorgCR10SCale = this.getNumericEnumKeyValue(RPEBorgCR10SCale);
+  feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
+  rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
   duration: DataDuration;
   distance: DataDistance;
   avgHeartRate: string;
@@ -42,7 +42,6 @@ export class EventHeaderComponent extends UnitBasedAbstract implements OnChanges
 
 
   constructor(private eventService: EventService, private snackBar: MatSnackBar) {
-    super();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -55,10 +54,9 @@ export class EventHeaderComponent extends UnitBasedAbstract implements OnChanges
     if (this.event.getStat(DataRPE.type)) {
       this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
     }
-    // const speeds = this.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.user ? this.user.settings.unitSettings : null)
-    // if (this.event.getStat(this.getUnitBasedDataTypesFromDataType(DataSpeed.type))) {
-    //   this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
-    // }
+    if (this.event.getStat(DataSpeedAvg.type)) {
+      this.avgSpeed = (<DataSpeedAvg>this.event.getStat(DataRPE.type)).getDisplayValue();
+    }
   }
 
 

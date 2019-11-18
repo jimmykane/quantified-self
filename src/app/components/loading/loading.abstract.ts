@@ -1,15 +1,13 @@
-import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 import {ChangeDetectorRef} from '@angular/core';
 
 /**
  * Class for handling loading with no change detection
  */
-export abstract class LoadingAbstract extends UnitBasedAbstract {
+export abstract class LoadingAbstract {
 
   public isLoading: boolean;
 
   constructor(private  changeDetector: ChangeDetectorRef) {
-    super();
   }
 
   public loading() {

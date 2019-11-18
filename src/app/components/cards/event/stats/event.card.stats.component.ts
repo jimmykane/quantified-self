@@ -10,7 +10,6 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
-import {UnitBasedAbstract} from '../../../unit-based/unit-based.abstract';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 
 @Component({
@@ -20,7 +19,7 @@ import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardStatsComponent extends UnitBasedAbstract implements OnChanges {
+export class EventCardStatsComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];

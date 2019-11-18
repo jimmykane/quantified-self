@@ -257,7 +257,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         if (!stat) {
           row.push('');
         } else {
-          row.push(`"` + this.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
+          row.push(`"` + DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
             innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
             return innerRows
           }, []).join('\n') + `"`);
@@ -269,7 +269,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         if (!stat || !isRunning) {
           row.push('');
         } else {
-          row.push(`"` + this.getUnitBasedDataTypesFromDataType(DataPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
+          row.push(`"` + DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
             innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
             return innerRows
           }, []).join('\n') + `"`);
@@ -281,7 +281,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         if (!stat || !isSwimming) {
           row.push('');
         } else {
-          row.push(`"` + this.getUnitBasedDataTypesFromDataType(DataSwimPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
+          row.push(`"` + DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSwimPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
             innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
             return innerRows
           }, []).join('\n') + `"`);

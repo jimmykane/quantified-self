@@ -44,6 +44,7 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {UserService} from '../../services/app.user.service';
 import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
+import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
 
 
 @Component({
@@ -82,8 +83,8 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
 
   feeling: Feelings;
   rpe: RPEBorgCR10SCale;
-  feelings = this.getNumericEnumKeyValue(Feelings);
-  rpeBorgCR10SCale = this.getNumericEnumKeyValue(RPEBorgCR10SCale);
+  feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
+  rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
 
   eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
