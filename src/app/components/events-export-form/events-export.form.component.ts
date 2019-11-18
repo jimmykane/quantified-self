@@ -207,107 +207,118 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       const row = [];
       if (this.user.settings.exportToCSVSettings.startDate) {
-        row.push(event.startDate.toLocaleDateString());
+        row.push(`"${event.startDate.toLocaleDateString()}"`);
       }
       if (this.user.settings.exportToCSVSettings.name) {
-        row.push(event.name);
+        row.push(`"${event.name}"`);
       }
       if (this.user.settings.exportToCSVSettings.description) {
-        row.push(event.description);
+        row.push(`"${event.description || '' }"`);
       }
       if (this.user.settings.exportToCSVSettings.activityTypes) {
         const stat = event.getStat(DataActivityTypes.type);
         if (!stat) {
-          row.push('');
+          row.push(`""`);
         }
-        row.push(event.getActivityTypesAsString());
+        row.push(`"${event.getActivityTypesAsString()}"`);
       }
       if (this.user.settings.exportToCSVSettings.distance) {
-        row.push(`${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`);
+        row.push(`"${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}"`);
       }
       if (this.user.settings.exportToCSVSettings.duration) {
-        row.push(event.getDuration().getDisplayValue());
+        row.push(`"${event.getDuration().getDisplayValue()}"`);
       }
       if (this.user.settings.exportToCSVSettings.ascent) {
         const stat = event.getStat(DataAscent.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
       if (this.user.settings.exportToCSVSettings.descent) {
         const stat = event.getStat(DataDescent.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
 
       if (this.user.settings.exportToCSVSettings.calories) {
         const stat = event.getStat(DataEnergy.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
 
       if (this.user.settings.exportToCSVSettings.feeling) {
         const stat = event.getStat(DataFeeling.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
 
       if (this.user.settings.exportToCSVSettings.rpe) {
         const stat = event.getStat(DataRPE.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
 
       if (this.user.settings.exportToCSVSettings.averageSpeed) {
         const stat = event.getStat(DataSpeedAvg.type);
         if (!stat) {
-          row.push('');
+          row.push('""');
         } else {
-          row.push(`"` + DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
-            innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
-            return innerRows
-          }, []).join('\n') + `"`);
+          row.push(`"${DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.user.settings.unitSettings)
+            .reduce((array, data) => {
+              array.push(`${data.getDisplayValue()} ${data.getDisplayUnit()}`);
+              return array
+            }, []).join('\n')}"`);
         }
       }
 
       if (this.user.settings.exportToCSVSettings.averagePace) {
-        const stat = event.getStat(DataPaceAvg.type) || event.getStat(DataSpeedAvg.type);
+        const speedAvg = event.getStat(DataSpeedAvg.type);
+        if (!speedAvg) {
+          return `""`;
+        }
+        const stat = event.getStat(DataPaceAvg.type) || new DataPaceAvg(<number>speedAvg.getValue(DataPace.type));
         if (!stat || !isRunning) {
-          row.push('');
+          row.push('""');
         } else {
-          row.push(`"` + DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
-            innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
-            return innerRows
-          }, []).join('\n') + `"`);
+          row.push(`"${DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.user.settings.unitSettings)
+            .reduce((array, data) => {
+              array.push(`${data.getDisplayValue()} ${data.getDisplayUnit()}`);
+              return array
+            }, []).join('\n')}"`);
         }
       }
 
       if (this.user.settings.exportToCSVSettings.averageSwimPace) {
-        const stat = event.getStat(DataSwimPaceAvg.type) || event.getStat(DataSpeedAvg.type);
+        const speedAvg = event.getStat(DataSpeedAvg.type);
+        if (!speedAvg) {
+          return `""`;
+        }
+        const stat = event.getStat(DataSwimPaceAvg.type) || new DataSwimPaceAvg(<number>speedAvg.getValue(DataSwimPace.type));
         if (!stat || !isSwimming) {
-          row.push('');
+          row.push('""');
         } else {
-          row.push(`"` + DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSwimPace.type, this.user.settings.unitSettings).reduce((innerRows: string[], dataType) => {
-            innerRows.push(`${DynamicDataLoader.getDataInstanceFromDataType(dataType, stat.getValue(dataType)).getDisplayValue()} ${DynamicDataLoader.getDataClassFromDataType(dataType).unit}`)
-            return innerRows
-          }, []).join('\n') + `"`);
+          row.push(`"${DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.user.settings.unitSettings)
+            .reduce((array, data) => {
+              array.push(`${data.getDisplayValue()} ${data.getDisplayUnit()}`);
+              return array
+            }, []).join('\n')}"`);
         }
       }
 
       if (this.user.settings.exportToCSVSettings.averageHeartRate) {
         const stat = event.getStat(DataHeartRateAvg.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
 
       if (this.user.settings.exportToCSVSettings.averagePower) {
         const stat = event.getStat(DataPowerAvg.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
       if (this.user.settings.exportToCSVSettings.maximumPower) {
         const stat = event.getStat(DataPowerMax.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
       if (this.user.settings.exportToCSVSettings.vO2Max) {
         const stat = event.getStat(DataVO2Max.type);
-        row.push(stat ? `${stat.getDisplayValue()} ${stat.getDisplayUnit()}` : '');
+        row.push(stat ? `"${stat.getDisplayValue()} ${stat.getDisplayUnit()}"` : '""');
       }
 
       if (this.user.settings.exportToCSVSettings.includeLink) {
-        row.push(this.sharingService.getShareURLForEvent(this.user.uid, event.getID()));
+        row.push(`"${this.sharingService.getShareURLForEvent(this.user.uid, event.getID())}"`);
       }
 
       rows.push(row);
