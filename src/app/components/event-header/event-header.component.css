@@ -26,3 +26,10 @@ section.item{
 mat-card-header .mat-card-title{
   font-size: 1.3em;
 }
+
+::ng-deep app-data-type-icon mat-icon{
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  vertical-align: top !important;
+}
