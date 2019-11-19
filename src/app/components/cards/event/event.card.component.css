@@ -5,6 +5,8 @@ mat-card.outer{
   border: 0;
   padding-top: 0.8em;
   padding-bottom: 0.8em;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 mat-card {

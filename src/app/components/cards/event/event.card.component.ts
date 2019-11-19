@@ -27,6 +27,8 @@ import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 
 
 @Component({
@@ -68,8 +70,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public statsToShow = [
     DataDuration.type,
     DataDistance.type,
-    DataSpeedAvg.type,
     DataHeartRateAvg.type,
+    DataSpeedAvg.type,
+    DataAscent.type,
+    DataDescent.type,
     DataPowerAvg.type,
   ];
 

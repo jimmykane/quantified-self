@@ -5,7 +5,15 @@
       <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
     </div>
     <mat-card-title>
-      {{ event.startDate | date:"d MMM, yy 'at' h:mm:ss a" }}
+      <span>
+         {{ event.startDate | date:"d MMM " }}
+      </span>
+      <span style="font-size: 0.8em">
+         {{ event.startDate | date:"yyyy" }}
+      </span>
+      <span style="font-size: 0.7em;">
+        at {{ event.startDate | date:"h:mm:ss a" }}
+      </span>
     </mat-card-title>
     <mat-card-subtitle>
       <section class="container">

@@ -24,7 +24,7 @@ section.item{
 }
 
 mat-card-header .mat-card-title{
-  font-size: 1.3em;
+  /*font-size: 1.3em;*/
 }
 
 ::ng-deep app-data-type-icon mat-icon{
