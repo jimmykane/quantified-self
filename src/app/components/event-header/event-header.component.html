@@ -9,22 +9,26 @@
     </mat-card-title>
     <mat-card-subtitle>
       <section class="container">
-        <section class="item">
-          <mat-icon>access_time</mat-icon>
-          {{event.getDuration().getDisplayValue()}}
+        <section class="item" *ngFor="let stat of statsToShow">
+          <app-data-type-icon [dataType]="stat"></app-data-type-icon>
         </section>
-        <section class="item">
-          <mat-icon>trending_flat</mat-icon>
-          {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
-        </section>
-        <section class="item">
-          <mat-icon svgIcon="heart_rate"></mat-icon>
-          {{ event.getStat('Average Heart Rate')?.getDisplayValue()}}{{event.getStat('Average Heart Rate')?.getDisplayUnit()}}
-        </section>
-        <section class="item">
-          <mat-icon svgIcon="energy"></mat-icon>
-          {{ event.getStat('Average Power')?.getDisplayValue()}}{{event.getStat('Average Power')?.getDisplayUnit()}}
-        </section>
+<!--        <section class="item">-->
+<!--          <mat-icon>access_time</mat-icon>-->
+<!--          {{event.getDuration().getDisplayValue()}}-->
+<!--        </section>-->
+<!--        <section class="item">-->
+<!--          <mat-icon>trending_flat</mat-icon>-->
+<!--          {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}-->
+<!--        </section>-->
+<!--        <section class="item">-->
+<!--          <mat-icon svgIcon="heart_rate"></mat-icon>-->
+<!--          {{ event.getStat('Average Heart Rate')?.getDisplayValue()}}{{event.getStat('Average Heart Rate')?.getDisplayUnit()}}-->
+<!--        </section>-->
+<!--        <section class="item">-->
+<!--          <mat-icon svgIcon="energy"></mat-icon>-->
+<!--          {{ event.getStat('Average Power')?.getDisplayValue()}}{{event.getStat('Average Power')?.getDisplayUnit()}}-->
+<!--        </section>-->
+
       </section>
     </mat-card-subtitle>
 

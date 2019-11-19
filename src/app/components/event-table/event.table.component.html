@@ -33,8 +33,7 @@
       <ng-container *ngIf="(!isFirst && !isLast)">
 
           <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-            <mat-icon *ngIf="getColumnHeaderIcon(column)">{{ getColumnHeaderIcon(column) }}</mat-icon>
-            <mat-icon *ngIf="getColumnHeaderSVGIcon(column)" svgIcon="{{ getColumnHeaderSVGIcon(column) }}"></mat-icon>
+            <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </th>
 
       </ng-container>

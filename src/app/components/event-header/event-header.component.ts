@@ -16,6 +16,8 @@ import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {DataPaceAvg} from 'quantified-self-lib/lib/data/data.pace-avg';
 import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
+import {DataSwimPaceAvg} from 'quantified-self-lib/lib/data/data.swim-pace-avg';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 
 @Component({
   selector: 'app-event-header',
@@ -29,16 +31,13 @@ export class EventHeaderComponent implements OnChanges{
   @Input() user: User;
   @Input() showType = true;
   @Input() showIcon = false;
+  @Input() statsToShow: string[];
 
   feeling: Feelings;
   rpe: RPEBorgCR10SCale;
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
-  duration: DataDuration;
-  distance: DataDistance;
-  avgHeartRate: string;
-  avgSpeed: string;
-  avgPace: string;
+  stats: DataInterface[] = [];
 
 
   constructor(private eventService: EventService, private snackBar: MatSnackBar) {
@@ -54,9 +53,18 @@ export class EventHeaderComponent implements OnChanges{
     if (this.event.getStat(DataRPE.type)) {
       this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
     }
-    if (this.event.getStat(DataSpeedAvg.type)) {
-      this.avgSpeed = (<DataSpeedAvg>this.event.getStat(DataRPE.type)).getDisplayValue();
+    if (changes.statsToShow) {
+      this.stats = [];
+      this.event.getStats().forEach(stat => {
+        if (this.statsToShow.indexOf(stat.getType())) {
+          this.stats.push(stat);
+        }
+      })
     }
+    // this.statsToShow.forEach()
+    // if (this.event.getStat(DataSpeedAvg.type)) {
+    //   this.avgSpeed = `${(<DataSpeedAvg>this.event.getStat(DataSpeedAvg.type)).getDisplayValue()}${(<DataSpeedAvg>this.event.getStat(DataSpeedAvg.type)).getDisplayUnit()}`;
+    // }
   }
 
 

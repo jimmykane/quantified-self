@@ -158,42 +158,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     this.updateActionButtonService();
   }
 
-  getColumnHeaderIcon(columnName): string {
-    switch (columnName) {
-      case 'Distance':
-        return 'trending_flat';
-      case 'Duration':
-        return 'timer';
-      case 'startDate':
-        return 'date_range';
-      case 'Device Names':
-        return 'watch';
-      case 'name':
-        return 'font_download';
-      case 'Activity Types':
-        return 'filter_none';
-      case 'privacy':
-        return 'visibility';
-      default:
-        return null;
-    }
-  }
-
-  getColumnHeaderSVGIcon(columnName): string {
-    switch (columnName) {
-      case 'Ascent':
-        return 'arrow_up_right';
-      case 'Descent':
-        return 'arrow_down_right';
-      case 'Average Heart Rate':
-        return 'heart_rate';
-      case 'Energy':
-        return 'energy';
-      default:
-        return null;
-    }
-  }
-
   isColumnHeaderSortable(columnName): boolean {
     return ['startDate', 'Distance', 'Activity Types', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
   }
