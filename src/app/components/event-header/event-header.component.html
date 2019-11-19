@@ -9,8 +9,9 @@
     </mat-card-title>
     <mat-card-subtitle>
       <section class="container">
-        <section class="item" *ngFor="let stat of statsToShow">
-          <app-data-type-icon [dataType]="stat"></app-data-type-icon>
+        <section class="item" *ngFor="let stat of stats">
+          <app-data-type-icon [dataType]="stat.getType()"></app-data-type-icon>
+
         </section>
 <!--        <section class="item">-->
 <!--          <mat-icon>access_time</mat-icon>-->

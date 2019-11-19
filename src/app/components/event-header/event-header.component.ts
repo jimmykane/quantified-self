@@ -56,7 +56,7 @@ export class EventHeaderComponent implements OnChanges{
     if (changes.statsToShow) {
       this.stats = [];
       this.event.getStats().forEach(stat => {
-        if (this.statsToShow.indexOf(stat.getType())) {
+        if (this.statsToShow.indexOf(stat.getType()) !== -1) {
           this.stats.push(stat);
         }
       })
