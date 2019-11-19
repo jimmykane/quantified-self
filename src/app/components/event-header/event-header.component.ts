@@ -18,6 +18,7 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
 import {DataSwimPaceAvg} from 'quantified-self-lib/lib/data/data.swim-pace-avg';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 
 @Component({
   selector: 'app-event-header',
@@ -26,7 +27,7 @@ import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventHeaderComponent implements OnChanges{
+export class EventHeaderComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() showType = true;
@@ -47,26 +48,23 @@ export class EventHeaderComponent implements OnChanges{
     if (!this.event) {
       return;
     }
-    if (this.event.getStat(DataFeeling.type)){
+    if (this.event.getStat(DataFeeling.type)) {
       this.feeling = (<DataFeeling>this.event.getStat(DataFeeling.type)).getValue();
     }
     if (this.event.getStat(DataRPE.type)) {
       this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
     }
-    if (changes.statsToShow) {
-      this.stats = [];
-      this.event.getStats().forEach(stat => {
-        if (this.statsToShow.indexOf(stat.getType()) !== -1) {
-          this.stats.push(stat);
-        }
-      })
-    }
+    this.stats = [];
+    this.statsToShow.forEach((statToShow) => {
+      if (this.event.getStat(statToShow)) {
+        this.stats = [...this.stats, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(<DataInterface>this.event.getStat(statToShow), this.user ? this.user.settings.unitSettings : null)];
+      }
+    });
     // this.statsToShow.forEach()
     // if (this.event.getStat(DataSpeedAvg.type)) {
     //   this.avgSpeed = `${(<DataSpeedAvg>this.event.getStat(DataSpeedAvg.type)).getDisplayValue()}${(<DataSpeedAvg>this.event.getStat(DataSpeedAvg.type)).getDisplayUnit()}`;
     // }
   }
-
 
 
   async toggleEventPrivacy() {

@@ -16,7 +16,7 @@ export class DataTypeIconComponent {
       case 'Distance':
         return 'trending_flat';
       case 'Duration':
-        return 'timer';
+        return 'access_time';
       case 'startDate':
         return 'date_range';
       case 'Device Names':

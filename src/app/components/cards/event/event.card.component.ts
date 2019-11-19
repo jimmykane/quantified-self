@@ -23,6 +23,10 @@ import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interfa
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {UserService} from '../../../services/app.user.service';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
+import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 
 
 @Component({
@@ -62,7 +66,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
   public statsToShow = [
-    DataHeartRateAvg.type
+    DataDuration.type,
+    DataDistance.type,
+    DataSpeedAvg.type,
+    DataHeartRateAvg.type,
+    DataPowerAvg.type,
   ];
 
   private userSubscription: Subscription;
