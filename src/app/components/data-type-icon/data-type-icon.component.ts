@@ -27,6 +27,16 @@ export class DataTypeIconComponent {
         return 'filter_none';
       case 'privacy':
         return 'visibility';
+      case 'Power':
+      case 'Average Power':
+        return 'bolt';
+      case 'Average Speed':
+      case 'Average speed in kilometers per hour':
+      case 'Average speed in miles per hour':
+      case 'Average speed in feet per second':
+      case 'Average speed in meters per minute':
+      case 'Average speed in feet per minute':
+        return 'speed';
       default:
         return null;
     }
@@ -39,7 +49,7 @@ export class DataTypeIconComponent {
       case 'Descent':
         return 'arrow_down_right';
       case 'Average Heart Rate':
-        return 'heart_rate';
+        return 'heart_pulse';
       case 'Energy':
         return 'energy';
       default:

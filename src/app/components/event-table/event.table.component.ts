@@ -45,6 +45,9 @@ import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {UserService} from '../../services/app.user.service';
 import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 
 
 @Component({
@@ -159,7 +162,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   }
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'Distance', 'Activity Types', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
+    return ['startDate', 'Distance', 'Activity Types', 'Average Power','Average Speed', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
   }
 
 
@@ -175,6 +178,8 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
       const ascent = event.getStat(DataAscent.type);
       const descent = event.getStat(DataDescent.type);
       const energy = event.getStat(DataEnergy.type);
+      const avgPower = event.getStat(DataPowerAvg.type);
+      const avgSpeed = event.getStat(DataSpeedAvg.type);
       const heartRateAverage = event.getStat(DataHeartRateAvg.type);
       const eventRPE = event.getStat(DataRPE.type);
       const eventFeeling = event.getStat(DataFeeling.type);
@@ -190,6 +195,14 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
       dataObject['Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
       dataObject['Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
       dataObject['Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
+      dataObject['Average Speed'] = avgSpeed ?
+        DynamicDataLoader.getUnitBasedDataFromDataInstance(avgSpeed, this.user.settings.unitSettings)
+          .reduce((avs, data) => {
+            avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
+            return avs;
+          }, []).join(', ')
+        : '';
+      dataObject['Average Power'] = avgPower ? `${avgPower.getDisplayValue()} ${avgPower.getDisplayUnit()}` : '';
       dataObject['Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
       dataObject['Duration'] = event.getDuration().getDisplayValue();
       dataObject['isMerge'] = event.isMerge;
@@ -211,6 +224,8 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
       dataObject['sort.Ascent'] = ascent ? <number>ascent.getValue() : 0;
       dataObject['sort.Descent'] = descent ? <number>descent.getValue() : 0;
       dataObject['sort.Energy'] = energy ? <number>energy.getValue() : 0;
+      dataObject['sort.Average Speed'] = avgSpeed ? <number>avgSpeed.getValue() : 0;
+      dataObject['sort.Average Power'] = avgPower ? <number>avgPower.getValue() : 0;
       dataObject['sort.Duration'] = event.getDuration().getValue() || 0;
       dataObject['sort.Average Heart Rate'] = heartRateAverage ? <number>heartRateAverage.getValue() : 0; // Check for null if better
       dataObject['sort.Device Names'] = dataObject['Device Names'];
@@ -356,12 +371,14 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
       'checkbox',
       'startDate',
       'Activity Types',
+      'Duration',
       'Distance',
       'Ascent',
       'Descent',
       'Energy',
       'Average Heart Rate',
-      'Duration',
+      'Average Speed',
+      'Average Power',
       'Device Names',
       'Actions'
     ]);
@@ -375,23 +392,23 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
     }
 
     return columns
@@ -432,6 +449,8 @@ export interface EventRowElement {
   'Average Heart Rate': string,
   'Duration': string,
   'Energy': string,
+  'Average Speed': string,
+  'Average Power': string,
   'Device Names': string,
   // And their sortable data
   'sort.startDate': number,
@@ -440,6 +459,7 @@ export interface EventRowElement {
   'sort.Ascent': number,
   'sort.Descent': number,
   'sort.Energy': number,
+  'sort.Average Power': number,
   'sort.Average Heart Rate': number,
   'sort.Duration': number,
   'sort.Device Names': string,

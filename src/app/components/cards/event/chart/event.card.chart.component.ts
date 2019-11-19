@@ -68,7 +68,8 @@ import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitud
 import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
 import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
 import {ChartHelper, LabelData} from './chart-helper';
-import * as am4plugins_annotation from "@amcharts/amcharts4/plugins/annotation";
+import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
+import {DataAirPower} from 'quantified-self-lib/lib/data/data.air-power';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
@@ -1091,6 +1092,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return 'Swim Pace'
     }
     if ([DataPower.type,
+      DataAirPower.type,
       DataPowerRight.type,
       DataPowerLeft.type].indexOf(name) !== -1) {
       return 'Power'

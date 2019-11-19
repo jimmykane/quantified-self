@@ -25,27 +25,23 @@ export abstract class ScreenSizeAbstract extends LoadingAbstract {
 
 
   protected getScreenWidthBreakPoint(): ScreenBreakPoints {
-    if (this.screenWidth > 1120) {
+    if (this.screenWidth > 1024) {
       return ScreenBreakPoints.Highest
     }
 
-    if (this.screenWidth > 1060) {
+    if (this.screenWidth > 896) {
       return ScreenBreakPoints.VeryHigh
     }
 
-    if (this.screenWidth > 960) {
+    if (this.screenWidth > 768) {
       return ScreenBreakPoints.High
     }
 
-    if (this.screenWidth > 850) {
+    if (this.screenWidth > 640) {
       return ScreenBreakPoints.Moderate
     }
 
-    if (this.screenWidth > 740) {
-      return ScreenBreakPoints.Low
-    }
-
-    if (this.screenWidth > 640) {
+    if (this.screenWidth > 384) {
       return ScreenBreakPoints.Low
     }
     return ScreenBreakPoints.Lowest;
