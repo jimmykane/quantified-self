@@ -41,7 +41,7 @@
     "fast-deep-equal": "^3.0.0-beta.2",
     "firebase": "^7.4.0",
     "hammerjs": "^2.0.8",
-    "material-design-icons": "^3.0.1",
+    "material-design-icons-iconfont": "^5.0.1",
     "ng2-logger": "2.0.48",
     "quantified-self-lib": "^3.3.31",
     "rxjs": "^6.5.3",
