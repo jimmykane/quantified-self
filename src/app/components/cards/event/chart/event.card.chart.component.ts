@@ -1093,7 +1093,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if ([DataPower.type,
       DataPowerRight.type,
       DataPowerLeft.type].indexOf(name) !== -1) {
-      return 'Left/Right Balance'
+      return 'Power'
     }
     if ([DataLeftBalance.type,
       DataRightBalance.type].indexOf(name) !== -1) {
