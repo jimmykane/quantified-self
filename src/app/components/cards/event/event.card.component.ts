@@ -67,15 +67,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public mapTheme: MapThemes;
   public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
-  public statsToShow = [
-    DataDuration.type,
-    DataDistance.type,
-    DataHeartRateAvg.type,
-    DataSpeedAvg.type,
-    DataAscent.type,
-    DataDescent.type,
-    DataPowerAvg.type,
-  ];
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;

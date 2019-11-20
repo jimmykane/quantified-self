@@ -3,7 +3,7 @@
   <app-event-header
     [event]="event"
     [user]='currentUser'
-    [statsToShow]="statsToShow">
+    [isOwner]="currentUser && (currentUser.uid === targetUserID)">
   </app-event-header>
 
 

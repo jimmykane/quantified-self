@@ -6,17 +6,11 @@ mat-card {
   /*padding: 16px 0 0;*/
   /*min-height: calc(30vh);*/
 }
+mat-card-subtitle{
+  margin-bottom: 0;
+  color: unset;
+}
 
-section.item{
-  white-space:nowrap;
-  display: inline-block;
-}
-section.item mat-icon{
-  font-size: 16px;width: 18px;height: 20px;vertical-align: sub;
-}
-section.item{
-  margin-right: 1em;
-}
 .mat-card-avatar{
   text-align: center;
   height: auto;
@@ -25,11 +19,4 @@ section.item{
 
 mat-card-header .mat-card-title{
   /*font-size: 1.3em;*/
-}
-
-::ng-deep app-data-type-icon mat-icon{
-  font-size: 18px !important;
-  width: 18px !important;
-  height: 18px !important;
-  vertical-align: top !important;
 }

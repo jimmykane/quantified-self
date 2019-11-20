@@ -1,0 +1,13 @@
+::ng-deep app-data-type-icon mat-icon{
+  font-size: 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  vertical-align: top !important;
+}
+
+section.item{
+  white-space:nowrap;
+  display: inline-block;
+  margin-right: 1em;
+
+}

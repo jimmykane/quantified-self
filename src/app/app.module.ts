@@ -13,7 +13,11 @@ import {AngularFireAuthModule} from '@angular/fire/auth';
 import {AngularFireStorageModule} from '@angular/fire/storage';
 import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
 import * as Sentry from '@sentry/browser';
-import {AngularFirePerformanceModule} from '@angular/fire/performance';
+import {
+  AngularFirePerformanceModule,
+  AUTOMATICALLY_TRACE_CORE_NG_METRICS, DATA_COLLECTION_ENABLED,
+  INSTRUMENTATION_ENABLED
+} from '@angular/fire/performance';
 import {MaterialModule} from './modules/material.module';
 import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
@@ -40,7 +44,7 @@ const appPackage = require('../../package.json');
 
 Sentry.init({
   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
-  environment: environment.production ? 'Production' : 'Development',
+  environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
   release: appPackage.version,
 });
 
@@ -103,9 +107,12 @@ export class SentryErrorHandler implements ErrorHandler {
     AppInfoService,
     WindowService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
-    {provide: ErrorHandler, useClass: environment.production ? SentryErrorHandler : ErrorHandler},
+    {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},
-    {provide: ANALYTICS_COLLECTION_ENABLED, useValue: environment.production},
+    {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: environment.production ||  environment.beta},
+    {provide: INSTRUMENTATION_ENABLED, useValue: environment.production ||  environment.beta},
+    {provide: DATA_COLLECTION_ENABLED, useValue: environment.production ||  environment.beta},
+    {provide: ANALYTICS_COLLECTION_ENABLED, useValue: environment.production ||  environment.beta},
     {provide: APP_VERSION, useValue: appPackage.version},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
   ],

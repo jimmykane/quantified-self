@@ -20,6 +20,7 @@ import {AgmCoreModule} from '@agm/core';
 import {MatPaginatorIntl} from '@angular/material/paginator';
 import {MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
 import {EventHeaderComponent} from '../components/event-header/event-header.component';
+import {HeaderStatsComponent} from '../components/header-stats/header-stats.component';
 
 
 @NgModule({
@@ -40,6 +41,7 @@ import {EventHeaderComponent} from '../components/event-header/event-header.comp
     EventCardChartActionsComponent,
     EventCardDevicesComponent,
     EventHeaderComponent,
+    HeaderStatsComponent,
     ActivityIconComponent,
     ActivitiesCheckboxesComponent,
     ActivityActionsComponent,

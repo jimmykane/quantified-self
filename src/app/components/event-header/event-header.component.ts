@@ -1,7 +1,5 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {EventColorService} from '../../services/color/app.event.color.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {EventService} from '../../services/app.event.service';
@@ -9,16 +7,16 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
+import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {DataPaceAvg} from 'quantified-self-lib/lib/data/data.pace-avg';
-import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
-import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
-import {DataSwimPaceAvg} from 'quantified-self-lib/lib/data/data.swim-pace-avg';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 
 @Component({
   selector: 'app-event-header',
@@ -32,13 +30,23 @@ export class EventHeaderComponent implements OnChanges {
   @Input() user: User;
   @Input() showType = true;
   @Input() showIcon = false;
-  @Input() statsToShow: string[];
+  @Input() isOwner = false;
+
+
+  public statsToShow = [
+    DataDuration.type,
+    DataDistance.type,
+    DataHeartRateAvg.type,
+    DataSpeedAvg.type,
+    DataAscent.type,
+    DataDescent.type,
+    DataPowerAvg.type,
+  ];
 
   feeling: Feelings;
   rpe: RPEBorgCR10SCale;
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
-  stats: DataInterface[] = [];
 
 
   constructor(private eventService: EventService, private snackBar: MatSnackBar) {
@@ -54,16 +62,6 @@ export class EventHeaderComponent implements OnChanges {
     if (this.event.getStat(DataRPE.type)) {
       this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
     }
-    this.stats = [];
-    this.statsToShow.forEach((statToShow) => {
-      if (this.event.getStat(statToShow)) {
-        this.stats = [...this.stats, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(<DataInterface>this.event.getStat(statToShow), this.user ? this.user.settings.unitSettings : null)];
-      }
-    });
-    // this.statsToShow.forEach()
-    // if (this.event.getStat(DataSpeedAvg.type)) {
-    //   this.avgSpeed = `${(<DataSpeedAvg>this.event.getStat(DataSpeedAvg.type)).getDisplayValue()}${(<DataSpeedAvg>this.event.getStat(DataSpeedAvg.type)).getDisplayUnit()}`;
-    // }
   }
 
 

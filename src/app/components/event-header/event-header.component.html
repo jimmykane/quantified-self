@@ -6,7 +6,10 @@
     </div>
     <mat-card-title>
       <span>
-         {{ event.startDate | date:"d MMM " }}
+         {{ event.startDate | date:"d" }}
+      </span>
+      <span style="font-size: 0.8em">
+         {{ event.startDate | date:"MMM " }}
       </span>
       <span style="font-size: 0.8em">
          {{ event.startDate | date:"yyyy" }}
@@ -16,60 +19,59 @@
       </span>
     </mat-card-title>
     <mat-card-subtitle>
-      <section class="container">
-        <section class="item" *ngFor="let stat of stats">
-          <app-data-type-icon [dataType]="stat.getType()"></app-data-type-icon>
-          {{stat.getDisplayValue()}}{{stat.getDisplayUnit()}}
-        </section>
-<!--        <section class="item">-->
-<!--          <mat-icon>access_time</mat-icon>-->
-<!--          {{event.getDuration().getDisplayValue()}}-->
-<!--        </section>-->
-<!--        <section class="item">-->
-<!--          <mat-icon>trending_flat</mat-icon>-->
-<!--          {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}-->
-<!--        </section>-->
-<!--        <section class="item">-->
-<!--          <mat-icon svgIcon="heart_rate"></mat-icon>-->
-<!--          {{ event.getStat('Average Heart Rate')?.getDisplayValue()}}{{event.getStat('Average Heart Rate')?.getDisplayUnit()}}-->
-<!--        </section>-->
-<!--        <section class="item">-->
-<!--          <mat-icon svgIcon="energy"></mat-icon>-->
-<!--          {{ event.getStat('Average Power')?.getDisplayValue()}}{{event.getStat('Average Power')?.getDisplayUnit()}}-->
-<!--        </section>-->
-
-      </section>
+      <app-edit-input
+        [disabled]="!isOwner"
+        [(data)]='event.name'
+        [type]="'text'"
+        [placeHolder]="event.name ? 'Name': 'Add a name'"
+        (dataChange)="saveEventDescription(event.description, event)">
+      </app-edit-input>
     </mat-card-subtitle>
+    <!--    <mat-card-subtitle>-->
+    <!--      <section>-->
+    <!--&lt;!&ndash;        <app-header-stats&ndash;&gt;-->
+    <!--&lt;!&ndash;          [stats]="event.getStatsAsArray()"&ndash;&gt;-->
+    <!--&lt;!&ndash;          [statsToShow]="statsToShow"&ndash;&gt;-->
+    <!--&lt;!&ndash;          [unitSettings]="user?.settings?.unitSettings"&ndash;&gt;-->
+    <!--&lt;!&ndash;        ></app-header-stats>&ndash;&gt;-->
+    <!--&lt;!&ndash;      </section>&ndash;&gt;-->
+    <!--    </mat-card-subtitle>-->
 
     <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
   </mat-card-header>
-  <mat-card-subtitle style="margin-bottom: 0">
-    <app-edit-input
-      [disabled]="!user"
-      [(data)]='event.name'
-      [type]="'text'"
-      [placeHolder]="event.name ? 'Name': 'Add a name'"
-      (dataChange)="saveEventDescription(event.description, event)">
-    </app-edit-input>
+  <mat-card-subtitle style="margin-bottom: 1em;">
+    <section>
+      <app-header-stats
+        [stats]="event.getStatsAsArray()"
+        [statsToShow]="statsToShow"
+        [unitSettings]="user?.settings?.unitSettings"
+      ></app-header-stats>
+    </section>
   </mat-card-subtitle>
-  <mat-card-subtitle style="margin-bottom: 0">
+  <mat-card-subtitle style="margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
     <app-edit-input
-      [disabled]="!user"
+      [disabled]="!isOwner"
       [(data)]='event.description'
       [type]="'textArea'"
       [placeHolder]="event.description ? 'Description': 'Add a description'"
       (dataChange)="saveEventDescription(event.description, event)">
     </app-edit-input>
   </mat-card-subtitle>
-  <mat-card-subtitle style="margin-bottom: 0;">
-    <app-edit-input style="width: 50%; display: inline-block;"
+  <mat-card-subtitle style="margin-bottom: 0; color: unset;" *ngIf="feeling || rpe || isOwner">
+    <app-edit-input
+      style="width: 50%; display: inline-block;"
+      *ngIf="feeling || isOwner"
+      [disabled]="!isOwner"
       [(data)]="feeling"
       [type]="'select'"
       [placeHolder]="'Feeling'"
       [selectOptions]="feelings"
       (dataChange)="saveEventFeeling(feeling, event)">
     </app-edit-input>
-    <app-edit-input style="width: 50%; display: inline-block;"
+    <app-edit-input
+      style="width: 50%; display: inline-block;"
+      *ngIf="rpe || isOwner"
+      [disabled]="!isOwner"
       [(data)]='rpe'
       [type]="'select'"
       [placeHolder]="'Rating of Perceived Exertion'"
