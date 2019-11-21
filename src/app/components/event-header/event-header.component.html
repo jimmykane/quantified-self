@@ -27,6 +27,15 @@
         (dataChange)="saveEventDescription(event.description, event)">
       </app-edit-input>
     </mat-card-subtitle>
+    <mat-card-subtitle style="margin-bottom: 1em;">
+      <section>
+        <app-header-stats
+          [stats]="event.getStatsAsArray()"
+          [statsToShow]="statsToShow"
+          [unitSettings]="user?.settings?.unitSettings">
+        </app-header-stats>
+      </section>
+    </mat-card-subtitle>
     <!--    <mat-card-subtitle>-->
     <!--      <section>-->
     <!--&lt;!&ndash;        <app-header-stats&ndash;&gt;-->
@@ -39,15 +48,15 @@
 
     <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
   </mat-card-header>
-  <mat-card-subtitle style="margin-bottom: 1em;">
-    <section>
-      <app-header-stats
-        [stats]="event.getStatsAsArray()"
-        [statsToShow]="statsToShow"
-        [unitSettings]="user?.settings?.unitSettings"
-      ></app-header-stats>
-    </section>
-  </mat-card-subtitle>
+<!--  <mat-card-subtitle style="margin-bottom: 1em;">-->
+<!--    <section>-->
+<!--      <app-header-stats-->
+<!--        [stats]="event.getStatsAsArray()"-->
+<!--        [statsToShow]="statsToShow"-->
+<!--        [unitSettings]="user?.settings?.unitSettings">-->
+<!--      </app-header-stats>-->
+<!--    </section>-->
+<!--  </mat-card-subtitle>-->
   <mat-card-subtitle style="margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
     <app-edit-input
       [disabled]="!isOwner"

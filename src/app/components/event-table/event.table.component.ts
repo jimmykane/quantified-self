@@ -23,9 +23,9 @@ import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {take} from 'rxjs/operators';
+import {debounceTime, take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {Subscription} from 'rxjs';
+import {Subject, Subscription} from 'rxjs';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
@@ -48,6 +48,7 @@ import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
 import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 
 
 @Component({
@@ -74,11 +75,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
   @ViewChild(MatCard, {static: true}) table: MatCard;
 
-  private deleteConfirmationSubscription: Subscription;
-  private sortSubscription: Subscription;
-
-  private logger = Log.create('EventTableComponent');
-
   data: MatTableDataSource<any> = new MatTableDataSource<EventRowElement>();
   selection = new SelectionModel(true, []);
   expandedElement: EventRowElement | null;
@@ -90,6 +86,13 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
 
   eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
+
+  private deleteConfirmationSubscription: Subscription;
+  private sortSubscription: Subscription;
+
+  private logger = Log.create('EventTableComponent');
+  private searchSubject: Subject<string> = new Subject();
+
 
   // isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
 
@@ -123,6 +126,11 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     if (!this.user) {
       throw new Error(`Component needs user`)
     }
+    this.searchSubject.pipe(
+      debounceTime(500)
+    ).subscribe(searchTextValue => {
+      this.search(searchTextValue);
+    });
   }
 
   ngAfterViewInit() {
@@ -188,20 +196,25 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
       dataObject.name = event.name;
       dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
 
-      const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
+      const activityTypes = <DataActivityTypes>event.getStat(DataActivityTypes.type); // @todo check if this breaks
       dataObject['Activity Types'] = event.getActivityTypesAsString();
 
       dataObject['Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
       dataObject['Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
       dataObject['Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
       dataObject['Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
-      dataObject['Average Speed'] = avgSpeed ?
-        DynamicDataLoader.getUnitBasedDataFromDataInstance(avgSpeed, this.user.settings.unitSettings)
-          .reduce((avs, data) => {
-            avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
-            return avs;
-          }, []).join(', ')
-        : '';
+      // ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType]).
+      dataObject['Average Speed'] =  activityTypes.getValue().reduce((accu, activityType) => {
+        return [...accu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])]
+      }, []).reduce((accu, dataType) => {
+        const stat = event.getStat(dataType);
+        return stat ?
+          [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.user.settings.unitSettings)]
+          : accu
+      }, []).reduce((avs, data) => {
+        avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
+        return avs;
+      }, []).join(', ');
       dataObject['Average Power'] = avgPower ? `${avgPower.getDisplayValue()} ${avgPower.getDisplayUnit()}` : '';
       dataObject['Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
       dataObject['Duration'] = event.getDuration().getDisplayValue();
@@ -425,8 +438,12 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  applyFilter(event) {
-    this.data.filter = event.target.value.trim().toLowerCase();
+  search(searchTerm) {
+    this.data.filter = searchTerm.trim().toLowerCase();
+  }
+
+  onKeyUp(event) {
+    this.searchSubject.next(event.target.value);
   }
 
   ngOnDestroy() {

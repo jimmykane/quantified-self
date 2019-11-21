@@ -36,6 +36,10 @@ export class DataTypeIconComponent {
       case 'Average speed in feet per second':
       case 'Average speed in meters per minute':
       case 'Average speed in feet per minute':
+      case 'Average Pace':
+      case 'Average pace in minutes per mile':
+      case 'Average Swim Pace':
+      case 'Average swim pace in minutes per 100 yard':
         return 'speed';
       default:
         return null;

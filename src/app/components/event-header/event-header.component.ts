@@ -8,8 +8,6 @@ import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
@@ -17,6 +15,8 @@ import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 
 @Component({
   selector: 'app-event-header',
@@ -62,6 +62,18 @@ export class EventHeaderComponent implements OnChanges {
     if (this.event.getStat(DataRPE.type)) {
       this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
     }
+
+    const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
+
+    this.statsToShow = this.statsToShow.reduce((statsAccu, statType) => {
+      if (statType === DataSpeedAvg.type) {
+        return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
+          return [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])];
+        }, [])];
+      }
+      return [...statsAccu, statType];
+    }, []);
+
   }
 
 

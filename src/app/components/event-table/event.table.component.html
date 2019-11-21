@@ -3,12 +3,9 @@
   <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0" [errorMessage]="'Nothing to show'"></app-shade>
 
   <mat-form-field>
-    <input matInput (keyup)="applyFilter($event)" placeholder="Filter">
+    <input matInput (keyup)="onKeyUp($event)" placeholder="Filter">
   </mat-form-field>
-  <!-- hide the below for now till proper DB filtering is live -->
-  <!--<mat-form-field>-->
-  <!--<input matInput (keyup)="applyFilter($event.target.value)" placeholder="Filter">-->
-  <!--</mat-form-field>-->
+
   <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active" [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear multiTemplateDataRows>
     <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize(); first as isFirst; last as isLast; index as i;" [matColumnDef]="column">
       <ng-container *ngIf="isFirst">
