@@ -10,6 +10,8 @@ import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 export class DataTypeIconComponent {
   @Input() dataType: string;
+  @Input() size: string;
+  @Input() vAlign: string;
 
   getColumnHeaderIcon(statName): string {
     switch (statName) {

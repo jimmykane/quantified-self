@@ -1,4 +1,6 @@
-<section class="item" *ngFor="let stat of stats">
-  <app-data-type-icon [dataType]="stat.getType()"></app-data-type-icon>
+<ng-container *ngFor="let stat of stats">
+<section class="item">
+  <app-data-type-icon [size]="'18px'" [vAlign]="'top'" [dataType]="stat.getType()"></app-data-type-icon>
   {{stat.getDisplayValue()}}{{stat.getDisplayUnit()}}
 </section>
+</ng-container>

@@ -17,6 +17,7 @@ import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 
 @Component({
   selector: 'app-event-header',
@@ -40,6 +41,7 @@ export class EventHeaderComponent implements OnChanges {
     DataSpeedAvg.type,
     DataAscent.type,
     DataDescent.type,
+    DataEnergy.type,
     DataPowerAvg.type,
   ];
 

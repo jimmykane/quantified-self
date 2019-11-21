@@ -1,2 +1,10 @@
-<mat-icon  *ngIf="getColumnHeaderIcon(dataType)">{{ getColumnHeaderIcon(dataType) }}</mat-icon>
-<mat-icon *ngIf="getColumnHeaderSVGIcon(dataType)" svgIcon="{{ getColumnHeaderSVGIcon(dataType)}}"></mat-icon>
+<mat-icon
+  *ngIf="getColumnHeaderIcon(dataType)"
+  [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
+  {{ getColumnHeaderIcon(dataType) }}
+</mat-icon>
+<mat-icon
+  *ngIf="getColumnHeaderSVGIcon(dataType)"
+  [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}"
+  [svgIcon]="getColumnHeaderSVGIcon(dataType)">
+</mat-icon>

@@ -11,3 +11,11 @@ mat-form-field{
 ::ng-deep .mat-form-field-disabled .mat-select-arrow {
   visibility: hidden;
 }
+
+::ng-deep .mat-input-element {
+  color: unset !important;
+}
+
+::ng-deep .mat-select-disabled .mat-select-value {
+  color: unset !important;
+}

@@ -8,7 +8,7 @@ mat-card {
 }
 mat-card-subtitle{
   margin-bottom: 0;
-  color: unset;
+  color: unset !important;
 }
 
 .mat-card-avatar{

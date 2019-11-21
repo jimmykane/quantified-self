@@ -18,6 +18,7 @@
         at {{ event.startDate | date:"h:mm:ss a" }}
       </span>
     </mat-card-title>
+
     <mat-card-subtitle>
       <app-edit-input
         [disabled]="!isOwner"
@@ -26,15 +27,6 @@
         [placeHolder]="event.name ? 'Name': 'Add a name'"
         (dataChange)="saveEventDescription(event.description, event)">
       </app-edit-input>
-    </mat-card-subtitle>
-    <mat-card-subtitle style="margin-bottom: 1em;">
-      <section>
-        <app-header-stats
-          [stats]="event.getStatsAsArray()"
-          [statsToShow]="statsToShow"
-          [unitSettings]="user?.settings?.unitSettings">
-        </app-header-stats>
-      </section>
     </mat-card-subtitle>
     <!--    <mat-card-subtitle>-->
     <!--      <section>-->
@@ -48,6 +40,8 @@
 
     <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
   </mat-card-header>
+
+
 <!--  <mat-card-subtitle style="margin-bottom: 1em;">-->
 <!--    <section>-->
 <!--      <app-header-stats-->
@@ -57,6 +51,8 @@
 <!--      </app-header-stats>-->
 <!--    </section>-->
 <!--  </mat-card-subtitle>-->
+
+
   <mat-card-subtitle style="margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
     <app-edit-input
       [disabled]="!isOwner"
@@ -88,5 +84,11 @@
       (dataChange)="saveEventRPE(rpe, event)">
     </app-edit-input>
   </mat-card-subtitle>
-
+  <mat-card-subtitle style="margin-bottom: 1em;">
+    <app-header-stats
+      [stats]="event.getStatsAsArray()"
+      [statsToShow]="statsToShow"
+      [unitSettings]="user?.settings?.unitSettings">
+    </app-header-stats>
+  </mat-card-subtitle>
 </mat-card>
