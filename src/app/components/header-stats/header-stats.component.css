@@ -9,5 +9,7 @@ section.item{
   white-space:nowrap;
   display: inline-block;
   /*margin-right: 1em;*/
-  min-width: 50%;
+  min-width: 25%;
+  min-height: 2.5em;
+  /*text-align: center;*/
 }

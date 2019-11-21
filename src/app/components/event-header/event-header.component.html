@@ -53,7 +53,7 @@
 <!--  </mat-card-subtitle>-->
 
 
-  <mat-card-subtitle style="margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
+  <mat-card-subtitle style="margin-top: -1em; margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
     <app-edit-input
       [disabled]="!isOwner"
       [(data)]='event.description'
