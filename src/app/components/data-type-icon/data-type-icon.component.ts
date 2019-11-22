@@ -43,6 +43,8 @@ export class DataTypeIconComponent {
       case 'Average Swim Pace':
       case 'Average swim pace in minutes per 100 yard':
         return 'speed';
+      case 'Average Temperature':
+        return 'device_thermostat';
       default:
         return null;
     }

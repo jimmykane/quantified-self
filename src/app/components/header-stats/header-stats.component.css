@@ -5,11 +5,38 @@
 /*  vertical-align: top !important;*/
 /*}*/
 
-section.item{
-  white-space:nowrap;
-  display: inline-block;
-  /*margin-right: 1em;*/
+/*section.item{*/
+/*  white-space:nowrap;*/
+/*  display: inline-block;*/
+/*  !*margin-right: 1em;*!*/
+/*  min-width: 25%;*/
+/*  min-height: 2.5em;*/
+/*  !*text-align: center;*!*/
+/*}*/
+
+
+mat-card{
+  margin: 0;
+  padding: 0;
   min-width: 25%;
-  min-height: 2.5em;
-  /*text-align: center;*/
+  height: 25%;
+  display: inline-block;
+}
+
+.mat-card-header .mat-card-title{
+  font-size: 1.1em;
+    white-space:nowrap;
+  margin: 0 ;
+}
+
+.mat-card-header mat-card-subtitle{
+  font-size: 0.8em;
+  margin: 0;
+}
+
+.mat-card-avatar{
+  height: auto;
+  width: auto;
+  padding-top: 8px;
+  /*flex-shrink: unset;*/
 }

@@ -6,13 +6,13 @@
     </div>
     <mat-card-title>
       <span>
-         {{ event.startDate | date:"d" }}
+        <b>{{ event.startDate | date:"d" }}</b>
       </span>
-      <span style="font-size: 0.8em">
+      <span style="font-size: 1em">
          {{ event.startDate | date:"MMM " }}
       </span>
       <span style="font-size: 0.8em">
-         {{ event.startDate | date:"yyyy" }}
+        <b>{{ event.startDate | date:"yyyy" }}</b>
       </span>
       <span style="font-size: 0.7em;">
         at {{ event.startDate | date:"h:mm:ss a" }}
@@ -20,14 +20,9 @@
     </mat-card-title>
 
     <mat-card-subtitle>
-      <app-edit-input
-        [disabled]="!isOwner"
-        [(data)]='event.name'
-        [type]="'text'"
-        [placeHolder]="event.name ? 'Name': 'Add a name'"
-        (dataChange)="saveEventDescription(event.description, event)">
-      </app-edit-input>
+      <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue()}} and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
     </mat-card-subtitle>
+
     <!--    <mat-card-subtitle>-->
     <!--      <section>-->
     <!--&lt;!&ndash;        <app-header-stats&ndash;&gt;-->
@@ -41,7 +36,6 @@
     <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
   </mat-card-header>
 
-
 <!--  <mat-card-subtitle style="margin-bottom: 1em;">-->
 <!--    <section>-->
 <!--      <app-header-stats-->
@@ -53,6 +47,15 @@
 <!--  </mat-card-subtitle>-->
 
 
+  <mat-card-subtitle style="margin-bottom: 0; color: unset;">
+    <app-edit-input
+      [disabled]="!isOwner"
+      [(data)]='event.name'
+      [type]="'text'"
+      [placeHolder]="event.name ? 'Name': 'Add a name'"
+      (dataChange)="saveEventDescription(event.description, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
   <mat-card-subtitle style="margin-top: -1em; margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
     <app-edit-input
       [disabled]="!isOwner"

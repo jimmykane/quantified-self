@@ -1,6 +1,16 @@
-<ng-container *ngFor="let stat of stats">
-<section class="item">
-  <app-data-type-icon [size]="'24px'" [vAlign]="'top'" [dataType]="stat.getType()"></app-data-type-icon>
-  {{stat.getDisplayValue()}}{{stat.getDisplayUnit()}}
-</section>
-</ng-container>
+<mat-card *ngFor="let stat of stats" class="mat-elevation-z0">
+  <mat-card-header>
+    <div mat-card-avatar>
+      <app-data-type-icon [matTooltip]="stat.getType()" [size]="'24px'" [vAlign]="'top'"
+                          [dataType]="stat.getType()"></app-data-type-icon>
+    </div>
+    <mat-card-subtitle>
+      {{stat.getDisplayType()}}
+    </mat-card-subtitle>
+    <mat-card-title>
+      {{stat.getDisplayValue()}}{{stat.getDisplayUnit()}}
+    </mat-card-title>
+  </mat-card-header>
+  <section>
+  </section>
+</mat-card>
