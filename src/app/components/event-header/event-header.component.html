@@ -99,20 +99,4 @@
     </app-header-stats>
   </mat-card-subtitle>
 
-  <mat-card class="mat-elevation-z0" style="padding: 0">
-    <mat-button-toggle-group [multiple]="true"  style="margin-bottom: 1em;">
-
-      <mat-card-header  *ngFor="let activity of event.getActivities()" >
-        <div mat-card-avatar>
-          1
-        </div>
-        <mat-button-toggle>
-          {{activity.type}}
-        </mat-button-toggle>
-      </mat-card-header>
-
-
-    </mat-button-toggle-group>
-
-  </mat-card>
 </mat-card>

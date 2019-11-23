@@ -147,7 +147,7 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultXAxisType(): XAxisTypes {
-    return XAxisTypes.Duration;
+    return XAxisTypes.Time;
   }
 
   static getDefaultSpeedUnits(): SpeedUnits[] {

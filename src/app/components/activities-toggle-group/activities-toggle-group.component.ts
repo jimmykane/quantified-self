@@ -2,20 +2,17 @@ import {Component, EventEmitter, Input, OnChanges, OnInit, Output} from '@angula
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventColorService} from '../../services/color/app.event.color.service';
-import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
-  selector: 'app-activities-checkboxes',
-  templateUrl: './activities-checkboxes.component.html',
-  styleUrls: ['./activities-checkboxes.component.css'],
+  selector: 'app-activities-toggle-groups',
+  templateUrl: './activities-toggle-group.component.html',
+  styleUrls: ['./activities-toggle-group.component.css'],
 })
 
 // @todo use selection model
-export class ActivitiesCheckboxesComponent implements OnChanges, OnInit {
+export class ActivitiesToggleGroupComponent implements OnChanges, OnInit {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
-  @Input() showActions: boolean;
-  @Input() user: User;
   @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
   activitiesCheckboxes: { activity: ActivityInterface, checked: boolean, intermediate: boolean, disabled: boolean }[] = [];
 

@@ -32,6 +32,8 @@ export class DataTypeIconComponent {
       case 'Power':
       case 'Average Power':
         return 'bolt';
+      case 'Average Cadence':
+        return 'autorenew';
       case 'Average Speed':
       case 'Average speed in kilometers per hour':
       case 'Average speed in miles per hour':

@@ -1,0 +1,38 @@
+<mat-button-toggle-group [multiple]="true">
+
+  <!--          <mat-card-header   >-->
+
+  <mat-button-toggle *ngFor="let activity of event.getActivities()">
+
+    {{activity.type}}
+  </mat-button-toggle>
+  <!--          </mat-card-header>-->
+</mat-button-toggle-group>
+
+
+
+
+<!--<section>-->
+<!--  <div *ngFor="let activityCheckbox of activitiesCheckboxes; let i = index;">-->
+<!--    <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(event, activityCheckbox.activity)}">-->
+<!--      watch-->
+<!--    </mat-icon>-->
+<!--    <mat-checkbox-->
+<!--      class="margin"-->
+<!--      [(ngModel)]="activityCheckbox.checked"-->
+<!--      [disabled]="activityCheckbox.disabled"-->
+<!--      (change)="onCheckboxChange()">-->
+<!--      <app-activity-header-->
+<!--        [user]="user"-->
+<!--        [event]="event"-->
+<!--        [activity]="activityCheckbox.activity"-->
+<!--        [showType]="true"-->
+<!--        [showActions]="showActions"-->
+<!--        [showDistance]="true"-->
+<!--        [showSerialNumber]="true"-->
+<!--        [showSWInfo]="true"-->
+<!--        [showDuration]="true">-->
+<!--      </app-activity-header>-->
+<!--    </mat-checkbox>-->
+<!--  </div>-->
+<!--</section>-->
