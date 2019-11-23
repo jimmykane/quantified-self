@@ -33,7 +33,7 @@ export class DataTypeIconComponent {
       case 'Average Power':
         return 'bolt';
       case 'Average Cadence':
-        return 'autorenew';
+        return 'cached';
       case 'Average Speed':
       case 'Average speed in kilometers per hour':
       case 'Average speed in miles per hour':
@@ -47,6 +47,8 @@ export class DataTypeIconComponent {
         return 'speed';
       case 'Average Temperature':
         return 'device_thermostat';
+      case 'Recovery Time':
+        return 'replay';
       default:
         return null;
     }

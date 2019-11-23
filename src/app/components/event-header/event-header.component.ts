@@ -20,6 +20,8 @@ import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-type
 import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
 import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
 import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
+import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
+import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
 
 @Component({
   selector: 'app-event-header',
@@ -47,6 +49,7 @@ export class EventHeaderComponent implements OnChanges {
     DataCadenceAvg.type,
     DataPowerAvg.type,
     DataTemperatureAvg.type,
+    DataRecoveryTime.type,
   ];
 
   feeling: Feelings;

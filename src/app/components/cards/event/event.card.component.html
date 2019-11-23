@@ -5,19 +5,19 @@
     [user]='currentUser'
     [isOwner]="currentUser && (currentUser.uid === targetUserID)">
   </app-event-header>
-
-
   <mat-accordion>
     <mat-expansion-panel class="mat-elevation-z0">
-      <mat-expansion-panel-header style="padding: 0 16px;">
+      <mat-expansion-panel-header style="padding: 0 16px; padding-right: 32px;">
 <!--        <mat-panel-title style="font-size: 1.1em">-->
 <!--            <span><mat-icon style="vertical-align: bottom;">insert_chart</mat-icon>-->
 <!--            Summaries</span>-->
 <!--        </mat-panel-title>-->
         <mat-panel-title>
-          <app-activities-toggle-groups [event]="event" [(selectedActivities)]="selectedActivities"></app-activities-toggle-groups>
-
+          <mat-icon>view_column</mat-icon>
         </mat-panel-title>
+        <mat-panel-description style="align-items: flex-end;">
+          Data
+        </mat-panel-description>
       </mat-expansion-panel-header>
       <app-event-card-stats
         [selectedActivities]="selectedActivities"
@@ -74,7 +74,10 @@
       <div mat-card-avatar>
         <mat-icon>map</mat-icon>
       </div>
-<!--      <mat-card-title>Map</mat-card-title>-->
+      <mat-card-subtitle>
+      <app-activities-toggle-groups [event]="event" [(selectedActivities)]="selectedActivities"></app-activities-toggle-groups>
+      </mat-card-subtitle>
+      <!--      <mat-card-title>Map</mat-card-title>-->
 <!--      <mat-card-subtitle>What to put here ?</mat-card-subtitle>-->
 
       <mat-card-subtitle>

@@ -22,6 +22,7 @@ mat-card {
   text-align: center;
   height: auto;
   width: auto;
+  padding-top: 12px;
 }
 
 
@@ -42,7 +43,7 @@ mat-card-header mat-icon {
 }
 
 app-event-card-stats{
-  max-height: 30vh;
+  /*height: 50vh;*/
 }
 
 .title {

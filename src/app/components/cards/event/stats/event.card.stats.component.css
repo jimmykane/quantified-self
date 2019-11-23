@@ -15,5 +15,5 @@ mat-form-field {
 
 mat-table{
   overflow: scroll;
-  height: 20vh;
+  height: 60vh;
 }

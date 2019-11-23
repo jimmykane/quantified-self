@@ -23,13 +23,13 @@ mat-card{
   display: inline-block;
 }
 
-.mat-card-header .mat-card-title{
+.mat-card-title{
   font-size: 1.1em;
     white-space:nowrap;
   margin: 0 ;
 }
 
-.mat-card-header mat-card-subtitle{
+mat-card-subtitle{
   font-size: 0.8em;
   margin: 0;
 }

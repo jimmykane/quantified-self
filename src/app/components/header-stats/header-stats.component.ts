@@ -15,7 +15,6 @@ export class HeaderStatsComponent implements OnChanges {
   @Input() unitSettings?: UserUnitSettingsInterface;
 
   ngOnChanges(changes: SimpleChanges): void {
-    console.log('change')
     this.stats = this.statsToShow.reduce((accu, statType) => {
       return this.stats.find(stat => stat.getType() === statType) ? [...accu, this.stats.find(stat => stat.getType() === statType)] : accu;
     }, []);
