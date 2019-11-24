@@ -37,6 +37,7 @@ import {AppInfoService} from './services/app.info.service';
 import {WindowService} from './services/app.window.service';
 import {AgmCoreModule} from '@agm/core';
 import {ANALYTICS_COLLECTION_ENABLED, AngularFireAnalyticsModule, APP_NAME, APP_VERSION} from '@angular/fire/analytics';
+import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 
 declare function require(moduleName: string): any;
 
@@ -106,6 +107,7 @@ export class SentryErrorHandler implements ErrorHandler {
     ThemeService,
     AppInfoService,
     WindowService,
+    ActivitySelectionService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},

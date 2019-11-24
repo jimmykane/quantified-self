@@ -630,9 +630,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // this.chart.invalidateData(); // @todo Perhaps this can go away.
     // Finally set the data and return
-    // this.zone.runOutsideAngular(() => {
+    this.zone.runOutsideAngular(() => {
       series.data = this.convertStreamDataToSeriesData(activity, stream);
-    // });
+    });
     return series;
   }
 

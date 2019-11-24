@@ -1,61 +1,56 @@
-import {Component, EventEmitter, Input, OnChanges, OnInit, Output} from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  Input,
+  OnChanges,
+  OnDestroy,
+  OnInit,
+  Output
+} from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventColorService} from '../../services/color/app.event.color.service';
+import {ActivitySelectionService} from '../../services/activity-selection-service/activity-selection.service';
+import {Subscription} from 'rxjs';
+import {MatButtonToggleChange} from '@angular/material/button-toggle';
 
 @Component({
   selector: 'app-activities-toggle-groups',
   templateUrl: './activities-toggle-group.component.html',
   styleUrls: ['./activities-toggle-group.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush, // @todo not sure
 })
 
-// @todo use selection model
-export class ActivitiesToggleGroupComponent implements OnChanges, OnInit {
-  @Input() event: EventInterface;
-  @Input() selectedActivities: ActivityInterface[];
-  @Output() selectedActivitiesChange: EventEmitter<ActivityInterface[]> = new EventEmitter<ActivityInterface[]>();
-  activitiesCheckboxes: { activity: ActivityInterface, checked: boolean, intermediate: boolean, disabled: boolean }[] = [];
+export class ActivitiesToggleGroupComponent implements OnChanges, OnInit, OnDestroy {
+  @Input() activities: ActivityInterface[];
 
-  constructor(public eventColorService: EventColorService) {
+  private selectedActivitiesSubscription: Subscription;
+  private selectedActivities: ActivityInterface[];
+
+  constructor(public eventColorService: EventColorService, private activitySelectionService: ActivitySelectionService) {
 
   }
 
   ngOnInit() {
-
+    this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable()
+      .subscribe((selectedActivities) => {
+        this.selectedActivities = selectedActivities.source.selected;
+      })
   }
-
 
   ngOnChanges(simpleChanges): void {
-    this.createCheckboxes();
-    this.updateCheckboxValues();
   }
 
-  onCheckboxChange() {
-    this.selectedActivities = this.activitiesCheckboxes.reduce((activities: ActivityInterface[], activityCheckbox) => {
-      if (activityCheckbox.checked) {
-        activities.push(activityCheckbox.activity)
-      }
-      return activities;
-    }, []);
-    this.selectedActivitiesChange.emit(this.selectedActivities);
+  onActivitySelect(event: MatButtonToggleChange) {
+    event.source.checked ?
+      this.activitySelectionService.selectedActivities.select(event.value)
+      : this.activitySelectionService.selectedActivities.deselect(event.value);
   }
 
-  private createCheckboxes(){
-    this.activitiesCheckboxes = this.event.getActivities().reduce((activitiesCheckboxes, activity) => {
-      activitiesCheckboxes.push({
-        activity: activity,
-        checked: !!this.selectedActivities.find(selectedActivity => selectedActivity === activity),
-        intermediate: false,
-        disabled: false,
-      });
-      return activitiesCheckboxes;
-    }, []);
-  }
-
-  private updateCheckboxValues(){
-    this.activitiesCheckboxes.forEach((activityCheckBox) => {
-      activityCheckBox.checked = !!this.selectedActivities
-        .find(selectedActivity => selectedActivity.getID() === activityCheckBox.activity.getID());
-    });
+  ngOnDestroy(): void {
+    if (this.selectedActivitiesSubscription) {
+      this.selectedActivitiesSubscription.unsubscribe();
+    }
   }
 }

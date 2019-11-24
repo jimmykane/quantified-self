@@ -31,6 +31,7 @@ import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../../services/app.user.service';
+import {LoadingAbstract} from '../../../loading/loading.abstract';
 
 declare function require(moduleName: string): any;
 
@@ -43,7 +44,7 @@ const mapStyles = require('./map-styles.json');
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardMapComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap, {static: false}) agmMap;
   @Input() event: EventInterface;
   @Input() targetUserID: string;
@@ -58,7 +59,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
 
   private streamsSubscriptions: Subscription[] = [];
   public activitiesMapData: MapData[] = [];
-  public isLoading = true;
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
@@ -84,6 +84,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     private eventService: EventService,
     private userService: UserService,
     public eventColorService: EventColorService) {
+    super(changeDetectorRef);
   }
 
 
@@ -108,8 +109,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
       this.bindToNewData();
     }
 
-    this.resizeMapToBounds();
-
     // // Get the new activityMapData
     // this.activitiesMapData = this.cacheNewData();
     // // No need to do anything if the base did not change (Event)
@@ -125,7 +124,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   }
 
   private bindToNewData() {
-    this.isLoading = true;
+    this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
@@ -194,9 +193,9 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
             }, [])
           });
 
-          this.isLoading = false;
-          this.changeDetectorRef.detectChanges();
           this.resizeMapToBounds();
+          this.loaded();
+          this.changeDetectorRef.detectChanges();
         }))
     })
   }

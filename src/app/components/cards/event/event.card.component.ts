@@ -29,6 +29,7 @@ import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
+import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
 
 
 @Component({
@@ -61,7 +62,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
   public showMapArrows = true;
-  public chartDownSamplingLevel = UserService.getDefaultDownSamplingLevel()
+  public chartDownSamplingLevel = UserService.getDefaultDownSamplingLevel();
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
@@ -74,6 +75,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   private chartThemeSubscription: Subscription;
   private appThemeSubscription: Subscription;
   private mapThemeSubscription: Subscription;
+  private selectedActivitiesSubscription: Subscription;
 
   private logger = Log.create('EventCardComponent');
 
@@ -83,6 +85,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private authService: AppAuthService,
     private eventService: EventService,
     private userSettingsService: UserSettingsService,
+    private activitySelectionService: ActivitySelectionService,
     private snackBar: MatSnackBar,
     private themeService: ThemeService) {
   }
@@ -163,8 +166,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return
       }
       this.event = event;
-      this.selectedActivities = event.getActivities();
+      this.activitySelectionService.selectedActivities.select(...event.getActivities())
     });
+
+    // Subscribe to selected activities
+    this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
+      this.selectedActivities = selectedActivities.source.selected;
+    })
   }
 
   isOwner() {
@@ -178,6 +186,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.chartThemeSubscription.unsubscribe();
     this.appThemeSubscription.unsubscribe();
     this.mapThemeSubscription.unsubscribe();
+    this.selectedActivitiesSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {
