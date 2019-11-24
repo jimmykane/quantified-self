@@ -431,6 +431,9 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe();
     }
+    if (this.sortSubscription){
+      this.sortSubscription.unsubscribe();
+    }
   }
 
   async pageChanges(pageEvent: PageEvent) {
