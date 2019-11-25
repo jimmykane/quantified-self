@@ -20,7 +20,8 @@
     </mat-card-header>
   </mat-card>
 
-  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;" [ngStyle]="{'padding-top': event.getActivities().length > 1 ? '0' : '1em'}">
+  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;"
+            [ngStyle]="{'padding-top': event.getActivities().length > 1 ? '0' : '1em'}">
     <mat-card-subtitle>
       <app-header-stats
         [statsToShow]="statsToShow"
@@ -31,29 +32,30 @@
 
   <!--  <mat-divider [inset]="true"></mat-divider>-->
 
-  <mat-accordion>
-    <mat-expansion-panel class="mat-elevation-z0">
-      <mat-expansion-panel-header style="padding: 0 16px; padding-right: 32px;">
-        <!--        <mat-panel-title style="font-size: 1.1em">-->
-        <!--            <span><mat-icon style="vertical-align: bottom;">insert_chart</mat-icon>-->
-        <!--            Summaries</span>-->
-        <!--        </mat-panel-title>-->
-        <mat-panel-title>
-          <mat-icon>view_column</mat-icon>
-        </mat-panel-title>
-        <mat-panel-description style="align-items: flex-end;">
-          Detailed statistics
-        </mat-panel-description>
-      </mat-expansion-panel-header>
-      <app-event-card-stats
-        [selectedActivities]="selectedActivities"
-        [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
-        [event]="event">
-      </app-event-card-stats>
-    </mat-expansion-panel>
-  </mat-accordion>
-
+  <mat-card  class="mat-elevation-z0" style="padding-bottom: 0;">
+    <mat-accordion>
+      <mat-expansion-panel class="mat-elevation-z0">
+        <mat-expansion-panel-header style="padding: 0 16px; padding-right: 32px;">
+          <!--        <mat-panel-title style="font-size: 1.1em">-->
+          <!--            <span><mat-icon style="vertical-align: bottom;">insert_chart</mat-icon>-->
+          <!--            Summaries</span>-->
+          <!--        </mat-panel-title>-->
+          <mat-panel-title>
+            <mat-icon>view_column</mat-icon>
+          </mat-panel-title>
+          <mat-panel-description style="align-items: flex-end;">
+            Detailed statistics
+          </mat-panel-description>
+        </mat-expansion-panel-header>
+        <app-event-card-stats
+          [selectedActivities]="selectedActivities"
+          [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
+          [event]="event">
+        </app-event-card-stats>
+      </mat-expansion-panel>
+    </mat-accordion>
     <mat-divider [inset]="true"></mat-divider>
+  </mat-card>
 
 
   <!--  <mat-card class="mat-elevation-z0">-->
