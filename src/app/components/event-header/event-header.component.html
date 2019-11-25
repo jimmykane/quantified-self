@@ -25,11 +25,11 @@
 
     <!--    <mat-card-subtitle>-->
     <!--      <section>-->
-    <!--&lt;!&ndash;        <app-header-stats&ndash;&gt;-->
-    <!--&lt;!&ndash;          [stats]="event.getStatsAsArray()"&ndash;&gt;-->
+    <!--&lt;!&ndash;        <app-header-statsToShow&ndash;&gt;-->
+    <!--&lt;!&ndash;          [statsToShow]="event.getStatsAsArray()"&ndash;&gt;-->
     <!--&lt;!&ndash;          [statsToShow]="statsToShow"&ndash;&gt;-->
     <!--&lt;!&ndash;          [unitSettings]="user?.settings?.unitSettings"&ndash;&gt;-->
-    <!--&lt;!&ndash;        ></app-header-stats>&ndash;&gt;-->
+    <!--&lt;!&ndash;        ></app-header-statsToShow>&ndash;&gt;-->
     <!--&lt;!&ndash;      </section>&ndash;&gt;-->
     <!--    </mat-card-subtitle>-->
 
@@ -38,11 +38,11 @@
 
 <!--  <mat-card-subtitle style="margin-bottom: 1em;">-->
 <!--    <section>-->
-<!--      <app-header-stats-->
-<!--        [stats]="event.getStatsAsArray()"-->
+<!--      <app-header-statsToShow-->
+<!--        [statsToShow]="event.getStatsAsArray()"-->
 <!--        [statsToShow]="statsToShow"-->
 <!--        [unitSettings]="user?.settings?.unitSettings">-->
-<!--      </app-header-stats>-->
+<!--      </app-header-statsToShow>-->
 <!--    </section>-->
 <!--  </mat-card-subtitle>-->
 
@@ -91,12 +91,6 @@
 
 <!--  <mat-divider [inset]="true" style="margin-bottom: 1em;"></mat-divider>-->
 
-  <mat-card-subtitle style="margin-bottom: 1em;">
-    <app-header-stats
-      [stats]="event.getStatsAsArray()"
-      [statsToShow]="statsToShow"
-      [unitSettings]="user?.settings?.unitSettings">
-    </app-header-stats>
-  </mat-card-subtitle>
+
 
 </mat-card>

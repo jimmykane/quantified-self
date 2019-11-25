@@ -5,6 +5,8 @@ mat-card {
   /*margin-right: 0.8em;*/
   /*padding: 16px 0 0;*/
   /*min-height: calc(30vh);*/
+  padding-top: 0;
+  padding-bottom: 0;
 }
 mat-card-subtitle{
   margin-bottom: 0;

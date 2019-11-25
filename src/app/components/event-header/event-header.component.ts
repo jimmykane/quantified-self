@@ -8,20 +8,6 @@ import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
-import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
-import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
-import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
-import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
-import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
-import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
 
 @Component({
   selector: 'app-event-header',
@@ -37,26 +23,10 @@ export class EventHeaderComponent implements OnChanges {
   @Input() showIcon = false;
   @Input() isOwner = false;
 
-
-  public statsToShow = [
-    DataDuration.type,
-    DataDistance.type,
-    DataHeartRateAvg.type,
-    DataSpeedAvg.type,
-    DataAscent.type,
-    DataDescent.type,
-    DataEnergy.type,
-    DataCadenceAvg.type,
-    DataPowerAvg.type,
-    DataTemperatureAvg.type,
-    DataRecoveryTime.type,
-  ];
-
   feeling: Feelings;
   rpe: RPEBorgCR10SCale;
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
-
 
   constructor(private eventService: EventService, private snackBar: MatSnackBar) {
   }
@@ -71,18 +41,6 @@ export class EventHeaderComponent implements OnChanges {
     if (this.event.getStat(DataRPE.type)) {
       this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
     }
-
-    const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
-
-    this.statsToShow = this.statsToShow.reduce((statsAccu, statType) => {
-      if (statType === DataSpeedAvg.type) {
-        return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
-          return [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])];
-        }, [])];
-      }
-      return [...statsAccu, statType];
-    }, []);
-
   }
 
 

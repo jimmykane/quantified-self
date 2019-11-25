@@ -20,7 +20,6 @@ import {
 import {ThemeService} from '../../../services/app.theme.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
-import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {UserService} from '../../../services/app.user.service';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
@@ -30,6 +29,15 @@ import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
+import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
+import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
+import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
+import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {Event} from 'quantified-self-lib/lib/events/event';
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 
 
 @Component({
@@ -57,8 +65,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartLapTypes = UserService.getDefaultChartLapTypes();
   public chartStrokeWidth: number = UserService.getDefaultChartStrokeWidth();
   public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
-  public chartFillOpacity: number = UserService.getDefaultChartFillOpacity() ;
-  public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold() ;
+  public chartFillOpacity: number = UserService.getDefaultChartFillOpacity();
+  public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold();
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
   public showMapArrows = true;
@@ -68,6 +76,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public mapTheme: MapThemes;
   public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
+  public statsToShow = [];
+  public stats: DataInterface[];
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
@@ -172,8 +182,48 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to selected activities
     this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
       this.selectedActivities = selectedActivities.source.selected;
+      // @todo optimize and move to component
+      if (!this.selectedActivities.length) {
+        this.stats = [];
+        return;
+      }
+
+      if ((this.selectedActivities.length === 1 && this.event.getActivities().length === 1)
+        ||  this.selectedActivities.length === this.event.getActivities().length) {
+        this.stats = [...this.event.getStats().values()];
+      } else if (this.selectedActivities.length === 1) {
+        this.stats = [...this.selectedActivities[0].getStats().values()];
+
+      } else {
+        this.stats = EventUtilities.getSummaryStatsForActivities(this.selectedActivities);
+      }
+
+      const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
+      // @todo move to own component
+
+      this.statsToShow = [
+        DataDuration.type,
+        DataDistance.type,
+        DataHeartRateAvg.type,
+        DataSpeedAvg.type,
+        DataAscent.type,
+        DataDescent.type,
+        DataEnergy.type,
+        DataCadenceAvg.type,
+        DataPowerAvg.type,
+        DataTemperatureAvg.type,
+        DataRecoveryTime.type,
+      ].reduce((statsAccu, statType) => {
+        if (statType === DataSpeedAvg.type) {
+          return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
+            return [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])];
+          }, [])];
+        }
+        return [...statsAccu, statType];
+      }, [])
     })
   }
+
 
   isOwner() {
     return !!(this.targetUserID && this.currentUser && (this.targetUserID === this.currentUser.uid));
@@ -192,6 +242,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   hasLaps(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
   }
+
   hasDevices(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((devicesArray, activity) => devicesArray.concat(activity.creator.devices), []).length
   }

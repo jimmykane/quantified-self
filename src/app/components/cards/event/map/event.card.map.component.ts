@@ -63,10 +63,10 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
   public mapTypeControlOptions: MapTypeControlOptions = {
-    mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
-    // mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
+    // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
+    mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
     position: ControlPosition.LEFT_TOP,
-    // style: MapTypeControlStyle.DEFAULT
+    style: 0
   };
 
   public rotateControlOptions: RotateControlOptions = {
@@ -100,7 +100,6 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
 
 
   ngOnChanges(simpleChanges) {
-    // // If no operational changes return
     if ((simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.lapTypes
@@ -128,6 +127,11 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     this.noMapData = false;
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
+    if (!this.selectedActivities.length){
+      this.noMapData = true;
+      this.loaded();
+      return;
+    }
     this.selectedActivities.forEach((activity) => {
       this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .subscribe((streams) => {
@@ -140,11 +144,10 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
             if (index !== -1) {
               this.activitiesMapData.splice(index, 1);
             }
-            this.isLoading = false;
             if (!this.activitiesMapData.length) {
               this.noMapData = true;
             }
-            this.changeDetectorRef.detectChanges();
+            this.loaded();
             return;
           }
 
@@ -165,8 +168,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
           });
 
           if (!positions.length) {
-            this.isLoading = false;
-            this.changeDetectorRef.detectChanges();
+            this.loaded();
             return;
           }
 
@@ -193,9 +195,8 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
             }, [])
           });
 
-          this.resizeMapToBounds();
           this.loaded();
-          this.changeDetectorRef.detectChanges();
+          this.resizeMapToBounds();
         }))
     })
   }

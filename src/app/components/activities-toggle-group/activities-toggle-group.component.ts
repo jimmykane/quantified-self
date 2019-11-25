@@ -28,7 +28,7 @@ export class ActivitiesToggleGroupComponent implements OnChanges, OnInit, OnDest
   private selectedActivitiesSubscription: Subscription;
   private selectedActivities: ActivityInterface[];
 
-  constructor(public eventColorService: EventColorService, private activitySelectionService: ActivitySelectionService) {
+  constructor(public eventColorService: EventColorService, public activitySelectionService: ActivitySelectionService) {
 
   }
 
