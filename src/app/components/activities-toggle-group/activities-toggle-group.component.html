@@ -3,7 +3,15 @@
   <!--          <mat-card-header   >-->
 
   <mat-button-toggle *ngFor="let activity of activities" [value]="activity" (change)="onActivitySelect($event)">
+    <mat-card-subtitle>
     {{activity.type}}
+    </mat-card-subtitle>
+    <mat-card-subtitle>
+      <mat-icon [ngStyle]="{'color':  eventColorService.getActivityColor(activities, activity)}">
+              watch
+      </mat-icon>
+      {{activity.creator.name}}
+    </mat-card-subtitle>
   </mat-button-toggle>
   <!--          </mat-card-header>-->
 </mat-button-toggle-group>

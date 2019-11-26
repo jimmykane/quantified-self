@@ -27,7 +27,7 @@
       </agm-marker>
       <!-- Polyline for the activity -->
       <agm-polyline
-        [strokeColor]="eventColorService.getActivityColor(event, activityMapData.activity)"
+        [strokeColor]="activityMapData.strokeColor"
         [strokeWeight]="strokeWidth">
         <!-- Points -->
         <agm-polyline-point

@@ -175,6 +175,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
           this.activitiesMapData.push({
             activity: activity,
             positions: positions,
+            strokeColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
             laps: activity.getLaps().reduce((laps, lap) => {
               // @todo gives back too big arrays should check the implementation of the activity method
               const positionData = activity.getSquashedPositionData(lap.startDate, lap.endDate, streams[0], streams[1]);
@@ -308,7 +309,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   getMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M22-48h-44v43h16l6 5 6-5h16z',
-      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.5,
@@ -324,7 +325,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   getHomeMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.8,
@@ -336,7 +337,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   getFlagMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
-      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.8,
@@ -415,6 +416,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
 export interface MapData {
   activity: ActivityInterface;
   positions: DataPositionInterface[];
+  strokeColor: string;
   laps: {
     lap: LapInterface,
     lapPosition: DataPositionInterface,

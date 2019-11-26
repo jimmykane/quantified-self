@@ -11,9 +11,9 @@ export class EventColorService {
     return '#' + Math.floor((Math.abs(Math.sin(number) * 16777215)) % 16777215).toString(16);
   }
 
-  public getActivityColor(event: EventInterface, activity: ActivityInterface): string {
+  public getActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
     // Get the index of the requested activity among all activities
-    const activityIndex = event.getActivities().findIndex((eventActivity) => {
+    const activityIndex = activities.findIndex((eventActivity) => {
       return activity.getID() === eventActivity.getID();
     });
     if (!AppDeviceColors[activity.creator.name]) {
@@ -21,7 +21,7 @@ export class EventColorService {
     }
 
     // Find the activities that have the same creator
-    const sameCreatorActivities = event.getActivities().filter(eventActivity => eventActivity.creator.name === activity.creator.name);
+    const sameCreatorActivities = activities.filter(eventActivity => eventActivity.creator.name === activity.creator.name);
     // If there are no activities with the same creator return the color of this creator
     if (!sameCreatorActivities.length) {
       return AppDeviceColors[activity.creator.name];
