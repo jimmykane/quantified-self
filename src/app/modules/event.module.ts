@@ -9,7 +9,6 @@ import {EventCardStatsComponent} from '../components/cards/event/stats/event.car
 import {EventCardLapsComponent} from '../components/cards/event/laps/event.card.laps.component';
 import {EventCardToolsComponent} from '../components/cards/event/tools/event.card.tools.component';
 import {ActivityIconComponent} from '../components/activity-icon/activity-icon.component';
-import {ActivitiesToggleGroupComponent} from '../components/activities-toggle-group/activities-toggle-group.component';
 import {ActivityActionsComponent} from '../components/activity-actions/activity.actions.component';
 import {MapActionsComponent} from '../components/map-actions/map.actions.component';
 import {EventCardChartActionsComponent} from '../components/cards/event/chart/actions/event.card.chart.actions.component';
@@ -18,6 +17,7 @@ import {ActivityHeaderComponent} from '../components/activity-header/activity-he
 import {AgmCoreModule} from '@agm/core';
 import {EventHeaderComponent} from '../components/event-header/event-header.component';
 import {HeaderStatsComponent} from '../components/header-stats/header-stats.component';
+import {ActivitiesTogglesComponent} from '../components/activities-toggle-group/activities-toggles.component';
 
 
 @NgModule({
@@ -40,7 +40,7 @@ import {HeaderStatsComponent} from '../components/header-stats/header-stats.comp
     EventHeaderComponent,
     HeaderStatsComponent,
     ActivityIconComponent,
-    ActivitiesToggleGroupComponent,
+    ActivitiesTogglesComponent,
     ActivityActionsComponent,
     ActivityHeaderComponent,
     MapActionsComponent,

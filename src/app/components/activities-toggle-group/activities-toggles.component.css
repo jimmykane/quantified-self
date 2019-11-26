@@ -1,0 +1,31 @@
+mat-card-subtitle{
+  margin: 1em 0;
+  line-height: 0.8em;
+  text-align: left;
+  font-size: 0.8em;
+  margin-left: 0.8em;
+}
+
+mat-icon{
+  vertical-align: middle;
+}
+
+.mat-card-avatar{
+  height: auto;
+  width: auto;
+  text-align: left;
+  /*margin-left: -16px;*/
+}
+
+::ng-deep .mat-card-header-text {
+  /*margin-left: 0;*/
+}
+
+mat-card-header mat-card-title{
+  font-size: 1.1em;
+  text-align: left;
+  margin: 0;
+  line-height: 2.5em;
+  margin-left: 0.5em;
+  margin-top: -0.6em;
+}

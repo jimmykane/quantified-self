@@ -1,0 +1,33 @@
+<!--          <mat-card-header   >-->
+<!--  <mat-slide-toggle-->
+<!--    class="example-margin"-->
+<!--    [color]="color"-->
+<!--    [checked]="checked"-->
+<!--    [disabled]="disabled">-->
+<!--    Slide me!-->
+<!--  </mat-slide-toggle>-->
+<mat-card-header *ngFor="let activity of activities">
+  <div mat-card-avatar>
+    <!-- put diff icon for merge -->
+    <mat-slide-toggle
+      (change)="onActivitySelect($event, activity)"
+      [color]="eventColorService.getActivityColor(activities, activity)"
+      [checked]="activitySelectionService.selectedActivities.isSelected(activity)">
+    </mat-slide-toggle>
+  </div>
+  <mat-card-title>
+    {{activity.type}}
+  </mat-card-title>
+  <mat-card-subtitle *ngIf="isMerge">
+    {{activity.startDate | date:'medium'}}
+  </mat-card-subtitle>
+  <mat-card-subtitle>
+    <span>{{activity.getDuration().getDisplayValue()}}{{activity.getDuration().getDisplayUnit()}}</span>,
+    <span>{{activity.getDistance().getDisplayValue()}}{{activity.getDistance().getDisplayUnit()}}</span>,
+    <span *ngIf="isMerge"> {{activity.creator.name}}</span>
+  </mat-card-subtitle>
+  <app-activity-actions *ngIf="user && isOwner" [user]="user" [event]="event"
+                        [activity]="activity" align="end"></app-activity-actions>
+</mat-card-header>
+
+<!--          </mat-card-header>-->

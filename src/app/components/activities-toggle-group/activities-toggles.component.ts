@@ -14,16 +14,23 @@ import {EventColorService} from '../../services/color/app.event.color.service';
 import {ActivitySelectionService} from '../../services/activity-selection-service/activity-selection.service';
 import {Subscription} from 'rxjs';
 import {MatButtonToggleChange} from '@angular/material/button-toggle';
+import {MatSlideToggleChange} from '@angular/material/slide-toggle';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
-  selector: 'app-activities-toggle-groups',
-  templateUrl: './activities-toggle-group.component.html',
-  styleUrls: ['./activities-toggle-group.component.css'],
+  selector: 'app-activities-toggles',
+  templateUrl: './activities-toggles.component.html',
+  styleUrls: ['./activities-toggles.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush, // @todo not sure
 })
 
-export class ActivitiesToggleGroupComponent implements OnChanges, OnInit, OnDestroy {
+export class ActivitiesTogglesComponent implements OnChanges, OnInit, OnDestroy {
   @Input() activities: ActivityInterface[];
+  @Input() color: string;
+  @Input() isOwner?: boolean;
+  @Input() user?: User;
+  @Input() event?: EventInterface;
+  @Input() isMerge: boolean; // Should show additional info
 
   private selectedActivitiesSubscription: Subscription;
   private selectedActivities: ActivityInterface[];
@@ -42,10 +49,10 @@ export class ActivitiesToggleGroupComponent implements OnChanges, OnInit, OnDest
   ngOnChanges(simpleChanges): void {
   }
 
-  onActivitySelect(event: MatButtonToggleChange) {
-    event.source.checked ?
-      this.activitySelectionService.selectedActivities.select(event.value)
-      : this.activitySelectionService.selectedActivities.deselect(event.value);
+  onActivitySelect(event: MatSlideToggleChange, activity: ActivityInterface) {
+    event.checked ?
+      this.activitySelectionService.selectedActivities.select(activity)
+      : this.activitySelectionService.selectedActivities.deselect(activity);
   }
 
   ngOnDestroy(): void {

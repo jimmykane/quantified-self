@@ -5,19 +5,17 @@
     [user]='currentUser'
     [isOwner]="currentUser && (currentUser.uid === targetUserID)">
   </app-event-header>
-  <mat-divider [inset]="true"></mat-divider>
+<!--  <mat-divider [inset]="true"></mat-divider>-->
 
   <!-- todo move to own compoenent and should be visible only if more than one activity the toggle groups-->
-  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;" *ngIf="event.getActivities().length > 1">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>edit_attributes</mat-icon>
-      </div>
-      <mat-card-subtitle>
-        <app-activities-toggle-groups [activities]="event.getActivities()"></app-activities-toggle-groups>
-        <!--      <mat-divider [inset]="false"></mat-divider>-->
-      </mat-card-subtitle>
-    </mat-card-header>
+  <mat-card class="mat-elevation-z0" style="" *ngIf="event.getActivities().length > 1">
+    <app-activities-toggles
+      [isMerge]="event.isMerge"
+      [event]="event"
+      [user]="currentUser"
+      [isOwner]="isOwner()"
+      [activities]="event.getActivities()">
+    </app-activities-toggles>
   </mat-card>
 
   <mat-card class="mat-elevation-z0" style="padding-bottom: 0;"
@@ -32,14 +30,10 @@
 
   <!--  <mat-divider [inset]="true"></mat-divider>-->
 
-  <mat-card  class="mat-elevation-z0" style="padding-bottom: 0;">
+  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;">
     <mat-accordion>
       <mat-expansion-panel class="mat-elevation-z0">
         <mat-expansion-panel-header style="padding: 0 16px; padding-right: 32px;">
-          <!--        <mat-panel-title style="font-size: 1.1em">-->
-          <!--            <span><mat-icon style="vertical-align: bottom;">insert_chart</mat-icon>-->
-          <!--            Summaries</span>-->
-          <!--        </mat-panel-title>-->
           <mat-panel-title>
             <mat-icon>view_column</mat-icon>
           </mat-panel-title>
