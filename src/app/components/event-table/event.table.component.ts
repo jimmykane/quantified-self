@@ -84,9 +84,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   rpe: RPEBorgCR10SCale;
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
-
-  eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
-
+  
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
 
@@ -277,7 +275,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
             promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.event.getID()).pipe(take(1)).toPromise());
           });
           // Now we can clear the selection
-          this.eventSelectionMap.clear();
           this.selection.clear();
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
@@ -321,7 +318,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
             this.unsubscribeFromAll();
             const deletePromises = [];
             this.selection.selected.map(selected => selected.event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
-            this.eventSelectionMap.clear();
             this.selection.clear();
             await Promise.all(deletePromises);
             this.processChanges();
