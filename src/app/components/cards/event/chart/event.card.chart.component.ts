@@ -1223,4 +1223,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.destroyLegendParent();
     super.destroyChart();
   }
+
+  getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
+    return chart.colors.getIndex(index * 3);
+  }
 }

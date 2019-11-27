@@ -8,7 +8,7 @@
 <!--  <mat-divider [inset]="true"></mat-divider>-->
 
   <!-- todo move to own compoenent and should be visible only if more than one activity the toggle groups-->
-  <mat-card class="mat-elevation-z0" style="" *ngIf="event.getActivities().length > 1">
+  <mat-card class="mat-elevation-z0" style="padding-top: 0;" *ngIf="event.getActivities().length > 1">
     <app-activities-toggles
       [isMerge]="event.isMerge"
       [event]="event"
@@ -19,7 +19,7 @@
   </mat-card>
 
   <mat-card class="mat-elevation-z0" style="padding-bottom: 0;"
-            [ngStyle]="{'padding-top': event.getActivities().length > 1 ? '0' : '1em'}">
+            [ngStyle]="{'padding-top': event.getActivities().length > 1 ? '0' : '0'}">
     <mat-card-subtitle>
       <app-header-stats
         [statsToShow]="statsToShow"

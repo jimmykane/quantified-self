@@ -179,7 +179,7 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultChartFillOpacity(): number {
-    return 0.15;
+    return 0.35;
   }
 
   static getDefaultTableSettings(): TableSettings {
