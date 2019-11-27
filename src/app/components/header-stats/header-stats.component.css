@@ -15,28 +15,44 @@
 /*}*/
 
 
-mat-card{
+mat-card {
   margin: 0;
   padding: 0;
-  min-width: 25%;
+  max-width: 25%;
+  flex: 1 1 25%;
   height: 25%;
-  display: inline-block;
+  min-width: 140px;
+  margin-bottom: 1em;
+  /*display: inline-block;*/
+  /*flex-basis: 0;*/
 }
 
-.mat-card-title{
+mat-card:last-child{
+  margin-bottom: 0;
+}
+
+.mat-card-title {
   font-size: 1.1em;
-    white-space:nowrap;
-  margin: 0 ;
-}
-
-mat-card-subtitle{
-  font-size: 0.8em;
+  white-space: nowrap;
   margin: 0;
 }
 
-.mat-card-avatar{
+mat-card-subtitle {
+  font-size: 0.8em;
+  margin: 0;
+  line-height: 1.3em;
+}
+
+.mat-card-avatar {
   height: auto;
   width: auto;
   padding-top: 8px;
   /*flex-shrink: unset;*/
+}
+
+
+section {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
 }

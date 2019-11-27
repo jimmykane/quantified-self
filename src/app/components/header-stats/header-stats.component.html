@@ -1,16 +1,18 @@
-<mat-card *ngFor="let stat of stats" class="mat-elevation-z0">
-  <mat-card-header>
-    <div mat-card-avatar>
-      <app-data-type-icon [matTooltip]="stat.getType()" [size]="'24px'" [vAlign]="'top'"
-                          [dataType]="stat.getType()"></app-data-type-icon>
-    </div>
-    <mat-card-subtitle>
-      {{stat.getDisplayType()}}
-    </mat-card-subtitle>
-    <mat-card-title>
-      {{stat.getDisplayValue()}}{{stat.getDisplayUnit()}}
-    </mat-card-title>
-  </mat-card-header>
-  <section>
-  </section>
-</mat-card>
+<section>
+  <mat-card *ngFor="let stat of stats" class="mat-elevation-z0">
+    <mat-card-header>
+      <div mat-card-avatar>
+        <app-data-type-icon [matTooltip]="stat.getType()" [size]="'24px'" [vAlign]="'top'"
+                            [dataType]="stat.getType()"></app-data-type-icon>
+      </div>
+      <mat-card-subtitle>
+        {{stat.getDisplayType()}}
+      </mat-card-subtitle>
+      <mat-card-title>
+        {{stat.getDisplayValue()}}{{stat.getDisplayUnit()}}
+      </mat-card-title>
+    </mat-card-header>
+    <section>
+    </section>
+  </mat-card>
+</section>

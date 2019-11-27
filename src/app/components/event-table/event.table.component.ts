@@ -84,7 +84,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   rpe: RPEBorgCR10SCale;
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
-  
+
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
 
