@@ -80,7 +80,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       this.logger.info(`Created outsize of zone chart with id ${chart.uid}`);
-      chart.pixelPerfect = false;
+      // chart.pixelPerfect = true;
       // chart.colors.step = 2;
       // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
