@@ -1,0 +1,14 @@
+/*mat-slide-toggle{*/
+/*  max-width: 50%;*/
+/*  width: 50%;*/
+/*}*/
+
+/*section{*/
+/*  display: flex;*/
+/*  flex-wrap: wrap;*/
+/*}*/
+
+
+mat-slide-toggle{
+  display: block;
+}

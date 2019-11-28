@@ -1,5 +1,5 @@
 <section [class.flex]="activities.length > 3">
-  <mat-card-header *ngFor="let activity of activities"  [class.flex-header]="activities.length > 1">
+  <mat-card-header *ngFor="let activity of activities"  [class.flex-header]="activities.length > 3">
     <div mat-card-avatar>
       <!-- put diff icon for merge -->
       <mat-slide-toggle
@@ -23,4 +23,3 @@
                           [activity]="activity" align="end"></app-activity-actions>
   </mat-card-header>
 </section>
-<!--          </mat-card-header>-->

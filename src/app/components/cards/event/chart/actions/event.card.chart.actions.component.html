@@ -1,8 +1,5 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
-  <mat-icon>more_vert</mat-icon>
-</button>
-<mat-menu #menu="matMenu">
-  <section mat-menu-item class="first">
+<section class="container">
+  <section class="item">
     <mat-form-field>
       <mat-label>X Axis type</mat-label>
       <mat-select placeholder="X Axis type" [(value)]="xAxisType" (selectionChange)="somethingChanged($event)">
@@ -13,7 +10,7 @@
     </mat-form-field>
   </section>
 
-  <section mat-menu-item>
+  <section class="item">
     <mat-slide-toggle
       [color]="'accent'"
       (change)="somethingChanged($event)"
@@ -25,19 +22,7 @@
     </mat-slide-toggle>
   </section>
 
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();"
-      [(ngModel)]="showGrid">
-      <span matTooltip="Show grid on the chart">
-        Show grid
-      </span>
-    </mat-slide-toggle>
-  </section>
-
-  <section mat-menu-item>
+  <section class="item">
     <mat-slide-toggle
       [color]="'accent'"
       (change)="somethingChanged($event)"
@@ -49,7 +34,7 @@
     </mat-slide-toggle>
   </section>
 
-  <section mat-menu-item>
+  <section class="item">
     <mat-slide-toggle
       [color]="'accent'"
       (change)="somethingChanged($event)"
@@ -60,4 +45,4 @@
       </span>
     </mat-slide-toggle>
   </section>
-</mat-menu>
+</section>

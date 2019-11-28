@@ -54,9 +54,9 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
-  public showAllData: boolean;
-  public showChartLaps: boolean;
-  public showChartGrid: boolean;
+  public showAllData = false;
+  public showChartLaps = true;
+  public showChartGrid = true;
   public stackChartYAxes = true;
   public useChartAnimations = true;
   public chartDisableGrouping = false;

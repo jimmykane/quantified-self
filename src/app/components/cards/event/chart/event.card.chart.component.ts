@@ -526,24 +526,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     yAxis.renderer.maxLabelPosition = 0.95;
     yAxis.title.fontSize = '1.0em';
     yAxis.title.fontWeight = '600';
-    // yAxis.renderer.minLabelPosition = 0.005;
-    // yAxis.renderer.maxLabelPosition = -1;
-    // yAxis.renderer.axisFills.template.disabled = true;
-    // yAxis.renderer.grid.template.disabled = true;
 
     yAxis.renderer.ticks.template.disabled = false;
     yAxis.renderer.ticks.template.strokeOpacity = 1;
     yAxis.renderer.ticks.template.strokeWidth = 1;
     yAxis.renderer.ticks.template.length = 5;
     yAxis.renderer.minGridDistance = 20;
-
-
-    // @todo on the other axis the min grid distance
-
-    // yAxis.adapter.add('getTooltipText', (text, target) => {
-    //   return text;
-    // });
-
 
     // Then create a series
     series = this.chart.series.push(new am4charts.LineSeries());

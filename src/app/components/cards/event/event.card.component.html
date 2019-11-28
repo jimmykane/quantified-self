@@ -5,7 +5,7 @@
     [user]='currentUser'
     [isOwner]="currentUser && (currentUser.uid === targetUserID)">
   </app-event-header>
-<!--  <mat-divider [inset]="true"></mat-divider>-->
+  <!--  <mat-divider [inset]="true"></mat-divider>-->
 
   <!-- todo move to own compoenent and should be visible only if more than one activity the toggle groups-->
   <mat-card class="mat-elevation-z0" style="padding-top: 0;" *ngIf="event.getActivities().length > 1">
@@ -52,63 +52,18 @@
   </mat-card>
 
 
-  <!--  <mat-card class="mat-elevation-z0">-->
-  <!--    &lt;!&ndash; Activity details &ndash;&gt;-->
-  <!--    <mat-card-header *ngFor="let activity of event.getActivities()">-->
-  <!--      <div mat-card-avatar>-->
-  <!--        <mat-icon>visibility</mat-icon>-->
-  <!--      </div>-->
-  <!--      <mat-card-title style="font-size: 1.2em;">-->
-  <!--        <b>{{ activity.type }}</b>&nbsp;-->
-  <!--        <span>-->
-  <!--          <b>{{ activity.getDistance().getDisplayValue() }}</b>-->
-  <!--          {{ activity.getDistance().getDisplayUnit() }}-->
-  <!--        </span>-->
-  <!--      </mat-card-title>-->
-  <!--      <mat-card-subtitle>-->
-  <!--         <span>-->
-  <!--           <b>{{ activity.getDuration().getDisplayValue() }}</b>-->
-  <!--         </span>-->
-  <!--      </mat-card-subtitle>-->
-  <!--      <app-activity-actions *ngIf="isOwner()" [user]="currentUser" [event]="event"-->
-  <!--                            [activity]="activity" align="end"></app-activity-actions>-->
-  <!--    </mat-card-header>-->
-  <!--    <mat-accordion>-->
-  <!--      <mat-expansion-panel class="mat-elevation-z0">-->
-  <!--        <mat-expansion-panel-header>-->
-  <!--          <mat-panel-title style="font-size: 1.1em">-->
-  <!--            <span><mat-icon style="vertical-align: bottom;">insert_chart</mat-icon>-->
-  <!--            Summaries</span>-->
-  <!--          </mat-panel-title>-->
-  <!--          <mat-panel-description>-->
-  <!--            Tap to expand-->
-  <!--          </mat-panel-description>-->
-  <!--        </mat-expansion-panel-header>-->
-  <!--        <app-event-card-statsToShow-->
-  <!--          [selectedActivities]="selectedActivities"-->
-  <!--          [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"-->
-  <!--          [event]="event">-->
-  <!--        </app-event-card-statsToShow>-->
-  <!--      </mat-expansion-panel>-->
-  <!--    </mat-accordion>-->
-  <!--    <mat-divider></mat-divider>-->
-
-  <!--  </mat-card>-->
   <mat-card class="mat-elevation-z0">
     <mat-card-header>
       <div mat-card-avatar>
         <mat-icon>map</mat-icon>
       </div>
-            <mat-card-title>Map</mat-card-title>
-            <mat-card-subtitle>What to put here ?</mat-card-subtitle>
       <mat-card-subtitle>
+        <app-map-actions
+          [(showLaps)]="showMapLaps"
+          [(showArrows)]="showMapArrows"
+          [user]="currentUser">
+        </app-map-actions>
       </mat-card-subtitle>
-      <app-map-actions
-        [(showLaps)]="showMapLaps"
-        [(showArrows)]="showMapArrows"
-        [user]="currentUser"
-        align="end">
-      </app-map-actions>
     </mat-card-header>
     <app-event-card-map
       *ngIf="event && targetUserID"
@@ -204,17 +159,15 @@
       <div mat-card-avatar>
         <mat-icon>show_chart</mat-icon>
       </div>
-      <mat-card-title>Title</mat-card-title>
-      <mat-card-subtitle>Subtitle</mat-card-subtitle>
+      <mat-card-subtitle>
       <app-event-card-chart-actions
         [(xAxisType)]="chartXAxisType"
         [(showAllData)]="showAllData"
         [(showLaps)]="showChartLaps"
         [(stackYAxes)]="stackChartYAxes"
-        [(showGrid)]="showChartGrid"
-        [user]="currentUser"
-        align="end">
+        [user]="currentUser">
       </app-event-card-chart-actions>
+      </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
       <app-event-card-chart

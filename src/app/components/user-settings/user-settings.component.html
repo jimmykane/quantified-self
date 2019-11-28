@@ -296,7 +296,16 @@
             formControlName="showChartLaps">
             <span matTooltip="Show laps on chart?">Show laps</span>
           </mat-slide-toggle>
-          <mat-hint><b>Tip:</b> laps can help in the data analysis</mat-hint>
+          <mat-hint><b>Tip:</b> laps can help with the data analysis</mat-hint>
+        </section>
+
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="showChartGrid">
+            <span matTooltip="Show grid on the chart?">Show grid</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> showing the grid can help with the data analysis</mat-hint>
         </section>
 
         <section>

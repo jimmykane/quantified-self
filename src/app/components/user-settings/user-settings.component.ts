@@ -133,6 +133,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showChartGrid: new FormControl(this.user.settings.chartSettings.showGrid, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       stackYAxes: new FormControl(this.user.settings.chartSettings.stackYAxes, [
         // Validators.required,
         // Validators.minLength(1),
@@ -267,6 +272,7 @@ export class UserSettingsComponent implements OnChanges {
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
+        showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
         stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
