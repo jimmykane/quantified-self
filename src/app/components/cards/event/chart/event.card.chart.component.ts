@@ -242,7 +242,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   protected createChart(): am4charts.XYChart {
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
-
     chart.fontSize = '1em';
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
@@ -612,11 +611,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.logger.info('Series ready');
     });
 
-    // this.chart.invalidateData(); // @todo Perhaps this can go away.
     // Finally set the data and return
-    this.zone.runOutsideAngular(() => {
-      series.data = this.convertStreamDataToSeriesData(activity, stream);
-    });
+    series.data = this.convertStreamDataToSeriesData(activity, stream);
     return series;
   }
 
