@@ -50,6 +50,7 @@ export class EventCardLapsComponent implements OnChanges {
   }
 
   getColumns(activity) {
-    return Object.keys(this.getData(activity).data[0]);
+    return ['#', 'Type', 'Start Time', 'Duration', 'Distance', 'Ascent', 'Descent', 'Average Heart Rate'];
+    // return Object.keys(this.getData(activity).data[0]);
   }
 }

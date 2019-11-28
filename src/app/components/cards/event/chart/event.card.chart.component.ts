@@ -182,7 +182,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Important for performance / or not?
     // This is / will be needed when more performance needs to be achieved
     // Leaving this here for the future. For now the groups of data do suffice and do it better
-    // am4core.options.minPolylineStep = this.downSamplingLevel;
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
         this.distanceAxesForActivitiesMap.set(
