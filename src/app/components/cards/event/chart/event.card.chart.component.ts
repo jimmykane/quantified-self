@@ -595,11 +595,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     series.interactionsEnabled = false;
 
-    // Show an hide on condition
-    if (selectedDataTypes && selectedDataTypes.length) {
-      if (selectedDataTypes.indexOf(series.id) === -1) {
-        series.hidden = true;
-      }
+    if (selectedDataTypes && selectedDataTypes.length && selectedDataTypes.indexOf(series.id) === -1) {
+      series.hidden = true;
     } else if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
       series.hidden = true;
     }
