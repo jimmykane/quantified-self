@@ -123,6 +123,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   }
 
   private bindToNewData() {
+    this.logger.info(`Binding to new data`);
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];

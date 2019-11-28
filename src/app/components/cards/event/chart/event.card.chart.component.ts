@@ -1225,6 +1225,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
-    return chart.colors.getIndex(index * 3);
+    return chart.colors.getIndex(index * 2);
   }
 }

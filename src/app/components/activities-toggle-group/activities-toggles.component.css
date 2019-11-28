@@ -2,7 +2,7 @@ mat-card-subtitle{
   margin: 1em 0;
   line-height: 0.9em;
   text-align: left;
-  font-size: 0.85em;
+  font-size: 0.90em;
   margin-left: 0.8em;
 }
 
@@ -29,7 +29,7 @@ mat-icon{
   height: auto;
   width: auto;
   text-align: left;
-  padding-top: 8px;
+  padding-top: 12px;
   /*margin-left: -16px;*/
 }
 
@@ -38,7 +38,7 @@ mat-icon{
 }
 
 mat-card-header mat-card-title{
-  font-size: 1.1em;
+  font-size: 1.2em;
   text-align: left;
   margin: 0;
   line-height: 2.5em;
