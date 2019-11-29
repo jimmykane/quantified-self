@@ -1,5 +1,4 @@
 import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output,} from '@angular/core';
-import {UserSettingsService} from '../../../../../services/app.user.settings.service';
 import {XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../../../../services/app.user.service';
@@ -26,8 +25,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   public xAxisTypes = XAxisTypes;
 
   constructor(
-    private userService: UserService,
-    private userSettingsService: UserSettingsService) {
+    private userService: UserService) {
   }
 
   async somethingChanged(event) {

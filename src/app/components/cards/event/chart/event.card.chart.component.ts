@@ -29,7 +29,6 @@ import {
   XAxisTypes
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {UserSettingsService} from '../../../../services/app.user.settings.service';
 import {ThemeService} from '../../../../services/app.theme.service';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
@@ -115,7 +114,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               protected zone: NgZone,
               private windowService: WindowService,
               private eventService: EventService,
-              private userSettingsService: UserSettingsService,
               private themeService: ThemeService,
               private eventColorService: EventColorService) {
     super(zone, changeDetector);
@@ -124,7 +122,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   async ngAfterViewInit() {
     this.logger.info(`ViewInit`);
     this.chart = this.createChart();
-    await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
+    await this.processChanges();
     // this.chart = this.createChart();
   }
 
@@ -171,13 +169,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
 
-      await this.processChanges(await this.userSettingsService.selectedDataTypes(this.event));
+      await this.processChanges();
       return;
     }
 
   }
 
-  private async processChanges(selectedDataTypes: string[] | null) {
+  private async processChanges() {
     this.loading();
     // Important for performance / or not?
     // This is / will be needed when more performance needs to be achieved
@@ -211,7 +209,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           }
           return [DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type].indexOf(stream.type) === -1;
         }).map((stream) => {
-          return this.createOrUpdateChartSeries(activity, stream, selectedDataTypes);
+          return this.createOrUpdateChartSeries(activity, stream);
         });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
@@ -468,7 +466,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return chart;
   }
 
-  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface, selectedDataTypes?: string[] | null): am4charts.XYSeries {
+  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
     let series = this.chart.series.values.find(seriesItem => seriesItem.id === this.getSeriesIDFromActivityAndStream(activity, stream));
     // If there is already a series with this id only data update should be done
     if (series) {
@@ -594,9 +592,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     series.interactionsEnabled = false;
 
-    if (selectedDataTypes && selectedDataTypes.length && selectedDataTypes.indexOf(series.id) === -1) {
-      series.hidden = true;
-    } else if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
+    if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
       series.hidden = true;
     }
 
@@ -979,9 +975,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // }
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
-      this.userSettingsService.selectedDataTypes(this.event).then((selectedDataTypes) => {
-        this.userSettingsService.setSelectedDataTypes(this.event, selectedDataTypes.concat([series.id]));
-      });
     });
     // Hidden
     series.events.on('hidden', () => {
@@ -1001,9 +994,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
       // series.yAxis.disabled = true;
       series.yAxis.invalidate();
-      this.userSettingsService.selectedDataTypes(this.event).then((selectedDataTypes) => {
-        this.userSettingsService.setSelectedDataTypes(this.event, selectedDataTypes.filter(dataType => dataType !== series.id))
-      });
     });
   }
 

@@ -23,7 +23,6 @@ import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
 import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
 import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
-import {UserSettingsService} from './services/app.user.settings.service';
 import {EventService} from './services/app.event.service';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventColorService} from './services/color/app.event.color.service';
@@ -95,7 +94,6 @@ export class SentryErrorHandler implements ErrorHandler {
     AppAuthGuard,
     MapSettingsLocalStorageService,
     ChartSettingsLocalStorageService,
-    UserSettingsService,
     EventService,
     ActionButtonService,
     EventColorService,

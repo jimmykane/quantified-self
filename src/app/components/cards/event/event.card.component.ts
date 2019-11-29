@@ -5,7 +5,6 @@ import {EventColorService} from '../../../services/color/app.event.color.service
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {UserSettingsService} from '../../../services/app.user.settings.service';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
@@ -94,7 +93,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private route: ActivatedRoute,
     private authService: AppAuthService,
     private eventService: EventService,
-    private userSettingsService: UserSettingsService,
     private activitySelectionService: ActivitySelectionService,
     private snackBar: MatSnackBar,
     private themeService: ThemeService) {
@@ -104,9 +102,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
-    // Get the settings
-    this.userSettingsService.showAllData().then(value => this.showAllData = value);
-
     // Get the path params
     const userID = this.route.snapshot.paramMap.get('userID');
     const eventID = this.route.snapshot.paramMap.get('eventID');
