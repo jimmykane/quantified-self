@@ -1,10 +1,37 @@
 import {Injectable} from '@angular/core';
 import {LocalStorageService} from './app.local.storage.service';
 import {Log} from 'ng2-logger/browser';
+import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 
 
 @Injectable()
 export class ChartSettingsLocalStorageService extends LocalStorageService {
   protected nameSpace = 'chart.settings.service.';
   protected logger = Log.create('ChartSettingsLocalStorageService');
+
+  // @todo perhaps make static
+  public getSeriesIDsToShow(event: EventInterface): string[] {
+    const stringValue = this.getItem(`selectedDataTypes${event.getID()}`);
+    return stringValue ? stringValue.split(',') : [];
+  }
+
+  public setSeriesIDsToShow(event: EventInterface, seriesIDs: string[]) {
+    this.setItem(`selectedDataTypes${event.getID()}`, seriesIDs.join(','));
+  }
+
+  public showSeriesID(event: EventInterface, seriesID: string) {
+    const seriesToShow = this.getSeriesIDsToShow(event);
+    if (seriesToShow.indexOf(seriesID) === -1) {
+      seriesToShow.push(seriesID);
+    }
+    this.setSeriesIDsToShow(event, seriesToShow);
+  }
+
+  public hideSeriesID(event: EventInterface, seriesID: string) {
+    const seriesToShow = this.getSeriesIDsToShow(event);
+    if (seriesToShow.indexOf(seriesID) !== -1) {
+      seriesToShow.splice(seriesToShow.indexOf(seriesID), 1);
+    }
+    this.setSeriesIDsToShow(event, seriesToShow);
+  }
 }

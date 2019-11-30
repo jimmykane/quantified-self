@@ -21,7 +21,6 @@ import {
 import {MaterialModule} from './modules/material.module';
 import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
-import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
 import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
 import {EventService} from './services/app.event.service';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
@@ -92,7 +91,6 @@ export class SentryErrorHandler implements ErrorHandler {
   providers: [
     AppAuthService,
     AppAuthGuard,
-    MapSettingsLocalStorageService,
     ChartSettingsLocalStorageService,
     EventService,
     ActionButtonService,

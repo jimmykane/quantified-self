@@ -1,14 +1,12 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
-import {EventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {
@@ -35,7 +33,6 @@ import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {Event} from 'quantified-self-lib/lib/events/event';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 
 

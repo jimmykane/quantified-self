@@ -128,7 +128,6 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
     series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
-
     const label = series.createChild(am4core.Label);
     label.horizontalCenter = 'middle';
     label.paddingLeft = 20;

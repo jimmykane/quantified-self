@@ -50,6 +50,8 @@ import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {UserExportToCsvSettingsInterface} from 'quantified-self-lib/lib/users/user.export-to-csv.settings.interface';
+import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
+import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 
 
 @Injectable()
@@ -77,7 +79,12 @@ export class UserService implements OnDestroy {
     return 4;
   }
 
-  // @todo move other calls to this
+  static getDefaultChartDataTypesToShowOnLoad(): string[] {
+    return [
+      DataAltitude.type,
+      DataHeartRate.type,
+    ]
+  }
 
   static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {

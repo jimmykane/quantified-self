@@ -34,7 +34,7 @@ import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.uti
 import {ChartAbstract} from '../../../charts/chart.abstract';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
 import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
@@ -69,6 +69,8 @@ import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-p
 import {ChartHelper, LabelData} from './chart-helper';
 import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
 import {DataAirPower} from 'quantified-self-lib/lib/data/data.air-power';
+import {UserService} from '../../../../services/app.user.service';
+import {ChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
@@ -114,7 +116,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               protected zone: NgZone,
               private windowService: WindowService,
               private eventService: EventService,
-              private themeService: ThemeService,
+              private chartSettingsLocalStorageService: ChartSettingsLocalStorageService,
               private eventColorService: EventColorService) {
     super(zone, changeDetector);
   }
@@ -592,8 +594,24 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     series.interactionsEnabled = false;
 
-    if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) || this.getVisibleSeries(this.chart).length > (this.selectedActivities.length * 2)) {
-      series.hidden = true;
+    // if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) ) {
+    //
+    //   series.hidden = true;
+    // }
+
+    // If we have something in local storage
+    if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
+      if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).indexOf(series.id) === -1){
+        series.hidden = true;
+      }
+    } else {
+      // Else try to check what we should show by default
+      if ([...UserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(activity.type)]
+        .reduce((accu, dataType) => {
+          return [...accu, ...DynamicDataLoader.getUnitBasedDataTypesFromDataType(dataType, this.userUnitSettings)]
+        }, []).indexOf(stream.type) === -1) {
+        series.hidden = true;
+      }
     }
 
     // Attach events
@@ -975,6 +993,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // }
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
+      this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
     });
     // Hidden
     series.events.on('hidden', () => {
@@ -994,10 +1013,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
       // series.yAxis.disabled = true;
       series.yAxis.invalidate();
+      this.chartSettingsLocalStorageService.hideSeriesID(this.event, series.id);
     });
   }
 
-  protected getYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis  {
+  protected getYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
       yAxis = new am4charts.DurationAxis()
