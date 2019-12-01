@@ -14,6 +14,11 @@
     <!--<mat-icon>file_download</mat-icon>-->
     <!--<span>Download as TCX</span>-->
   <!--</button>-->
+    <button mat-menu-item (click)="reGenerateStatistics()">
+      <mat-icon>autorenew</mat-icon>
+      <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
+      </span>
+    </button>
   <button mat-menu-item (click)="download()">
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>

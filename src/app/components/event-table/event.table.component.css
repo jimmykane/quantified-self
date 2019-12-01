@@ -1,6 +1,8 @@
 mat-cell, .mat-header-cell {
   overflow: visible;
+  min-width: 8vw;
 }
+
 
 .mat-cell{
   font-size: 0.85em ;
@@ -8,8 +10,14 @@ mat-cell, .mat-header-cell {
   padding-right: 0.5em;
 }
 
-.mat-column-checkbox, .mat-column-actions, .mat-column-privacy, .mat-column-expand{
-  /*width: 40px;*/
+.mat-column-checkbox, .mat-column-Actions, .mat-column-privacy, .mat-column-expand{
+ min-width: 30px;
+ max-width: 30px;
+ width: 30px;
+}
+
+td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:last-of-type{
+  padding-right: 0;
 }
 
 .mat-column-expand{
@@ -51,8 +59,9 @@ mat-icon {
   /*padding: 0;*/
 }
 
-td.mat-cell, th.mat-header-cell{
-}
+/*td.mat-cell, th.mat-header-cell{*/
+
+/*}*/
 
 mat-card{
   /*min-height: 90vh;*/

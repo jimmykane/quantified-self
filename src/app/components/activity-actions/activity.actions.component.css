@@ -6,6 +6,9 @@
 
 mat-icon.toolTip{
   margin-left: 0.5em;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
 }
 
 .mat-icon-button{

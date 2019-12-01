@@ -168,6 +168,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return
       }
       this.event = event;
+      this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...event.getActivities())
     });
 
