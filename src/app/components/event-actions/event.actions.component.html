@@ -6,7 +6,7 @@
     <mat-icon>share</mat-icon>
     <span>Share</span>
   </button>
-  <button mat-menu-item (click)="edit()">
+  <button *ngIf="event.getActivities().length === 1" mat-menu-item (click)="editEventActivity()">
     <mat-icon>edit</mat-icon>
     <span>Edit</span>
   </button>

@@ -42,6 +42,9 @@ mat-card-header mat-icon {
   margin: 0 !important;
 }
 
+::ng-deep .mat-expansion-panel-body{
+  padding: 0!important;
+}
 app-event-card-stats{
   /*height: 50vh;*/
 }

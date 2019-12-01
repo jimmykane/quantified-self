@@ -2,7 +2,6 @@
   <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)">
 
     <span class="mat-headline">Editing event</span>
-    <span class="mat-subheader">internal id {{ event.getID() }}</span>
 
     <mat-form-field>
       <input matInput placeholder="Name" formControlName="name">

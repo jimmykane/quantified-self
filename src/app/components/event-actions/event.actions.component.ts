@@ -16,6 +16,7 @@ import {MatBottomSheet} from '@angular/material';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {ActivityFormComponent} from '../activity-form/activity.form.component';
 
 @Component({
   selector: 'app-event-actions',
@@ -61,12 +62,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     })
   }
 
-  edit() {
-    const dialogRef = this.dialog.open(EventFormComponent, {
+  editEventActivity() {
+    const dialogRef = this.dialog.open(ActivityFormComponent, {
       width: '75vw',
       disableClose: false,
       data: {
         event: this.event,
+        activity: this.event.getFirstActivity(),
         user: this.user
       },
     });

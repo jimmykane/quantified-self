@@ -30,10 +30,10 @@
 
   <!--  <mat-divider [inset]="true"></mat-divider>-->
 
-  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;">
+  <mat-card class="mat-elevation-z0" style="padding-bottom: 0; padding-top: 0">
     <mat-accordion>
       <mat-expansion-panel class="mat-elevation-z0">
-        <mat-expansion-panel-header style="padding: 0 16px; padding-right: 32px;">
+        <mat-expansion-panel-header style="padding: 0 16px 0 0">
           <mat-panel-title>
             <mat-icon>view_column</mat-icon>
           </mat-panel-title>
@@ -160,13 +160,13 @@
         <mat-icon>show_chart</mat-icon>
       </div>
       <mat-card-subtitle>
-      <app-event-card-chart-actions
-        [(xAxisType)]="chartXAxisType"
-        [(showAllData)]="showAllData"
-        [(showLaps)]="showChartLaps"
-        [(stackYAxes)]="stackChartYAxes"
-        [user]="currentUser">
-      </app-event-card-chart-actions>
+        <app-event-card-chart-actions
+          [(xAxisType)]="chartXAxisType"
+          [(showAllData)]="showAllData"
+          [(showLaps)]="showChartLaps"
+          [(stackYAxes)]="stackChartYAxes"
+          [user]="currentUser">
+        </app-event-card-chart-actions>
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
