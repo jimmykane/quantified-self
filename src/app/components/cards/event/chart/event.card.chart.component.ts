@@ -231,8 +231,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // })
       //   this.chart.xAxes.getIndex(0).strictMinMax = true;
       // }
-
-
     });
   }
 
@@ -469,6 +467,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
+    // @todo try runoutisde angular
     let series = this.chart.series.values.find(seriesItem => seriesItem.id === this.getSeriesIDFromActivityAndStream(activity, stream));
     // If there is already a series with this id only data update should be done
     if (series) {
@@ -532,11 +531,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     yAxis.renderer.minGridDistance = 20;
 
     // Then create a series
-    series = this.chart.series.push(new am4charts.LineSeries());
+    series = new am4charts.LineSeries();
+    series.showOnInit = false;
+    series = this.chart.series.push(series);
     series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
     series.name = this.getSeriesName(stream.type);
-
 
     this.attachSeriesEventListeners(series);
 
@@ -553,7 +553,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Set the axis
     series.yAxis = yAxis;
 
-    yAxis.title.text = `${series.name} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '');
+
+    // yAxis.title.text = `${series.name} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '');
+    if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
+      yAxis.title.text = `${series.name}`
+    } else {
+      yAxis.title.text = `${series.name} [font-size: 0.9em](${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})[/]`
+    }
 
     // Setup the series
 
@@ -601,7 +607,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // If we have something in local storage
     if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
-      if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).indexOf(series.id) === -1){
+      if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).indexOf(series.id) === -1) {
         series.hidden = true;
       }
     } else {
@@ -626,7 +632,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
 
     // Finally set the data and return
-    series.data = this.convertStreamDataToSeriesData(activity, stream);
+    this.zone.runOutsideAngular(() => {
+      series.data = this.convertStreamDataToSeriesData(activity, stream);
+    });
     return series;
   }
 
@@ -977,9 +985,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
     // });
     series.events.on('shown', () => {
-      if (series.appeared) {
-        series.hidden = false;
-      }
+      series.hidden = false;
       this.showSeriesYAxis(series);
       // console.log(series.name + ' shown stat: ' + series.hidden )
       if (this.getSeriesRangeLabelContainer(series)) {
@@ -991,15 +997,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // if (this.xAxisType === XAxisTypes.Distance) {
       //   series.chart.cursor.snapToSeries = series;
       // }
-      series.yAxis.height = am4core.percent(100);
+      series.yAxis.height = am4core.percent(50);
       series.yAxis.invalidate();
       this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
     });
     // Hidden
     series.events.on('hidden', () => {
-      if (series.appeared) {
-        series.hidden = true;
-      }
+      series.hidden = true;
       if (!this.getVisibleSeriesWithSameYAxis(series).length) {
         this.hideSeriesYAxis(series)
       }
