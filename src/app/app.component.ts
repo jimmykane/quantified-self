@@ -100,6 +100,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'arrow_down_right',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-down-right.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'swimmer',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/swimmer.svg')
+    );
   }
 
   async ngOnInit() {

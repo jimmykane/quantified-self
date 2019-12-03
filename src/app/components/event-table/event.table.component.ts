@@ -49,6 +49,7 @@ import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataTableAbstract} from '../data-table/data-table.abstract';
 
 
 @Component({
@@ -68,7 +69,7 @@ import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activi
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventTableComponent extends ScreenSizeAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventTableComponent extends DataTableAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
   @ViewChild(MatSort, {static: true}) sort: MatSort;
@@ -288,7 +289,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
             Sentry.withScope(scope => {
               scope.setExtra('data_event', mergedEvent.toJSON());
               mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
-              // will be tagged with my-tag="my value"
               Sentry.captureException(e);
               this.processChanges();
               this.loaded();
@@ -369,58 +369,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
-  }
-
-  getColumnsToDisplayDependingOnScreenSize(event?) {
-    let columns = ['expand'];
-
-
-    // push all the rest
-    columns.push(...[
-      'checkbox',
-      'startDate',
-      'Activity Types',
-      'Duration',
-      'Distance',
-      'Ascent',
-      'Descent',
-      'Energy',
-      'Average Heart Rate',
-      'Average Speed',
-      'Average Power',
-      'Device Names',
-      'Actions'
-    ]);
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
-      return columns;
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
-      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Energy', 'Average Power'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
-    }
-
-    return columns
   }
 
   private unsubscribeFromAll() {

@@ -7,6 +7,7 @@ import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {LoadingAbstract} from '../../../loading/loading.abstract';
+import {DataTableAbstract} from '../../../data-table/data-table.abstract';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -16,7 +17,7 @@ import {LoadingAbstract} from '../../../loading/loading.abstract';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardLapsComponent implements OnChanges {
+export class EventCardLapsComponent extends DataTableAbstract implements OnChanges {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
 
@@ -47,10 +48,5 @@ export class EventCardLapsComponent implements OnChanges {
       lapDataArray.push(lapObj);
       return lapDataArray;
     }, []));
-  }
-
-  getColumns(activity) {
-    return ['#', 'Type', 'Start Time', 'Duration', 'Distance', 'Ascent', 'Descent', 'Average Heart Rate'];
-    // return Object.keys(this.getData(activity).data[0]);
   }
 }

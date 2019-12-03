@@ -34,6 +34,10 @@ import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-type
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
+import {DataVerticalSpeedAvg} from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
+import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
+import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
 
 
 @Component({
@@ -197,15 +201,18 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.statsToShow = [
         DataDuration.type,
         DataDistance.type,
-        DataHeartRateAvg.type,
-        DataSpeedAvg.type,
-        DataAscent.type,
-        DataDescent.type,
         DataEnergy.type,
+        DataHeartRateAvg.type,
         DataCadenceAvg.type,
         DataPowerAvg.type,
-        DataTemperatureAvg.type,
+        DataAscent.type,
+        DataDescent.type,
+        DataAltitudeMax.type,
+        DataAltitudeMin.type,
         DataRecoveryTime.type,
+        DataVO2Max.type,
+        DataTemperatureAvg.type,
+        DataSpeedAvg.type,
       ].reduce((statsAccu, statType) => {
         if (statType === DataSpeedAvg.type) {
           return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {

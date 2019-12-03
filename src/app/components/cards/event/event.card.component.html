@@ -23,7 +23,8 @@
     <mat-card-subtitle>
       <app-header-stats
         [statsToShow]="statsToShow"
-        [stats]="stats">
+        [stats]="stats"
+        [unitSettings]="currentUser?.settings.unitSettings">
       </app-header-stats>
     </mat-card-subtitle>
   </mat-card>
@@ -43,7 +44,7 @@
         </mat-expansion-panel-header>
         <app-event-card-stats
           [selectedActivities]="selectedActivities"
-          [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
+          [userUnitSettings]="currentUser?.settings.unitSettings"
           [event]="event">
         </app-event-card-stats>
       </mat-expansion-panel>

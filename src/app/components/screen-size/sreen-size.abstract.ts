@@ -41,7 +41,7 @@ export abstract class ScreenSizeAbstract extends LoadingAbstract {
       return ScreenBreakPoints.Moderate
     }
 
-    if (this.screenWidth > 384) {
+    if (this.screenWidth > 460) {
       return ScreenBreakPoints.Low
     }
     return ScreenBreakPoints.Lowest;

@@ -8,7 +8,6 @@ import {EventCardMapComponent} from '../components/cards/event/map/event.card.ma
 import {EventCardStatsComponent} from '../components/cards/event/stats/event.card.stats.component';
 import {EventCardLapsComponent} from '../components/cards/event/laps/event.card.laps.component';
 import {EventCardToolsComponent} from '../components/cards/event/tools/event.card.tools.component';
-import {ActivityIconComponent} from '../components/activity-icon/activity-icon.component';
 import {ActivityActionsComponent} from '../components/activity-actions/activity.actions.component';
 import {MapActionsComponent} from '../components/map-actions/map.actions.component';
 import {EventCardChartActionsComponent} from '../components/cards/event/chart/actions/event.card.chart.actions.component';
@@ -39,7 +38,6 @@ import {ActivitiesTogglesComponent} from '../components/activities-toggle-group/
     EventCardDevicesComponent,
     EventHeaderComponent,
     HeaderStatsComponent,
-    ActivityIconComponent,
     ActivitiesTogglesComponent,
     ActivityActionsComponent,
     ActivityHeaderComponent,

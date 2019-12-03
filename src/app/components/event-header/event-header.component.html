@@ -23,28 +23,9 @@
       <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue()}} and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
     </mat-card-subtitle>
 
-    <!--    <mat-card-subtitle>-->
-    <!--      <section>-->
-    <!--&lt;!&ndash;        <app-header-statsToShow&ndash;&gt;-->
-    <!--&lt;!&ndash;          [statsToShow]="event.getStatsAsArray()"&ndash;&gt;-->
-    <!--&lt;!&ndash;          [statsToShow]="statsToShow"&ndash;&gt;-->
-    <!--&lt;!&ndash;          [unitSettings]="user?.settings?.unitSettings"&ndash;&gt;-->
-    <!--&lt;!&ndash;        ></app-header-statsToShow>&ndash;&gt;-->
-    <!--&lt;!&ndash;      </section>&ndash;&gt;-->
-    <!--    </mat-card-subtitle>-->
 
     <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
   </mat-card-header>
-
-<!--  <mat-card-subtitle style="margin-bottom: 1em;">-->
-<!--    <section>-->
-<!--      <app-header-statsToShow-->
-<!--        [statsToShow]="event.getStatsAsArray()"-->
-<!--        [statsToShow]="statsToShow"-->
-<!--        [unitSettings]="user?.settings?.unitSettings">-->
-<!--      </app-header-statsToShow>-->
-<!--    </section>-->
-<!--  </mat-card-subtitle>-->
 
 
   <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0; color: unset;">
@@ -87,10 +68,4 @@
       (dataChange)="saveEventRPE(rpe, event)">
     </app-edit-input>
   </mat-card-subtitle>
-
-
-<!--  <mat-divider [inset]="true" style="margin-bottom: 1em;"></mat-divider>-->
-
-
-
 </mat-card>
