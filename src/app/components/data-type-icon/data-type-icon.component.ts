@@ -95,6 +95,8 @@ export class DataTypeIconComponent {
         return 'update';
       case DataVO2Max.type:
         return 'trending_up';
+      case 'Type':
+        return 'assignment';
       default:
         return null;
     }

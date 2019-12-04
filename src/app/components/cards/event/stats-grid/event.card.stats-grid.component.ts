@@ -34,7 +34,7 @@ import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-t
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardStatsGridComponent extends DataTableAbstract implements OnChanges {
+export class EventCardStatsGridComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings?: UserUnitSettingsInterface;

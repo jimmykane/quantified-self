@@ -1,10 +1,25 @@
-<ng-container *ngFor="let activity of selectedActivities">
-  <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
-    <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize()" [matColumnDef]="column">
-      <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
-      <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+<mat-card class="mat-elevation-z0 inner">
+  <mat-card-header>
+    <div mat-card-avatar>
+      <mat-icon>linear_scale</mat-icon>
+    </div>
+    <mat-card-title>Laps</mat-card-title>
+    <mat-card-subtitle></mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+
+    <ng-container *ngFor="let activity of selectedActivities">
+      <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
+        <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize()" [matColumnDef]="column">
+          <mat-header-cell *matHeaderCellDef>
+            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+          </mat-header-cell>
+          <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+        </ng-container>
+        <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();"></mat-row>
+      </mat-table>
     </ng-container>
-    <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();"></mat-row>
-  </mat-table>
-</ng-container>
+
+  </mat-card-content>
+</mat-card>

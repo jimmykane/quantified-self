@@ -11,6 +11,8 @@ import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
+import {DataTableAbstract} from '../../../data-table/data-table.abstract';
 
 @Component({
   selector: 'app-event-stats-table',
