@@ -60,7 +60,6 @@ export class EventCardStatsGridComponent implements OnChanges {
     }
 
     const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
-    // @todo move to own component
 
     this.statsToShow = [
       DataDuration.type,
@@ -82,7 +81,7 @@ export class EventCardStatsGridComponent implements OnChanges {
     ].reduce((statsAccu, statType) => {
       if (statType === DataSpeedAvg.type) {
         return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
-          return [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])];
+          return [...new Set( [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])]).values()];
         }, [])];
       }
       return [...statsAccu, statType];
