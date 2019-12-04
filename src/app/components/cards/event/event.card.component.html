@@ -17,11 +17,11 @@
   </app-activities-toggles>
 
 
-  <app-header-stats
-    [statsToShow]="statsToShow"
-    [stats]="stats"
+  <app-event-card-stats-grid
+    [event]="event"
+    [selectedActivities]="selectedActivities"
     [unitSettings]="currentUser?.settings.unitSettings">
-  </app-header-stats>
+  </app-event-card-stats-grid>
 
   <!--  <mat-divider [inset]="true"></mat-divider>-->
 

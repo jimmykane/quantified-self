@@ -76,8 +76,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public mapTheme: MapThemes;
   public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
-  public statsToShow = [];
-  public stats: DataInterface[];
+
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
@@ -179,48 +178,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to selected activities
     this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
       this.selectedActivities = selectedActivities.source.selected;
-      // @todo optimize and move to component
-      if (!this.selectedActivities.length) {
-        this.stats = [];
-        return;
-      }
-
-      if ((this.selectedActivities.length === 1 && this.event.getActivities().length === 1)
-        ||  this.selectedActivities.length === this.event.getActivities().length) {
-        this.stats = [...this.event.getStats().values()];
-      } else if (this.selectedActivities.length === 1) {
-        this.stats = [...this.selectedActivities[0].getStats().values()];
-
-      } else {
-        this.stats = EventUtilities.getSummaryStatsForActivities(this.selectedActivities);
-      }
-
-      const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
-      // @todo move to own component
-
-      this.statsToShow = [
-        DataDuration.type,
-        DataDistance.type,
-        DataEnergy.type,
-        DataHeartRateAvg.type,
-        DataCadenceAvg.type,
-        DataPowerAvg.type,
-        DataAscent.type,
-        DataDescent.type,
-        DataAltitudeMax.type,
-        DataAltitudeMin.type,
-        DataRecoveryTime.type,
-        DataVO2Max.type,
-        DataTemperatureAvg.type,
-        DataSpeedAvg.type,
-      ].reduce((statsAccu, statType) => {
-        if (statType === DataSpeedAvg.type) {
-          return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
-            return [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])];
-          }, [])];
-        }
-        return [...statsAccu, statType];
-      }, [])
     })
   }
 
