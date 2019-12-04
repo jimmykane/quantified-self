@@ -23,6 +23,8 @@ import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {DataPeakEPOC} from 'quantified-self-lib/lib/data/data.peak-epoc';
+import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -72,6 +74,8 @@ export class EventCardStatsGridComponent extends DataTableAbstract implements On
       DataAltitudeMax.type,
       DataAltitudeMin.type,
       DataRecoveryTime.type,
+      DataPeakEPOC.type,
+      DataTotalTrainingEffect.type,
       DataVO2Max.type,
       DataTemperatureAvg.type,
       DataSpeedAvg.type,

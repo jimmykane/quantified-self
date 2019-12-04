@@ -9,7 +9,6 @@ import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {DataRecovery} from 'quantified-self-lib/lib/data/data.recovery';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
-import {DataPeakTrainingEffect} from 'quantified-self-lib/lib/data/data.peak-training-effect';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -123,7 +122,6 @@ export class ChartActionsComponent implements OnInit {
         DataVO2Max.type,
         DataRecovery.type,
         DataTotalTrainingEffect.type,
-        DataPeakTrainingEffect.type,
         DataPeakEPOC.type,
       ]
     },
