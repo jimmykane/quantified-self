@@ -120,22 +120,7 @@
   <!--      [theme]="mapTheme">-->
   <!--    </app-event-card-map>-->
   <!--  </mat-card>-->
-  <mat-card class="mat-elevation-z0 inner">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>show_chart</mat-icon>
-      </div>
-      <mat-card-subtitle>
-        <app-event-card-chart-actions
-          [(xAxisType)]="chartXAxisType"
-          [(showAllData)]="showAllData"
-          [(showLaps)]="showChartLaps"
-          [(stackYAxes)]="stackChartYAxes"
-          [user]="currentUser">
-        </app-event-card-chart-actions>
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
+
       <app-event-card-chart
         [showAllData]="showAllData"
         [showLaps]="showChartLaps"
@@ -153,14 +138,14 @@
         [targetUserID]="targetUserID"
         [dataTypesToUse]="chartDataTypesToUse"
         [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
+        [user]="currentUser"
         [downSamplingLevel]="chartDownSamplingLevel"
         [chartCursorBehaviour]="chartCursorBehaviour"
         [chartTheme]="chartTheme"
         [waterMark]="currentUser ? currentUser.brandText : null"
         [event]="event">
       </app-event-card-chart>
-    </mat-card-content>
-  </mat-card>
+
   <mat-card class="mat-elevation-z1 inner">
     <mat-card-header>
       <div mat-card-avatar>

@@ -18,6 +18,7 @@ import {HeaderStatsComponent} from '../components/header-stats/header-stats.comp
 import {ActivitiesTogglesComponent} from '../components/activities-toggle-group/activities-toggles.component';
 import {EventCardStatsTableComponent} from '../components/cards/event/stats-table/event.card.stats-table.component';
 import {EventCardStatsGridComponent} from '../components/cards/event/stats-grid/event.card.stats-grid.component';
+import {EventCardChartComponent} from '../components/cards/event/chart/event.card.chart.component';
 
 
 @NgModule({
@@ -36,6 +37,7 @@ import {EventCardStatsGridComponent} from '../components/cards/event/stats-grid/
     EventCardStatsGridComponent,
     EventCardLapsComponent,
     EventCardToolsComponent,
+    EventCardChartComponent,
     EventCardChartActionsComponent,
     EventCardDevicesComponent,
     EventHeaderComponent,

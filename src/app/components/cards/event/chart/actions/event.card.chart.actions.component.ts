@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output,} from '@angular/core';
+import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output} from '@angular/core';
 import {XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../../../../../services/app.user.service';

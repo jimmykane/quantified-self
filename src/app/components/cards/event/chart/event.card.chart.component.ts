@@ -71,6 +71,7 @@ import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
 import {DataAirPower} from 'quantified-self-lib/lib/data/data.air-power';
 import {UserService} from '../../../../services/app.user.service';
 import {ChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
+import {User} from 'quantified-self-lib/lib/users/user';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
@@ -85,6 +86,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   @Input() event: EventInterface;
   @Input() targetUserID: string;
+  @Input() user: User;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible: boolean;
