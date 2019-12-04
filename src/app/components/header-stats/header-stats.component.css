@@ -15,7 +15,7 @@
 /*}*/
 
 
-mat-card {
+mat-card.item {
   margin: 0;
   padding: 0;
   max-width: 25%;
@@ -32,13 +32,13 @@ mat-card:last-child{
 }
 
 .mat-card-title {
-  font-size: 1.1em;
+  font-size: 1.2em;
   white-space: nowrap;
   margin: 0;
 }
 
 mat-card-subtitle {
-  font-size: 0.8em;
+  font-size: 0.9em;
   margin: 0;
   line-height: 1.3em;
 }
@@ -46,7 +46,7 @@ mat-card-subtitle {
 .mat-card-avatar {
   height: auto;
   width: auto;
-  padding-top: 8px;
+  padding-top: 3px;
   /*flex-shrink: unset;*/
 }
 
