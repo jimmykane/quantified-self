@@ -6,7 +6,7 @@ import {
   Output,
 } from '@angular/core';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {UserService} from '../../services/app.user.service';
+import {UserService} from '../../../../../services/app.user.service';
 
 @Component({
   selector: 'app-map-actions',

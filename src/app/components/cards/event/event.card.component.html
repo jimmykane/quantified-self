@@ -32,20 +32,6 @@
     [event]="event">
   </app-event-stats-table>
 
-
-  <mat-card class="mat-elevation-z0">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>map</mat-icon>
-      </div>
-      <mat-card-subtitle>
-        <app-map-actions
-          [(showLaps)]="showMapLaps"
-          [(showArrows)]="showMapArrows"
-          [user]="currentUser">
-        </app-map-actions>
-      </mat-card-subtitle>
-    </mat-card-header>
     <app-event-card-map
       *ngIf="event && targetUserID"
       [selectedActivities]="selectedActivities"
@@ -58,7 +44,6 @@
       [strokeWidth]="mapStrokeWidth"
       [theme]="mapTheme">
     </app-event-card-map>
-  </mat-card>
 
   <!--  <mat-card class="mat-elevation-z1 inner">-->
   <!--    <mat-card-header *ngFor="let activity of event.getActivities()">-->
