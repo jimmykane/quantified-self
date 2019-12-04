@@ -9,10 +9,10 @@
   dependencies:
     tslib "^1.9.0"
 
-"@amcharts/amcharts4@4.7.11":
-  version "4.7.11"
-  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.7.11.tgz#d52d0f29ac6e8c6a259bfbe85a636aee383edfdc"
-  integrity sha512-gZUN0FZW2kk3Iu06aIy68LcFS6FnJZp2KvhZuhf+mrx/yMdyP0q3e8BrFY7SXn/uduOU1/M3Vdkc+tB0cRCUfg==
+"@amcharts/amcharts4@4.7.12":
+  version "4.7.12"
+  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.7.12.tgz#ac7a9cd5bbc6cd510ef4328b0a62a05e43020713"
+  integrity sha512-YCrmTq3LktuyfuUkfnL/TheGzVLSNzM1Ymh98W6E/gjjAVHbMzvTfuUcG0+oTWw7b4atONjjITCYT9uCq3V++g==
   dependencies:
     "@types/regression" "^2.0.0"
     canvg "^2.0.0"
