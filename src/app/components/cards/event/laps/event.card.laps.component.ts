@@ -10,6 +10,7 @@ import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {DataTableAbstract} from '../../../data-table/data-table.abstract';
 import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {EventColorService} from '../../../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -23,6 +24,10 @@ export class EventCardLapsComponent extends DataTableAbstract implements OnChang
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;
+
+  constructor(public eventColorService: EventColorService, protected changeDetectorRef: ChangeDetectorRef) {
+    super(changeDetectorRef);
+  }
 
   ngOnChanges() {
   }

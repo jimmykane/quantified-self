@@ -25,12 +25,10 @@ import {User} from 'quantified-self-lib/lib/users/user';
 })
 
 export class ActivitiesTogglesComponent implements OnChanges, OnInit, OnDestroy {
-  @Input() activities: ActivityInterface[];
   @Input() color: string;
   @Input() isOwner?: boolean;
+  @Input() event: EventInterface;
   @Input() user?: User;
-  @Input() event?: EventInterface;
-  @Input() isMerge: boolean; // Should show additional info
 
   private selectedActivitiesSubscription: Subscription;
   private selectedActivities: ActivityInterface[];

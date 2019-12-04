@@ -9,11 +9,9 @@
 
   <app-activities-toggles
     *ngIf="event.getActivities().length > 1"
-    [isMerge]="event.isMerge"
     [event]="event"
     [user]="currentUser"
-    [isOwner]="isOwner()"
-    [activities]="event.getActivities()">
+    [isOwner]="isOwner()">
   </app-activities-toggles>
 
 

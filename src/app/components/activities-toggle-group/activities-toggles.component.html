@@ -1,20 +1,21 @@
 <mat-card class="mat-elevation-z0" style="padding-top: 0;">
 
-<section [class.flex]="activities.length > 3">
-    <mat-card-header *ngFor="let activity of activities" [class.flex-header]="activities.length > 3">
+<section [class.flex]="event.getActivities().length > 3">
+    <mat-card-header *ngFor="let activity of event.getActivities()" [class.flex-header]="event.getActivities().length > 3">
       <div mat-card-avatar>
         <!-- put diff icon for merge -->
         <mat-slide-toggle
+          #toggle
           (change)="onActivitySelect($event, activity)"
           [color]="'accent'"
           [checked]="activitySelectionService.selectedActivities.isSelected(activity)">
         </mat-slide-toggle>
       </div>
-      <mat-card-title [ngStyle]="isMerge && {color: eventColorService.getActivityColor(activities, activity)}">
-        <span><b>{{activity.type}}</b></span><span *ngIf="isMerge"
+      <mat-card-title [ngStyle]="event.isMerge && {color: eventColorService.getActivityColor(event.getActivities(), activity)}">
+        <span><b>{{activity.type}}</b></span><span *ngIf="event.isMerge"
                                                    style="font-size: 0.8em;"> {{activity.creator.name}}</span>
       </mat-card-title>
-      <mat-card-subtitle *ngIf="isMerge">
+      <mat-card-subtitle *ngIf="event.isMerge">
         {{activity.startDate | date:'medium'}}
       </mat-card-subtitle>
       <mat-card-subtitle>
