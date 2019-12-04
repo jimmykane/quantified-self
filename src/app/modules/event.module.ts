@@ -5,7 +5,6 @@ import {CommonModule} from '@angular/common';
 import {EventRoutingModule} from '../event-routing.module';
 import {EventCardComponent} from '../components/cards/event/event.card.component';
 import {EventCardMapComponent} from '../components/cards/event/map/event.card.map.component';
-import {EventCardStatsComponent} from '../components/cards/event/stats/event.card.stats.component';
 import {EventCardLapsComponent} from '../components/cards/event/laps/event.card.laps.component';
 import {EventCardToolsComponent} from '../components/cards/event/tools/event.card.tools.component';
 import {ActivityActionsComponent} from '../components/activity-actions/activity.actions.component';
@@ -17,6 +16,7 @@ import {AgmCoreModule} from '@agm/core';
 import {EventHeaderComponent} from '../components/event-header/event-header.component';
 import {HeaderStatsComponent} from '../components/header-stats/header-stats.component';
 import {ActivitiesTogglesComponent} from '../components/activities-toggle-group/activities-toggles.component';
+import {EventCardStatsTableComponent} from '../components/cards/event/stats-table/event.card.stats-table.component';
 
 
 @NgModule({
@@ -31,7 +31,7 @@ import {ActivitiesTogglesComponent} from '../components/activities-toggle-group/
   declarations: [
     EventCardComponent,
     EventCardMapComponent,
-    EventCardStatsComponent,
+    EventCardStatsTableComponent,
     EventCardLapsComponent,
     EventCardToolsComponent,
     EventCardChartActionsComponent,

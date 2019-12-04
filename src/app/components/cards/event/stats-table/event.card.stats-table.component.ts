@@ -13,13 +13,13 @@ import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 
 @Component({
-  selector: 'app-event-card-stats',
-  templateUrl: './event.card.stats.component.html',
-  styleUrls: ['./event.card.stats.component.css'],
+  selector: 'app-event-stats-table',
+  templateUrl: './event.card.stats-table.component.html',
+  styleUrls: ['./event.card.stats-table.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardStatsComponent implements OnChanges {
+export class EventCardStatsTableComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];

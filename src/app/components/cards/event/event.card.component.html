@@ -25,26 +25,12 @@
 
   <!--  <mat-divider [inset]="true"></mat-divider>-->
 
-  <mat-card class="mat-elevation-z0" style="padding-bottom: 0; padding-top: 0">
-    <mat-accordion>
-      <mat-expansion-panel class="mat-elevation-z0">
-        <mat-expansion-panel-header style="padding: 0 16px 0 0">
-          <mat-panel-title>
-            <mat-icon>view_column</mat-icon>
-          </mat-panel-title>
-          <mat-panel-description style="align-items: flex-end;">
-            Detailed statistics
-          </mat-panel-description>
-        </mat-expansion-panel-header>
-        <app-event-card-stats
-          [selectedActivities]="selectedActivities"
-          [userUnitSettings]="currentUser?.settings.unitSettings"
-          [event]="event">
-        </app-event-card-stats>
-      </mat-expansion-panel>
-    </mat-accordion>
-    <mat-divider [inset]="true"></mat-divider>
-  </mat-card>
+
+  <app-event-stats-table
+    [selectedActivities]="selectedActivities"
+    [userUnitSettings]="currentUser?.settings.unitSettings"
+    [event]="event">
+  </app-event-stats-table>
 
 
   <mat-card class="mat-elevation-z0">
