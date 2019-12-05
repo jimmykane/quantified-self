@@ -150,7 +150,7 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultDateRange(): DateRanges {
-    return DateRanges.thisWeek;
+    return DateRanges.all;
   }
 
   static getDefaultXAxisType(): XAxisTypes {
@@ -339,8 +339,8 @@ export class UserService implements OnDestroy {
     settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : UserService.getDefaultChartFillOpacity();
     settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || UserService.getDefaultChartLapTypes();
     settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
-    settings.chartSettings.showGrid = settings.chartSettings.showGrid === true;
-    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes === true;
+    settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
+    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
     settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
     settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold()
 

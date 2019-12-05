@@ -52,7 +52,7 @@ export class DataTypeIconComponent {
         return 'trending_flat';
       case DataDuration.type:
         return 'access_time';
-      case 'startDate':
+      case 'Start Date':
         return 'date_range';
       case DataDeviceNames.type:
         return 'watch';
@@ -97,6 +97,14 @@ export class DataTypeIconComponent {
         return 'trending_up';
       case 'Type':
         return 'assignment';
+      case 'Name':
+        return 'title';
+      case 'Battery Status':
+        return 'battery_unknown';
+      case 'Manufacturer':
+        return 'business';
+      case 'Software Info':
+        return 'system_update_alt';
       default:
         return null;
     }

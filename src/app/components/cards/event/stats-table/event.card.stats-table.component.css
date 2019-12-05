@@ -1,7 +1,9 @@
-mat-icon.mat-tooltip {
-  vertical-align: top;
-  font-size: 12px;
+mat-icon.tooltip {
+  vertical-align: middle;
   margin-left: 0.5em;
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
 }
 
 /*mat-card{*/

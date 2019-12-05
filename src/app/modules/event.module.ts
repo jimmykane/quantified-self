@@ -11,14 +11,14 @@ import {ActivityActionsComponent} from '../components/activity-actions/activity.
 import {MapActionsComponent} from '../components/cards/event/map/map-actions/map.actions.component';
 import {EventCardChartActionsComponent} from '../components/cards/event/chart/actions/event.card.chart.actions.component';
 import {EventCardDevicesComponent} from '../components/cards/event/devices/event.card.devices.component';
-import {ActivityHeaderComponent} from '../components/activity-header/activity-header.component';
 import {AgmCoreModule} from '@agm/core';
 import {EventHeaderComponent} from '../components/event-header/event-header.component';
 import {HeaderStatsComponent} from '../components/header-stats/header-stats.component';
-import {ActivitiesTogglesComponent} from '../components/activities-toggle-group/activities-toggles.component';
+import {ActivitiesTogglesComponent} from '../components/cards/event/activities-toggles/activities-toggles.component';
 import {EventCardStatsTableComponent} from '../components/cards/event/stats-table/event.card.stats-table.component';
 import {EventCardStatsGridComponent} from '../components/cards/event/stats-grid/event.card.stats-grid.component';
 import {EventCardChartComponent} from '../components/cards/event/chart/event.card.chart.component';
+import {ActivityToggleComponent} from '../components/cards/event/activity-toggle/activity-toggle.component';
 
 
 @NgModule({
@@ -44,7 +44,7 @@ import {EventCardChartComponent} from '../components/cards/event/chart/event.car
     HeaderStatsComponent,
     ActivitiesTogglesComponent,
     ActivityActionsComponent,
-    ActivityHeaderComponent,
+    ActivityToggleComponent,
     MapActionsComponent,
   ],
   entryComponents: [],

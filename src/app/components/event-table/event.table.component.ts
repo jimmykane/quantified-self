@@ -217,7 +217,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
-            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.event.getID()).pipe(take(1)).toPromise());
+            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.Event.getID()).pipe(take(1)).toPromise());
           });
           // Now we can clear the selection
           this.selection.clear();
@@ -261,7 +261,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
             this.actionButtonService.removeActionButton('mergeEvents');
             this.unsubscribeFromAll();
             const deletePromises = [];
-            this.selection.selected.map(selected => selected.event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
+            this.selection.selected.map(selected => selected.Event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
             this.selection.clear();
             await Promise.all(deletePromises);
             this.processChanges();

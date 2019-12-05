@@ -13,7 +13,6 @@ import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {combineLatest, Subscription} from 'rxjs';
@@ -25,11 +24,9 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
 import {
   ChartCursorBehaviours,
-  UserChartSettingsInterface,
   XAxisTypes
 } from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {ThemeService} from '../../../../services/app.theme.service';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
 import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
@@ -250,6 +247,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.scrollbarX = new am4core.Scrollbar();
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
+    chart.scrollbarX.marginTop = 0;
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);

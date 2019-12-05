@@ -10,31 +10,33 @@ import {
 } from '@angular/core';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {EventColorService} from '../../services/color/app.event.color.service';
-import {ActivitySelectionService} from '../../services/activity-selection-service/activity-selection.service';
+import {EventColorService} from '../../../../services/color/app.event.color.service';
+import {ActivitySelectionService} from '../../../../services/activity-selection-service/activity-selection.service';
 import {Subscription} from 'rxjs';
-import {MatButtonToggleChange} from '@angular/material/button-toggle';
 import {MatSlideToggleChange} from '@angular/material/slide-toggle';
 import {User} from 'quantified-self-lib/lib/users/user';
 
 @Component({
-  selector: 'app-activities-toggles',
-  templateUrl: './activities-toggles.component.html',
-  styleUrls: ['./activities-toggles.component.css'],
+  selector: 'app-activity-toggle',
+  templateUrl: './activity-toggle.component.html',
+  styleUrls: ['./activity-toggle.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush, // @todo not sure
 })
 
-export class ActivitiesTogglesComponent implements OnChanges, OnInit, OnDestroy {
-  @Input() color: string;
+export class ActivityToggleComponent implements OnChanges, OnInit, OnDestroy {
   @Input() isOwner?: boolean;
   @Input() event: EventInterface;
-  @Input() user?: User;
+  @Input() activity: ActivityInterface;
+  @Input() user: User;
+  @Input() showToggle = true;
+  @Input() showActions?: boolean;
+  @Input() showDate = true;
+  @Input() showStats = true;
 
   private selectedActivitiesSubscription: Subscription;
   private selectedActivities: ActivityInterface[];
 
   constructor(public eventColorService: EventColorService, public activitySelectionService: ActivitySelectionService) {
-
   }
 
   ngOnInit() {

@@ -1,4 +1,4 @@
-<mat-card class="mat-elevation-z0 inner">
+<mat-card class="mat-elevation-z0">
   <mat-card-header>
     <div mat-card-avatar>
       <mat-icon>linear_scale</mat-icon>
@@ -7,22 +7,16 @@
     <mat-card-subtitle></mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
-
-    <ng-container *ngFor="let activity of selectedActivities">
-      <mat-card class="mat-elevation-z0"  *ngIf="getData(activity).data.length">
-        <mat-card-header style="font-size: 1em;" *ngIf="selectedActivities.length > 1">
-          <mat-card-title>
-            <span [ngStyle]="event.isMerge && {color: eventColorService.getActivityColor(event.getActivities(), activity)}">
-              <b>{{activity.type}}</b>
-            </span>
-          </mat-card-title>
-          <mat-card-subtitle>
-            <span><b>{{activity.getDuration().getDisplayValue()}}</b>, </span>
-            <span><b>{{activity.getDistance().getDisplayValue()}}</b>{{activity.getDistance().getDisplayUnit()}}</span>
-            <span *ngIf="event.isMerge" [ngStyle]="event.isMerge && {color: eventColorService.getActivityColor(event.getActivities(), activity)}" style="font-size: 0.8em;"> {{activity.creator.name}}</span>
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-divider *ngIf="selectedActivities.length > 1"></mat-divider>
+    <ng-container *ngFor="let activity of selectedActivities; index as i; ">
+      <section *ngIf="getData(activity).data.length">
+        <app-activity-toggle
+          [event]="event"
+          [showToggle]="false"
+          [showDate]="false"
+          [showStats]="false"
+          [activity]="activity">
+        </app-activity-toggle>
+        <mat-divider *ngIf="selectedActivities.length > 1" [inset]="true"></mat-divider>
         <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
           <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize()" [matColumnDef]="column">
             <mat-header-cell *matHeaderCellDef>
@@ -33,7 +27,7 @@
           <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
           <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();"></mat-row>
         </mat-table>
-      </mat-card>
+      </section>
     </ng-container>
   </mat-card-content>
 </mat-card>

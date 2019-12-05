@@ -1,12 +1,7 @@
-table{
-  width: 100%;
-  padding-top: 2%;
+.mat-column-Manufacturer{
+  text-transform: capitalize;
 }
 
-mat-card{
-  padding: 0;
-}
-
-section{
-  padding: 1em;
+mat-table{
+  padding-bottom: 1em;
 }

@@ -1,8 +1,3 @@
-table{
-  width: 100%;
-  /*padding-top: 2%;*/
-}
-
-section{
-  padding: 1em;
+mat-table{
+  padding-bottom: 1em;
 }
