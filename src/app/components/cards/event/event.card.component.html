@@ -146,6 +146,7 @@
 
 
       <app-event-card-laps
+        *ngIf="hasLaps(event)"
         [selectedActivities]="selectedActivities"
         [event]="event">
       </app-event-card-laps>

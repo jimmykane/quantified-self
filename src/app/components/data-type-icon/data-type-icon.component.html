@@ -9,5 +9,6 @@
   [svgIcon]="getColumnHeaderSVGIcon(dataType)">
 </mat-icon>
 <section *ngIf="!getColumnHeaderSVGIcon(dataType) && !getColumnHeaderIcon(dataType)"
+         [attr.data-letters]="getColumnHeaderTextInitials(dataType)"
          [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
 </section>

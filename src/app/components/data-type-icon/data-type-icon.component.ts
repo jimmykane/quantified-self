@@ -119,4 +119,8 @@ export class DataTypeIconComponent {
         return null;
     }
   }
+
+  getColumnHeaderTextInitials(statName): string {
+    return statName.split(' ').map(i => i.charAt(0).toUpperCase()).join('')
+  }
 }

@@ -1,3 +1,12 @@
 mat-icon{
   vertical-align: middle;
 }
+
+[data-letters]:before {
+  content:attr(data-letters);
+  display:inline-block;
+  font-size: 0.8em;
+  text-align:center;
+  vertical-align:middle;
+  margin-right:1em;
+}
