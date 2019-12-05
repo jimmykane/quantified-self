@@ -133,6 +133,7 @@ export class UserFormComponent implements OnInit {
         duration: 5000,
       });
       this.dialogRef.close(); // Not sure if needed
+      localStorage.clear();
       this.windowService.windowRef.location.reload();
     } catch (e) {
       Sentry.captureException(e);
