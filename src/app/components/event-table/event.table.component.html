@@ -62,7 +62,7 @@
       <td mat-cell *matCellDef="let element" [attr.colspan]="getColumnsToDisplayDependingOnScreenSize().length">
         <div class="detail"
              [@detailExpand]="element == expandedElement || expandAll ? 'expanded' : 'collapsed'">
-        <table style="text-align: left">
+        <table style="text-align: left;">
           <tr>
             <td>
               <app-privacy-icon [privacy]="element.Privacy"></app-privacy-icon>

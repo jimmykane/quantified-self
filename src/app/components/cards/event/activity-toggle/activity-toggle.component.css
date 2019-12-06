@@ -10,15 +10,6 @@ mat-card-header{
   min-width: 240px;
 }
 
-.flex-header{
-  max-width: 50%;
-  width: 50%;
-}
-
-.flex{
-  display: flex;
-  flex-wrap: wrap;
-}
 
 mat-icon{
   vertical-align: middle;
@@ -32,9 +23,9 @@ mat-icon{
   /*margin-left: -16px;*/
 }
 
-::ng-deep .mat-card-header-text {
-  /*margin-left: 0;*/
-}
+/*::ng-deep .mat-card-header-text {*/
+/*  !*margin-left: 0;*!*/
+/*}*/
 
 mat-card-header mat-card-title{
   font-size: 1.2em;

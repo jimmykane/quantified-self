@@ -13,9 +13,10 @@ mat-form-field{
 }
 
 section.item{
-  max-width: 51%;
-  width: 51%;
+  max-width: 50%;
+  width: 50%;
 }
+
 
 section.container{
   display: flex;

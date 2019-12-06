@@ -20,7 +20,7 @@
     </mat-card-title>
 
     <mat-card-subtitle style="font-size: 1.0em;">
-      <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue()}} and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
+      <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue(false, false)}} and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
     </mat-card-subtitle>
 
 
