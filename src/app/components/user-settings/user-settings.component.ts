@@ -118,6 +118,12 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      chartExtraMaxForPower: new FormControl(this.user.settings.chartSettings.extraMaxForPower, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+
       chartFillOpacity: new FormControl(this.user.settings.chartSettings.fillOpacity, [
         Validators.required,
         // Validators.minLength(1),
@@ -149,6 +155,11 @@ export class UserSettingsComponent implements OnChanges {
       ]),
 
       useAnimations: new FormControl(this.user.settings.chartSettings.useAnimations, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      chartHideAllSeriesOnInit: new FormControl(this.user.settings.chartSettings.hideAllSeriesOnInit, [
         // Validators.required,
         // Validators.minLength(1),
       ]),
@@ -269,12 +280,14 @@ export class UserSettingsComponent implements OnChanges {
         chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
         strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
         strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
+        extraMaxForPower: this.userSettingsFormGroup.get('chartExtraMaxForPower').value,
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
         showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
         stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
+        hideAllSeriesOnInit: this.userSettingsFormGroup.get('chartHideAllSeriesOnInit').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
         downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
       });

@@ -145,6 +145,10 @@ export class UserService implements OnDestroy {
     return 1;
   }
 
+  static getDefaultExtraMaxForPower(): number {
+    return 0;
+  }
+
   static getDefaultMapType(): MapTypes {
     return MapTypes.RoadMap;
   }
@@ -347,12 +351,14 @@ export class UserService implements OnDestroy {
     settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || UserService.getDefaultChartStrokeWidth();
     settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : UserService.getDefaultChartStrokeOpacity();
     settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : UserService.getDefaultChartFillOpacity();
+    settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : UserService.getDefaultExtraMaxForPower();
     settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || UserService.getDefaultChartLapTypes();
     settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
     settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
     settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
     settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
-    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold()
+    settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
+    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold();
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};

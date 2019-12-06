@@ -61,12 +61,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public stackChartYAxes = true;
   public useChartAnimations = true;
   public chartDisableGrouping = false;
+  public chartHideAllSeriesOnInit = false;
   public chartXAxisType = XAxisTypes.Duration;
   public mapLapTypes = UserService.getDefaultMapLapTypes();
   public chartLapTypes = UserService.getDefaultChartLapTypes();
   public chartStrokeWidth: number = UserService.getDefaultChartStrokeWidth();
   public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
   public chartFillOpacity: number = UserService.getDefaultChartFillOpacity();
+  public chartExtraMaxForPower: number = UserService.getDefaultExtraMaxForPower();
   public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold();
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
@@ -132,6 +134,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.showChartLaps = user.settings.chartSettings.showLaps;
       this.showChartGrid = user.settings.chartSettings.showGrid;
       this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
+      this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
       this.showMapArrows = user.settings.mapSettings.showArrows;
       this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
       this.mapLapTypes = user.settings.mapSettings.lapTypes;
@@ -139,6 +142,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
       this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
       this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
+      this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
       this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
         if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
           dataTypesToUse.push(dataTypeSettingsKey);

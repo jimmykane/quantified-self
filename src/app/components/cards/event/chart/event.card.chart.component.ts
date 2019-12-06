@@ -91,6 +91,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() showLaps: boolean;
   @Input() showGrid: boolean;
   @Input() disableGrouping: boolean;
+  @Input() hideAllSeriesOnInit: boolean;
   @Input() lapTypes: LapTypes[];
   @Input() xAxisType: XAxisTypes;
   @Input() downSamplingLevel: number;
@@ -101,6 +102,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() strokeWidth: number;
   @Input() strokeOpacity: number;
   @Input() fillOpacity: number;
+  @Input() extraMaxForPower: number;
   @Input() dataTypesToUse: string[];
 
 
@@ -149,6 +151,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.lapTypes
       || simpleChanges.showGrid
       || simpleChanges.stackYAxes
+      || simpleChanges.extraMaxForPower
+      || simpleChanges.hideAllSeriesOnInit
       || simpleChanges.strokeWidth
       || simpleChanges.fillOpacity
       || simpleChanges.dataTypesToUse
@@ -485,7 +489,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
     }
 
-    // yAxis.extraMax = 0.20;
+
+    if (stream.type === DataPower.type){
+      yAxis.extraMax = this.extraMaxForPower;
+    }
+
     // yAxis.tooltip.disabled = true;
     // yAxis.interpolationDuration = 500;
     // yAxis.rangeChangeDuration = 500;
@@ -599,13 +607,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     series.interactionsEnabled = false;
 
-    // if (([DataHeartRate.type, DataAltitude.type].indexOf(stream.type) === -1) ) {
-    //
-    //   series.hidden = true;
-    // }
 
     // If we have something in local storage
-    if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
+    if (this.hideAllSeriesOnInit) {
+      series.hidden = true
+    } else if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
       if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).indexOf(series.id) === -1) {
         series.hidden = true;
       }

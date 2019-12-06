@@ -318,7 +318,30 @@
         </section>
 
         <section>
-          <mat-hint matTooltip="How vibrant the chart lines will be">
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="chartHideAllSeriesOnInit">
+            <span matTooltip="Hide all series on chart initialization?">Hide all sereis on initialization</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> this will create an empty chart</mat-hint>
+        </section>
+
+        <section>
+          <mat-hint matTooltip="Improves the scalability for power analysis">
+            Extra max for Power series
+          </mat-hint>
+          <mat-slider
+            [max]="1"
+            [min]="0.05"
+            [step]="0.05"
+            [thumbLabel]="true"
+            formControlName="chartExtraMaxForPower">
+          </mat-slider><br/>
+          <mat-hint><b>Tip:</b> this will compress the power series</mat-hint>
+        </section>
+
+        <section>
+          <mat-hint matTooltip="How easy it is to calculate gain or loss">
             Gain and loss threshold
           </mat-hint>
           <mat-slider
@@ -328,7 +351,7 @@
             [thumbLabel]="true"
             formControlName="chartGainAndLossThreshold">
           </mat-slider><br/>
-          <mat-hint><b>Tip:</b> use 5 (5m) if you are interested in a consistent filtering across datar</mat-hint>
+          <mat-hint><b>Tip:</b> use 5 (5m) if you are interested in a consistent filtering across data</mat-hint>
         </section>
 
         <section>
