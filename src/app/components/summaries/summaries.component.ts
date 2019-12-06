@@ -123,7 +123,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       }
     });
     // Here we need to remove non existing ones
-    this.charts = this.charts.filter(chart => newCharts.find(newChart=> newChart.order === chart.order));
+    this.charts = this.charts.filter(chart => newCharts.find(newChart => newChart.order === chart.order));
     this.loaded();
   }
 
