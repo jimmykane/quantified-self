@@ -54,6 +54,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
+  public userUnitSettings = UserService.getDefaultUserUnitSettings();
   public showAllData = false;
   public showChartLaps = true;
   public showChartGrid = true;
@@ -119,6 +120,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       if (!this.currentUser) {
         return;
       }
+      this.userUnitSettings =  user.settings.unitSettings;
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
       this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
       this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;

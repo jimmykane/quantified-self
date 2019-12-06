@@ -16,12 +16,12 @@
   <app-event-card-stats-grid
     [event]="event"
     [selectedActivities]="selectedActivities"
-    [unitSettings]="currentUser?.settings.unitSettings">
+    [unitSettings]="userUnitSettings">
   </app-event-card-stats-grid>
 
   <app-event-stats-table
     [selectedActivities]="selectedActivities"
-    [userUnitSettings]="currentUser?.settings.unitSettings"
+    [userUnitSettings]="userUnitSettings"
     [event]="event">
   </app-event-stats-table>
 
@@ -54,7 +54,7 @@
     [selectedActivities]="selectedActivities"
     [targetUserID]="targetUserID"
     [dataTypesToUse]="chartDataTypesToUse"
-    [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
+    [userUnitSettings]="userUnitSettings"
     [user]="currentUser"
     [downSamplingLevel]="chartDownSamplingLevel"
     [chartCursorBehaviour]="chartCursorBehaviour"

@@ -173,6 +173,16 @@ export class UserService implements OnDestroy {
     return [VerticalSpeedUnits.MetersPerSecond];
   }
 
+  static getDefaultUserUnitSettings(): UserUnitSettingsInterface{
+    const unitSettings = <UserUnitSettingsInterface>{};
+    unitSettings.speedUnits = UserService.getDefaultSpeedUnits();
+    unitSettings.paceUnits = UserService.getDefaultPaceUnits();
+    unitSettings.swimPaceUnits =  UserService.getDefaultSwimPaceUnits();
+    unitSettings.verticalSpeedUnits = UserService.getDefaultVerticalSpeedUnits();
+    unitSettings.startOfTheWeek = UserService.getDefaultStartOfTheWeek();
+    return unitSettings;
+  }
+
   static getDefaultStartOfTheWeek(): DaysOfTheWeek {
     return DaysOfTheWeek.Monday;
   }

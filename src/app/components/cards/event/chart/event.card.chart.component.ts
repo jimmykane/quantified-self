@@ -200,7 +200,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         // @todo create whitelist for unitstreams and not generate all and then remove ...
         // We get the unit streams and we filter on them based on the user pref
         const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
-          // If its a swimming activity it will detect the corresponding metrics
           return DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
         });
         return unitStreams.concat(streams).filter((stream) => {
@@ -796,7 +795,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getDataTypesToRequest(): string[] {
-    return this.getNonUnitBasedDataTypes().concat([DataSpeed.type]); // Inject speed always for pace and swim pace till this is refactored
+    if (this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1){
+      return this.getNonUnitBasedDataTypes().concat([DataSpeed.type]);// Inject speed always for pace and swim pace till this is refactored
+    }
+    return this.getNonUnitBasedDataTypes();
   }
 
   /**
