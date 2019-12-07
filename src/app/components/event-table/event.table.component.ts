@@ -112,7 +112,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       this.loading();
       return;
     }
-    if (this.events && simpleChanges.events) {
+    if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
@@ -145,6 +145,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
         this.userService.updateUserProperties(this.user, {settings: this.user.settings})
       }
     });
+    this.processChanges();
   }
 
   checkBoxClick(row) {

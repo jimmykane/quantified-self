@@ -107,8 +107,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
 
+      // @todo remove this if the bug is fixed
       // If this user is not set here there is a bug (again that makes a memory leak with big data) for the table component
-      this.user = user;
+      // this.user = user;
 
       // Get what is needed
       const returnObservable = this.shouldSearch ?
