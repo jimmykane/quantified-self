@@ -133,7 +133,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
-    this.events = null;
     this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;

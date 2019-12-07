@@ -29,7 +29,6 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
   }
 
   ngOnChanges(simpleChanges) {
-
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.chartTheme && this.chart) {
