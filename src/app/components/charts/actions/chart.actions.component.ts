@@ -38,6 +38,7 @@ import * as firebase from 'firebase/app';
 import {DataFeeling} from 'quantified-self-lib/lib/data/data.feeling';
 import {DataRPE} from 'quantified-self-lib/lib/data/data.rpe';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
 
 @Component({
   selector: 'app-chart-actions',
@@ -123,6 +124,7 @@ export class ChartActionsComponent implements OnInit {
         DataRecovery.type,
         DataTotalTrainingEffect.type,
         DataPeakEPOC.type,
+        DataRecoveryTime.type,
       ]
     },
   ];
