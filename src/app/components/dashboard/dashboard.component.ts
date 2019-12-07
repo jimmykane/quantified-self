@@ -63,11 +63,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         || this.user.settings.dashboardSettings.endDate !== user.settings.dashboardSettings.endDate
         || this.user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
       )) {
-        this.events = null;
-        this.shouldSearch = true;
+        this.events = [];
+        this.shouldSearch = true; // Not sure about this
       }
 
-      // this.user = user;
       // Setup the ranges to search depending on pref
       if (user.settings.dashboardSettings.dateRange === DateRanges.custom && user.settings.dashboardSettings.startDate && user.settings.dashboardSettings.endDate) {
         this.searchStartDate = new Date(user.settings.dashboardSettings.startDate);
@@ -120,7 +119,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return {events: events, user: user}
       }))
     })).subscribe((eventsAndUser) => {
-      this.events = eventsAndUser.events;
+      this.events = eventsAndUser.events || [];
       this.user = eventsAndUser.user;
       this.shouldSearch = false;
       if (this.events && this.events.length) {

@@ -131,10 +131,10 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
       chartsAndData.push({
         ...chartSettings, ...{
-          dataDateRange: events && events.length ? this.getEventsDateRange(events) : null,
+          dataDateRange: events && events.length ? this.getEventsDateRange(events) : SummariesChartDataDateRages.Daily, // Default to daily
           data: events ? // The below will create a new instance of this events due to filtering
             this.getChartData(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
-            : null // We send null if there are no events for the input date range
+            : [] // We send null if there are no events for the input date range
         }
       });
       return chartsAndData;
