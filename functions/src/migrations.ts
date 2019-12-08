@@ -70,12 +70,12 @@
 //         deviceTypes.push(activityDoc.data().creator.name)
 //       }
 //
-//       const eventStats = eventDoc.data().stats;
+//       const eventStats = eventDoc.data().statsToShow;
 //       try {
 //         eventStats[DataActivityTypes.type] = activityTypes;
 //         eventStats[DataDeviceNames.type] = deviceTypes;
 //         batch.update(eventDoc.ref, {
-//           stats: eventStats
+//           statsToShow: eventStats
 //         });
 //         count++;
 //       } catch (e) {

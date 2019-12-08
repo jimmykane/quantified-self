@@ -7,22 +7,21 @@ import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {environment} from '../environments/environment';
 import {HttpClientModule} from '@angular/common/http';
-import {EventFormComponent} from './components/event-form/event.form.component';
-import {ActivityFormComponent} from './components/activity-form/activity.form.component';
 import {AngularFireModule} from '@angular/fire';
 import {AngularFirestoreModule} from '@angular/fire/firestore';
 import {AngularFireAuthModule} from '@angular/fire/auth';
 import {AngularFireStorageModule} from '@angular/fire/storage';
 import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
 import * as Sentry from '@sentry/browser';
-import {AngularFirePerformanceModule} from '@angular/fire/performance';
+import {
+  AngularFirePerformanceModule,
+  AUTOMATICALLY_TRACE_CORE_NG_METRICS, DATA_COLLECTION_ENABLED,
+  INSTRUMENTATION_ENABLED
+} from '@angular/fire/performance';
 import {MaterialModule} from './modules/material.module';
-import {SharedModule} from './modules/shared.module';
 import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
-import {MapSettingsLocalStorageService} from './services/storage/app.map.settings.local.storage.service';
 import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
-import {UserSettingsService} from './services/app.user.settings.service';
 import {EventService} from './services/app.event.service';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventColorService} from './services/color/app.event.color.service';
@@ -34,17 +33,18 @@ import {SideNavService} from './services/side-nav/side-nav.service';
 import {ThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
 import {WindowService} from './services/app.window.service';
-import {DeleteConfirmationComponent} from './components/delete-confirmation/delete-confirmation.component';
 import {AgmCoreModule} from '@agm/core';
+import {ANALYTICS_COLLECTION_ENABLED, AngularFireAnalyticsModule, APP_NAME, APP_VERSION} from '@angular/fire/analytics';
+import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 
 declare function require(moduleName: string): any;
 
-const {version: appVersion} = require('../../package.json');
+const appPackage = require('../../package.json');
 
 Sentry.init({
   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
-  environment: environment.production ? 'Production' : 'Development',
-  release: appVersion,
+  environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
+  release: appPackage.version,
 });
 
 
@@ -75,6 +75,7 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFireStorageModule,
     AngularFireAuthModule,
     AngularFirePerformanceModule,
+    AngularFireAnalyticsModule,
     MaterialModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
@@ -86,14 +87,11 @@ export class SentryErrorHandler implements ErrorHandler {
     SideNavComponent,
     HomeComponent,
   ],
-  entryComponents: [
-  ],
+  entryComponents: [],
   providers: [
     AppAuthService,
     AppAuthGuard,
-    MapSettingsLocalStorageService,
     ChartSettingsLocalStorageService,
-    UserSettingsService,
     EventService,
     ActionButtonService,
     EventColorService,
@@ -105,9 +103,16 @@ export class SentryErrorHandler implements ErrorHandler {
     ThemeService,
     AppInfoService,
     WindowService,
+    ActivitySelectionService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
-    {provide: ErrorHandler, useClass: environment.production ? SentryErrorHandler : ErrorHandler},
-    {provide: FunctionsRegionToken, useValue: 'europe-west2'}
+    {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
+    {provide: FunctionsRegionToken, useValue: 'europe-west2'},
+    {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: environment.production ||  environment.beta},
+    {provide: INSTRUMENTATION_ENABLED, useValue: environment.production ||  environment.beta},
+    {provide: DATA_COLLECTION_ENABLED, useValue: environment.production ||  environment.beta},
+    {provide: ANALYTICS_COLLECTION_ENABLED, useValue: environment.production ||  environment.beta},
+    {provide: APP_VERSION, useValue: appPackage.version},
+    {provide: APP_NAME, useValue: 'quantified-self.io'},
   ],
   bootstrap: [AppComponent],
 })

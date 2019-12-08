@@ -236,7 +236,6 @@
           </mat-hint>
         </section>
         <section>
-
           <mat-slide-toggle
             [color]="'accent'"
             formControlName="useAnimations">
@@ -297,7 +296,16 @@
             formControlName="showChartLaps">
             <span matTooltip="Show laps on chart?">Show laps</span>
           </mat-slide-toggle>
-          <mat-hint><b>Tip:</b> laps can help in the data analysis</mat-hint>
+          <mat-hint><b>Tip:</b> laps can help with the data analysis</mat-hint>
+        </section>
+
+        <section>
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="showChartGrid">
+            <span matTooltip="Show grid on the chart?">Show grid</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> showing the grid can help with the data analysis</mat-hint>
         </section>
 
         <section>
@@ -310,7 +318,30 @@
         </section>
 
         <section>
-          <mat-hint matTooltip="How vibrant the chart lines will be">
+          <mat-slide-toggle
+            [color]="'accent'"
+            formControlName="chartHideAllSeriesOnInit">
+            <span matTooltip="Hide all series on chart initialization?">Hide all sereis on initialization</span>
+          </mat-slide-toggle>
+          <mat-hint><b>Tip:</b> this will create an empty chart</mat-hint>
+        </section>
+
+        <section>
+          <mat-hint matTooltip="Improves the scalability for power analysis">
+            Extra max for Power series
+          </mat-hint>
+          <mat-slider
+            [max]="1"
+            [min]="0.00"
+            [step]="0.05"
+            [thumbLabel]="true"
+            formControlName="chartExtraMaxForPower">
+          </mat-slider><br/>
+          <mat-hint><b>Tip:</b> this will compress the power series</mat-hint>
+        </section>
+
+        <section>
+          <mat-hint matTooltip="How easy it is to calculate gain or loss">
             Gain and loss threshold
           </mat-hint>
           <mat-slider
@@ -320,7 +351,7 @@
             [thumbLabel]="true"
             formControlName="chartGainAndLossThreshold">
           </mat-slider><br/>
-          <mat-hint><b>Tip:</b> use 5 (5m) if you are interested in a consistent filtering across datar</mat-hint>
+          <mat-hint><b>Tip:</b> use 5 (5m) if you are interested in a consistent filtering across data</mat-hint>
         </section>
 
         <section>
@@ -329,8 +360,7 @@
             formControlName="chartDisableGrouping">
             <span matTooltip="Disable grouping of data?">Disable grouping</span>
           </mat-slide-toggle>
-          <mat-hint>
-          <b>Grouping</b> "groups" the data to fit at the available screen pixel size.<br/>
+          <mat-hint><b>Grouping</b> "groups" the data to fit at the available screen pixel size.<br/>
           This creates a more readable chart and improves performance by not calculating "those extra pixels"<br/>
           The more you zoom on the chart, the more data is unfold on the chart.<br/>
           However, if you use QS to mainly compare activities <b>at full zoomed out view</b>, eg heart rate or power from more than once device, you might want to experiment with this setting.<br/>
@@ -338,6 +368,24 @@
           </mat-hint>
         </section>
 
+        <section>
+          <mat-hint matTooltip="How much downsampling will happen for activities that are over 6h">
+            Down-sampling level
+          </mat-hint>
+          <mat-slider
+            [max]="20"
+            [min]="2"
+            [step]="1"
+            [thumbLabel]="true"
+            formControlName="chartDownSamplingLevel">
+          </mat-slider>
+          <mat-hint>
+            <br/>
+            <b>Down-sampling</b> keeps data every nth second according to what you've chosen for activities that are over 6 hours.<br/>
+            For example the default is 4 and that will keep the data from second 4,8,12 etc if the activity is 6hours.<br/>
+            Raising this value can dramatically improve performance or lowering it improve details.
+          </mat-hint>
+        </section>
       </mat-card-content>
     </mat-card>
 

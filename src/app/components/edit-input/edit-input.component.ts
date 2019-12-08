@@ -13,7 +13,10 @@ export class EditInputComponent implements OnChanges{
   @Input() type: 'text' | 'number' | 'textArea' | 'select' = 'text';
   @Input() selectOptions: any;
   @Input() selectOptionsArray: string[];
+  @Input() disabled: boolean;
+
   @Output() dataChange: EventEmitter<number|string> = new EventEmitter<number|string>();
+
   editMode = false;
 
   ngOnChanges(changes: SimpleChanges): void {

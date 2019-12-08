@@ -50,6 +50,8 @@ import {MapThemes, MapTypes, UserMapSettingsInterface} from "quantified-self-lib
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {UserExportToCsvSettingsInterface} from 'quantified-self-lib/lib/users/user.export-to-csv.settings.interface';
+import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
+import {DataHeartRate} from 'quantified-self-lib/lib/data/data.heart-rate';
 
 
 @Injectable()
@@ -77,7 +79,12 @@ export class UserService implements OnDestroy {
     return 4;
   }
 
-  // @todo move other calls to this
+  static getDefaultChartDataTypesToShowOnLoad(): string[] {
+    return [
+      DataAltitude.type,
+      DataHeartRate.type,
+    ]
+  }
 
   static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
@@ -130,12 +137,16 @@ export class UserService implements OnDestroy {
     return [LapTypes.AutoLap, LapTypes.Distance];
   }
 
-  static getDefaultSmoothingLevel(): number {
-    return 3.5;
+  static getDefaultDownSamplingLevel(): number {
+    return 4;
   }
 
   static getDefaultGainAndLossThreshold(): number {
     return 1;
+  }
+
+  static getDefaultExtraMaxForPower(): number {
+    return 0;
   }
 
   static getDefaultMapType(): MapTypes {
@@ -143,11 +154,11 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultDateRange(): DateRanges {
-    return DateRanges.thisWeek;
+    return DateRanges.all;
   }
 
   static getDefaultXAxisType(): XAxisTypes {
-    return XAxisTypes.Duration;
+    return XAxisTypes.Time;
   }
 
   static getDefaultSpeedUnits(): SpeedUnits[] {
@@ -166,6 +177,16 @@ export class UserService implements OnDestroy {
     return [VerticalSpeedUnits.MetersPerSecond];
   }
 
+  static getDefaultUserUnitSettings(): UserUnitSettingsInterface{
+    const unitSettings = <UserUnitSettingsInterface>{};
+    unitSettings.speedUnits = UserService.getDefaultSpeedUnits();
+    unitSettings.paceUnits = UserService.getDefaultPaceUnits();
+    unitSettings.swimPaceUnits =  UserService.getDefaultSwimPaceUnits();
+    unitSettings.verticalSpeedUnits = UserService.getDefaultVerticalSpeedUnits();
+    unitSettings.startOfTheWeek = UserService.getDefaultStartOfTheWeek();
+    return unitSettings;
+  }
+
   static getDefaultStartOfTheWeek(): DaysOfTheWeek {
     return DaysOfTheWeek.Monday;
   }
@@ -179,7 +200,7 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultChartFillOpacity(): number {
-    return 0.15;
+    return 0.35;
   }
 
   static getDefaultTableSettings(): TableSettings {
@@ -325,17 +346,19 @@ export class UserService implements OnDestroy {
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
     settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || UserService.getDefaultXAxisType();
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
-    settings.chartSettings.dataSmoothingLevel = settings.chartSettings.dataSmoothingLevel || UserService.getDefaultSmoothingLevel();
+    settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || UserService.getDefaultDownSamplingLevel();
     settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || UserService.getDefaultChartCursorBehaviour();
     settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || UserService.getDefaultChartStrokeWidth();
     settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : UserService.getDefaultChartStrokeOpacity();
     settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : UserService.getDefaultChartFillOpacity();
+    settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : UserService.getDefaultExtraMaxForPower();
     settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || UserService.getDefaultChartLapTypes();
     settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
-    settings.chartSettings.showGrid = settings.chartSettings.showGrid === true;
-    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes === true;
+    settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
+    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
     settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
-    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold()
+    settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
+    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold();
 
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
@@ -346,12 +369,12 @@ export class UserService implements OnDestroy {
     settings.unitSettings.startOfTheWeek = settings.unitSettings.startOfTheWeek || UserService.getDefaultStartOfTheWeek();
     // Dashboard
     settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
-    settings.dashboardSettings.dateRange = settings.dashboardSettings.dateRange || UserService.getDefaultDateRange();
+    settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : UserService.getDefaultDateRange();
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || UserService.getDefaultUserDashboardChartSettings();
     // Patch missing defaults
-    settings.dashboardSettings.chartsSettings.forEach(chartSetting => chartSetting.dataCategoryType = chartSetting.dataCategoryType || ChartDataCategoryTypes.ActivityType)
+    settings.dashboardSettings.chartsSettings.forEach(chartSetting => chartSetting.dataCategoryType = chartSetting.dataCategoryType || ChartDataCategoryTypes.ActivityType);
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
     settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || UserService.getDefaultTableSettings();

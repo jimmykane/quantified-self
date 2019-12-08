@@ -1,15 +1,12 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
-import {EventColorService} from '../../../services/color/app.event.color.service';
 import {EventService} from '../../../services/app.event.service';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {UserSettingsService} from '../../../services/app.user.settings.service';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {AppAuthService} from '../../../authentication/app.auth.service';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {
@@ -20,8 +17,27 @@ import {
 import {ThemeService} from '../../../services/app.theme.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
-import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {UserService} from '../../../services/app.user.service';
+import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
+import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
+import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
+import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
+import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
+import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
+import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
+import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
+import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
+import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
+import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
+import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
+import {DataVerticalSpeedAvg} from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
+import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
+import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
 
 
 @Component({
@@ -38,28 +54,32 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public streams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
-  public showAllData: boolean;
-  public showChartLaps: boolean;
-  public showChartGrid: boolean;
+  public userUnitSettings = UserService.getDefaultUserUnitSettings();
+  public showAllData = false;
+  public showChartLaps = true;
+  public showChartGrid = true;
   public stackChartYAxes = true;
   public useChartAnimations = true;
   public chartDisableGrouping = false;
+  public chartHideAllSeriesOnInit = false;
   public chartXAxisType = XAxisTypes.Duration;
   public mapLapTypes = UserService.getDefaultMapLapTypes();
   public chartLapTypes = UserService.getDefaultChartLapTypes();
   public chartStrokeWidth: number = UserService.getDefaultChartStrokeWidth();
   public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
-  public chartFillOpacity: number = UserService.getDefaultChartFillOpacity() ;
-  public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold() ;
+  public chartFillOpacity: number = UserService.getDefaultChartFillOpacity();
+  public chartExtraMaxForPower: number = UserService.getDefaultExtraMaxForPower();
+  public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold();
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
   public showMapArrows = true;
-  public dataSmoothingLevel = 3.5;
+  public chartDownSamplingLevel = UserService.getDefaultDownSamplingLevel();
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
   public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
+
 
   private userSubscription: Subscription;
   private parametersSubscription: Subscription;
@@ -67,6 +87,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   private chartThemeSubscription: Subscription;
   private appThemeSubscription: Subscription;
   private mapThemeSubscription: Subscription;
+  private selectedActivitiesSubscription: Subscription;
 
   private logger = Log.create('EventCardComponent');
 
@@ -75,7 +96,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private route: ActivatedRoute,
     private authService: AppAuthService,
     private eventService: EventService,
-    private userSettingsService: UserSettingsService,
+    private activitySelectionService: ActivitySelectionService,
     private snackBar: MatSnackBar,
     private themeService: ThemeService) {
   }
@@ -84,9 +105,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
-    // Get the settings
-    this.userSettingsService.showAllData().then(value => this.showAllData = value);
-
     // Get the path params
     const userID = this.route.snapshot.paramMap.get('userID');
     const eventID = this.route.snapshot.paramMap.get('eventID');
@@ -104,8 +122,9 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       if (!this.currentUser) {
         return;
       }
+      this.userUnitSettings =  user.settings.unitSettings;
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
-      this.dataSmoothingLevel = user.settings.chartSettings.dataSmoothingLevel;
+      this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
       this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
       this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
       this.showAllData = user.settings.chartSettings.showAllData;
@@ -115,6 +134,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.showChartLaps = user.settings.chartSettings.showLaps;
       this.showChartGrid = user.settings.chartSettings.showGrid;
       this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
+      this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
       this.showMapArrows = user.settings.mapSettings.showArrows;
       this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
       this.mapLapTypes = user.settings.mapSettings.lapTypes;
@@ -122,6 +142,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
       this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
       this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
+      this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
       this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
         if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
           dataTypesToUse.push(dataTypeSettingsKey);
@@ -156,13 +177,16 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         return
       }
       this.event = event;
-      this.selectedActivities = event.getActivities();
+      this.activitySelectionService.selectedActivities.clear();
+      this.activitySelectionService.selectedActivities.select(...event.getActivities())
     });
+
+    // Subscribe to selected activities
+    this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
+      this.selectedActivities = selectedActivities.source.selected;
+    })
   }
 
-  async toggleEventPrivacy() {
-    return this.eventService.setEventPrivacy(this.currentUser, this.event.getID(), this.event.privacy === Privacy.Private ? Privacy.Public : Privacy.Private);
-  }
 
   isOwner() {
     return !!(this.targetUserID && this.currentUser && (this.targetUserID === this.currentUser.uid));
@@ -175,11 +199,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     this.chartThemeSubscription.unsubscribe();
     this.appThemeSubscription.unsubscribe();
     this.mapThemeSubscription.unsubscribe();
+    this.selectedActivitiesSubscription.unsubscribe();
   }
 
   hasLaps(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
   }
+
   hasDevices(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((devicesArray, activity) => devicesArray.concat(activity.creator.devices), []).length
   }

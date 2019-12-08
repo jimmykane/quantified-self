@@ -1,0 +1,37 @@
+mat-card-subtitle{
+  margin: 1em 0;
+  line-height: 0.9em;
+  text-align: left;
+  font-size: 0.90em;
+  margin-left: 0.8em;
+}
+
+mat-card-header{
+  min-width: 240px;
+}
+
+
+mat-icon{
+  vertical-align: middle;
+}
+
+.mat-card-avatar{
+  height: auto;
+  width: auto;
+  text-align: left;
+  padding-top: 12px;
+  /*margin-left: -16px;*/
+}
+
+/*::ng-deep .mat-card-header-text {*/
+/*  !*margin-left: 0;*!*/
+/*}*/
+
+mat-card-header mat-card-title{
+  font-size: 1.2em;
+  text-align: left;
+  margin: 0;
+  line-height: 2.5em;
+  margin-left: 0.5em;
+  margin-top: -0.6em;
+}

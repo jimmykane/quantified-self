@@ -28,6 +28,7 @@ import {UserDashboardSettingsInterface} from 'quantified-self-lib/lib/users/user
 import {MapThemes, MapTypes, UserMapSettingsInterface} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {LapTypesHelper} from 'quantified-self-lib/lib/laps/lap.types';
 import * as firebase from 'firebase/app';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Component({
   selector: 'app-user-settings',
@@ -69,7 +70,13 @@ export class UserSettingsComponent implements OnChanges {
   public swimPaceUnits = SwimPaceUnits;
   public userSettingsFormGroup: FormGroup;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog) {
+  constructor(private authService: AppAuthService,
+              private route: ActivatedRoute,
+              private userService: UserService,
+              private router: Router,
+              private snackBar: MatSnackBar,
+              private afa: AngularFireAnalytics,
+              private dialog: MatDialog) {
   }
 
   ngOnChanges(): void {
@@ -93,7 +100,10 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
         // Validators.minLength(1),
       ]),
-
+      chartDownSamplingLevel: new FormControl(this.user.settings.chartSettings.downSamplingLevel, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
       chartStrokeWidth: new FormControl(this.user.settings.chartSettings.strokeWidth, [
         Validators.required,
         // Validators.minLength(1),
@@ -107,6 +117,12 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
         // Validators.minLength(1),
       ]),
+
+      chartExtraMaxForPower: new FormControl(this.user.settings.chartSettings.extraMaxForPower, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
+
 
       chartFillOpacity: new FormControl(this.user.settings.chartSettings.fillOpacity, [
         Validators.required,
@@ -123,6 +139,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showChartGrid: new FormControl(this.user.settings.chartSettings.showGrid, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       stackYAxes: new FormControl(this.user.settings.chartSettings.stackYAxes, [
         // Validators.required,
         // Validators.minLength(1),
@@ -134,6 +155,11 @@ export class UserSettingsComponent implements OnChanges {
       ]),
 
       useAnimations: new FormControl(this.user.settings.chartSettings.useAnimations, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
+      chartHideAllSeriesOnInit: new FormControl(this.user.settings.chartSettings.hideAllSeriesOnInit, [
         // Validators.required,
         // Validators.minLength(1),
       ]),
@@ -254,12 +280,16 @@ export class UserSettingsComponent implements OnChanges {
         chartCursorBehaviour: this.userSettingsFormGroup.get('chartCursorBehaviour').value ? ChartCursorBehaviours.SelectX : ChartCursorBehaviours.ZoomX,
         strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
         strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
+        extraMaxForPower: this.userSettingsFormGroup.get('chartExtraMaxForPower').value,
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,
+        showGrid: this.userSettingsFormGroup.get('showChartGrid').value,
         stackYAxes: this.userSettingsFormGroup.get('stackYAxes').value,
         disableGrouping: this.userSettingsFormGroup.get('chartDisableGrouping').value,
+        hideAllSeriesOnInit: this.userSettingsFormGroup.get('chartHideAllSeriesOnInit').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
+        downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
       });
 
       await this.userService.updateUserProperties(this.user, {
@@ -300,7 +330,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      firebase.analytics().logEvent('user_settings_update');
+      this.afa.logEvent('user_settings_update');
     } catch (e) {
       this.logger.error(e);
       this.snackBar.open('Could not update user', null, {

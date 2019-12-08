@@ -32,7 +32,7 @@ export class EventCardDevicesComponent implements OnChanges {
         // 'batteryVoltage': device.batteryVoltage,
         'Manufacturer': device.manufacturer,
         // 'serialNumber': device.serialNumber,
-        'Product': device.product,
+        'Product I. D.': device.product,
         'Software Info': device.swInfo,
         // 'hwInfo': device.hwInfo,
         'Ant Device Number': device.antDeviceNumber,

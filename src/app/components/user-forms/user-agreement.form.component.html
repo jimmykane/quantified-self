@@ -3,7 +3,7 @@
     <span class="mat-headline">Hi there {{ user.displayName || 'Mr. Anonymous🧐'  }},</span>
     <span class="mat-subheader">Let's agree an a few things before we proceed</span>
     <mat-checkbox formControlName="acceptPrivacyPolicy" >
-      <mat-card>
+      <mat-card class="mat-elevation-z0">
         <b>You accept that: </b> Your data are stored and held encrypted by Google (Google Cloud).<br/>
         You choose what part of your data to make public or private (profile, individual data).
         We provide all default privacy settings to private, only seen by you and you can choose what to make public.
@@ -11,7 +11,7 @@
     </mat-checkbox>
 
     <mat-checkbox formControlName="acceptDataPolicy">
-      <mat-card>
+      <mat-card class="mat-elevation-z0">
         <b>You accept that: </b> While we will employ best endeavours we don't promise to keep your files accessible at
         any time, it's best advised to keep your own private copies.
 
@@ -19,23 +19,19 @@
     </mat-checkbox>
 
     <mat-checkbox formControlName="acceptTrackingPolicy">
-      <mat-card>
+      <mat-card class="mat-elevation-z0">
         <b>You accept that: </b> Your IP will be anonymized and will be used only to determine visits by country.
       </mat-card>
     </mat-checkbox>
 
     <mat-checkbox formControlName="acceptDiagnosticsPolicy">
-      <mat-card>
+      <mat-card class="mat-elevation-z0">
         <b>You accept that: </b> Your browser can send anonymized data when errors happen to help improve the quality of the service
       </mat-card>
     </mat-checkbox>
 
-    <mat-error *ngIf="!this.userFormGroup.valid" class="mat-subheader">
-      <p class="mat-small">You must accept all the above policies</p>
-    </mat-error>
-
     <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button *ngIf="this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My Account
+    <button [disabled]="!this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My Account
     </button>
 
   </form>

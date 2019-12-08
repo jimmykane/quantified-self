@@ -1,138 +1,219 @@
-<mat-card *ngIf="event">
-  <mat-card-header>
-    <app-event-actions *ngIf="isOwner()" [user]="currentUser" [event]="event" align="end"></app-event-actions>
-    <mat-card-subtitle>
-      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
-      <span class="mat-body-2"> {{ event.name.slice(0, 70) }}</span>
-    </mat-card-subtitle>
-    <mat-card-subtitle>
-      <mat-icon>access_time</mat-icon>
-      {{ event.startDate | date:'medium' }}
-    </mat-card-subtitle>
-    <mat-card-subtitle>
-      <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser"
-                                 [event]="event" [(selectedActivities)]="selectedActivities">
-      </app-activities-checkboxes>
-      <app-activity-header
-        *ngIf="event.getActivities().length === 1"
-        [user]="currentUser"
-        [showIcon]="true"
-        [event]="event"
-        [activity]="selectedActivities[0]"
-        [showType]="true"
-        [showActions]="isOwner()"
-        [showDistance]="true"
-        [showSerialNumber]="true"
-        [showSWInfo]="true"
-        [showDuration]="true">
-      </app-activity-header>
-    </mat-card-subtitle>
-  </mat-card-header>
+<mat-card *ngIf="event" class="outer">
 
-  <mat-card-content>
-    <mat-tab-group animationDuration="500ms"
-      [dynamicHeight]="true"
-      [selectedIndex]="tabIndex"
-      (selectedIndexChange)="router.navigate(['/user', targetUserID, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">
-      <mat-tab label="Map">
-        <ng-template matTabLabel>
-          <mat-icon>map</mat-icon>
-          <app-map-actions
-            [(showLaps)]="showMapLaps"
-            [(showArrows)]="showMapArrows"
-            [user]="currentUser"
-            align="end">
-          </app-map-actions>
-        </ng-template>
-        <ng-template matTabContent>
+  <app-event-header
+    [event]="event"
+    [user]='currentUser'
+    [isOwner]="currentUser && (currentUser.uid === targetUserID)">
+  </app-event-header>
 
-        <app-event-card-map
-          [selectedActivities]="selectedActivities"
-          [targetUserID]="targetUserID"
-          [user]="currentUser"
-          [event]="event"
-          [showLaps]="showMapLaps"
-          [lapTypes]="mapLapTypes"
-          [showArrows]="showMapArrows"
-          [strokeWidth]="mapStrokeWidth"
-          [theme]="mapTheme">
-        </app-event-card-map>
-        </ng-template>
-      </mat-tab>
-      <mat-tab label="Stats">
-        <ng-template matTabLabel>
-          <mat-icon>insert_chart</mat-icon>
-        </ng-template>
-        <app-event-card-stats
-          [selectedActivities]="selectedActivities"
-          [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
-          [event]="event">
-        </app-event-card-stats>
-      </mat-tab>
-      <mat-tab label="Chart">
-        <ng-template matTabLabel>
-          <mat-icon>show_chart</mat-icon>
-          <app-event-card-chart-actions
-            [(xAxisType)]="chartXAxisType"
-            [(showAllData)]="showAllData"
-            [(showLaps)]="showChartLaps"
-            [(stackYAxes)]="stackChartYAxes"
-            [(showGrid)]="showChartGrid"
-            [(dataSmoothingLevel)]="dataSmoothingLevel"
-            [user]="currentUser"
-            align="end">
-          </app-event-card-chart-actions>
-        </ng-template>
-        <ng-template matTabContent>
-          <app-event-card-chart
-            [showAllData]="showAllData"
-            [showLaps]="showChartLaps"
-            [useAnimations]="useChartAnimations"
-            [disableGrouping]="chartDisableGrouping"
-            [gainAndLossThreshold]="chartGainAndLossThreshold"
-            [stackYAxes]="stackChartYAxes"
-            [showGrid]="showChartGrid"
-            [lapTypes]="chartLapTypes"
-            [xAxisType]="chartXAxisType"
-            [strokeWidth]="chartStrokeWidth"
-            [strokeOpacity]="chartStrokeOpacity"
-            [fillOpacity]="chartFillOpacity"
-            [selectedActivities]="selectedActivities"
-            [targetUserID]="targetUserID"
-            [dataTypesToUse]="chartDataTypesToUse"
-            [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"
-            [dataSmoothingLevel]="dataSmoothingLevel"
-            [chartCursorBehaviour]="chartCursorBehaviour"
-            [chartTheme]="chartTheme"
-            [waterMark]="currentUser ? currentUser.brandText : null"
-            [event]="event">
-          </app-event-card-chart>
-        </ng-template>
-      </mat-tab>
-      <mat-tab label="Laps" *ngIf="hasLaps(event)">
-        <ng-template matTabLabel>
-          <mat-icon>linear_scale</mat-icon>
-        </ng-template>
-        <app-event-card-laps
-          [selectedActivities]="selectedActivities"
-          [event]="event">
-        </app-event-card-laps>
-      </mat-tab>
-      <mat-tab label="Devices" *ngIf="hasDevices(event)">
-        <ng-template matTabLabel>
-          <mat-icon>leak_add</mat-icon>
-        </ng-template>
-        <app-event-card-devices
-          [selectedActivities]="selectedActivities"
-          [event]="event">
-        </app-event-card-devices>
-      </mat-tab>
-      <!--      <mat-tab label="Tools">-->
-      <!--        <ng-template matTabLabel>-->
-      <!--          <mat-icon>build</mat-icon>-->
-      <!--        </ng-template>-->
-      <!--        <app-event-card-tools *ngIf="currentUser" [selectedActivities]="selectedActivities" [event]="event" [targetUserID]="targetUserID"></app-event-card-tools>-->
-      <!--      </mat-tab>-->
-    </mat-tab-group>
-  </mat-card-content>
+  <app-activities-toggles
+    *ngIf="event.getActivities().length > 1"
+    [event]="event"
+    [user]="currentUser"
+    [isOwner]="isOwner()">
+  </app-activities-toggles>
+
+  <app-event-card-stats-grid
+    [event]="event"
+    [selectedActivities]="selectedActivities"
+    [unitSettings]="userUnitSettings">
+  </app-event-card-stats-grid>
+
+  <app-event-stats-table
+    [selectedActivities]="selectedActivities"
+    [userUnitSettings]="userUnitSettings"
+    [event]="event">
+  </app-event-stats-table>
+
+  <app-event-card-map
+    *ngIf="event && targetUserID"
+    [selectedActivities]="selectedActivities"
+    [targetUserID]="targetUserID"
+    [user]="currentUser"
+    [event]="event"
+    [showLaps]="showMapLaps"
+    [lapTypes]="mapLapTypes"
+    [showArrows]="showMapArrows"
+    [strokeWidth]="mapStrokeWidth"
+    [theme]="mapTheme">
+  </app-event-card-map>
+
+  <app-event-card-chart
+    [showAllData]="showAllData"
+    [showLaps]="showChartLaps"
+    [useAnimations]="useChartAnimations"
+    [disableGrouping]="chartDisableGrouping"
+    [hideAllSeriesOnInit]="chartHideAllSeriesOnInit"
+    [gainAndLossThreshold]="chartGainAndLossThreshold"
+    [stackYAxes]="stackChartYAxes"
+    [showGrid]="showChartGrid"
+    [lapTypes]="chartLapTypes"
+    [xAxisType]="chartXAxisType"
+    [strokeWidth]="chartStrokeWidth"
+    [strokeOpacity]="chartStrokeOpacity"
+    [extraMaxForPower]="chartExtraMaxForPower"
+    [fillOpacity]="chartFillOpacity"
+    [selectedActivities]="selectedActivities"
+    [targetUserID]="targetUserID"
+    [dataTypesToUse]="chartDataTypesToUse"
+    [userUnitSettings]="userUnitSettings"
+    [user]="currentUser"
+    [downSamplingLevel]="chartDownSamplingLevel"
+    [chartCursorBehaviour]="chartCursorBehaviour"
+    [chartTheme]="chartTheme"
+    [waterMark]="currentUser ? currentUser.brandText : null"
+    [event]="event">
+  </app-event-card-chart>
+
+  <app-event-card-laps
+    *ngIf="hasLaps(event)"
+    [selectedActivities]="selectedActivities"
+    [event]="event">
+  </app-event-card-laps>
+
+  <app-event-card-devices
+    *ngIf="hasDevices(event)"
+    [selectedActivities]="selectedActivities"
+    [event]="event">
+  </app-event-card-devices>
+
+
+  <!--<mat-card *ngIf="event">-->
+  <!--  <mat-card-header>-->
+  <!--    <app-event-actions *ngIf="isOwner()" [user]="currentUser" [event]="event" align="end"></app-event-actions>-->
+  <!--    <mat-card-subtitle>-->
+  <!--      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>-->
+  <!--      <span class="mat-body-2"> {{ event.name.slice(0, 70) }}</span>-->
+  <!--    </mat-card-subtitle>-->
+  <!--    <mat-card-subtitle>-->
+  <!--      <mat-icon>access_time</mat-icon>-->
+  <!--      {{ event.startDate | date:'medium' }}-->
+  <!--    </mat-card-subtitle>-->
+  <!--    <mat-card-subtitle>-->
+  <!--      <app-activities-checkboxes *ngIf="event.getActivities().length > 1" [showActions]="isOwner()" [user]="currentUser"-->
+  <!--                                 [event]="event" [(selectedActivities)]="selectedActivities">-->
+  <!--      </app-activities-checkboxes>-->
+  <!--      <app-activity-header-->
+  <!--        *ngIf="event.getActivities().length === 1"-->
+  <!--        [user]="currentUser"-->
+  <!--        [showIcon]="true"-->
+  <!--        [event]="event"-->
+  <!--        [activity]="selectedActivities[0]"-->
+  <!--        [showType]="true"-->
+  <!--        [showActions]="isOwner()"-->
+  <!--        [showDistance]="true"-->
+  <!--        [showSerialNumber]="true"-->
+  <!--        [showSWInfo]="true"-->
+  <!--        [showDuration]="true">-->
+  <!--      </app-activity-header>-->
+  <!--    </mat-card-subtitle>-->
+  <!--  </mat-card-header>-->
+
+  <!--  <mat-card-content>-->
+  <!--    <mat-tab-group animationDuration="500ms"-->
+  <!--      [dynamicHeight]="true"-->
+  <!--      [selectedIndex]="tabIndex"-->
+  <!--      (selectedIndexChange)="router.navigate(['/user', targetUserID, 'event', event.getID()], {queryParams: { tabIndex: $event}} )">-->
+  <!--      <mat-tab label="Map">-->
+  <!--        <ng-template matTabLabel>-->
+  <!--          <mat-icon>map</mat-icon>-->
+  <!--          <app-map-actions-->
+  <!--            [(showLaps)]="showMapLaps"-->
+  <!--            [(showArrows)]="showMapArrows"-->
+  <!--            [user]="currentUser"-->
+  <!--            align="end">-->
+  <!--          </app-map-actions>-->
+  <!--        </ng-template>-->
+  <!--        <ng-template matTabContent>-->
+
+  <!--        <app-event-card-map-->
+  <!--          [selectedActivities]="selectedActivities"-->
+  <!--          [targetUserID]="targetUserID"-->
+  <!--          [user]="currentUser"-->
+  <!--          [event]="event"-->
+  <!--          [showLaps]="showMapLaps"-->
+  <!--          [lapTypes]="mapLapTypes"-->
+  <!--          [showArrows]="showMapArrows"-->
+  <!--          [strokeWidth]="mapStrokeWidth"-->
+  <!--          [theme]="mapTheme">-->
+  <!--        </app-event-card-map>-->
+  <!--        </ng-template>-->
+  <!--      </mat-tab>-->
+  <!--      <mat-tab label="Stats">-->
+  <!--        <ng-template matTabLabel>-->
+  <!--          <mat-icon>insert_chart</mat-icon>-->
+  <!--        </ng-template>-->
+  <!--        <app-event-card-statsToShow-->
+  <!--          [selectedActivities]="selectedActivities"-->
+  <!--          [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"-->
+  <!--          [event]="event">-->
+  <!--        </app-event-card-statsToShow>-->
+  <!--      </mat-tab>-->
+  <!--      <mat-tab label="Chart">-->
+  <!--        <ng-template matTabLabel>-->
+  <!--          <mat-icon>show_chart</mat-icon>-->
+  <!--          <app-event-card-chart-actions-->
+  <!--            [(xAxisType)]="chartXAxisType"-->
+  <!--            [(showAllData)]="showAllData"-->
+  <!--            [(showLaps)]="showChartLaps"-->
+  <!--            [(stackYAxes)]="stackChartYAxes"-->
+  <!--            [(showGrid)]="showChartGrid"-->
+  <!--            [user]="currentUser"-->
+  <!--            align="end">-->
+  <!--          </app-event-card-chart-actions>-->
+  <!--        </ng-template>-->
+  <!--        <ng-template matTabContent>-->
+  <!--          <app-event-card-chart-->
+  <!--            [showAllData]="showAllData"-->
+  <!--            [showLaps]="showChartLaps"-->
+  <!--            [useAnimations]="useChartAnimations"-->
+  <!--            [disableGrouping]="chartDisableGrouping"-->
+  <!--            [gainAndLossThreshold]="chartGainAndLossThreshold"-->
+  <!--            [stackYAxes]="stackChartYAxes"-->
+  <!--            [showGrid]="showChartGrid"-->
+  <!--            [lapTypes]="chartLapTypes"-->
+  <!--            [xAxisType]="chartXAxisType"-->
+  <!--            [strokeWidth]="chartStrokeWidth"-->
+  <!--            [strokeOpacity]="chartStrokeOpacity"-->
+  <!--            [fillOpacity]="chartFillOpacity"-->
+  <!--            [selectedActivities]="selectedActivities"-->
+  <!--            [targetUserID]="targetUserID"-->
+  <!--            [dataTypesToUse]="chartDataTypesToUse"-->
+  <!--            [userUnitSettings]="currentUser ? currentUser.settings.unitSettings : null"-->
+  <!--            [downSamplingLevel]="chartDownSamplingLevel"-->
+  <!--            [chartCursorBehaviour]="chartCursorBehaviour"-->
+  <!--            [chartTheme]="chartTheme"-->
+  <!--            [waterMark]="currentUser ? currentUser.brandText : null"-->
+  <!--            [event]="event">-->
+  <!--          </app-event-card-chart>-->
+  <!--        </ng-template>-->
+  <!--      </mat-tab>-->
+  <!--      <mat-tab label="Laps" *ngIf="hasLaps(event)">-->
+  <!--        <ng-template matTabLabel>-->
+  <!--          <mat-icon>linear_scale</mat-icon>-->
+  <!--        </ng-template>-->
+  <!--        <app-event-card-laps-->
+  <!--          [selectedActivities]="selectedActivities"-->
+  <!--          [event]="event">-->
+  <!--        </app-event-card-laps>-->
+  <!--      </mat-tab>-->
+  <!--      <mat-tab label="Devices" *ngIf="hasDevices(event)">-->
+  <!--        <ng-template matTabLabel>-->
+  <!--          <mat-icon>leak_add</mat-icon>-->
+  <!--        </ng-template>-->
+  <!--        <app-event-card-devices-->
+  <!--          [selectedActivities]="selectedActivities"-->
+  <!--          [event]="event">-->
+  <!--        </app-event-card-devices>-->
+  <!--      </mat-tab>-->
+  <!--      &lt;!&ndash;      <mat-tab label="Tools">&ndash;&gt;-->
+  <!--      &lt;!&ndash;        <ng-template matTabLabel>&ndash;&gt;-->
+  <!--      &lt;!&ndash;          <mat-icon>build</mat-icon>&ndash;&gt;-->
+  <!--      &lt;!&ndash;        </ng-template>&ndash;&gt;-->
+  <!--      &lt;!&ndash;        <app-event-card-tools *ngIf="currentUser" [selectedActivities]="selectedActivities" [event]="event" [targetUserID]="targetUserID"></app-event-card-tools>&ndash;&gt;-->
+  <!--      &lt;!&ndash;      </mat-tab>&ndash;&gt;-->
+  <!--    </mat-tab-group>-->
+  <!--  </mat-card-content>-->
+  <!--</mat-card>-->
+
 </mat-card>

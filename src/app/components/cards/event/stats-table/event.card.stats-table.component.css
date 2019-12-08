@@ -1,0 +1,25 @@
+mat-icon.tooltip {
+  vertical-align: middle;
+  margin-left: 0.5em;
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+/*mat-card{*/
+/*  min-height: 100vh;*/
+/*  padding: 0;*/
+/*}*/
+
+mat-form-field {
+  padding: 0 1em;
+}
+
+mat-table{
+  overflow: scroll;
+  height: 60vh;
+}
+
+.mat-header-cell{
+  font-size: unset;
+}

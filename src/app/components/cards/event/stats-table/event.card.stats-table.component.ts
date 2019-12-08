@@ -10,23 +10,28 @@ import {DataSpeed} from 'quantified-self-lib/lib/data/data.speed';
 import {DataPace} from 'quantified-self-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataSwimPace} from 'quantified-self-lib/lib/data/data.swim-pace';
-import {UnitBasedAbstract} from '../../../unit-based/unit-based.abstract';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
+import {DataTableAbstract} from '../../../data-table/data-table.abstract';
+import {EventColorService} from '../../../../services/color/app.event.color.service';
 
 @Component({
-  selector: 'app-event-card-stats',
-  templateUrl: './event.card.stats.component.html',
-  styleUrls: ['./event.card.stats.component.css'],
+  selector: 'app-event-stats-table',
+  templateUrl: './event.card.stats-table.component.html',
+  styleUrls: ['./event.card.stats-table.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardStatsComponent extends UnitBasedAbstract implements OnChanges {
+export class EventCardStatsTableComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];
   data: MatTableDataSource<Object>;
   columns: Array<Object>;
   appColors = AppColors;
+
+  constructor(private eventColorService: EventColorService) {
+  }
 
   ngOnChanges(simpleChanges) {
     this.data = new MatTableDataSource<Object>();
@@ -37,9 +42,8 @@ export class EventCardStatsComponent extends UnitBasedAbstract implements OnChan
 
     // Create the columns
     this.columns = ['Name'].concat(this.selectedActivities
-      .map(activity => activity.creator.name)
-      .map((key, index) => {
-        return `${key} ${(new Array(index + 1)).join(' ')}`
+      .map((activity, index) => {
+        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.event.getActivities(), activity)}`
       }));
 
     // Collect all the stat types from all the activities
@@ -92,7 +96,7 @@ export class EventCardStatsComponent extends UnitBasedAbstract implements OnChan
           if (!activityStat) {
             return rowObj;
           }
-          rowObj[`${activity.creator.name} ${(new Array(index + 1)).join(' ')}`] =
+          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.event.getActivities(), activity)}`] =
             (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
@@ -146,5 +150,13 @@ export class EventCardStatsComponent extends UnitBasedAbstract implements OnChan
 
   applyFilter(event) {
     this.data.filter = event.target.value.trim().toLowerCase();
+  }
+
+  getColumnHeaderName(columnHeader: string): string {
+    return columnHeader.slice(0, -7);
+  }
+
+  getColumnHeaderColor(columnHeader: string): string {
+    return columnHeader.slice(-7);
   }
 }

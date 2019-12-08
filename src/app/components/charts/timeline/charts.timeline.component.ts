@@ -26,19 +26,14 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
   styleUrls: ['./charts.timeline.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsTimelineComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsTimelineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
-  protected logger = Log.create('ChartColumnComponent');
+  protected logger = Log.create('ChartsTimelineComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
   }
 
-  async ngAfterViewInit() {
-  }
-
-  async ngOnInit() {
-  }
 
   protected createChart(): am4charts.XYChart {
     const chart = <am4plugins_timeline.SpiralChart>super.createChart(am4plugins_timeline.SpiralChart);
@@ -132,7 +127,6 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     });
 
     series.columns.template.filters.push(ChartHelper.getShadowFilter());
-
 
     const label = series.createChild(am4core.Label);
     label.horizontalCenter = 'middle';

@@ -1,18 +1,34 @@
-<mat-card *ngFor="let activity of selectedActivities">
-  <section>
-    <app-activity-header
-      [activity]="activity"
-      [event]="event"
-      [showType]="true"
-      [showDuration]="false">
-    </app-activity-header>
-  </section>
-  <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
-    <ng-container *ngFor="let column of getColumns(activity)" [matColumnDef]="column">
-      <mat-header-cell *matHeaderCellDef>{{ column }}</mat-header-cell>
-      <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+<mat-card class="mat-elevation-z0">
+  <mat-card-header>
+    <div mat-card-avatar>
+      <mat-icon>linear_scale</mat-icon>
+    </div>
+    <mat-card-title>Laps</mat-card-title>
+    <mat-card-subtitle></mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <ng-container *ngFor="let activity of selectedActivities; index as i; ">
+      <section *ngIf="getData(activity).data.length">
+        <app-activity-toggle
+          *ngIf="selectedActivities.length > 1 || event.getActivities().length > 1"
+          [event]="event"
+          [showToggle]="false"
+          [showDate]="false"
+          [showStats]="false"
+          [activity]="activity">
+        </app-activity-toggle>
+        <mat-divider *ngIf="selectedActivities.length > 1" [inset]="true"></mat-divider>
+        <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
+          <ng-container *ngFor="let column of getColumnsToDisplayDependingOnScreenSize()" [matColumnDef]="column">
+            <mat-header-cell *matHeaderCellDef>
+              <app-data-type-icon [dataType]="column"></app-data-type-icon>
+            </mat-header-cell>
+            <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+          </ng-container>
+          <mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></mat-header-row>
+          <mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();"></mat-row>
+        </mat-table>
+      </section>
     </ng-container>
-    <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
-    <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
-  </mat-table>
+  </mat-card-content>
 </mat-card>

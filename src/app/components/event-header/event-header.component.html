@@ -1,0 +1,71 @@
+<mat-card class="mat-elevation-z0">
+  <!-- Event details -->
+  <mat-card-header>
+    <div mat-card-avatar>
+      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
+    </div>
+    <mat-card-title>
+      <span>
+        <b>{{ event.startDate | date:"d" }}</b>
+      </span>
+      <span style="font-size: 1em">
+         {{ event.startDate | date:"MMM " }}
+      </span>
+      <span style="font-size: 0.8em">
+        <b>{{ event.startDate | date:"yyyy" }}</b>
+      </span>
+      <span style="font-size: 0.7em;">
+        at {{ event.startDate | date:"h:mm:ss a" }}
+      </span>
+    </mat-card-title>
+
+    <mat-card-subtitle style="font-size: 1.0em;">
+      <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue(false, false)}} and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
+    </mat-card-subtitle>
+
+
+    <app-event-actions *ngIf="user" [user]="user" [event]="event" align="end"></app-event-actions>
+  </mat-card-header>
+
+
+  <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0; color: unset;">
+    <app-edit-input
+      [disabled]="!isOwner"
+      [(data)]='event.name'
+      [type]="'text'"
+      [placeHolder]="event.name ? 'Name': 'Add a name'"
+      (dataChange)="saveEventDescription(event.description, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
+  <mat-card-subtitle style="margin-top: 0em; margin-bottom: 0; color: unset;" *ngIf="event.description || isOwner">
+    <app-edit-input
+      [disabled]="!isOwner"
+      [(data)]='event.description'
+      [type]="'textArea'"
+      [placeHolder]="event.description ? 'Description': 'Add a description'"
+      (dataChange)="saveEventDescription(event.description, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
+  <mat-card-subtitle style="margin-bottom: 0; color: unset;" *ngIf="feeling || rpe || isOwner">
+    <app-edit-input
+      style="width: 50%; display: inline-block;"
+      *ngIf="feeling || isOwner"
+      [disabled]="!isOwner"
+      [(data)]="feeling"
+      [type]="'select'"
+      [placeHolder]="'Feeling'"
+      [selectOptions]="feelings"
+      (dataChange)="saveEventFeeling(feeling, event)">
+    </app-edit-input>
+    <app-edit-input
+      style="width: 50%; display: inline-block;"
+      *ngIf="rpe || isOwner"
+      [disabled]="!isOwner"
+      [(data)]='rpe'
+      [type]="'select'"
+      [placeHolder]="'Rating of Perceived Exertion'"
+      [selectOptions]="rpeBorgCR10SCale"
+      (dataChange)="saveEventRPE(rpe, event)">
+    </app-edit-input>
+  </mat-card-subtitle>
+</mat-card>

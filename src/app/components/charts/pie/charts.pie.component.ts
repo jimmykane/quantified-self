@@ -29,25 +29,19 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
-  protected logger = Log.create('ChartPieComponent');
+  protected logger = Log.create('ChartsPieComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
-  }
-
-  async ngAfterViewInit() {
-  }
-
-  async ngOnInit() {
   }
 
   protected createChart(): am4charts.PieChart {
     const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
 
     // chart.hiddenState.properties.opacity = 0;
-    chart.padding(0, 10, 0, 10)
+    chart.padding(0, 10, 0, 10);
     chart.radius = am4core.percent(50);
     chart.innerRadius = am4core.percent(35);
 
@@ -126,8 +120,6 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       grouper.zoomOutButton.valign = 'top';
     }
 
-    // Attach events
-    this.attachEventListenersOnChart(chart);
     return chart;
   }
 

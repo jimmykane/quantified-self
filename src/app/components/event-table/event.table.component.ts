@@ -23,9 +23,9 @@ import {SelectionModel} from '@angular/cdk/collections';
 import {DatePipe} from '@angular/common';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {take} from 'rxjs/operators';
+import {debounceTime, take} from 'rxjs/operators';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {Subscription} from 'rxjs';
+import {Subject, Subscription} from 'rxjs';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
@@ -44,6 +44,12 @@ import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {UserService} from '../../services/app.user.service';
 import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
+import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
+import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
+import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataTableAbstract, StatRowElement} from '../data-table/data-table.abstract';
 
 
 @Component({
@@ -63,29 +69,31 @@ import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.a
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventTableComponent extends ScreenSizeAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventTableComponent extends DataTableAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
   @ViewChild(MatSort, {static: true}) sort: MatSort;
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
   @ViewChild(MatCard, {static: true}) table: MatCard;
 
+  data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
+  selection = new SelectionModel(true, []);
+  expandedElement: StatRowElement | null;
+  expandAll: boolean;
+
+  feeling: Feelings;
+  rpe: RPEBorgCR10SCale;
+  feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
+  rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
+
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
 
   private logger = Log.create('EventTableComponent');
+  private searchSubject: Subject<string> = new Subject();
 
-  data: MatTableDataSource<any> = new MatTableDataSource<EventRowElement>();
-  selection = new SelectionModel(true, []);
-  expandedElement: EventRowElement | null;
-  expandAll: boolean;
-  rpeBorgCR10SCale = RPEBorgCR10SCale;
-  feelings = Feelings;
-
-  eventSelectionMap: Map<EventInterface, boolean> = new Map<EventInterface, boolean>();
 
   // isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
-
 
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
@@ -98,13 +106,13 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   }
 
 
-
   ngOnChanges(simpleChanges: SimpleChanges): void {
-    if (!this.events || !this.user) {
+    this.logger.info(`ngOnChanges`);
+    if (!this.events) {
       this.loading();
       return;
     }
-    if (this.events && simpleChanges.events) {
+    if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
@@ -114,13 +122,21 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   }
 
   ngOnInit(): void {
+    if (!this.user) {
+      throw new Error(`Component needs user`)
+    }
+    this.searchSubject.pipe(
+      debounceTime(500)
+    ).subscribe(searchTextValue => {
+      this.search(searchTextValue);
+    });
   }
 
   ngAfterViewInit() {
     this.data.paginator = this.paginator;
     this.data.sort = this.sort;
-    this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
-      return eventRowElement[`sort.${header}`];
+    this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
+      return statRowElement[`sort.${header}`];
     };
     this.sortSubscription = this.sort.sortChange.subscribe((sort) => {
       if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
@@ -129,6 +145,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
         this.userService.updateUserProperties(this.user, {settings: this.user.settings})
       }
     });
+    this.processChanges();
   }
 
   checkBoxClick(row) {
@@ -152,108 +169,34 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     this.updateActionButtonService();
   }
 
-  getColumnHeaderIcon(columnName): string {
-    switch (columnName) {
-      case 'Distance':
-        return 'trending_flat';
-      case 'Duration':
-        return 'timer';
-      case 'startDate':
-        return 'date_range';
-      case 'Device Names':
-        return 'watch';
-      case 'name':
-        return 'font_download';
-      case 'Activity Types':
-        return 'filter_none';
-      case 'privacy':
-        return 'visibility';
-      default:
-        return null;
-    }
-  }
-
-  getColumnHeaderSVGIcon(columnName): string {
-    switch (columnName) {
-      case 'Ascent':
-        return 'arrow_up_right';
-      case 'Descent':
-        return 'arrow_down_right';
-      case 'Average Heart Rate':
-        return 'heart_rate';
-      case 'Energy':
-        return 'energy';
-      default:
-        return null;
-    }
-  }
-
-  isColumnHeaderSortable(columnName): boolean {
-    return ['startDate', 'Distance', 'Activity Types', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
-  }
-
-
   private processChanges() {
+    this.logger.info(`Processing changes`);
     // this.data = new MatTableDataSource<any>(data);
     this.data.data = this.events.reduce((EventRowElementsArray, event) => {
       if (!event) {
         return EventRowElementsArray;
       }
 
-      const dataObject: EventRowElement = <EventRowElement>{};
-      const ascent = event.getStat(DataAscent.type);
-      const descent = event.getStat(DataDescent.type);
-      const energy = event.getStat(DataEnergy.type);
-      const heartRateAverage = event.getStat(DataHeartRateAvg.type);
-      const eventRPE = event.getStat(DataRPE.type);
-      const eventFeeling = event.getStat(DataFeeling.type);
+      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue(), this.user.settings.unitSettings);
 
-      dataObject.privacy = event.privacy;
-      dataObject.name = event.name;
-      dataObject.startDate = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
-
-      const activityTypes = event.getStat(DataActivityTypes.type) || new DataActivityTypes(['Not found']);
-      dataObject['Activity Types'] = event.getActivityTypesAsString();
-
-      dataObject['Distance'] = `${event.getDistance().getDisplayValue()} ${event.getDistance().getDisplayUnit()}`;
-      dataObject['Ascent'] = ascent ? `${ascent.getDisplayValue()} ${ascent.getDisplayUnit()}` : '';
-      dataObject['Descent'] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
-      dataObject['Energy'] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
-      dataObject['Average Heart Rate'] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
-      dataObject['Duration'] = event.getDuration().getDisplayValue();
-      dataObject['isMerge'] = event.isMerge;
-      dataObject.description = event.description;
-      const deviceNames = event.getStat(DataDeviceNames.type) || new DataDeviceNames(['Not found']);
-      dataObject['Device Names'] = event.getDeviceNamesAsString();
-      if (eventRPE) {
-        dataObject.rpe = <RPEBorgCR10SCale>eventRPE.getValue();
-      }
-      if (eventFeeling) {
-        dataObject.feeling = <Feelings>eventFeeling.getValue();
-      }
-      dataObject.event = event;
+      statRowElement['Privacy'] = event.privacy;
+      statRowElement['Name'] = event.name;
+      statRowElement['Start Date'] = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
+      statRowElement['Activity Types'] = event.getActivityTypesAsString();
+      statRowElement['Merged Event'] = event.isMerge;
+      statRowElement['Description'] = event.description;
+      statRowElement['Device Names'] = event.getDeviceNamesAsString();
+      statRowElement['Event'] = event;
 
       // Add the sorts
-      dataObject['sort.startDate'] = event.startDate.getTime();
-      dataObject['sort.Activity Types'] = dataObject['Activity Types'];
-      dataObject['sort.Distance'] = event.getDistance().getValue() || 0;
-      dataObject['sort.Ascent'] = ascent ? <number>ascent.getValue() : 0;
-      dataObject['sort.Descent'] = descent ? <number>descent.getValue() : 0;
-      dataObject['sort.Energy'] = energy ? <number>energy.getValue() : 0;
-      dataObject['sort.Duration'] = event.getDuration().getValue() || 0;
-      dataObject['sort.Average Heart Rate'] = heartRateAverage ? <number>heartRateAverage.getValue() : 0; // Check for null if better
-      dataObject['sort.Device Names'] = dataObject['Device Names'];
+      statRowElement['sort.Start Date'] = event.startDate.getTime();
+      statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
+      statRowElement['sort.Device Names'] = statRowElement['Device Names'];
 
-      EventRowElementsArray.push(dataObject);
+      EventRowElementsArray.push(statRowElement);
       return EventRowElementsArray;
-    }, [])
-    // this.data.paginator = this.paginator;
-    // this.data.sort = this.sort;
-    //
-    // this.data.sortingDataAccessor = (eventRowElement: EventRowElement, header) => {
-    //   return eventRowElement[`sort.${header}`];
-    // };
-
+    }, []);
+    this.logger.info(`Changes processed`);
   }
 
   private updateActionButtonService() {
@@ -275,10 +218,9 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
           // First fetch them complete
           const promises: Promise<EventInterface>[] = [];
           this.selection.selected.forEach((selected) => {
-            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.event.getID()).pipe(take(1)).toPromise());
+            promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.Event.getID()).pipe(take(1)).toPromise());
           });
           // Now we can clear the selection
-          this.eventSelectionMap.clear();
           this.selection.clear();
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
@@ -292,7 +234,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
             Sentry.withScope(scope => {
               scope.setExtra('data_event', mergedEvent.toJSON());
               mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
-              // will be tagged with my-tag="my value"
               Sentry.captureException(e);
               this.processChanges();
               this.loaded();
@@ -321,8 +262,7 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
             this.actionButtonService.removeActionButton('mergeEvents');
             this.unsubscribeFromAll();
             const deletePromises = [];
-            this.selection.selected.map(selected => selected.event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
-            this.eventSelectionMap.clear();
+            this.selection.selected.map(selected => selected.Event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
             this.selection.clear();
             await Promise.all(deletePromises);
             this.processChanges();
@@ -336,6 +276,57 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
         'material',
       ));
     }
+  }
+
+  getColumnsToDisplayDependingOnScreenSize() {
+
+    // push all the rest
+    let columns = [
+      'Expand',
+      'Checkbox',
+      'Start Date',
+      'Activity Types',
+      'Duration',
+      'Distance',
+      'Ascent',
+      'Descent',
+      'Energy',
+      'Average Heart Rate',
+      'Average Speed',
+      'Average Power',
+      'Device Names',
+      'Actions'
+    ];
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
+      return columns;
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
+      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
+      columns = columns.filter(column => ['Energy', 'Average Power'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+    }
+
+    return columns
   }
 
   async saveEventDescription(description: string, event: EventInterface) {
@@ -376,67 +367,12 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     });
   }
 
-  getEnumKeyValue(enumerator) {
-    return Object.keys(enumerator).slice(Object.keys(enumerator).length / 2)
-      .reduce((obj, key) => {
-        obj[`${enumerator[key]} - ${key}`] = enumerator[key];
-        return obj
-      }, {});
-  }
-
-  getColumnsToDisplayDependingOnScreenSize(event?) {
-    let columns = ['expand'];
-
-
-    // push all the rest
-    columns.push(...[
-      'checkbox',
-      'startDate',
-      'Activity Types',
-      'Distance',
-      'Ascent',
-      'Descent',
-      'Energy',
-      'Average Heart Rate',
-      'Duration',
-      'Device Names',
-      'Actions'
-    ]);
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest){
-      return columns;
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
-      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
-    }
-
-    return columns
-  }
-
   private unsubscribeFromAll() {
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe();
+    }
+    if (this.sortSubscription){
+      this.sortSubscription.unsubscribe();
     }
   }
 
@@ -445,8 +381,12 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  applyFilter(event) {
-    this.data.filter = event.target.value.trim().toLowerCase();
+  search(searchTerm) {
+    this.data.filter = searchTerm.trim().toLowerCase();
+  }
+
+  onKeyUp(event) {
+    this.searchSubject.next(event.target.value);
   }
 
   ngOnDestroy() {
@@ -456,36 +396,6 @@ export class EventTableComponent extends ScreenSizeAbstract implements OnChanges
   }
 }
 
-
-export interface EventRowElement {
-  event: EventInterface,
-  privacy: Privacy,
-  name: string,
-  startDate: String,
-  'Activity Types': string,
-  'Distance': string,
-  'Ascent': string,
-  'Descent': string,
-  'Average Heart Rate': string,
-  'Duration': string,
-  'Energy': string,
-  'Device Names': string,
-  // And their sortable data
-  'sort.startDate': number,
-  'sort.Activity Types': string,
-  'sort.Distance': number,
-  'sort.Ascent': number,
-  'sort.Descent': number,
-  'sort.Energy': number,
-  'sort.Average Heart Rate': number,
-  'sort.Duration': number,
-  'sort.Device Names': string,
-  isMerge: boolean,
-  actions: boolean,
-  description: string,
-  rpe?: RPEBorgCR10SCale,
-  feeling?: Feelings,
-}
 
 @Injectable()
 export class MatPaginatorIntlFireStore extends MatPaginatorIntl {

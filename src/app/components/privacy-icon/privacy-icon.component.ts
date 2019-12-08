@@ -1,10 +1,11 @@
-import {Component, Input} from '@angular/core';
+import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 
 @Component({
   selector: 'app-privacy-icon',
   templateUrl: './privacy-icon.component.html',
   styleUrls: ['./privacy-icon.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class PrivacyIconComponent {
@@ -12,7 +13,7 @@ export class PrivacyIconComponent {
 
   getPrivacyIcon() {
     let iconName = 'lock';
-    if (this.privacy === Privacy.Public){
+    if (this.privacy === Privacy.Public) {
       iconName = 'public'
     }
     return iconName;

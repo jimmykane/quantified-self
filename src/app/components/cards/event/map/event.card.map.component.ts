@@ -15,6 +15,12 @@ import {EventColorService} from '../../../../services/color/app.event.color.serv
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
+import {
+  ControlPosition,
+  MapTypeControlOptions,
+  MapTypeId, RotateControlOptions,
+  ZoomControlOptions
+} from '@agm/core';
 import {Log} from 'ng2-logger/browser';
 import {EventService} from '../../../../services/app.event.service';
 import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
@@ -25,6 +31,7 @@ import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../../services/app.user.service';
+import {LoadingAbstract} from '../../../loading/loading.abstract';
 
 declare function require(moduleName: string): any;
 
@@ -37,7 +44,7 @@ const mapStyles = require('./map-styles.json');
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardMapComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap, {static: false}) agmMap;
   @Input() event: EventInterface;
   @Input() targetUserID: string;
@@ -52,23 +59,22 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
 
   private streamsSubscriptions: Subscription[] = [];
   public activitiesMapData: MapData[] = [];
-  public isLoading = true;
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeControlOptions = {
+  public mapTypeControlOptions: MapTypeControlOptions = {
     // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
     mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
-    position: 5,
+    position: ControlPosition.LEFT_TOP,
     style: 0
   };
 
-  public rotateControlOptions = {
-    position: 6,
+  public rotateControlOptions: RotateControlOptions = {
+    position: ControlPosition.LEFT_BOTTOM,
   };
 
-  public zoomControlOptions = {
-    position: 7
+  public zoomControlOptions: ZoomControlOptions = {
+    position: ControlPosition.RIGHT_TOP
   };
 
   private logger = Log.create('EventCardMapAGMComponent');
@@ -78,6 +84,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
     private eventService: EventService,
     private userService: UserService,
     public eventColorService: EventColorService) {
+    super(changeDetectorRef);
   }
 
 
@@ -93,7 +100,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
 
 
   ngOnChanges(simpleChanges) {
-    // // If no operational changes return
     if ((simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.lapTypes
@@ -101,8 +107,6 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
       || simpleChanges.showLaps)) {
       this.bindToNewData();
     }
-
-    this.resizeMapToBounds();
 
     // // Get the new activityMapData
     // this.activitiesMapData = this.cacheNewData();
@@ -119,10 +123,16 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   }
 
   private bindToNewData() {
-    this.isLoading = true;
+    this.logger.info(`Binding to new data`);
+    this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
+    if (!this.selectedActivities.length){
+      this.noMapData = true;
+      this.loaded();
+      return;
+    }
     this.selectedActivities.forEach((activity) => {
       this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .subscribe((streams) => {
@@ -135,11 +145,10 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
             if (index !== -1) {
               this.activitiesMapData.splice(index, 1);
             }
-            this.isLoading = false;
             if (!this.activitiesMapData.length) {
               this.noMapData = true;
             }
-            this.changeDetectorRef.detectChanges();
+            this.loaded();
             return;
           }
 
@@ -160,14 +169,14 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
           });
 
           if (!positions.length) {
-            this.isLoading = false;
-            this.changeDetectorRef.detectChanges();
+            this.loaded();
             return;
           }
 
           this.activitiesMapData.push({
             activity: activity,
             positions: positions,
+            strokeColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
             laps: activity.getLaps().reduce((laps, lap) => {
               // @todo gives back too big arrays should check the implementation of the activity method
               const positionData = activity.getSquashedPositionData(lap.startDate, lap.endDate, streams[0], streams[1]);
@@ -188,8 +197,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
             }, [])
           });
 
-          this.isLoading = false;
-          this.changeDetectorRef.detectChanges();
+          this.loaded();
           this.resizeMapToBounds();
         }))
     })
@@ -302,7 +310,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   getMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M22-48h-44v43h16l6 5 6-5h16z',
-      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.5,
@@ -318,7 +326,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   getHomeMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.8,
@@ -330,7 +338,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
   getFlagMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
-      fillColor: this.eventColorService.getActivityColor(this.event, activity),
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.8,
@@ -409,6 +417,7 @@ export class EventCardMapComponent implements OnChanges, OnInit, OnDestroy, Afte
 export interface MapData {
   activity: ActivityInterface;
   positions: DataPositionInterface[];
+  strokeColor: string;
   laps: {
     lap: LapInterface,
     lapPosition: DataPositionInterface,

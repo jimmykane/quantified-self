@@ -1,24 +1,17 @@
-import {
-  ChangeDetectorRef,
-  Inject,
-  OnDestroy,
-} from '@angular/core';
-import {MAT_DIALOG_DATA, MatDialogRef, MatSnackBar} from '@angular/material';
+import {MatDialogRef, MatSnackBar} from '@angular/material';
 import {FormControl, FormGroup} from '@angular/forms';
-import {UnitBasedAbstract} from '../unit-based/unit-based.abstract';
 
 
 /**
  * @todo move all forms to here
  */
-export abstract class FormsAbstract extends UnitBasedAbstract{
+export abstract class FormsAbstract {
 
   constructor(
     public dialogRef: MatDialogRef<any>,
     public data: any,
     protected snackBar?: MatSnackBar,
   ) {
-    super();
   }
 
 

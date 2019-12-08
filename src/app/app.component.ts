@@ -74,15 +74,23 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
     this.matIconRegistry.addSvgIcon(
       'suunto',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto_logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto-logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'heart_rate',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
     );
     this.matIconRegistry.addSvgIcon(
+      'heart_pulse',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-pulse.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
       'energy',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/energy.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'power',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/power.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'arrow_up_right',
@@ -92,12 +100,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'arrow_down_right',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-down-right.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'swimmer',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/swimmer.svg')
+    );
   }
 
   async ngOnInit() {
-    // Init analytics
-    firebase.analytics();
-
     this.sideNavService.setSidenav(this.sideNav);
     this.router.events.subscribe((event: RouterEvent) => {
       switch (true) {

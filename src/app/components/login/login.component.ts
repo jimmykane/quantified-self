@@ -13,6 +13,7 @@ import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
 import * as firebase from 'firebase/app'
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
@@ -38,6 +39,7 @@ export class LoginComponent implements OnInit {
   constructor(
     public authService: AppAuthService,
     private afAuth: AngularFireAuth,
+    private afa: AngularFireAnalytics,
     public userService: UserService,
     private router: Router,
     private snackBar: MatSnackBar,
@@ -73,7 +75,7 @@ export class LoginComponent implements OnInit {
           await this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
           break;
         case SignInProviders.Google:
-          await this.authService.googleLogiWwithRedirect();
+          await this.authService.googleLoginWithRedirect();
           break;
         case SignInProviders.Facebook:
           await this.authService.facebookLoginWithRedirect();
@@ -123,7 +125,7 @@ export class LoginComponent implements OnInit {
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
           duration: 5000,
         });
-        firebase.analytics().logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous'});
+        this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous'});
         return;
       }
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous', serviceName, serviceToken)

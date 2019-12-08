@@ -11,3 +11,13 @@ mat-form-field{
 .first{
   padding-top: 1em;
 }
+
+section.item{
+  min-width: 50%;
+}
+
+
+section.container{
+  display: flex;
+  flex-wrap: wrap;
+}

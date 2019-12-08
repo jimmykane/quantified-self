@@ -11,6 +11,7 @@ import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestor
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../services/app.user.service';
 import {WindowService} from '../services/app.window.service';
+import {LocalStorageService} from '../services/storage/app.local.storage.service';
 
 @Injectable()
 export class AppAuthService implements OnDestroy {
@@ -23,7 +24,6 @@ export class AppAuthService implements OnDestroy {
     private afs: AngularFirestore,
     private userService: UserService,
     private snackBar: MatSnackBar,
-    private windowService: WindowService,
   ) {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
@@ -48,7 +48,7 @@ export class AppAuthService implements OnDestroy {
     return this.authState;
   }
 
-  googleLogiWwithRedirect() {
+  googleLoginWithRedirect() {
     const provider = new auth.GoogleAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }

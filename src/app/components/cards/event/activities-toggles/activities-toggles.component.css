@@ -1,0 +1,9 @@
+.flex{
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.flex-header{
+  max-width: 50%;
+  width: 50%;
+}

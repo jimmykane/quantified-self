@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
@@ -6,6 +6,11 @@ import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
 import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
 import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
+import {LoadingAbstract} from '../../../loading/loading.abstract';
+import {DataTableAbstract} from '../../../data-table/data-table.abstract';
+import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
+import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {EventColorService} from '../../../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -15,40 +20,72 @@ import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardLapsComponent implements OnChanges {
+export class EventCardLapsComponent extends DataTableAbstract implements OnChanges {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
+  @Input() unitSettings: UserUnitSettingsInterface;
+
+  constructor(public eventColorService: EventColorService, protected changeDetectorRef: ChangeDetectorRef) {
+    super(changeDetectorRef);
+  }
 
   ngOnChanges() {
   }
 
-  getData(activity) {
+  getData(activity: ActivityInterface) {
     return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
-      const lapObj = {
-        '#': index + 1,
-        'Type': lap.type,
-        'Start Time': lap.startDate.toLocaleTimeString(),
-        // 'End Time': lap.endDate.toLocaleTimeString(),
-        'Duration': lap.getDuration().getDisplayValue(),
-      };
-      if (lap.getDistance()) {
-        lapObj[DataDistance.type] = lap.getDistance().getDisplayValue() + lap.getDistance().getDisplayUnit();
-      }
-      if (lap.getStat(DataAscent.type)) {
-        lapObj[DataAscent.type] = lap.getStat(DataAscent.type).getDisplayValue() + ' ' + lap.getStat(DataAscent.type).getDisplayUnit();
-      }
-      if (lap.getStat(DataDescent.type)) {
-        lapObj[DataDescent.type] = lap.getStat(DataDescent.type).getDisplayValue() + ' ' + lap.getStat(DataDescent.type).getDisplayUnit();
-      }
-      if (lap.getStat(DataHeartRateAvg.type)) {
-        lapObj[DataHeartRateAvg.type] = lap.getStat(DataHeartRateAvg.type).getDisplayValue() + ' ' + lap.getStat(DataHeartRateAvg.type).getDisplayUnit();
-      }
-      lapDataArray.push(lapObj);
+      const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
+      statRowElement['#'] = index + 1;
+      statRowElement['Type'] = lap.type;
+      lapDataArray.push(statRowElement);
       return lapDataArray;
     }, []));
   }
 
-  getColumns(activity) {
-    return Object.keys(this.getData(activity).data[0]);
+  getColumnsToDisplayDependingOnScreenSize() {
+
+    // push all the rest
+    let columns = [
+      '#',
+      'Type',
+      'Duration',
+      'Distance',
+      'Ascent',
+      'Descent',
+      'Energy',
+      'Average Heart Rate',
+      'Average Speed',
+      'Average Power',
+    ];
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
+      return columns;
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
+      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
+      columns = columns.filter(column => ['Energy', 'Average Power'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+    }
+
+    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+    }
+
+    return columns
   }
 }

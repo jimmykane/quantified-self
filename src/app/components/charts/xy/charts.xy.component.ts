@@ -23,20 +23,14 @@ import {ChartHelper} from '../../cards/event/chart/chart-helper';
   styleUrls: ['./charts.xy.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsXYComponent extends DashboardChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class ChartsXYComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
   @Input() vertical = true;
   @Input() type: 'columns' | 'lines' | 'pyramids';
 
-  protected logger = Log.create('ChartColumnComponent');
+  protected logger = Log.create('ChartsXYComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
-  }
-
-  async ngAfterViewInit() {
-  }
-
-  async ngOnInit() {
   }
 
   protected createChart(): am4charts.XYChart {
@@ -61,7 +55,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.3em]${value.getDisplayType()}[/] [bold font-size: 1.4em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
+      return `[font-size: 1.2em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
     });
 
 

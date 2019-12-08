@@ -1,0 +1,49 @@
+<mat-card class="mat-elevation-z0" style="padding-bottom: 0; padding-top: 0">
+  <mat-accordion>
+    <mat-expansion-panel class="mat-elevation-z0">
+      <mat-expansion-panel-header style="padding: 0 16px 0 0">
+        <mat-panel-title>
+          <mat-icon>view_column</mat-icon>
+        </mat-panel-title>
+        <mat-panel-description style="align-items: flex-end;">
+          Detailed statistics
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+
+
+      <mat-form-field>
+        <input matInput (keyup)="applyFilter($event)" placeholder="Filter">
+      </mat-form-field>
+      <mat-table [dataSource]="data">
+        <ng-container *ngFor="let column of columns" [matColumnDef]="column">
+          <mat-header-cell *matHeaderCellDef [ngStyle]="{'color': getColumnHeaderColor(column)}">
+           {{getColumnHeaderName(column)}}
+            <span *ngIf="column == 'Difference'">
+        <mat-icon class="tooltip" matTooltip="Up to 2% of difference is acceptable, up to 5% it gets worse and more than 5% it's bad">info_outline</mat-icon>
+      </span>
+          </mat-header-cell>
+          <mat-cell *matCellDef="let row">
+      <span *ngIf="column == 'Difference' && row[column]">
+        {{ row[column].display }}
+        <span *ngIf="row[column].percent <= 2" [ngStyle]="{'color': appColors.Green}">
+        {{ row[column].percent.toFixed(1) }}%
+        </span>
+       <span *ngIf="row[column].percent > 2 && row[column].percent <= 5" [ngStyle]="{'color': appColors.Orange}">
+        {{ row[column].percent.toFixed(1) }}%
+        </span>
+        <span *ngIf="row[column].percent > 5" [ngStyle]="{'color': appColors.Red}">
+        {{ row[column].percent.toFixed(1) }}%
+        </span>
+      </span>
+            <span *ngIf="column !== 'Difference'">{{ row[column] }}</span>
+          </mat-cell>
+        </ng-container>
+        <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
+        <mat-row *matRowDef="let row; columns: columns;">
+        </mat-row>
+      </mat-table>
+
+    </mat-expansion-panel>
+  </mat-accordion>
+  <mat-divider [inset]="true"></mat-divider>
+</mat-card>

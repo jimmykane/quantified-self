@@ -1,0 +1,58 @@
+/*::ng-deep app-data-type-icon mat-icon{*/
+/*  font-size: 18px !important;*/
+/*  width: 18px !important;*/
+/*  height: 18px !important;*/
+/*  vertical-align: top !important;*/
+/*}*/
+
+/*section.item{*/
+/*  white-space:nowrap;*/
+/*  display: inline-block;*/
+/*  !*margin-right: 1em;*!*/
+/*  min-width: 25%;*/
+/*  min-height: 2.5em;*/
+/*  !*text-align: center;*!*/
+/*}*/
+
+
+mat-card.item {
+  margin: 0;
+  padding: 0;
+  max-width: 25%;
+  flex: 1 1 25%;
+  height: 25%;
+  min-width: 140px;
+  margin-bottom: 1em;
+  /*display: inline-block;*/
+  /*flex-basis: 0;*/
+}
+
+mat-card:last-child{
+  margin-bottom: 0;
+}
+
+.mat-card-title {
+  font-size: 1.2em;
+  white-space: nowrap;
+  margin: 0;
+}
+
+mat-card-subtitle {
+  font-size: 0.9em;
+  margin: 0;
+  line-height: 1.3em;
+}
+
+.mat-card-avatar {
+  height: auto;
+  width: auto;
+  padding-top: 3px;
+  /*flex-shrink: unset;*/
+}
+
+
+section {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+}

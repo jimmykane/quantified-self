@@ -10,7 +10,7 @@ export abstract class LocalStorageService implements StorageServiceInterface {
   constructor() {
   }
 
-  getNameSpace(): string{
+  getNameSpace(): string {
     return this.nameSpace;
   }
 
@@ -21,28 +21,20 @@ export abstract class LocalStorageService implements StorageServiceInterface {
     );
   }
 
-  getItem(key: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      if (!localStorage.getItem(this.nameSpace + key)){
-        reject('No item found');
-        return;
-      }
-      resolve(localStorage.getItem(this.nameSpace + key));
-    });
+  getItem(key: string): string {
+    return localStorage.getItem(this.nameSpace + key)
   }
 
-  removeItem(key: string): Promise<void> {
-    return Promise.resolve(localStorage.removeItem(this.nameSpace + key));
+  removeItem(key: string): void {
+    return localStorage.removeItem(this.nameSpace + key)
   }
 
-  getAllItems(): Promise<string[]> {
-    return new Promise((resolve, reject) => {
+  getAllItems(): string[] {
       const items = [];
       this.getAllKeys().map((localStorageKey) => {
-          items.push(localStorage.getItem(localStorageKey));
+        items.push(localStorage.getItem(localStorageKey));
       });
-      resolve(items);
-    });
+      return items;
   }
 
   getAllKeys(): string[] {
