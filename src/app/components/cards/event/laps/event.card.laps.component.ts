@@ -75,15 +75,15 @@ export class EventCardLapsComponent extends DataTableAbstract implements OnChang
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Ascent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Descent', 'Ascent', 'Descent'].indexOf(column) === -1)
     }
 
     return columns
