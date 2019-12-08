@@ -39,10 +39,6 @@ mat-card-header mat-icon {
   width: 100%;
 }
 
-::ng-deep .no-margin .mat-card-header-text{
-  margin: 0 !important;
-}
-
 ::ng-deep .mat-expansion-panel-body{
   padding: 0!important;
 }

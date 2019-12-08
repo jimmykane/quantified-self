@@ -21,18 +21,23 @@ mat-card.item {
   max-width: 25%;
   flex: 1 1 25%;
   height: 25%;
-  min-width: 140px;
+  min-width: 120px;
   margin-bottom: 1em;
   /*display: inline-block;*/
   /*flex-basis: 0;*/
 }
+
+::ng-deep .no-margin .mat-card-header-text{
+  margin-left: 8px !important;
+}
+
 
 mat-card:last-child{
   margin-bottom: 0;
 }
 
 .mat-card-title {
-  font-size: 1.2em;
+  font-size: 1.1em;
   white-space: nowrap;
   margin: 0;
 }
