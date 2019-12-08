@@ -19,3 +19,7 @@ mat-table{
   overflow: scroll;
   height: 60vh;
 }
+
+.mat-header-cell{
+  font-size: unset;
+}
