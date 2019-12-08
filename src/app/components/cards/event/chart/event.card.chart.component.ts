@@ -1005,7 +1005,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // if (this.xAxisType === XAxisTypes.Distance) {
       //   series.chart.cursor.snapToSeries = series;
       // }
-      series.yAxis.height = am4core.percent(50);
+      series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
       this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
     });
