@@ -16,8 +16,8 @@
       </mat-form-field>
       <mat-table [dataSource]="data">
         <ng-container *ngFor="let column of columns" [matColumnDef]="column">
-          <mat-header-cell *matHeaderCellDef>
-            {{ column }}
+          <mat-header-cell *matHeaderCellDef [ngStyle]="{'color': getColumnHeaderColor(column)}">
+           {{getColumnHeaderName(column)}}
             <span *ngIf="column == 'Difference'">
         <mat-icon class="tooltip" matTooltip="Up to 2% of difference is acceptable, up to 5% it gets worse and more than 5% it's bad">info_outline</mat-icon>
       </span>
