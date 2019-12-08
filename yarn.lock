@@ -4375,7 +4375,7 @@ genfun@^5.0.0:
   resolved "https://registry.yarnpkg.com/genfun/-/genfun-5.0.0.tgz#9dd9710a06900a5c4a5bf57aca5da4e52fe76537"
   integrity sha512-KGDOARWVga7+rnB3z9Sd2Letx515owfk0hSxHGuqjANb1M+x2bGZGqHLiozPsYMdM2OubeMni/Hpwmjq6qIUhA==
 
-geolib@^3.0.4:
+geolib@^3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.1.0.tgz#c2b5124105f2cc37f097700f8ec63e65c7061920"
   integrity sha512-46P2RFHUskJGVi8jE389tK2CPmpnpU+7bRr3hQks7ojU7dEqtqKbih+yB1nBXTTpUUt47VPen16oMV3P6IRQyg==
@@ -7224,15 +7224,15 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.4.7:
-  version "3.4.7"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.4.7.tgz#11f662e94521b1c8a548ec9edbfc6ef7174a5438"
-  integrity sha512-POd4vpHTy1N0AvO67yTfiXIhnho61/3PuHQvjcGSW6/I6dHC/icLIHQTfLZaLddo+05NmQ1dTJMZSAI3ArTCFg==
+quantified-self-lib@^3.4.8:
+  version "3.4.8"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.4.8.tgz#097c9de517da22b000a1211b0f5ca5102f8e950d"
+  integrity sha512-RVeikknF/Weu8lHL5kC9xgSnNwDpna4yNKxKk/r8X8GF6cebHVVYcyiv3LNwQcGuxbIHZsz+LErMEO8e0/AJog==
   dependencies:
     "@types/node" "^12.7.1"
     fast-xml-parser "^3.12.19"
     fit-file-parser "^1.6.15"
-    geolib "^3.0.4"
+    geolib "^3.1.0"
     gxparser "^1.0.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
