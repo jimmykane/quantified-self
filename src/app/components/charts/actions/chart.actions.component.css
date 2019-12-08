@@ -33,3 +33,5 @@ mat-icon.delete{
 .mat-slide-toggle{
   height: 100%;
 }
+
+.mat-menu-item .mat-icon {margin: 0}
