@@ -42,6 +42,7 @@ import * as equal from 'fast-deep-equal';
 export class SummariesComponent extends LoadingAbstract implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
+  @Input() isLoading: boolean;
 
   public rowHeight;
   public numberOfCols;
@@ -80,7 +81,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
   ngOnChanges(simpleChanges: SimpleChanges) {
     if (simpleChanges.events || simpleChanges.user) {
-      this.loading();
       this.unsibscribeAndCreateCharts();
     }
   }

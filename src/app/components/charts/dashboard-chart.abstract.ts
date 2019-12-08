@@ -19,6 +19,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() filterLowValues: boolean;
   @Input() chartDataDateRange?: SummariesChartDataDateRages;
+  @Input() isLoading: boolean;
 
   protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
@@ -30,6 +31,7 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
   }
 
   ngOnChanges(simpleChanges) {
+    this.isLoading ? this.loading() : this.loaded();
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.chartTheme && this.chart) {
@@ -39,7 +41,6 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     }
 
     if (!this.data) {
-      this.loading();
       return;
     }
 
@@ -49,7 +50,6 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
         this.data = this.filterOutLowValues(this.data)
       }
     }
-    this.loaded();
   }
 
 

@@ -72,6 +72,7 @@ import {DataTableAbstract, StatRowElement} from '../data-table/data-table.abstra
 export class EventTableComponent extends DataTableAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
+  @Input() isLoading: boolean;
   @ViewChild(MatSort, {static: true}) sort: MatSort;
   @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
   @ViewChild(MatCard, {static: true}) table: MatCard;
@@ -107,7 +108,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
 
 
   ngOnChanges(simpleChanges: SimpleChanges): void {
-    this.logger.info(`ngOnChanges`);
+    this.isLoading ? this.loading() : this.loaded();
     if (!this.events) {
       this.loading();
       return;
@@ -118,7 +119,6 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     if (this.user && simpleChanges.user) {
       this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
     }
-    this.loaded();
   }
 
   ngOnInit(): void {
@@ -235,7 +235,6 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
               scope.setExtra('data_event', mergedEvent.toJSON());
               mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
               Sentry.captureException(e);
-              this.processChanges();
               this.loaded();
             });
             this.snackBar.open('Could not merge events', null, {

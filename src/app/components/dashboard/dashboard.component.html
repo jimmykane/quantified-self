@@ -9,9 +9,10 @@
   </app-event-search>
 
   <app-summaries  *ngIf="user && user.settings.dashboardSettings.showSummaries"
+                  [isLoading]="isLoading"
                   [user]="user"
                   [events]="events">
   </app-summaries>
 
-  <app-event-table *ngIf="user" [user]="user" [events]="events"></app-event-table>
+  <app-event-table *ngIf="user" [isLoading]="isLoading" [user]="user" [events]="events"></app-event-table>
 </mat-card>
