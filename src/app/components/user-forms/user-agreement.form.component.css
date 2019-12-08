@@ -1,6 +1,5 @@
 form {
   width: 100%;
-  padding: 1%;
 }
 
 mat-form-field {
@@ -19,11 +18,16 @@ button{
 /*mat-checkbox{*/
   /*margin-bottom: 0.5em;*/
 /*}*/
+mat-checkbox{
+  /*width: 100%;*/
+  /*min-width: 100%;*/
 
+}
 mat-card{
   margin-bottom: 0.5em;
   font-size: 0.85em;
   line-height: 1.5em;
-  width: 100%;
+  /*width: 100%;*/
+  /*min-width: 100%;*/
 }
 

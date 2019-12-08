@@ -137,7 +137,7 @@ export class LoginComponent implements OnInit {
 
   private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: ServiceTokenInterface) {
     const dialogRef = this.dialog.open(UserAgreementFormComponent, {
-      width: '75vw',
+      // width: '50vw',
       disableClose: true,
       data: {
         user: user,

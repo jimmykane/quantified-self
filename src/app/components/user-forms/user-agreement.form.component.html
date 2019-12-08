@@ -9,6 +9,7 @@
         We provide all default privacy settings to private, only seen by you and you can choose what to make public.
       </mat-card>
     </mat-checkbox>
+    <mat-divider></mat-divider>
 
     <mat-checkbox formControlName="acceptDataPolicy">
       <mat-card class="mat-elevation-z0">
@@ -17,6 +18,7 @@
 
       </mat-card>
     </mat-checkbox>
+    <mat-divider></mat-divider>
 
     <mat-checkbox formControlName="acceptTrackingPolicy">
       <mat-card class="mat-elevation-z0">
@@ -24,11 +26,14 @@
       </mat-card>
     </mat-checkbox>
 
+    <mat-divider></mat-divider>
+
     <mat-checkbox formControlName="acceptDiagnosticsPolicy">
       <mat-card class="mat-elevation-z0">
         <b>You accept that: </b> Your browser can send anonymized data when errors happen to help improve the quality of the service
       </mat-card>
     </mat-checkbox>
+    <mat-divider></mat-divider>
 
     <button mat-stroked-button (click)="close($event)">Cancel</button>
     <button [disabled]="!this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My Account
