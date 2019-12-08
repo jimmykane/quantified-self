@@ -1,13 +1,10 @@
-import {
-  ChangeDetectorRef,
-  HostListener,
-  Inject,
-} from '@angular/core';
+import { ChangeDetectorRef, HostListener, Inject, Directive } from '@angular/core';
 import {LoadingAbstract} from '../loading/loading.abstract';
 
 /**
  * Class for handling screensize change and calling screen change event with no change detection
  */
+@Directive()
 export abstract class ScreenSizeAbstract extends LoadingAbstract {
 
   private screenWidth: number = window.innerWidth;

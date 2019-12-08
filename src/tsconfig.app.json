@@ -6,11 +6,10 @@
     "types": []
   },
   "angularCompilerOptions": {
-    "preserveWhitespaces": false,
-    "enableIvy": true
-  },
-  "exclude": [
-    "test.ts",
-    "**/*.spec.ts"
+    "preserveWhitespaces": false
+},
+  "files": [
+    "main.ts",
+    "polyfills.ts"
   ]
 }
