@@ -1,5 +1,5 @@
 import {ChartAbstract} from './chart.abstract';
-import {AfterViewInit, ChangeDetectorRef, Input, NgZone, OnChanges} from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Input, NgZone, OnChanges, Directive } from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summaries/summaries.component';
 import {
@@ -11,6 +11,7 @@ import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 
 
+@Directive()
 export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges, AfterViewInit {
   @Input() data: any;
   @Input() chartDataType: string;

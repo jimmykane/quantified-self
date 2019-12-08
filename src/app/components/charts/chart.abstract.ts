@@ -1,11 +1,4 @@
-import {
-  ChangeDetectorRef,
-  ElementRef,
-  Input,
-  NgZone,
-  OnDestroy,
-  ViewChild
-} from '@angular/core';
+import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Directive } from '@angular/core';
 import * as Sentry from '@sentry/browser';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {Log} from 'ng2-logger/browser';
@@ -39,6 +32,7 @@ try {
 }
 
 // @todo should dectate to implement on screen change
+@Directive()
 export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;

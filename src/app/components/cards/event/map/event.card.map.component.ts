@@ -45,7 +45,7 @@ const mapStyles = require('./map-styles.json');
 })
 
 export class EventCardMapComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @ViewChild(AgmMap, {static: false}) agmMap;
+  @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() targetUserID: string;
   @Input() user: User;
