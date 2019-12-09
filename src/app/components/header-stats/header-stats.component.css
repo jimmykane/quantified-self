@@ -28,7 +28,7 @@ mat-card.item {
 }
 
 ::ng-deep .no-margin .mat-card-header-text{
-  margin-left: 8px !important;
+  margin-left: 12px !important;
 }
 
 
