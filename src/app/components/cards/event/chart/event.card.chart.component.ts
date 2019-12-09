@@ -499,15 +499,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // yAxis.rangeChangeDuration = 500;
     yAxis.renderer.inside = false;
     yAxis.renderer.grid.template.disabled = !this.showGrid;
+    yAxis.renderer.line.strokeOpacity = 1;
+
     if (this.stackYAxes) {
-      yAxis.renderer.line.strokeOpacity = 1;
 
       // const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
       // categoryLabel.label.text = '123';
       yAxis.align = 'right';
       yAxis.marginTop = 5;
     } else {
-      yAxis.renderer.line.strokeOpacity = 1;
       yAxis.renderer.labels.template.marginLeft = 10;
       yAxis.paddingLeft = 5;
       yAxis.paddingRight = 0;
