@@ -165,14 +165,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (!this.event || !this.selectedActivities.length) {
         return;
       }
-      if (this.showGrid) {
-        this.addGrid();
-      } else {
-        this.removeGrid();
-      }
-      if (this.showLaps) {
-        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
-      }
+
 
       await this.processChanges();
       return;
@@ -224,6 +217,14 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
+      if (this.showGrid) {
+        this.addGrid();
+      } else {
+        this.removeGrid();
+      }
+      if (this.showLaps) {
+        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+      }
       this.loaded();
       // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
       // After you have all the info adjust the axis if needed
