@@ -293,6 +293,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       'Average Heart Rate',
       'Average Speed',
       'Average Power',
+      'VO2 Max',
       'Device Names',
       'Actions'
     ];
@@ -306,23 +307,23 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Energy', 'Average Power'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Descent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
     }
 
     return columns
