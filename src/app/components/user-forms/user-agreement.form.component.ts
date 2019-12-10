@@ -104,7 +104,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open(`Thanks for registering ${dbUser.displayName || 'Anonymous'}`, null, {
         duration: 2000,
       });
-      this.afa.logEvent('sign_up', {method: this.signInMethod});
+      await this.afa.logEvent('sign_up', {method: this.signInMethod});
     } catch (e) {
       // debugger;
       this.snackBar.open('Could not update user', null, {

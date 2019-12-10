@@ -50,6 +50,7 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataTableAbstract, StatRowElement} from '../data-table/data-table.abstract';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
@@ -101,6 +102,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
               private actionButtonService: ActionButtonService,
               private deleteConfirmationBottomSheet: MatBottomSheet,
               private userService: UserService,
+              private afa: AngularFireAnalytics,
               changeDetector: ChangeDetectorRef,
               private router: Router, private  datePipe: DatePipe) {
     super(changeDetector);
@@ -226,6 +228,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
           const mergedEvent = EventUtilities.mergeEvents(events);
           try {
             await this.eventService.setEvent(this.user, mergedEvent);
+            await this.afa.logEvent('merge_events');
             await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
             this.snackBar.open('Events merged', null, {
               duration: 2000,
@@ -264,10 +267,11 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
             this.selection.selected.map(selected => selected.Event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
             this.selection.clear();
             await Promise.all(deletePromises);
-            this.processChanges();
+            await this.afa.logEvent('delete_events');
             this.snackBar.open('Events deleted', null, {
               duration: 2000,
             });
+            this.loaded();
           });
           return;
 

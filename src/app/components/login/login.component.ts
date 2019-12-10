@@ -125,7 +125,7 @@ export class LoginComponent implements OnInit {
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
           duration: 5000,
         });
-        this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous'});
+        await this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous'});
         return;
       }
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous', serviceName, serviceToken)
