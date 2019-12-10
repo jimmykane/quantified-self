@@ -1215,7 +1215,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private destroyLegendParent() {
     return this.zone.runOutsideAngular(() => {
-      if (this.chart && this.chart.legend) {
+      if (this.chart && this.chart.legend && this.chart.legend.parent) {
         this.chart.legend.parent.dispose();
       }
     });
