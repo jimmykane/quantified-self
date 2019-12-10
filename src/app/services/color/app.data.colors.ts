@@ -2,16 +2,19 @@ import {AppColors} from './app.colors';
 
 export enum AppDataColors {
   'Altitude' = AppColors.Green,
+  'Altitude_0' = AppColors.Green,
+  'Altitude_1' = AppColors.LightGreen,
   'Power' = AppColors.Orange,
+  'Power_0' = AppColors.Orange,
+  'Power_1' = AppColors.Blue,
+  'Power_2' = AppColors.Green,
+  'Power_3' = AppColors.Red,
   'Pace' = AppColors.Blue,
+  'Pace_0' = AppColors.Blue,
+  'Pace_1' = AppColors.Orange,
   'Heart Rate' = AppColors.Red,
+  'Heart Rate_0' = AppColors.Red,
+  'Heart Rate_1' = AppColors.Purple,
+  'Speed' = AppColors.DeepBlue,
   // 'Speed' = AppColors.DeepBlue,
-  // 'Speed' = AppColors.DeepBlue,
-
-  // Pink = '#ff7fc8',
-  // Purple = '#ba68c8',
-  // PurpleBlue = '#889bc8',
-  // Red = '#ff3f07',
-  // LightGreen = '#bcf15b',
-  // DeepBlue = '#00688b',
 }

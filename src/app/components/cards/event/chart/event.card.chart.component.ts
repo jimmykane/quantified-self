@@ -490,7 +490,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
 
 
-    if (stream.type === DataPower.type){
+    if (stream.type === DataPower.type) {
       yAxis.extraMax = this.extraMaxForPower;
     }
 
@@ -585,14 +585,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 ? '' : activity.creator.name}[/]`;
 
     series.adapter.add('fill', (fill, target) => {
-      return this.selectedActivities.length === 1 ?
-        AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target))
-        : this.getFillColor(target.chart, target.chart.series.indexOf(target));
+      return this.getSeriesColor(target);
     });
     series.adapter.add('stroke', (fill, target) => {
-      return this.selectedActivities.length === 1 ?
-        AppDataColors[target.name] || this.getFillColor(target.chart, target.chart.series.indexOf(target))
-        : this.getFillColor(target.chart, target.chart.series.indexOf(target));
+      return this.getSeriesColor(target);
     });
 
     series.strokeWidth = this.strokeWidth;
@@ -801,7 +797,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private getDataTypesToRequest(): string[] {
-    if (this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1){
+    if (this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1) {
       return this.getNonUnitBasedDataTypes().concat([DataSpeed.type]);// Inject speed always for pace and swim pace till this is refactored
     }
     return this.getNonUnitBasedDataTypes();
@@ -986,6 +982,16 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = false);
   }
 
+  private getSeriesColor(series: am4charts.XYSeries) {
+    // console.log(target.name)
+    // console.log(this.getSameNameSeries(target).indexOf(target));
+    if (this.getSameNameSeries(series).length < 2) {
+      return AppDataColors[series.name] || this.getFillColor(series.chart, series.chart.series.indexOf(series));
+    }
+
+    return AppDataColors[`${series.name}_${this.getSameNameSeries(series).indexOf(series)}`] || this.getFillColor(series.chart, series.chart.series.indexOf(series));
+  }
+
 
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
     // Shown
@@ -1052,10 +1058,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
   }
 
+  protected getSameNameSeries(series: am4charts.XYSeries): am4charts.XYSeries[] {
+    return series.chart.series.values.filter(serie => serie.name === series.name);
+  }
+
   protected getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
     return chart.series.values
       .filter(series => !series.hidden);
   }
+
 
   // This helps to goup series vy providing the same name (type) for things that should have the same axis
   protected getSeriesName(name: string) {
