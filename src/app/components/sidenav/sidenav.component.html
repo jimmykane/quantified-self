@@ -50,7 +50,7 @@
   <mat-list-item
     routerLinkActive="mat-elevation-z0 active"
     routerLink="/services" (click)="sideNav.close();">
-    <mat-icon>change_history</mat-icon>
+    <mat-icon>sync</mat-icon>
     <span>Services</span>
   </mat-list-item>
 
@@ -78,6 +78,13 @@
     <mat-icon>bug_report</mat-icon>
     <span>File a bug</span><span class="fill-space"></span>
     <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
+
+  <mat-divider></mat-divider>
+
+  <mat-list-item routerLink="/policies">
+    <mat-icon>policy</mat-icon>
+    <span>Policies</span><span class="fill-space"></span>
   </mat-list-item>
 
   <mat-divider></mat-divider>

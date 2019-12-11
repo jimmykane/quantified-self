@@ -1,0 +1,14 @@
+mat-card.outer{
+  padding: 0;
+  padding-bottom: 1em;
+  margin: 0;
+  min-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+
+mat-card.inner{
+  flex: 1 0 auto;
+  margin: 1em;
+}
