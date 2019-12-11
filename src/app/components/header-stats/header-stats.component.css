@@ -18,7 +18,7 @@
 mat-card.item {
   margin: 0;
   padding: 0;
-  max-width: 25%;
+  /*max-width: 25%;*/
   flex: 1 1 25%;
   height: 25%;
   min-width: 120px;
@@ -60,4 +60,10 @@ section {
   display: flex;
   flex-wrap: wrap;
   flex-direction: row;
+}
+
+
+section::after {
+  content: '';
+  flex: auto;
 }
