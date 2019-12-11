@@ -225,15 +225,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (this.showLaps) {
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
+      // Store at local storage the visible / non visible series
+      series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
       this.loaded();
-      // this.chart.xAxes.getIndex(0).title.text = this.xAxisType;
-      // After you have all the info adjust the axis if needed
-      // if (this.xAxisType === XAxisTypes.Distance){
-      //   (<am4charts.ValueAxis>this.chart.xAxes.getIndex(0)).max = this.distanceAxesForActivitiesMap.values(() =>{
-      //   debugger;
-      // })
-      //   this.chart.xAxes.getIndex(0).strictMinMax = true;
-      // }
     });
   }
 
