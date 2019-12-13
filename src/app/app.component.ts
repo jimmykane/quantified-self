@@ -72,38 +72,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private windowService: WindowService,
     private snackBar: MatSnackBar) {
 
-    this.matIconRegistry.addSvgIcon(
-      'suunto',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto-logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'heart_rate',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'heart_pulse',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-pulse.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'energy',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/energy.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'power',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/power.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'arrow_up_right',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-up-right.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'arrow_down_right',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-down-right.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'swimmer',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/swimmer.svg')
-    );
+    this.addIconsToRegistry();
   }
 
   async ngOnInit() {
@@ -174,6 +143,57 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
     });
 
+  }
+
+  private addIconsToRegistry() {
+    this.matIconRegistry.addSvgIcon(
+      'suunto',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto-logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'heart_rate',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'heart_pulse',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-pulse.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'energy',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/energy.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'power',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/power.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'arrow_up_right',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-up-right.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'arrow_down_right',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-down-right.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'swimmer',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/swimmer.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'google_logo_light',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/google_logo_light.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'facebook_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/facebook_logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'twitter_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/twitter_logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'github_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/github_logo.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {
