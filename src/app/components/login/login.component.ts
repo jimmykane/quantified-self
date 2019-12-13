@@ -159,7 +159,8 @@ export class LoginComponent implements OnInit {
 
   private showPhoneNumberForm() {
     const dialogRef = this.dialog.open(PhoneFormComponent, {
-      width: '75vw',
+      width: '86vw',
+      maxWidth: '86vw',
       disableClose: false,
       data: {},
     });
