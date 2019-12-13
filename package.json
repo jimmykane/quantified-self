@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "5.0.13-Bisbiki",
+  "version": "5.0.14-Bisbiki",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
