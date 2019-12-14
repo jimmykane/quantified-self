@@ -41,8 +41,21 @@
           [latitude]="activityMapData.positions[0].latitudeDegrees"
           [longitude]="activityMapData.positions[0].longitudeDegrees">
         </agm-marker>
+
+
+        <!-- marker for cursor -->
+        <agm-marker
+          *ngIf="cursorMarkerPosition?.activity === activityMapData.activity"
+          [iconUrl]="getCursorMarkerIcon(activityMapData.activity)"
+          [zIndex]="9999"
+          [latitude]="cursorMarkerPosition.latitudeDegrees"
+          [longitude]="cursorMarkerPosition.longitudeDegrees">
+        </agm-marker>
+
         <!-- Polyline for the activity -->
         <agm-polyline
+          (lineMouseMove)="lineMouseMove($event, activityMapData.activity)"
+          (lineMouseOut)="lineMouseOut($event, activityMapData.activity)"
           [strokeColor]="activityMapData.strokeColor"
           [strokeWeight]="strokeWidth">
           <!-- Points -->

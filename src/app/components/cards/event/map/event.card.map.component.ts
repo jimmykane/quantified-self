@@ -69,6 +69,8 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     style: 0
   };
 
+  public cursorMarkerPosition: { latitudeDegrees: number, longitudeDegrees: number, activity: ActivityInterface };
+
   public rotateControlOptions: RotateControlOptions = {
     position: ControlPosition.LEFT_BOTTOM,
   };
@@ -347,6 +349,18 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     }
   }
 
+  getCursorMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
+      scale: 1,
+      anchor: {x: 12, y: 12}
+    }
+  }
+
   // @todo make prop
   getLabel(text) {
     return {
@@ -360,15 +374,17 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     return mapStyles[mapTheme]
   }
 
-  // lineClick(event: PolyMouseEvent, points: PointInterface[]) {
-  //   // const nearestPoint = (new GeoLibAdapter()).getNearestPointToPosition({
-  //   //   latitudeDegrees: event.latLng.lat(),
-  //   //   longitudeDegrees: event.latLng.lng(),
-  //   // }, positions);
-  //   // if (nearestPoint) {
-  //   //   this.clickedPoint = nearestPoint;
-  //   // }
-  // }
+  lineMouseMove(event: PolyMouseEvent, activity: ActivityInterface) {
+    this.cursorMarkerPosition = {
+      activity: activity,
+      latitudeDegrees: event.latLng.lat(),
+      longitudeDegrees: event.latLng.lng()
+    }
+  }
+
+  lineMouseOut(event: PolyMouseEvent, activity: ActivityInterface) {
+    this.cursorMarkerPosition = null;
+  }
 
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
     return Array.from(map.values());
