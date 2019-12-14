@@ -45,11 +45,11 @@
 
         <!-- marker for cursor -->
         <agm-marker
-          *ngIf="cursorMarkerPosition?.activity === activityMapData.activity"
+          *ngIf="activitiesCursors.get(activityMapData.activity.getID())"
           [iconUrl]="getCursorMarkerIcon(activityMapData.activity)"
           [zIndex]="9999"
-          [latitude]="cursorMarkerPosition.latitudeDegrees"
-          [longitude]="cursorMarkerPosition.longitudeDegrees">
+          [latitude]="activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees"
+          [longitude]="activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees">
         </agm-marker>
 
         <!-- Polyline for the activity -->

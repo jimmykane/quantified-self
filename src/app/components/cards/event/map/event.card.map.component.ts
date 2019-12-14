@@ -69,7 +69,8 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     style: 0
   };
 
-  public cursorMarkerPosition: { latitudeDegrees: number, longitudeDegrees: number, activity: ActivityInterface };
+  /** key is the activity id **/
+  public activitiesCursors: Map<string, {latitudeDegrees: number, longitudeDegrees: number}> = new Map();
 
   public rotateControlOptions: RotateControlOptions = {
     position: ControlPosition.LEFT_BOTTOM,
@@ -375,15 +376,14 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   }
 
   lineMouseMove(event: PolyMouseEvent, activity: ActivityInterface) {
-    this.cursorMarkerPosition = {
-      activity: activity,
+    this.activitiesCursors.set(activity.getID(), {
       latitudeDegrees: event.latLng.lat(),
       longitudeDegrees: event.latLng.lng()
-    }
+    })
   }
 
   lineMouseOut(event: PolyMouseEvent, activity: ActivityInterface) {
-    this.cursorMarkerPosition = null;
+    this.activitiesCursors.delete(activity.getID());
   }
 
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
