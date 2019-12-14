@@ -32,6 +32,8 @@ import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../../services/app.user.service';
 import {LoadingAbstract} from '../../../loading/loading.abstract';
+import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
+import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
 
 declare function require(moduleName: string): any;
 
@@ -70,7 +72,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   };
 
   /** key is the activity id **/
-  public activitiesCursors: Map<string, {latitudeDegrees: number, longitudeDegrees: number}> = new Map();
+  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
   public rotateControlOptions: RotateControlOptions = {
     position: ControlPosition.LEFT_BOTTOM,
@@ -86,6 +88,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     private changeDetectorRef: ChangeDetectorRef,
     private eventService: EventService,
     private userService: UserService,
+    private activityCursorService: ActivityCursorService,
     public eventColorService: EventColorService) {
     super(changeDetectorRef);
   }
@@ -131,7 +134,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     this.noMapData = false;
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
-    if (!this.selectedActivities.length){
+    if (!this.selectedActivities.length) {
       this.noMapData = true;
       this.loaded();
       return;
@@ -156,14 +159,15 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
           }
 
           // Start building map data
-          const latData = streams[0].getNumericData();
-          const longData = streams[1].getNumericData();
+          const latData = streams[0].getStreamDataByTime(activity.startDate, true);
+          const longData = streams[1].getStreamDataByTime(activity.startDate, true);
 
           // If no numeric data for any reason
           const positions = latData.reduce((latLongArray, value, index) => {
             latLongArray[index] = {
-              latitudeDegrees: latData[index],
-              longitudeDegrees: longData[index],
+              latitudeDegrees: latData[index].value,
+              longitudeDegrees: longData[index].value,
+              time: longData[index].time
             };
             return latLongArray
           }, []).filter((position) => {
@@ -205,67 +209,6 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
         }))
     })
   }
-
-  // private cacheNewData(): MapData[] {
-  //   const t0 = performance.now();
-  //   const activitiesMapData = [];
-  //   this.selectedActivities.forEach((activity) => {
-  //     let activityPoints: PointInterface[];
-  //     if (this.showData) {
-  //       activityPoints = activity.getPointsInterpolated();
-  //     } else {
-  //       activityPoints = activity.getPoints()
-  //     }
-  //     activityPoints = activityPoints.filter((point) => point.getPosition());
-  //     let lowNumberOfSatellitesPoints: PointInterface[] = [];
-  //     if (this.showDataWarnings) {
-  //       lowNumberOfSatellitesPoints = activityPoints.filter((point) => {
-  //         const numberOfSatellitesData = point.getDataByType(DataNumberOfSatellites.type);
-  //         if (!numberOfSatellitesData) {
-  //           return false
-  //         }
-  //         return numberOfSatellitesData.getValue() < 7;
-  //       });
-  //     }
-  //     // If the activity has no positions skip
-  //     if (!activityPoints.length) {
-  //       return;
-  //     }
-  //     // Check for laps with position
-  //     const lapsWithPosition = activity.getLaps()
-  //       .filter((lap) => {
-  //         if (this.showLaps && (lap.type === LapTypes.AutoLap || lap.type === LapTypes.Distance)) {
-  //           return true;
-  //         }
-  //         if (this.showManualLaps && lap.type === LapTypes.Manual) {
-  //           return true;
-  //         }
-  //         return false;
-  //       })
-  //       .reduce((lapsArray, lap) => {
-  //         const lapPoints = this.event.getPointsWithPosition(lap.startDate, lap.endDate, [activity]);
-  //         if (lapPoints.length) {
-  //           lapsArray.push({
-  //             lap: lap,
-  //             lapPoints: lapPoints,
-  //             lapEndPoint: lapPoints[lapPoints.length - 1],
-  //           })
-  //         }
-  //         return lapsArray;
-  //       }, []);
-  //     // Create the object
-  //     activitiesMapData.push({
-  //       activity: activity,
-  //       positions: activityPoints,
-  //       lowNumberOfSatellitesPoints: lowNumberOfSatellitesPoints,
-  //       activityStartPoint: activityPoints[0],
-  //       lapsWithPosition: lapsWithPosition,
-  //     });
-  //   });
-  //   const t1 = performance.now();
-  //   this.logger.info(`Parsed activityMapData after ${t1 - t0}ms`);
-  //   return activitiesMapData;
-  // }
 
   getBounds(): LatLngBoundsLiteral {
     const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
@@ -375,15 +318,29 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     return mapStyles[mapTheme]
   }
 
-  lineMouseMove(event: PolyMouseEvent, activity: ActivityInterface) {
-    this.activitiesCursors.set(activity.getID(), {
-      latitudeDegrees: event.latLng.lat(),
-      longitudeDegrees: event.latLng.lng()
-    })
+  lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
+    const nearest = (new GeoLibAdapter()).findNearest({
+      latitude: event.latLng.lat(),
+      longitude: event.latLng.lng()
+    }, activityMapData.positions.map(a => { return {latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time}}));
+
+    if (!nearest) {
+      return;
+    }
+
+    // debugger;
+    this.activityCursorService.setCursor({
+      activityID: activityMapData.activity.getID(),
+      time: nearest.time,
+    });
+    this.activitiesCursors.set(activityMapData.activity.getID(), {
+      latitudeDegrees: nearest.latitude,
+      longitudeDegrees: nearest.longitude
+    });
   }
 
-  lineMouseOut(event: PolyMouseEvent, activity: ActivityInterface) {
-    this.activitiesCursors.delete(activity.getID());
+  lineMouseOut(event: PolyMouseEvent, activityMapData: MapData) {
+    // this.activitiesCursors.delete(activityMapData.activity.getID());
   }
 
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {

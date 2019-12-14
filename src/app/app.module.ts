@@ -36,7 +36,7 @@ import {WindowService} from './services/app.window.service';
 import {AgmCoreModule} from '@agm/core';
 import {ANALYTICS_COLLECTION_ENABLED, AngularFireAnalyticsModule, APP_NAME, APP_VERSION} from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
-import {DataCursorService} from './services/data-cursor/data-cursor.service';
+import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
 
 declare function require(moduleName: string): any;
 
@@ -105,7 +105,7 @@ export class SentryErrorHandler implements ErrorHandler {
     AppInfoService,
     WindowService,
     ActivitySelectionService,
-    DataCursorService,
+    ActivityCursorService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},
