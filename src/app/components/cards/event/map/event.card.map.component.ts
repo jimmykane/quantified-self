@@ -319,16 +319,17 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   }
 
   lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
-    const nearest = (new GeoLibAdapter()).findNearest({
+    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()
-    }, activityMapData.positions.map(a => { return {latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time}}));
+    }, activityMapData.positions.map(a => {
+      return {latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time}
+    }));
 
     if (!nearest) {
       return;
     }
 
-    // debugger;
     this.activityCursorService.setCursor({
       activityID: activityMapData.activity.getID(),
       time: nearest.time,
@@ -389,11 +390,11 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
 
 export interface MapData {
   activity: ActivityInterface;
-  positions: DataPositionInterface[];
+  positions: { latitudeDegrees: number, longitudeDegrees: number, time: number }[];
   strokeColor: string;
   laps: {
     lap: LapInterface,
-    lapPosition: DataPositionInterface,
+    lapPosition: { latitudeDegrees: number, longitudeDegrees: number, time: number },
     symbol: any,
   }[]
 }
