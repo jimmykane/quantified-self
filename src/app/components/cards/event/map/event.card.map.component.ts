@@ -74,6 +74,9 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   /** key is the activity id **/
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
+  private activitiesCursorSubscription: Subscription;
+
+
   public rotateControlOptions: RotateControlOptions = {
     position: ControlPosition.LEFT_BOTTOM,
   };
@@ -139,6 +142,23 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
       this.loaded();
       return;
     }
+
+    // Set the cursor
+    this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
+      cursors.forEach(cursor => {
+        const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
+        if (cursorActivityMapData) {
+          const position = cursorActivityMapData.positions.find(p => p.time === cursor.time);
+          if (position) {
+            this.activitiesCursors.set(cursor.activityID, {
+              latitudeDegrees: position.latitudeDegrees,
+              longitudeDegrees: position.longitudeDegrees
+            });
+          }
+        }
+      })
+    });
+
     this.selectedActivities.forEach((activity) => {
       this.streamsSubscriptions.push(this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .subscribe((streams) => {
@@ -334,10 +354,6 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
       activityID: activityMapData.activity.getID(),
       time: nearest.time,
     });
-    this.activitiesCursors.set(activityMapData.activity.getID(), {
-      latitudeDegrees: nearest.latitude,
-      longitudeDegrees: nearest.longitude
-    });
   }
 
   lineMouseOut(event: PolyMouseEvent, activityMapData: MapData) {
@@ -372,6 +388,9 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     this.streamsSubscriptions.forEach((streamsSubscription) => {
       streamsSubscription.unsubscribe()
     });
+    if (this.activitiesCursorSubscription) {
+      this.activitiesCursorSubscription.unsubscribe();
+    }
   }
 
   private resizeMapToBounds() {

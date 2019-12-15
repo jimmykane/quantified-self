@@ -781,7 +781,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       });
     } else {
       data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000, true); // Default unix timestamp is at 1 hours its kinda hacky but easy
-      console.log(data)
     }
 
     // filter if needed (this operation costs)
