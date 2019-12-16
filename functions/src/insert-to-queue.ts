@@ -19,6 +19,8 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
   const userName = req.query.username ||  req.body.username;
   const workoutID = req.query.workoutid ||  req.body.workoutid;
 
+  console.log(`Inserting to queue or processing ${workoutID} for ${userName}`);
+
   try {
     // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
     // @todo ask about this
