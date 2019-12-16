@@ -55,6 +55,7 @@
         <!-- Polyline for the activity -->
         <agm-polyline
           (lineMouseMove)="lineMouseMove($event, activityMapData)"
+          (lineMouseDown)="lineMouseMove($event, activityMapData)"
           (lineMouseOut)="lineMouseOut($event, activityMapData)"
           [strokeColor]="activityMapData.strokeColor"
           [strokeWeight]="strokeWidth">

@@ -34,6 +34,7 @@ import {UserService} from '../../../../services/app.user.service';
 import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
 import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
+import {debounceTime} from 'rxjs/operators';
 
 declare function require(moduleName: string): any;
 
@@ -144,7 +145,9 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     }
 
     // Set the cursor
-    this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
+    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
+      debounceTime(200)
+    ).subscribe((cursors) => {
       this.logger.info(`Cursor on subscription`);
       cursors.forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
@@ -340,7 +343,8 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     return mapStyles[mapTheme]
   }
 
-  lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
+  async lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
+    this.activityCursorService.clear();
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()

@@ -19,7 +19,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import {combineLatest, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
 import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
-import {map, take} from 'rxjs/operators';
+import {debounceTime, map, take} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
@@ -200,8 +200,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
 
     // Listen to cursor changes
-    this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
-      this.logger.info(`Cursors on subscribe`, cursors);
+    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
+      debounceTime(200)
+    ).subscribe((cursors) => {
+      this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
         this.activitiesCursors = [];
         return;

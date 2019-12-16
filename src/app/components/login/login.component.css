@@ -9,7 +9,9 @@ mat-grid-list{
 button{
   height: 48px;
   min-width: 50%;
-  width: 50%;
+  /*width: 50%;*/
+  max-width: 80%;
+
   text-align: left;
 }
 
