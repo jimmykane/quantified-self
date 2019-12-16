@@ -195,6 +195,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
     }
 
+    // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
       if (!cursors || !cursors.length || !this.chart) {
         return;
@@ -214,10 +215,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           }
         })
       })
-
     });
 
 
+    // Subscribe to the data
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
         this.getDataTypesToRequest(), //
@@ -297,10 +298,29 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.behavior = this.chartCursorBehaviour;
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
-    // Sticky
-    // chart.cursor.events.on('cursorpositionchanged', (event) => {
-    //   chart.cursor.triggerMove(event.target.point, 'soft');
-    // });
+
+
+    chart.cursor.events.on('cursorpositionchanged', (event) => {
+      this.logger.info(`Cursor position changed`);
+      let xAxis;
+      switch (this.xAxisType) {
+        case XAxisTypes.Time:
+          xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
+          this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+            activityID: activity.getID(), time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime()
+          }));
+          break;
+        case XAxisTypes.Duration:
+          xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
+          this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+            activityID: activity.getID(), time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000)
+          }));
+          break;
+      }
+
+      // Sticky
+      // chart.cursor.triggerMove(event.target.point, 'soft');
+    });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
       const range = ev.target.xRange;
