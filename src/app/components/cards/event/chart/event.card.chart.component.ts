@@ -2,12 +2,13 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
-  Component, HostListener,
+  Component,
   Input,
   NgZone,
   OnChanges,
   OnDestroy,
-  OnInit, SimpleChanges,
+  OnInit,
+  SimpleChanges,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
@@ -22,10 +23,7 @@ import {map, take} from 'rxjs/operators';
 import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
-import {
-  ChartCursorBehaviours,
-  XAxisTypes
-} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {ChartCursorBehaviours, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
@@ -40,17 +38,24 @@ import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
 import {
   DataSpeed,
   DataSpeedFeetPerMinute,
-  DataSpeedFeetPerSecond, DataSpeedKilometersPerHour,
-  DataSpeedMetersPerMinute, DataSpeedMilesPerHour
+  DataSpeedFeetPerSecond,
+  DataSpeedKilometersPerHour,
+  DataSpeedMetersPerMinute,
+  DataSpeedMilesPerHour
 } from 'quantified-self-lib/lib/data/data.speed';
 import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
 import {AppDataColors} from '../../../../services/color/app.data.colors';
 import {WindowService} from '../../../../services/app.window.service';
 import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
 import {
-  DataVerticalSpeed, DataVerticalSpeedFeetPerHour, DataVerticalSpeedFeetPerMinute,
-  DataVerticalSpeedFeetPerSecond, DataVerticalSpeedKilometerPerHour, DataVerticalSpeedMetersPerHour,
-  DataVerticalSpeedMetersPerMinute, DataVerticalSpeedMilesPerHour
+  DataVerticalSpeed,
+  DataVerticalSpeedFeetPerHour,
+  DataVerticalSpeedFeetPerMinute,
+  DataVerticalSpeedFeetPerSecond,
+  DataVerticalSpeedKilometerPerHour,
+  DataVerticalSpeedMetersPerHour,
+  DataVerticalSpeedMetersPerMinute,
+  DataVerticalSpeedMilesPerHour
 } from 'quantified-self-lib/lib/data/data.vertical-speed';
 import {DataPower} from 'quantified-self-lib/lib/data/data.power';
 import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
@@ -69,6 +74,10 @@ import {DataAirPower} from 'quantified-self-lib/lib/data/data.air-power';
 import {UserService} from '../../../../services/app.user.service';
 import {ChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
 import {User} from 'quantified-self-lib/lib/users/user';
+import {
+  ActivityCursorInterface,
+  ActivityCursorService
+} from '../../../../services/activity-cursor/activity-cursor.service';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
@@ -110,6 +119,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   public isLoading: boolean;
 
   private streamsSubscription: Subscription;
+  private activitiesCursorSubscription: Subscription;
+  private activitiesCursors: ActivityCursorInterface[] = [];
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventCardChartComponent');
 
@@ -118,6 +129,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               private windowService: WindowService,
               private eventService: EventService,
               private chartSettingsLocalStorageService: ChartSettingsLocalStorageService,
+              private activityCursorService: ActivityCursorService,
               private eventColorService: EventColorService) {
     super(zone, changeDetector);
   }
@@ -186,6 +198,42 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         );
       }
     }
+
+    // Listen to cursor changes
+    this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
+      this.logger.info(`Cursors on subscribe`, cursors);
+      if (!cursors || !cursors.length || !this.chart) {
+        this.activitiesCursors = [];
+        return;
+      }
+
+      cursors.forEach((cursor) => {
+        const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
+
+        // Do not trigger update
+        if (activityCursor && (activityCursor.time === cursor.time)){
+          return;
+        }
+
+        this.chart.xAxes.values.forEach(xAxis => {
+          switch (this.xAxisType) {
+            case XAxisTypes.Time:
+              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'soft');
+              break;
+            case XAxisTypes.Duration:
+              const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
+              if (cursorActivity) {
+                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'soft');
+              }
+              break;
+          }
+        })
+      });
+      this.activitiesCursors = cursors;
+    });
+
+
+    // Subscribe to the data
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
         this.getDataTypesToRequest(), //
@@ -265,10 +313,31 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.cursor.behavior = this.chartCursorBehaviour;
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
-    // Sticky
-    // chart.cursor.events.on('cursorpositionchanged', (event) => {
-    //   chart.cursor.triggerMove(event.target.point, 'soft');
-    // });
+
+
+    chart.cursor.events.on('cursorpositionchanged', (event) => {
+      this.logger.info(`Cursor position changed ${event.target.point.x} ${event.target.point.y}`);
+      let xAxis;
+      switch (this.xAxisType) {
+        case XAxisTypes.Time:
+          xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
+          this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+            activityID: activity.getID(),
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime()
+          }));
+          break;
+        case XAxisTypes.Duration:
+          xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
+          this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+            activityID: activity.getID(),
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000)
+          }));
+          break;
+      }
+
+      // Sticky
+      // chart.cursor.triggerMove(event.target.point, 'soft');
+    });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
       const range = ev.target.xRange;
@@ -883,7 +952,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   protected getSubscriptions(): Subscription[] {
-    return this.streamsSubscription ? [this.streamsSubscription] : [];
+    return [this.streamsSubscription, this.activitiesCursorSubscription];
   }
 
   private getSeriesRangeLabelContainer(series): am4core.Container | null {
