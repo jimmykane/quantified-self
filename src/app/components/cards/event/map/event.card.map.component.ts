@@ -72,7 +72,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   };
 
   /** key is the activity id **/
-  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number, nearest?: {latitudeDegrees: number, longitudeDegrees: number} }> = new Map();
+  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
   private activitiesCursorSubscription: Subscription;
 
