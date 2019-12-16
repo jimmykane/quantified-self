@@ -74,7 +74,10 @@ import {DataAirPower} from 'quantified-self-lib/lib/data/data.air-power';
 import {UserService} from '../../../../services/app.user.service';
 import {ChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
+import {
+  ActivityCursorInterface,
+  ActivityCursorService
+} from '../../../../services/activity-cursor/activity-cursor.service';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
@@ -117,6 +120,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
+  private activitiesCursors: ActivityCursorInterface[] = [];
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventCardChartComponent');
 
@@ -197,10 +201,20 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
+      this.logger.info(`Cursors on subscribe`, cursors);
       if (!cursors || !cursors.length || !this.chart) {
+        this.activitiesCursors = [];
         return;
       }
+
       cursors.forEach((cursor) => {
+        const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
+
+        // Do not trigger update
+        if (activityCursor && (activityCursor.time === cursor.time)){
+          return;
+        }
+
         this.chart.xAxes.values.forEach(xAxis => {
           switch (this.xAxisType) {
             case XAxisTypes.Time:
@@ -214,7 +228,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               break;
           }
         })
-      })
+      });
+      this.activitiesCursors = cursors;
     });
 
 
@@ -301,19 +316,21 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
-      this.logger.info(`Cursor position changed`);
+      this.logger.info(`Cursor position changed ${event.target.point.x} ${event.target.point.y}`);
       let xAxis;
       switch (this.xAxisType) {
         case XAxisTypes.Time:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
           this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-            activityID: activity.getID(), time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime()
+            activityID: activity.getID(),
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime()
           }));
           break;
         case XAxisTypes.Duration:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
           this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-            activityID: activity.getID(), time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000)
+            activityID: activity.getID(),
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000)
           }));
           break;
       }

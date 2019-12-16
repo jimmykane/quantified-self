@@ -1,16 +1,18 @@
 import {Injectable} from '@angular/core';
 import {BehaviorSubject} from 'rxjs';
+import {Log} from 'ng2-logger/browser';
 
 @Injectable()
 export class ActivityCursorService {
-
   public cursors: BehaviorSubject<ActivityCursorInterface[]> = new BehaviorSubject([]);
+
+  private logger = Log.create('ActivityCursorService');
 
   constructor() {
   }
 
   public setCursor(cursor: ActivityCursorInterface) {
-    const activityCursor = this.cursors.getValue().find(cursor => cursor.activityID === cursor.activityID);
+    const activityCursor = this.cursors.getValue().find(c => c.activityID === cursor.activityID);
     // If there is no current cursor then justs add it and return
     if (!activityCursor) {
       this.cursors.getValue().push(cursor);
@@ -19,6 +21,7 @@ export class ActivityCursorService {
     }
     // Noop if the cursor is the same
     if (activityCursor.time === cursor.time) {
+      this.logger.info(`Noop for ${cursor.time}`);
       return;
     }
     // Now update the time

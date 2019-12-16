@@ -72,7 +72,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
   };
 
   /** key is the activity id **/
-  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
+  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number, nearest?: {latitudeDegrees: number, longitudeDegrees: number} }> = new Map();
 
   private activitiesCursorSubscription: Subscription;
 
@@ -145,22 +145,20 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
 
     // Set the cursor
     this.activitiesCursorSubscription = this.activityCursorService.cursors.subscribe((cursors) => {
-      // debugger;
-      this.logger.info(`Cursor on subscription`)
+      this.logger.info(`Cursor on subscription`);
       cursors.forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
         if (cursorActivityMapData) {
-          // const position = cursorActivityMapData.positions.find(p => p.time === cursor.time);
           const position = cursorActivityMapData.positions.reduce((prev, curr) => Math.abs(curr.time -  cursor.time) < Math.abs(prev.time -  cursor.time) ? curr : prev);
           if (position) {
             this.activitiesCursors.set(cursor.activityID, {
               latitudeDegrees: position.latitudeDegrees,
               longitudeDegrees: position.longitudeDegrees
             });
-            this.changeDetectorRef.detectChanges();
           }
         }
-      })
+      });
+      this.changeDetectorRef.detectChanges();
     });
 
     this.selectedActivities.forEach((activity) => {
