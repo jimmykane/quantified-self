@@ -34,6 +34,10 @@ export class ActivityCursorService {
     this.cursors.getValue().splice(index, 1);
     this.cursors.next(this.cursors.getValue());
   }
+
+  public clear() {
+    this.cursors.next([]);
+  }
 }
 
 
