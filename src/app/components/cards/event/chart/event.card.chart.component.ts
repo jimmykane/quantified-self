@@ -201,7 +201,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(200)
+      debounceTime(400)
     ).subscribe((cursors) => {
       this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
@@ -310,7 +310,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
-    chart.cursor.interactions.hitOptions.hitTolerance = 10;
+    // chart.cursor.interactions.hitOptions.hitTolerance = 200;
+    chart.cursor.interactions.hitOptions.noFocus = true;
 
     chart.cursor.behavior = this.chartCursorBehaviour;
     chart.cursor.zIndex = 10;
@@ -768,7 +769,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     button.zIndex = 20;
     button.events.on('hit', (ev) => {
-      // debugger;
       chart.cursor.behavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? ChartCursorBehaviours.ZoomX : ChartCursorBehaviours.SelectX;
       ev.target.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
     });
