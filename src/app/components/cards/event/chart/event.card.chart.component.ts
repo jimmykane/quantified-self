@@ -954,7 +954,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   protected getSubscriptions(): Subscription[] {
-    return [this.streamsSubscription, this.activitiesCursorSubscription];
+    const subscriptions = [];
+    if (this.streamsSubscription){
+      subscriptions.push(this.streamsSubscription)
+    }
+    if (this.activitiesCursorSubscription){
+      subscriptions.push(this.activitiesCursorSubscription);
+
+    }
+    return subscriptions;
   }
 
   private getSeriesRangeLabelContainer(series): am4core.Container | null {
