@@ -649,6 +649,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     }
 
+    series.hideTooltipWhileZooming = true;
+
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 ? '' : activity.creator.name}[/]`;
 
     series.adapter.add('fill', (fill, target) => {
@@ -1082,9 +1084,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       }
 
       // Snap to the shown series
-      // if (this.xAxisType === XAxisTypes.Distance) {
-      //   series.chart.cursor.snapToSeries = series;
-      // }
+      if (this.xAxisType === XAxisTypes.Distance) {
+        series.chart.cursor.snapToSeries = series;
+      }
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
       this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
