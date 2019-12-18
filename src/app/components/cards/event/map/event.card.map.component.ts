@@ -146,7 +146,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
 
     // Set the cursor
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(400)
+      debounceTime(500)
     ).subscribe((cursors) => {
       this.logger.info(`Cursor on subscription`);
       cursors.forEach(cursor => {

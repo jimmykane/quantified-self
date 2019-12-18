@@ -201,7 +201,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(400)
+      debounceTime(500)
     ).subscribe((cursors) => {
       this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
