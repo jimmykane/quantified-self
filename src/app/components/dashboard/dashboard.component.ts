@@ -33,6 +33,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public startOfTheWeek: DaysOfTheWeek;
   public showUpload: boolean = this.authService.isCurrentUserAnonymous();
   public isLoading: boolean;
+  public isInitialized = false;
 
   private shouldSearch: boolean;
 
@@ -49,7 +50,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   async ngOnInit() {
     this.shouldSearch = true;
-    this.isLoading = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.isLoading = true;
       // Get the user
@@ -131,8 +131,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.removeExportButton();
       }
       this.isLoading = false;
+      this.isInitialized = true;
     });
-
   }
 
   search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
