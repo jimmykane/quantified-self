@@ -49,6 +49,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   async ngOnInit() {
     this.shouldSearch = true;
+    this.isLoading = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.isLoading = true;
       // Get the user

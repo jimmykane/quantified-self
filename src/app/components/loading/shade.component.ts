@@ -10,5 +10,5 @@ export class ShadeComponent{
   @Input() isActive: boolean;
   @Input() hasError: boolean;
   @Input() errorMessage: string;
-  @Input() mode = 'query';
+  @Input() mode = 'buffer';
 }
