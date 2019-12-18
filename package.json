@@ -21,7 +21,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.1.0",
-    "@amcharts/amcharts4": "4.7.15",
+    "@amcharts/amcharts4": "4.7.16",
     "@angular/animations": "9.0.0-rc.6",
     "@angular/cdk": "^8.2.3",
     "@angular/common": "9.0.0-rc.6",
@@ -54,7 +54,7 @@
     "@angular/cli": "^9.0.0-rc.6",
     "@angular/compiler-cli": "9.0.0-rc.6",
     "@types/jasmine": "3.5.0",
-    "@types/node": "^12.11.1",
+    "@types/node": "^12.12.21",
     "codelyzer": "^5.1.2",
     "first-input-delay": "^0.1.3",
     "jasmine-core": "^3.5.0",
