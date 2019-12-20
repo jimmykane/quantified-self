@@ -158,7 +158,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   private removeUploadButton() {
     this.actionButtonService.removeActionButton('turnOnUpload');
-
   }
 
   private addExportButton() {
