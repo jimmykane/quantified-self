@@ -66,8 +66,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         || this.user.settings.dashboardSettings.endDate !== user.settings.dashboardSettings.endDate
         || this.user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
       )) {
-        this.events = [];
-        this.shouldSearch = true; // Not sure about this
+        this.shouldSearch = true;
       }
 
       // Setup the ranges to search depending on pref
@@ -109,10 +108,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
 
-      // @todo remove this if the bug is fixed
-      // If this user is not set here there is a bug (again that makes a memory leak with big data) for the table component
-      // this.user = user;
-
       // Get what is needed
       const returnObservable = this.shouldSearch ?
         this.eventService
@@ -122,9 +117,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return {events: events, user: user}
       }))
     })).subscribe((eventsAndUser) => {
+      this.shouldSearch = false;
       this.events = eventsAndUser.events || [];
       this.user = eventsAndUser.user;
-      this.shouldSearch = false;
       if (this.events && this.events.length) {
         this.addExportButton();
       } else {
