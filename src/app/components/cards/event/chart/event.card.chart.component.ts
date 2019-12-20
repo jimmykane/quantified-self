@@ -80,7 +80,7 @@ import {
 } from '../../../../services/activity-cursor/activity-cursor.service';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
-const DOWNSAMPLE_FACTOR_PER_HOUR = 1; // @todo should be per 10 hours
+const DOWNSAMPLE_FACTOR_PER_HOUR = 2; // @todo should be per 10 hours
 
 @Component({
   selector: 'app-event-card-chart',
@@ -649,7 +649,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     }
 
-    series.hideTooltipWhileZooming = true;
+    // series.hideTooltipWhileZooming = true;
 
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 ? '' : activity.creator.name}[/]`;
 
@@ -825,14 +825,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     }
 
     // filter if needed (this operation costs)
-    if (this.getStreamSamplingRateInSeconds(activity) !== 1) {
-      data = data.filter((streamData, index) => (index % this.getStreamSamplingRateInSeconds(activity)) === 0);
+    const samplingRate = this.getSamplingRateInSeconds(this.selectedActivities);
+    if (samplingRate !== 1) {
+      data = data.filter((streamData, index) => (index % samplingRate) === 0);
     }
     this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
     return data;
   }
 
-  private getStreamSamplingRateInSeconds(activity: ActivityInterface): number {
+  private getSamplingRateInSeconds(activities: ActivityInterface[]): number {
     if (this.downSamplingLevel === 1) {
       return 1;
     }
@@ -840,12 +841,18 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const rate = this.downSamplingLevel || 1;
     // If we do not need to strengthen the downsampling based on the DOWNSAMPLE_AFTER_X_HOURS
     // then we just need to return the sampling rate the user has selected
-    if (this.getActivityHours(activity) < DOWNSAMPLE_AFTER_X_HOURS) {
+    if (this.getActivitiesHours(activities) < DOWNSAMPLE_AFTER_X_HOURS) {
       return 1;
     }
-    // return rate * (this.getActivityHours(activity) / DOWNSAMPLE_AFTER_X_HOURS);
     // If the activity needs a bump on downsampling > DOWNSAMPLE_AFTER_X_HOURS
-    return rate * Math.ceil(Math.ceil(this.getActivityHours(activity) / DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_FACTOR_PER_HOUR);
+    return rate * Math.ceil(Math.ceil(this.getActivitiesHours(activities) / DOWNSAMPLE_AFTER_X_HOURS) * DOWNSAMPLE_FACTOR_PER_HOUR);
+  }
+
+  private getActivitiesHours(activities: ActivityInterface[]): number {
+    return activities.reduce((duration, activity) => {
+      duration += Math.ceil((activity.getDuration().getValue() / (60 * 60)));
+      return duration
+    }, 0);
   }
 
   private getActivityHours(activity: ActivityInterface): number {
