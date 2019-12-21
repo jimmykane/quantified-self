@@ -47,7 +47,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   @HostListener('window:authError', ['$event'])
   async authError(event) {
     this.isLoading = false;
-    Sentry.captureException(new Error(event.detail.error));
+    Sentry.captureException(new Error(`Could not connect to Suunto app. Please try another browser or allow popups and cross-site cookies form this site. ERROR: ${event.detail.error}`));
     this.snackBar.open(`Could not connect to Suunto app. Please try another browser or allow popups and cross-site cookies form this site. ERROR: ${event.detail.error}`, null, {
       duration: 10000,
     });
@@ -140,7 +140,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', null, {
         duration: 5000,
       });
-      Sentry.captureException(e.message);
+      Sentry.captureException(e);
     } finally {
       this.isLoading = false;
     }
