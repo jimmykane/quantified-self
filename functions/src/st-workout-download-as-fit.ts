@@ -29,7 +29,7 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
       method: 'GET',
       headers: {
         'Content-Type': req.get('Content-Type'),
-        'STTAuthorization': "f2mlnp8spic6d08ielfvc41ujq65bt8t",
+        'STTAuthorization': "998mnpmc2tstvrgcpmbbobgvaplmna5r",
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36'
       },
     };
