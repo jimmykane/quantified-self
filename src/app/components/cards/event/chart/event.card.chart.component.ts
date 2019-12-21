@@ -343,13 +343,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
-      const range = ev.target.xRange;
-      this.disposeRangeLabelsContainer(ev.target.chart);
-      this.disposeClearSelectionButton(ev.target.chart);
-      // Noop if there is no selection its a click so just clear?
-      if (!range) {
+      if (!ev.target.xRange) {
         return;
       }
+      this.disposeRangeLabelsContainer(ev.target.chart);
+      this.disposeClearSelectionButton(ev.target.chart);
       this.addClearSelectionButton(ev.target.chart);
 
       const rangeLabelsContainer = this.createRangeLabelsContainer(ev.target.chart);
@@ -358,16 +356,16 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       let end;
       switch (this.xAxisType) {
         case XAxisTypes.Time:
-          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.start));
-          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.end));
+          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.start));
+          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.end));
           break;
         case XAxisTypes.Duration:
-          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.start));
-          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(range.end));
+          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.start));
+          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.end));
           break;
         default:
-          start = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(range.start));
-          end = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(range.end));
+          start = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(ev.target.xRange.start));
+          end = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(ev.target.xRange.end));
           break;
       }
 
