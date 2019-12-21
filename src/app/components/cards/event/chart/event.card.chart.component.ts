@@ -80,7 +80,7 @@ import {
 } from '../../../../services/activity-cursor/activity-cursor.service';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
-const DOWNSAMPLE_FACTOR_PER_HOUR = 2; // @todo should be per 10 hours
+const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
 
 @Component({
   selector: 'app-event-card-chart',
@@ -826,6 +826,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // filter if needed (this operation costs)
     const samplingRate = this.getSamplingRateInSeconds(this.selectedActivities);
+    this.logger.info(`Sampling rate is ${samplingRate}`);
     if (samplingRate !== 1) {
       data = data.filter((streamData, index) => (index % samplingRate) === 0);
     }
