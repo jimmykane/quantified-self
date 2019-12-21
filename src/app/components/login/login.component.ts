@@ -122,10 +122,10 @@ export class LoginComponent implements OnInit {
           await this.userService.setServiceAuthToken(databaseUser, serviceName, serviceToken)
         }
         await this.router.navigate(['/dashboard']);
-        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Anonymous'}`, null, {
+        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'}`, null, {
           duration: 5000,
         });
-        await this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous'});
+        await this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
         return;
       }
       this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous', serviceName, serviceToken)

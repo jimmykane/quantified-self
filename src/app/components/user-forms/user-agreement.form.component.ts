@@ -101,7 +101,7 @@ export class UserAgreementFormComponent implements OnInit {
         duration: 2000,
       });
       await this.router.navigate(['dashboard']);
-      this.snackBar.open(`Thanks for registering ${dbUser.displayName || 'Anonymous'}`, null, {
+      this.snackBar.open(`Thanks for signing in ${dbUser.displayName || 'guest'}!`, null, {
         duration: 2000,
       });
       await this.afa.logEvent('sign_up', {method: this.signInMethod});

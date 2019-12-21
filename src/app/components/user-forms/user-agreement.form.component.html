@@ -1,6 +1,6 @@
 <mat-dialog-content>
   <form [formGroup]="userFormGroup" (submit)="onSubmit($event)">
-    <span class="mat-headline">Hi there {{ user.displayName || 'Mr. Anonymous🧐'  }},</span>
+    <span class="mat-headline">Hi there {{ user.displayName || ''  }},</span>
     <span class="mat-subheader">Let's agree an a few things before we proceed</span>
     <mat-checkbox formControlName="acceptPrivacyPolicy" >
       <mat-card class="mat-elevation-z0">

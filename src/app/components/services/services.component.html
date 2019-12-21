@@ -13,7 +13,7 @@
                 info
               </mat-icon>
             </p>
-            <p class="mat-small" *ngIf="!user || this.authService.isCurrentUserAnonymous()">For non anonymous users</p>
+            <p class="mat-small mat-error" *ngIf="!user || this.authService.isCurrentUserAnonymous()">You must login with a non guest account to activate service syncing</p>
 
             <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>
 
