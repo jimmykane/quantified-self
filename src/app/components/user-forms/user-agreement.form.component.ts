@@ -100,11 +100,11 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
+      await this.afa.logEvent('sign_up', {method: this.signInMethod});
       await this.router.navigate(['dashboard']);
       this.snackBar.open(`Thanks for signing in ${dbUser.displayName || 'guest'}!`, null, {
         duration: 2000,
       });
-      await this.afa.logEvent('sign_up', {method: this.signInMethod});
     } catch (e) {
       // debugger;
       this.snackBar.open('Could not update user', null, {

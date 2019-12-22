@@ -5,8 +5,8 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {of, Subscription} from 'rxjs';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import {MatDialog, MatDialogRef} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
 import {catchError, map, switchMap} from 'rxjs/operators';
 import {UserFormComponent} from '../user-forms/user.form.component';
 
@@ -54,10 +54,10 @@ export class UserComponent implements OnInit, OnDestroy {
         return
       }
       // Populate placeholders for display name etc
-      if (!targetUser.displayName){
-        targetUser.displayName = 'Anonymous';
+      if (!targetUser.displayName) {
+        targetUser.displayName = 'Guest';
       }
-      if(!targetUser.photoURL){
+      if (!targetUser.photoURL) {
         targetUser.photoURL = `https://ui-avatars.com/api/?name=${targetUser.displayName}`
       }
 
