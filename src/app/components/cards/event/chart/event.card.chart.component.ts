@@ -310,7 +310,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Create a cursor
     chart.cursor = new am4charts.XYCursor();
 
-    // chart.cursor.interactions.hitOptions.hitTolerance = 200;
+    chart.cursor.interactions.hitOptions.hitTolerance = 80;
     chart.cursor.interactions.hitOptions.noFocus = true;
 
     chart.cursor.behavior = this.chartCursorBehaviour;
