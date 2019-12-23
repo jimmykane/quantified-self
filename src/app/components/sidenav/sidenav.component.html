@@ -31,15 +31,6 @@
   </mat-list-item>
 
   <mat-list-item
-    *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z0 active"
-    [routerLink]="['/user/' + (authService.user | async)?.uid]"
-    (click)="sideNav.close();">
-    <mat-icon>account_circle</mat-icon>
-    <span>My Profile</span>
-  </mat-list-item>
-
-  <mat-list-item
     *ngIf="!authService.authenticated()"
     routerLinkActive="mat-elevation-z0 active"
     routerLink="/login" (click)="sideNav.close();">
@@ -52,6 +43,15 @@
     routerLink="/services" (click)="sideNav.close();">
     <mat-icon>sync</mat-icon>
     <span>Services</span>
+  </mat-list-item>
+
+  <mat-list-item
+    *ngIf="authService.authenticated()"
+    routerLinkActive="mat-elevation-z0 active"
+    [routerLink]="['/user/' + (authService.user | async)?.uid]"
+    (click)="sideNav.close();">
+    <mat-icon>settings_applications</mat-icon>
+    Preferences
   </mat-list-item>
 
   <mat-divider></mat-divider>
@@ -73,6 +73,8 @@
     <span>Donate via PayPal </span><span class="fill-space"></span>
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
+
+  <mat-divider></mat-divider>
 
   <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
     <mat-icon>bug_report</mat-icon>
