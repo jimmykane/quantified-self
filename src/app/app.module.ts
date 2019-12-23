@@ -75,7 +75,7 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFireFunctionsModule,
     AngularFireStorageModule,
     AngularFireAuthModule,
-    AngularFirePerformanceModule,
+    // AngularFirePerformanceModule,
     AngularFireAnalyticsModule,
     MaterialModule,
     AgmCoreModule.forRoot({
