@@ -34,7 +34,9 @@ button{
 }
 
 mat-card{
-  margin-bottom: 1em;
+  padding-left: 0;
+  padding-right: 0;
+  /*margin-bottom: 1em;*/
 }
 
 mat-slide-toggle{
@@ -42,4 +44,11 @@ mat-slide-toggle{
 }
 .smaller{
   font-size: 75%;
+}
+
+::ng-deep .mat-tab-label{
+  padding: 0;
+  min-width: 18vw !important;
+  /*text-align: left;*/
+  /*justify-content: left;*/
 }
