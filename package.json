@@ -44,7 +44,7 @@
     "hammerjs": "^2.0.8",
     "material-design-icons-iconfont": "^5.0.1",
     "ng2-logger": "3.0.10",
-    "quantified-self-lib": "^3.4.13",
+    "quantified-self-lib": "^3.4.17",
     "rxjs": "^6.5.3",
     "tslib": "^1.10.0",
     "zone.js": "~0.10.2"
