@@ -213,7 +213,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
 
         // Do not trigger update
-        if (activityCursor && (activityCursor.time === cursor.time)){
+        if (activityCursor && (activityCursor.time === cursor.time)) {
           return;
         }
 
@@ -238,32 +238,42 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Subscribe to the data
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
-        this.getDataTypesToRequest(), //
+        [...new Set(this.getNonUnitBasedDataTypes().concat([DataSpeed.type, DataDistance.type]))], // if the stream speed is missing or distance please add it
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
           return [];
         }
-        // @todo create whitelist for unitstreams and not generate all and then remove ...
-        // We get the unit streams and we filter on them based on the user pref
+        const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
+        const shouldRemoveDistance = this.getNonUnitBasedDataTypes().indexOf(DataDistance.type) === -1;
         const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
           return DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
         });
-        return unitStreams.concat(streams).filter((stream) => {
+        return unitStreams.filter((stream) => {
           // Filter out pace if swimming
           if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1) {
             return [DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) === -1;
           }
+          // @todo remove speed etc from eg Running and so on 
           return [DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type].indexOf(stream.type) === -1;
-        }).map((stream) => {
-          return this.createOrUpdateChartSeries(activity, stream);
-        });
+        })
+          .concat(streams)
+          .filter((stream) => {
+            if (shouldRemoveDistance && stream.type === DataDistance.type) {
+              return false;
+            }
+            if (shouldRemoveSpeed && stream.type === DataSpeed.type) {
+              return false;
+            }
+            return true;
+          }).map((stream) => {
+            return this.createOrUpdateChartSeries(activity, stream);
+          });
       }))
     })).pipe(map((seriesArrayOfArrays) => {
       // Format flatten the arrays as they come in [[], []]
       return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
     })).subscribe((series: am4charts.LineSeries[]) => {
-
       // this.logger.info(`Rendering chart data per series`);
       // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
       this.logger.info(`Data Injected`);
@@ -625,8 +635,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Set the axis
     series.yAxis = yAxis;
 
-
-    // yAxis.title.text = `${series.name} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '');
     if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
       yAxis.title.text = `${series.name}`
     } else {
@@ -642,6 +650,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // @todo use base type
     if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
+      yAxis.renderer.inversed = true;
+      yAxis.baseValue = 6000;
+      // series.baseAxis = yAxis;
       series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
       series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
@@ -819,7 +830,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         }) // @todo if needed sort here by distance
       });
     } else {
-      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000, true); // Default unix timestamp is at 1 hours its kinda hacky but easy
+      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true, true) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000, true, true); // Default unix timestamp is at 1 hours its kinda hacky but easy
     }
 
     // filter if needed (this operation costs)
@@ -963,10 +974,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   protected getSubscriptions(): Subscription[] {
     const subscriptions = [];
-    if (this.streamsSubscription){
+    if (this.streamsSubscription) {
       subscriptions.push(this.streamsSubscription)
     }
-    if (this.activitiesCursorSubscription){
+    if (this.activitiesCursorSubscription) {
       subscriptions.push(this.activitiesCursorSubscription);
 
     }
