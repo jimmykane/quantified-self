@@ -254,7 +254,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
           if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1) {
             return [DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) === -1;
           }
-          // @todo remove speed etc from eg Running and so on 
+          // @todo remove speed etc from eg Running and so on
           return [DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type].indexOf(stream.type) === -1;
         })
           .concat(streams)
@@ -581,7 +581,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
       // categoryLabel.label.text = '123';
       yAxis.align = 'right';
-      yAxis.marginTop = 5;
+      yAxis.marginTop = 10;
     } else {
       yAxis.renderer.labels.template.marginLeft = 10;
       yAxis.paddingLeft = 5;

@@ -21,7 +21,7 @@ export class ActivityCursorService {
     }
     // Noop if the cursor is the same
     if (activityCursor.time === cursor.time) {
-      this.logger.info(`Noop for ${cursor.time}`);
+      // this.logger.info(`Noop for ${cursor.time}`);
       return;
     }
     // Now update the time
