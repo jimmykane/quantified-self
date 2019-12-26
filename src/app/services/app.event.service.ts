@@ -19,7 +19,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {WindowService} from './app.window.service';
 
-import '../../node_modules/wasm-flate/dist/bootstrap';
+import '../../../node_modules/wasm-flate/dist/bootstrap';
 
 
 @Injectable()
