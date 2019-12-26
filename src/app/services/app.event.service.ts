@@ -17,7 +17,10 @@ import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
+import {WindowService} from './app.window.service';
+
+import '../../node_modules/wasm-flate/dist/bootstrap';
+
 
 @Injectable()
 export class EventService implements OnDestroy {
@@ -26,6 +29,7 @@ export class EventService implements OnDestroy {
 
   constructor(
     private storage: AngularFireStorage,
+    private windowService: WindowService,
     private afs: AngularFirestore) {
   }
 
@@ -405,7 +409,13 @@ export class EventService implements OnDestroy {
   }
 
   private getStreamDataFromBlob(blob: firestore.Blob): number[] {
-    return JSON.parse(Pako.ungzip(atob(blob.toBase64()), {to: 'string'}));
+    // const t0 = performance.now();
+    // JSON.parse(Pako.ungzip(atob(blob.toBase64()), {to: 'string'}));
+    // const t1 = performance.now();
+    // console.log(`Pako ${t1 - t0}`);
+    const flate = (<any>this.windowService.windowRef['flate']);
+    return JSON.parse(flate.gzip_decode(blob.toBase64()));
+
   }
 
   ngOnDestroy() {
