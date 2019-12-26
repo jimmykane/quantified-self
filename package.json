@@ -47,6 +47,7 @@
     "quantified-self-lib": "^3.4.17",
     "rxjs": "^6.5.3",
     "tslib": "^1.10.0",
+    "wasm-flate": "^0.1.12-alpha",
     "zone.js": "~0.10.2"
   },
   "devDependencies": {
