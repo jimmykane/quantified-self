@@ -564,10 +564,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
     }
 
+    yAxis.extraMax = 0.2;
 
     if (stream.type === DataPower.type) {
       yAxis.extraMax = this.extraMaxForPower;
     }
+
+
 
     // yAxis.tooltip.disabled = true;
     // yAxis.interpolationDuration = 500;
@@ -932,6 +935,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   protected clearChart() {
     if (this.chart) {
+      this.chart.series.values.forEach(s => s.dispose());
       this.chart.series.clear();
       this.chart.colors.reset();
       if (this.chart.yAxes.length) {
