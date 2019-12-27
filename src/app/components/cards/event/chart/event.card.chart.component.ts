@@ -585,6 +585,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       // categoryLabel.label.text = '123';
       yAxis.align = 'right';
       yAxis.marginTop = 10;
+      yAxis.title.marginRight = 5;
+      yAxis.title.fontSize = '1.2em';
+      yAxis.title.fontWeight = '600';
+      // yAxis.paddingLeft = -5;
+      yAxis.renderer.inside = true;
     } else {
       yAxis.renderer.labels.template.marginLeft = 10;
       yAxis.paddingLeft = 5;
@@ -654,7 +659,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // @todo use base type
     if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
       yAxis.renderer.inversed = true;
-      yAxis.baseValue = 6000;
+      yAxis.baseValue = Infinity;
+      yAxis.extraMin = 0.5;
       // series.baseAxis = yAxis;
       series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
@@ -671,6 +677,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     series.adapter.add('stroke', (fill, target) => {
       return this.getSeriesColor(target);
     });
+
+
+    // yAxis.title.rotation = 0;
+
 
     series.strokeWidth = this.strokeWidth;
     series.strokeOpacity = this.strokeOpacity;
@@ -778,7 +788,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // button.width = 20;
     button.fontSize = '1.2em';
     button.align = 'left';
-    button.marginLeft = 15;
+    button.marginLeft = 25;
     button.opacity = 0.8;
 
     button.zIndex = 20;
@@ -798,7 +808,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.y = 50;
     button.fontSize = '1.2em';
     button.align = 'left';
-    button.marginLeft = 15;
+    button.marginLeft = 25;
     button.zIndex = 30;
     button.opacity = 0.8;
     button.events.on('hit', (ev) => {
@@ -882,13 +892,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     this.zone.runOutsideAngular(() => {
       series.data = data;
     });
-  }
-
-  private getDataTypesToRequest(): string[] {
-    if (this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1) {
-      return this.getNonUnitBasedDataTypes().concat([DataSpeed.type]);// Inject speed always for pace and swim pace till this is refactored
-    }
-    return this.getNonUnitBasedDataTypes();
   }
 
   /**
