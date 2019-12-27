@@ -77,7 +77,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   async ngOnInit() {
     this.sideNavService.setSidenav(this.sideNav);
-    this.router.events.subscribe((event: RouterEvent) => {
+    this.routerEventSubscription = this.router.events.subscribe((event: RouterEvent) => {
       switch (true) {
         case event instanceof RoutesRecognized:
           this.title = (<RoutesRecognized>event).state.root.firstChild.data['title'];
@@ -96,14 +96,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         }
       }
     });
-    this.routerEventSubscription = this.router.events
-      .pipe(filter(event => event instanceof RoutesRecognized))
-      .pipe(map((event: RoutesRecognized) => {
-        return event.state.root.firstChild.data['title'];
-      })).subscribe(title => {
-        this.title = title;
-        this.titleService.setTitle(`${title} - Quantified Self`);
-      });
     this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
       this.sideNav.toggle();
     }, 'material'));
