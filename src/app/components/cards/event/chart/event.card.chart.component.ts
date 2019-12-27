@@ -558,67 +558,74 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(stream.type));
     if (!sameTypeSeries) {
+      // Create a new axis
       yAxis = this.chart.yAxes.push(this.getYAxisForSeries(stream.type));
+      yAxis.extraMax = 0.2;
+
+      if (stream.type === DataPower.type) {
+        yAxis.extraMax = this.extraMaxForPower;
+      }
+
+      // yAxis.tooltip.disabled = true;
+      // yAxis.interpolationDuration = 500;
+      // yAxis.rangeChangeDuration = 500;
+      yAxis.renderer.inside = false;
+      yAxis.renderer.grid.template.disabled = !this.showGrid;
+      yAxis.renderer.line.strokeOpacity = 1;
+
+      if (this.stackYAxes) {
+
+        // const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+        // categoryLabel.label.text = '123';
+        yAxis.align = 'right';
+        yAxis.marginTop = 10;
+        yAxis.title.marginRight = 5;
+        yAxis.title.fontSize = '1.2em';
+        yAxis.title.fontWeight = '600';
+        // yAxis.paddingLeft = -5;
+        yAxis.renderer.inside = true;
+      } else {
+        yAxis.renderer.labels.template.marginLeft = 10;
+        yAxis.paddingLeft = 5;
+        yAxis.paddingRight = 0;
+        yAxis.layout = 'absolute';
+        yAxis.align = 'left';
+        yAxis.renderer.line.align = 'right';
+        yAxis.title.valign = 'middle';
+        yAxis.title.align = 'left';
+
+
+        // yAxis.layout = 'absolute';
+        // yAxis.title.rotation = 0;
+        // yAxis.title.align = 'center';
+        // yAxis.title.valign = 'top';
+        // yAxis.title.padding(10,10,10,10)
+        // yAxis.title.dy = -40;
+      }
+
+      yAxis.renderer.minLabelPosition = 0.05;
+      yAxis.renderer.maxLabelPosition = 0.95;
+      yAxis.title.fontSize = '1.0em';
+      yAxis.title.fontWeight = '600';
+
+      yAxis.renderer.ticks.template.disabled = false;
+      yAxis.renderer.ticks.template.strokeOpacity = 1;
+      yAxis.renderer.ticks.template.strokeWidth = 1;
+      yAxis.renderer.ticks.template.length = 5;
+      yAxis.renderer.minGridDistance = 20;
+
+      yAxis.title.adapter.add('text', () => {
+        if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
+          return`${series.name}`
+        } else {
+          return `${series.name} [font-size: 0.9em](${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})[/]`
+        }
+      });
+
     } else {
       // Share
       yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
     }
-
-    yAxis.extraMax = 0.2;
-
-    if (stream.type === DataPower.type) {
-      yAxis.extraMax = this.extraMaxForPower;
-    }
-
-
-
-    // yAxis.tooltip.disabled = true;
-    // yAxis.interpolationDuration = 500;
-    // yAxis.rangeChangeDuration = 500;
-    yAxis.renderer.inside = false;
-    yAxis.renderer.grid.template.disabled = !this.showGrid;
-    yAxis.renderer.line.strokeOpacity = 1;
-
-    if (this.stackYAxes) {
-
-      // const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-      // categoryLabel.label.text = '123';
-      yAxis.align = 'right';
-      yAxis.marginTop = 10;
-      yAxis.title.marginRight = 5;
-      yAxis.title.fontSize = '1.2em';
-      yAxis.title.fontWeight = '600';
-      // yAxis.paddingLeft = -5;
-      yAxis.renderer.inside = true;
-    } else {
-      yAxis.renderer.labels.template.marginLeft = 10;
-      yAxis.paddingLeft = 5;
-      yAxis.paddingRight = 0;
-      yAxis.layout = 'absolute';
-      yAxis.align = 'left';
-      yAxis.renderer.line.align = 'right';
-      yAxis.title.valign = 'middle';
-      yAxis.title.align = 'left';
-
-
-      // yAxis.layout = 'absolute';
-      // yAxis.title.rotation = 0;
-      // yAxis.title.align = 'center';
-      // yAxis.title.valign = 'top';
-      // yAxis.title.padding(10,10,10,10)
-      // yAxis.title.dy = -40;
-    }
-
-    yAxis.renderer.minLabelPosition = 0.05;
-    yAxis.renderer.maxLabelPosition = 0.95;
-    yAxis.title.fontSize = '1.0em';
-    yAxis.title.fontWeight = '600';
-
-    yAxis.renderer.ticks.template.disabled = false;
-    yAxis.renderer.ticks.template.strokeOpacity = 1;
-    yAxis.renderer.ticks.template.strokeWidth = 1;
-    yAxis.renderer.ticks.template.length = 5;
-    yAxis.renderer.minGridDistance = 20;
 
     // Then create a series
     series = new am4charts.LineSeries();
@@ -643,11 +650,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     // Set the axis
     series.yAxis = yAxis;
 
-    if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
-      yAxis.title.text = `${series.name}`
-    } else {
-      yAxis.title.text = `${series.name} [font-size: 0.9em](${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})[/]`
-    }
 
     // Setup the series
 
