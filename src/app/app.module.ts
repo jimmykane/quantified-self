@@ -39,7 +39,7 @@ import {
   AngularFireAnalyticsModule,
   APP_NAME,
   APP_VERSION,
-  DEBUG_MODE
+  DEBUG_MODE, ScreenTrackingService, UserTrackingService
 } from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
@@ -112,6 +112,8 @@ export class SentryErrorHandler implements ErrorHandler {
     WindowService,
     ActivitySelectionService,
     ActivityCursorService,
+    ScreenTrackingService,
+    UserTrackingService,
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},
