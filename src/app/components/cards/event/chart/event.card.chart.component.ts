@@ -807,11 +807,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.y = -2;
     button.dx = -68;
     button.opacity = 0.8;
-    button.icon = new am4core.Sprite();
+    // button.icon = new am4core.Sprite();
     // button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX ?
     //   'm3 5h2v-2c-1.1 0-2 .9-2 2zm0 8h2v-2h-2zm4 8h2v-2h-2zm-4-12h2v-2h-2zm10-6h-2v2h2zm6 0v2h2c0-1.1-.9-2-2-2zm-14 18v-2h-2c0 1.1.9 2 2 2zm-2-4h2v-2h-2zm6-14h-2v2h2zm2 18h2v-2h-2zm8-8h2v-2h-2zm0 8c1.1 0 2-.9 2-2h-2zm0-12h2v-2h-2zm0 8h2v-2h-2zm-4 4h2v-2h-2zm0-16h2v-2h-2zm-8 12h10v-10h-10zm2-8h6v6h-6z"'
     //   : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z';
-    button.icon.marginRight = 10;
+    // button.icon.marginRight = 10;
     button.zIndex = 20;
     button.events.on('hit', (ev) => {
       chart.cursor.behavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? ChartCursorBehaviours.ZoomX : ChartCursorBehaviours.SelectX;
