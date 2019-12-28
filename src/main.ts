@@ -1,7 +1,6 @@
 import {enableProdMode} from '@angular/core';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 
-import {AppModule} from './app/app.module';
 import {environment} from './environments/environment';
 import {Log} from 'ng2-logger/browser';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
@@ -19,5 +18,7 @@ if (localStorage.getItem('appTheme')) {
   localStorage.getItem('appTheme') === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme')
 }
 
-
-platformBrowserDynamic().bootstrapModule(AppModule);
+import('./app/app.module')
+  .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))
+  .catch(err => console.error(err));
+// platformBrowserDynamic().bootstrapModule(AppModule);

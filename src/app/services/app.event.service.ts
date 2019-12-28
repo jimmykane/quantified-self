@@ -18,8 +18,7 @@ import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporte
 import {User} from 'quantified-self-lib/lib/users/user';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {WindowService} from './app.window.service';
-
-import '../../../node_modules/wasm-flate/dist/bootstrap';
+import {gzip_decode} from 'wasm-flate';
 
 
 @Injectable()
@@ -413,9 +412,7 @@ export class EventService implements OnDestroy {
     // JSON.parse(Pako.ungzip(atob(blob.toBase64()), {to: 'string'}));
     // const t1 = performance.now();
     // console.log(`Pako ${t1 - t0}`);
-    const flate = (<any>this.windowService.windowRef['flate']);
-    return JSON.parse(flate.gzip_decode(blob.toBase64()));
-
+    return JSON.parse(gzip_decode(blob.toBase64()));
   }
 
   ngOnDestroy() {
