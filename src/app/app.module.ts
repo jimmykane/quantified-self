@@ -34,7 +34,13 @@ import {ThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
 import {WindowService} from './services/app.window.service';
 import {AgmCoreModule} from '@agm/core';
-import {ANALYTICS_COLLECTION_ENABLED, AngularFireAnalyticsModule, APP_NAME, APP_VERSION} from '@angular/fire/analytics';
+import {
+  ANALYTICS_COLLECTION_ENABLED,
+  AngularFireAnalyticsModule,
+  APP_NAME,
+  APP_VERSION,
+  DEBUG_MODE
+} from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
 
@@ -109,12 +115,13 @@ export class SentryErrorHandler implements ErrorHandler {
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},
-    {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: environment.production ||  environment.beta},
-    {provide: INSTRUMENTATION_ENABLED, useValue: environment.production ||  environment.beta},
-    {provide: DATA_COLLECTION_ENABLED, useValue: environment.production ||  environment.beta},
-    {provide: ANALYTICS_COLLECTION_ENABLED, useValue: environment.production ||  environment.beta},
+    {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: (environment.production ||  environment.beta)},
+    {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production ||  environment.beta)},
+    {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
+    {provide: ANALYTICS_COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
     {provide: APP_VERSION, useValue: appPackage.version},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
+    {provide: DEBUG_MODE, useValue: !!environment.beta},
   ],
   bootstrap: [AppComponent],
 })
