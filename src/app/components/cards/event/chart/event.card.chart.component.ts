@@ -301,6 +301,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
 
+    chart.durationFormatter.durationFormat = 'mm:ss';
+
     // Add scrollbar
     chart.scrollbarX = new am4core.Scrollbar();
     chart.scrollbarX.startGrip.disabled = true;
@@ -333,9 +335,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     chart.zoomOutButton.background.fill = tempButton.background.fill;
     chart.zoomOutButton.icon.stroke = tempButton.label.stroke;
+    chart.zoomOutButton.strokeWidth = tempButton.label.strokeWidth;
+
     chart.zoomOutButton.icon.padding(0, 0, 0, 0);
-    chart.zoomOutButton.padding(12, 12, 12, 12);
+    chart.zoomOutButton.padding(13, 12, 13, 12);
     chart.zoomOutButton.fontSize = '1.2em';
+    chart.zoomOutButton.dx = -88;
+    chart.zoomOutButton.dy = 4;
 
 
     // chart.zoomOutButton.padding(0,0,0,0)
@@ -676,7 +682,13 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
       yAxis.renderer.inversed = true;
       yAxis.baseValue = Infinity;
-      yAxis.extraMin = 0.5;
+      yAxis.extraMin = 0.0;
+      yAxis.extraMax = -0.1;
+      // yAxis.min = 0
+      // yAxis.minY = 0;
+
+      // yAxis.strictMinMax = true;
+      // yAxis.extraMax = 0.5
       // series.baseAxis = yAxis;
       series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
     } else {
@@ -802,10 +814,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.label.text = chart.cursor.behavior === 'selectX' ? ' Selecting' : ' Zooming';
     button.padding(12, 12, 12, 12);
     // button.width = 20;
-    button.fontSize = '1.0em';
+    button.fontSize = '1.1em';
     button.align = 'right';
-    button.y = -2;
-    button.dx = -68;
+    // button.y = -2;
+    // button.dx = -68;
     button.opacity = 0.8;
     // button.icon = new am4core.Sprite();
     // button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX ?
@@ -825,8 +837,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     button.id = 'clearSelectionButton';
     // button.label.text = 'Clear';
     button.padding(12, 12, 12, 12);
-    button.y = 50;
-    button.dx = -6;
+    button.y = 60;
+    button.dx = -0;
     button.fontSize = '1.0em';
     button.align = 'right';
     // button.marginLeft = 25;
@@ -963,7 +975,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   protected clearChart() {
     if (this.chart) {
-      this.chart.series.values.forEach(s => s.dispose());
+      // this.chart.series.values.forEach(s => s.dispose());
       this.chart.series.clear();
       this.chart.colors.reset();
       if (this.chart.yAxes.length) {
@@ -1163,7 +1175,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   protected getYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
-      yAxis = new am4charts.DurationAxis()
+      yAxis = new am4charts.DurationAxis();
     } else {
       yAxis = new am4charts.ValueAxis();
     }
