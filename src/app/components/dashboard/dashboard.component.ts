@@ -16,6 +16,7 @@ import {map, mergeMap, switchMap} from 'rxjs/operators';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {MatDialog} from '@angular/material/dialog';
 import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Component({
   selector: 'app-dashboard',
@@ -43,6 +44,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
               private userService: UserService,
               private actionButtonService: ActionButtonService,
               private  changeDetector: ChangeDetectorRef,
+              private afa: AngularFireAnalytics,
               private dialog: MatDialog,
               private snackBar: MatSnackBar) {
     this.addUploadButton();
@@ -130,7 +132,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
-  search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
+  async search(search: { searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }) {
     this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
@@ -138,7 +140,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.user.settings.dashboardSettings.dateRange = search.dateRange;
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
-    this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    await this.afa.logEvent('date_search', {method: DateRanges[search.dateRange]});
+    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   ngOnChanges() {

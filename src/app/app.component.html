@@ -17,7 +17,7 @@
 
     <span class="fill-space"></span>
 
-    <button matTabLink class="no-border theme" (click)="themeService.toggleTheme(user);" mat-stroked-button >
+    <button matTabLink class="no-border theme" (click)="toggleTheme();" mat-stroked-button >
       <mat-icon class="smaller icon-theme  mat-icon material-icons mat-icon-no-color theme">format_color_fill</mat-icon>
     </button>
     <button matTabLink mat-stroked-button class="right " *ngIf="!authService.authenticated() && title !== 'Login'" [routerLink]="['login']"  color="accent">Login</button>

@@ -33,6 +33,7 @@ import {slideInAnimation} from './animations/animations';
 
 import * as firebase from 'firebase/app'
 import {WindowService} from './services/app.window.service';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 declare function require(moduleName: string): any;
 
@@ -70,6 +71,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public appInfoService: AppInfoService,
     private titleService: Title,
     private windowService: WindowService,
+    private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar) {
 
     this.addIconsToRegistry();
@@ -135,6 +137,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
     });
 
+  }
+
+  async toggleTheme() {
+    await this.afa.logEvent('change_theme');
+    await this.themeService.toggleTheme(this.user);
   }
 
   private addIconsToRegistry() {
