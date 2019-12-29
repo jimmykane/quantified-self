@@ -12,7 +12,6 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../services/app.user.service';
 import {WindowService} from '../services/app.window.service';
 import {LocalStorageService} from '../services/storage/app.local.storage.service';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Injectable()
 export class AppAuthService implements OnDestroy {
@@ -25,19 +24,16 @@ export class AppAuthService implements OnDestroy {
     private afs: AngularFirestore,
     private userService: UserService,
     private snackBar: MatSnackBar,
-    private afa: AngularFireAnalytics,
   ) {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
         if (user) {
           return this.userService.getUserByID(user.uid).pipe(map((dbUser: User) => {
             this.authState = !!dbUser;
-            this.afa.setAnalyticsCollectionEnabled(true);
             return dbUser;
           }));
         } else {
           this.authState = false;
-          this.afa.setAnalyticsCollectionEnabled(false);
           return of(null);
         }
       }),
