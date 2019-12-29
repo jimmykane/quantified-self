@@ -763,7 +763,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     rangeLabelsContainer.id = 'rangeLabelsContainer';
     rangeLabelsContainer.width = am4core.percent(100);
     rangeLabelsContainer.height = am4core.percent(100);
-    rangeLabelsContainer.x = 0;
+    rangeLabelsContainer.x = 50;
     rangeLabelsContainer.y = am4core.percent(99);
     rangeLabelsContainer.layout = 'horizontal';
     // rangeLabelsContainer.align = 'center';
@@ -792,15 +792,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     const label = labelContainer.createChild(am4core.Label);
     label.align = 'center';
     label.text = `
-      [bold font-size: 1.2em ${series.stroke}]${labelData.name}[/]\n
-      [bold font-size: 1.15em ${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.min.value}[/][${am4core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
-      [bold font-size: 1.1em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.2em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      [bold font-size: 1.1em ${series.stroke}]${labelData.name}[/]\n
+      ${this.event.getActivities().length !== 1 ? `[bold font-size: 1.0em ${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n` : ``}
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.min.value}[/][${am4core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
+      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
 
     // Important! disable it after the creation of the child label
