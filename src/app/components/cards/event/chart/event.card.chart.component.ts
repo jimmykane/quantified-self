@@ -865,15 +865,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
       distanceStream.data.reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
-        if (stream.data[index] && isNumber(distanceStreamDataItem)) {
+        if (isNumber(stream.data[index]) && stream.data[index] !== Infinity && isNumber(distanceStreamDataItem)) {
           // debugger;
           dataMap.set(distanceStreamDataItem, stream.data[index])
         }
         return dataMap;
       }, new Map<number, number>()).forEach((value, distance) => {
-        if (value === null) {
-          return;
-        }
         data.push({
           axisValue: distance,
           value: value
