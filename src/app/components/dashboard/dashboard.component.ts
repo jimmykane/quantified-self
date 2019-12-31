@@ -17,6 +17,7 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import {MatDialog} from '@angular/material/dialog';
 import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {Log} from 'ng2-logger/browser';
 
 @Component({
   selector: 'app-dashboard',
@@ -38,6 +39,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   private shouldSearch: boolean;
 
+  private logger = Log.create('DashboardComponent');
+
+
   constructor(private router: Router,
               public authService: AppAuthService,
               private eventService: EventService,
@@ -53,6 +57,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   async ngOnInit() {
     this.shouldSearch = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
+      this.logger.info(`User subscription`);
       this.isLoading = true;
       // Get the user
       if (!user) {
@@ -119,6 +124,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return {events: events, user: user}
       }))
     })).subscribe((eventsAndUser) => {
+      this.logger.info(`Events and user subscription`);
       this.shouldSearch = false;
       this.events = eventsAndUser.events || [];
       this.user = eventsAndUser.user;
