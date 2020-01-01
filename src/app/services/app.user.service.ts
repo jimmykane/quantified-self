@@ -124,7 +124,7 @@ export class UserService implements OnDestroy {
       type: ChartTypes.PyramidsVertical,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataType: DataAscent.type,
-      dataValueType: ChartDataValueTypes.Maximum,
+      dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
     }]
   }
