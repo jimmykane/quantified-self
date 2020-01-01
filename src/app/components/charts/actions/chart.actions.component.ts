@@ -18,8 +18,6 @@ import {UserService} from '../../../services/app.user.service';
 import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
 import {DataAltitudeAvg} from 'quantified-self-lib/lib/data/data.altitude-avg';
-import {DataAscentTime} from 'quantified-self-lib/lib/data/data.ascent-time';
-import {DataDescentTime} from 'quantified-self-lib/lib/data/data.descent-time';
 import {DataHeartRateMax} from 'quantified-self-lib/lib/data/data.heart-rate-max';
 import {DataHeartRateMin} from 'quantified-self-lib/lib/data/data.heart-rate-min';
 import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
@@ -77,9 +75,7 @@ export class ChartActionsComponent implements OnInit {
         DataAltitudeMin.type,
         DataAltitudeAvg.type,
         DataAscent.type,
-        DataAscentTime.type,
         DataDescent.type,
-        DataDescentTime.type,
       ]
     },
     {
