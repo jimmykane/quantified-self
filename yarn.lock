@@ -7189,10 +7189,10 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.4.21:
-  version "3.4.21"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.4.21.tgz#f7e96535394a0d1189c84aa6857d3f99b5329690"
-  integrity sha512-+LgQLNKkLeDBwSE587TyqfSKXlQ09A85cKBaXUUrzDM56+mSbMt1r4PKLq+g7AbeiAMuBu5FvY0I3YBegsNZsA==
+quantified-self-lib@^3.4.22:
+  version "3.4.22"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.4.22.tgz#b3d77dff94e5d8d24ee3e1a8d82a5e859d8fa60d"
+  integrity sha512-a5DIldXvwQo08XicxLj3LTaboA4ereQWioUQdeFKLbUanb4IBshGHYxpyjso6R6mdN39iP16X8Lugat2E2oUjw==
   dependencies:
     "@types/node" "^12.7.1"
     fast-xml-parser "^3.12.19"

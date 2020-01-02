@@ -44,7 +44,7 @@
     "hammerjs": "^2.0.8",
     "material-design-icons-iconfont": "^5.0.1",
     "ng2-logger": "3.0.11",
-    "quantified-self-lib": "^3.4.21",
+    "quantified-self-lib": "^3.4.22",
     "rxjs": "^6.5.4",
     "tslib": "^1.10.0",
     "wasm-flate": "0.1.0-beta",
