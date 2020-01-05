@@ -313,7 +313,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
       fillOpacity: 1,
       strokeColor: '#FFF',
       strokeWeight: 0.8,
-      scale: 1.5,
+      scale: 1,
       anchor: {x: 6, y: 24}
     }
   }

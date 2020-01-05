@@ -19,6 +19,7 @@ import {EventCardStatsTableComponent} from '../components/cards/event/stats-tabl
 import {EventCardStatsGridComponent} from '../components/cards/event/stats-grid/event.card.stats-grid.component';
 import {EventCardChartComponent} from '../components/cards/event/chart/event.card.chart.component';
 import {ActivityToggleComponent} from '../components/cards/event/activity-toggle/activity-toggle.component';
+import {EventIntensityZonesComponent} from '../components/cards/event/intensity-zones/event.intensity-zones.component';
 
 
 @NgModule({
@@ -46,6 +47,7 @@ import {ActivityToggleComponent} from '../components/cards/event/activity-toggle
     ActivityActionsComponent,
     ActivityToggleComponent,
     MapActionsComponent,
+    EventIntensityZonesComponent,
   ],
   entryComponents: [],
 })
