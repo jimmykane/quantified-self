@@ -111,7 +111,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
       series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
-      series.columns.template.tooltipText = `[bold]{valueX.percent.formatNumber('#.')}%[/]\n[bold]{valueX.formatDuration()}[/]`;
+      series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = am4core.percent(70);
       series.columns.template.column.cornerRadiusBottomRight = 2;

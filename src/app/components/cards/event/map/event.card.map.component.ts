@@ -324,8 +324,8 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
       fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
       fillOpacity: 1,
       strokeColor: '#FFF',
-      strokeWeight: 0.8,
-      scale: 1,
+      strokeWeight: 1,
+      scale: 1.2,
       anchor: {x: 12, y: 12}
     }
   }
