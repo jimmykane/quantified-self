@@ -69,7 +69,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
     this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
-      this.applyChartStylesFromUserSettings(this.chartTheme, this.useAnimations);
+      this.setChartThemes(this.chartTheme, this.useAnimations);
       // Create a chart
       // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
@@ -99,7 +99,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     return exportingMenu;
   }
 
-  protected applyChartStylesFromUserSettings(chartTheme: ChartThemes, useAnimations: boolean) {
+  protected setChartThemes(chartTheme: ChartThemes, useAnimations: boolean) {
     this.zone.runOutsideAngular(() => {
       am4core.unuseAllThemes();
       am4core.useTheme(this.themes[chartTheme]);

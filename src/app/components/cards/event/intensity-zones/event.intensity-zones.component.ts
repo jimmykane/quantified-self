@@ -42,12 +42,16 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventIntensityZonesComponent');
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef,    private matIconRegistry: MatIconRegistry) {
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private matIconRegistry: MatIconRegistry) {
     super(zone, changeDetector);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (this.chart) {
+      if (changes.chartTheme || changes.useAnimations) {
+        this.destroyChart();
+        this.chart = this.createChart();
+      }
       this.updateIntensityZones();
       this.updateChart();
     }
@@ -72,8 +76,8 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     chart.legend = legend;
     legend.parent = chart.plotContainer;
     legend.background.fill = am4core.color('#000');
-    legend.background.fillOpacity = 0.05;
-    legend.width = 20;
+    legend.background.fillOpacity = 0.00;
+    legend.width = 100;
     legend.align = 'right';
     legend.valign = 'bottom';
 
@@ -94,6 +98,11 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     categoryAxis.cursorTooltipEnabled = false;
     categoryAxis.dataFields.category = 'zone';
     categoryAxis.renderer.labels.template.align = 'left';
+    categoryAxis.renderer.labels.template.fontWeight = 'bold';
+    categoryAxis.renderer.cellStartLocation = 0;
+    categoryAxis.renderer.cellEndLocation = 0.9;
+    categoryAxis.renderer.grid.template.fillOpacity = 1;
+    categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF')
 
     this.intensityZones.forEach(intensityZone => {
       const series = chart.series.push(new am4charts.ColumnSeries());
@@ -101,14 +110,15 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       series.dataFields.valueX = intensityZone.type;
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
-      series.columns.template.tooltipText = `{categoryY} ${intensityZone.type}: {valueX.percent.formatNumber('#.')}% [bold]{valueX.formatDuration()}[/]`;
+      series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
+      series.columns.template.tooltipText = `[bold]{valueX.percent.formatNumber('#.')}%[/]\n[bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = am4core.percent(70);
-      series.marginBottom = 20;
-      series.paddingBottom = 20;
-      series.filters.push(ChartHelper.getShadowFilter());
-      series.columns.template.column.cornerRadiusBottomRight = 10;
-      series.columns.template.column.cornerRadiusTopRight = 10;
+      series.columns.template.column.cornerRadiusBottomRight = 2;
+      series.columns.template.column.cornerRadiusTopRight = 2;
+
+      // series.filters.push(ChartHelper.getShadowFilter());
+
       switch (intensityZone.type) {
         case DataHeartRate.type:
           series.fill = am4core.color(AppColors.Red);
