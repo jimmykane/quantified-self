@@ -1,5 +1,7 @@
 mat-card{
-  padding: 0;
+  /*padding: 0;*/
+  padding-top: 0;
+  padding-bottom: 0;
   margin: 0;
   height: 30vh;
 }
