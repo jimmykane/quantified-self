@@ -1,4 +1,4 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit} from '@angular/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
 import {EventService} from '../../../services/app.event.service';
@@ -18,26 +18,7 @@ import {ThemeService} from '../../../services/app.theme.service';
 import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
 import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../services/app.user.service';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
 import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
-import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
-import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
-import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
-import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
-import {DataVerticalSpeedAvg} from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
-import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
-import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
 
 
 @Component({
@@ -114,6 +95,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
       this.tabIndex = +queryParams.get('tabIndex');
+      this.changeDetectorRef.detectChanges()
     }));
 
     // Subscribe to authService and set the current user if possible
@@ -178,13 +160,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       }
       this.event = event;
       this.activitySelectionService.selectedActivities.clear();
-      this.activitySelectionService.selectedActivities.select(...event.getActivities())
+      this.activitySelectionService.selectedActivities.select(...event.getActivities());
     });
 
     // Subscribe to selected activities
     this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
       this.selectedActivities = selectedActivities.source.selected;
-    })
+    });
   }
 
 
@@ -204,6 +186,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   hasLaps(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
+  }
+
+  hasIntensityZones(event: EventInterface): boolean {
+    return !!this.event.getActivities().reduce((intensityZonesArray, activity) => intensityZonesArray.concat(activity.intensityZones), []).length
   }
 
   hasDevices(event: EventInterface): boolean {

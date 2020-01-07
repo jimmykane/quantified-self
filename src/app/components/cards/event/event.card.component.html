@@ -20,6 +20,7 @@
   </app-event-card-stats-grid>
 
   <app-event-intensity-zones
+    *ngIf="hasIntensityZones(event)"
     [activities]="selectedActivities"
     [useAnimations]="useChartAnimations"
     [chartTheme]="chartTheme">
