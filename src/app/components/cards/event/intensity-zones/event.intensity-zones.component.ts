@@ -125,55 +125,6 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     //   }
     // });
 
-    this.intensityZones.forEach(intensityZone => {
-      const series = chart.series.push(new am4charts.ColumnSeries());
-      // series.clustered = false;
-      series.dataFields.valueX = intensityZone.type;
-      series.dataFields.categoryY = 'zone';
-      series.calculatePercent = true;
-      series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
-      series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
-      series.columns.template.strokeWidth = 0;
-      series.columns.template.height = am4core.percent(80);
-      series.columns.template.column.cornerRadiusBottomRight = 2;
-      series.columns.template.column.cornerRadiusTopRight = 2;
-
-      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-      categoryLabel.label.adapter.add('text', (text, target) => {
-        return `[bold]${Math.round(target.dataItem.values.valueX.percent)}[/]%`;
-      });
-      categoryLabel.label.horizontalCenter = 'left';
-      categoryLabel.label.verticalCenter = 'middle';
-      categoryLabel.label.truncate = false;
-      categoryLabel.label.hideOversized = false;
-      categoryLabel.label.fontSize = '0.65em';
-      categoryLabel.label.dx = 10;
-      categoryLabel.label.padding(1, 2, 0, 2);
-
-      categoryLabel.label.background = new am4core.RoundedRectangle();
-      categoryLabel.label.background.fillOpacity = 0.5;
-      categoryLabel.label.background.stroke = chart.colors.getIndex(6);
-      categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
-        return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
-      });
-      categoryLabel.label.background.strokeOpacity = 1;
-      (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
-
-      // series.filters.push(ChartHelper.getShadowFilter());
-
-      switch (intensityZone.type) {
-        case DataHeartRate.type:
-          series.fill = am4core.color(AppColors.Red);
-          break;
-        case DataPower.type:
-          series.fill = am4core.color(AppColors.Orange);
-          break;
-        case DataSpeed.type:
-          series.fill = am4core.color(AppColors.Blue);
-          break;
-      }
-      // series.cursorTooltipEnabled = false;
-    });
 
     return chart;
   }
@@ -215,6 +166,8 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
   }
 
   private updateChart() {
+    this.chart.series.clear();
+    this.createChartSeries();
     this.chart.data = this.intensityZones.reduce((data, intensityZones) => {
       data.push({
         zone: `Zone 1`,
@@ -234,7 +187,6 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       });
       return data;
     }, []);
-    console.log(this.chart.data);
   }
 
   private getColorForZone(zone: string): am4core.Color {
@@ -251,5 +203,63 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       default:
         return am4core.color(AppColors.LightBlue);
     }
+  }
+
+  private createChartSeries() {
+    this.intensityZones.forEach(intensityZone => {
+      if (!intensityZone.zone1Duration
+        && !intensityZone.zone2Duration
+        && !intensityZone.zone3Duration
+        && !intensityZone.zone4Duration
+        && !intensityZone.zone5Duration) {
+        return;
+      }
+      const series = this.chart.series.push(new am4charts.ColumnSeries());
+      // series.clustered = false;
+      series.dataFields.valueX = intensityZone.type;
+      series.dataFields.categoryY = 'zone';
+      series.calculatePercent = true;
+      series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
+      series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
+      series.columns.template.strokeWidth = 0;
+      series.columns.template.height = am4core.percent(80);
+      series.columns.template.column.cornerRadiusBottomRight = 2;
+      series.columns.template.column.cornerRadiusTopRight = 2;
+
+      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+      categoryLabel.label.adapter.add('text', (text, target) => {
+        return `[bold]${Math.round(target.dataItem.values.valueX.percent)}[/]%`;
+      });
+      categoryLabel.label.horizontalCenter = 'left';
+      categoryLabel.label.verticalCenter = 'middle';
+      categoryLabel.label.truncate = false;
+      categoryLabel.label.hideOversized = false;
+      categoryLabel.label.fontSize = '0.65em';
+      categoryLabel.label.dx = 10;
+      categoryLabel.label.padding(1, 2, 0, 2);
+
+      categoryLabel.label.background = new am4core.RoundedRectangle();
+      categoryLabel.label.background.fillOpacity = 0.5;
+      categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
+        return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
+      });
+      categoryLabel.label.background.strokeOpacity = 1;
+      (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
+
+      // series.filters.push(ChartHelper.getShadowFilter());
+
+      switch (intensityZone.type) {
+        case DataHeartRate.type:
+          series.fill = am4core.color(AppColors.Red);
+          break;
+        case DataPower.type:
+          series.fill = am4core.color(AppColors.Orange);
+          break;
+        case DataSpeed.type:
+          series.fill = am4core.color(AppColors.Blue);
+          break;
+      }
+      // series.cursorTooltipEnabled = false;
+    });
   }
 }

@@ -95,7 +95,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
       this.tabIndex = +queryParams.get('tabIndex');
-      this.changeDetectorRef.detectChanges()
     }));
 
     // Subscribe to authService and set the current user if possible
