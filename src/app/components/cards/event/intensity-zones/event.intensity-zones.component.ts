@@ -100,8 +100,8 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     categoryAxis.dataFields.category = 'zone';
     categoryAxis.renderer.labels.template.align = 'left';
     categoryAxis.renderer.labels.template.fontWeight = 'bold';
-    categoryAxis.renderer.cellStartLocation = 0;
-    categoryAxis.renderer.cellEndLocation = 0.9;
+    categoryAxis.renderer.cellStartLocation = 0.05;
+    categoryAxis.renderer.cellEndLocation = 0.95;
     categoryAxis.renderer.grid.template.fillOpacity = 1;
     categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
     // categoryAxis.renderer.axisFills.template.disabled = false;
@@ -134,13 +134,13 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
-      series.columns.template.height = am4core.percent(90);
+      series.columns.template.height = am4core.percent(80);
       series.columns.template.column.cornerRadiusBottomRight = 2;
       series.columns.template.column.cornerRadiusTopRight = 2;
 
       const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
       categoryLabel.label.adapter.add('text', (text, target) => {
-        return `${Math.round(target.dataItem.values.valueX.percent)}%`;
+        return `[bold]${Math.round(target.dataItem.values.valueX.percent)}[/]%`;
       });
       categoryLabel.label.horizontalCenter = 'left';
       categoryLabel.label.verticalCenter = 'middle';
@@ -148,11 +148,14 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       categoryLabel.label.hideOversized = false;
       categoryLabel.label.fontSize = '0.65em';
       categoryLabel.label.dx = 10;
-      categoryLabel.label.padding(1, 1, 0, 2);
+      categoryLabel.label.padding(1, 2, 0, 2);
 
       categoryLabel.label.background = new am4core.RoundedRectangle();
       categoryLabel.label.background.fillOpacity = 0.5;
-      categoryLabel.label.background.stroke = am4core.color('#efefef');
+      categoryLabel.label.background.stroke = chart.colors.getIndex(6);
+      categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
+        return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
+      });
       categoryLabel.label.background.strokeOpacity = 1;
       (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
@@ -232,5 +235,21 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       return data;
     }, []);
     console.log(this.chart.data);
+  }
+
+  private getColorForZone(zone: string): am4core.Color {
+    switch (zone) {
+      case `Zone 5`:
+        return am4core.color(AppColors.Red);
+      case `Zone 4`:
+        return am4core.color(AppColors.Orange);
+      case `Zone 3`:
+        return am4core.color(AppColors.Yellow);
+      case `Zone 2`:
+        return am4core.color(AppColors.Green);
+      case `Zone 1`:
+      default:
+        return am4core.color(AppColors.LightBlue);
+    }
   }
 }
