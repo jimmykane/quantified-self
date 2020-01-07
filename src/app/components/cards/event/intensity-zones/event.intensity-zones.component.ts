@@ -70,7 +70,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
-    chart.padding(12,0,0,0);
+    chart.padding(12, 0, 0, 0);
 
     // Legend
     const legend = new am4charts.Legend();
@@ -103,7 +103,27 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     categoryAxis.renderer.cellStartLocation = 0;
     categoryAxis.renderer.cellEndLocation = 0.9;
     categoryAxis.renderer.grid.template.fillOpacity = 1;
-    categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF')
+    categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
+    // categoryAxis.renderer.axisFills.template.disabled = false;
+    // categoryAxis.renderer.axisFills.template.fillOpacity = 0.2;
+    // categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
+    //   if (!target.dataItem.dataContext) {
+    //     return null;
+    //   }
+    //   switch (target.dataItem.dataContext['zone']) {
+    //     case `Zone 5`:
+    //       return am4core.color(AppColors.Red);
+    //     case `Zone 4`:
+    //       return am4core.color(AppColors.Yellow);
+    //     case `Zone 3`:
+    //       return am4core.color(AppColors.LightBlue);
+    //     case `Zone 2`:
+    //       return am4core.color(AppColors.LightGreen);
+    //     case `Zone 1`:
+    //     default:
+    //       return am4core.color(AppColors.Blue);
+    //   }
+    // });
 
     this.intensityZones.forEach(intensityZone => {
       const series = chart.series.push(new am4charts.ColumnSeries());
