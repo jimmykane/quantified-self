@@ -70,6 +70,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
+    chart.padding(12,0,0,0);
 
     // Legend
     const legend = new am4charts.Legend();
@@ -113,9 +114,27 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
-      series.columns.template.height = am4core.percent(70);
+      series.columns.template.height = am4core.percent(90);
       series.columns.template.column.cornerRadiusBottomRight = 2;
       series.columns.template.column.cornerRadiusTopRight = 2;
+
+      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+      categoryLabel.label.adapter.add('text', (text, target) => {
+        return `${Math.round(target.dataItem.values.valueX.percent)}%`;
+      });
+      categoryLabel.label.horizontalCenter = 'left';
+      categoryLabel.label.verticalCenter = 'middle';
+      categoryLabel.label.truncate = false;
+      categoryLabel.label.hideOversized = false;
+      categoryLabel.label.fontSize = '0.65em';
+      categoryLabel.label.dx = 10;
+      categoryLabel.label.padding(1, 1, 0, 2);
+
+      categoryLabel.label.background = new am4core.RoundedRectangle();
+      categoryLabel.label.background.fillOpacity = 0.5;
+      categoryLabel.label.background.stroke = am4core.color('#efefef');
+      categoryLabel.label.background.strokeOpacity = 1;
+      (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
       // series.filters.push(ChartHelper.getShadowFilter());
 
