@@ -317,10 +317,10 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.14.10.tgz#e491484c6060af8d461e12ec81c0da8a3282b8de"
   integrity sha512-V8wj+w2YMNvGuhgl/MA5fmTxgjmVHVoasfIaxMMZJV6Y8Kk+Ydpi1z2whoShDCJ2BuNVoqH/h1hrygnBxkrw/Q==
 
-"@types/node@^12.7.1":
-  version "12.7.2"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.7.2.tgz#c4e63af5e8823ce9cc3f0b34f7b998c2171f0c44"
-  integrity sha512-dyYO+f6ihZEtNPDcWNR1fkoTDf3zAK3lAABDze3mz6POyIercH0lEUawUFXlG8xaQZmm1yEBON/4TsYv/laDYg==
+"@types/node@^13.1.4":
+  version "13.1.4"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-13.1.4.tgz#4cfd90175a200ee9b02bd6b1cd19bc349741607e"
+  integrity sha512-Lue/mlp2egZJoHXZr4LndxDAd7i/7SQYhV0EjWfb/a4/OZ6tuVwMCVPiwkU5nsEipxEf7hmkSU7Em5VQ8P5NGA==
 
 "@types/node@^8.0.53":
   version "8.10.49"
@@ -943,12 +943,10 @@ fast-text-encoding@^1.0.0:
   resolved "https://registry.yarnpkg.com/fast-text-encoding/-/fast-text-encoding-1.0.0.tgz#3e5ce8293409cfaa7177a71b9ca84e1b1e6f25ef"
   integrity sha512-R9bHCvweUxxwkDwhjav5vxpFvdPGlVngtqmx4pIZfSUhM/Q4NiIUHB456BAf+Q1Nwu3HEZYONtu+Rya+af4jiQ==
 
-fast-xml-parser@^3.12.19:
-  version "3.12.19"
-  resolved "https://registry.yarnpkg.com/fast-xml-parser/-/fast-xml-parser-3.12.19.tgz#be70984fc61d870ce72bbcda474a0ffe6440524e"
-  integrity sha512-DB93FtI9FCn4DDxjDSFW91vdAo+Y1La6jNDRxKCO3F4WxyodeHtXo/HwWum/Qy/XunTdXEAdwiSVYAFvHeJOIw==
-  dependencies:
-    nimnjs "^1.3.2"
+fast-xml-parser@^3.15.1:
+  version "3.15.1"
+  resolved "https://registry.yarnpkg.com/fast-xml-parser/-/fast-xml-parser-3.15.1.tgz#7299ef53b00d5c0f9809599396a26e6d1af20603"
+  integrity sha512-MStlD6aNPZCd9msF5wBh2VJ0jAE2zz85ipk+OIPO+pZi64ckY//oGi5kskcTVRj2bMSmBI5F2SY1IGWHWZzbCA==
 
 faye-websocket@0.11.3:
   version "0.11.3"
@@ -1007,10 +1005,10 @@ firebase-functions@^3.0.2:
     jsonwebtoken "^8.3.2"
     lodash "^4.6.1"
 
-fit-file-parser@^1.6.15:
-  version "1.6.15"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.15.tgz#e3c3671def1812c53350e848c4bc6c7029053650"
-  integrity sha512-yNBrlNGaYmybcz7dPeaE9w+29yggawXkaVWg9hDRbnFPytwVj7g6kmKfODvU2BmE2qL+jLaDGs14Mg9lC2zv0g==
+fit-file-parser@^1.6.17:
+  version "1.6.17"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.17.tgz#6110b3d33d082e5b8523dfaabcb93ca38cfca594"
+  integrity sha512-SMaayfkOjWKd9XF9CBJ0tZIkUvjgtqwCO5Q4fiYzx0KrDXjKQnBWvFF+JPNCf1qxVIGpwb/p6aOjPKr3qb0Ntg==
   dependencies:
     buffer "^5.1.0"
 
@@ -1096,10 +1094,10 @@ gcs-resumable-upload@^1.0.0:
     pumpify "^1.5.1"
     stream-events "^1.0.4"
 
-geolib@^3.1.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.1.0.tgz#c2b5124105f2cc37f097700f8ec63e65c7061920"
-  integrity sha512-46P2RFHUskJGVi8jE389tK2CPmpnpU+7bRr3hQks7ojU7dEqtqKbih+yB1nBXTTpUUt47VPen16oMV3P6IRQyg==
+geolib@^3.2.1:
+  version "3.2.1"
+  resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.2.1.tgz#1d7c6e7106eddc10445ba2038550aab63d6e4fa4"
+  integrity sha512-O9nD8iSD4VimupKak8bKySLkkWI5VWetxIXsU7jmJRXxBFRR9LxSXGfTomtcHJLSRiznx+YHXHTOIVq4qgQmPw==
 
 getpass@^0.1.1:
   version "0.1.7"
@@ -1636,24 +1634,6 @@ negotiator@0.6.2:
   resolved "https://registry.yarnpkg.com/negotiator/-/negotiator-0.6.2.tgz#feacf7ccf525a77ae9634436a64883ffeca346fb"
   integrity sha512-hZXc7K2e+PgeI1eDBe/10Ard4ekbfrrqG8Ep+8Jmf4JID2bNg7NvCPOZN+kfF574pFQI7mum2AUqDidoKqcTOw==
 
-nimn-date-parser@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/nimn-date-parser/-/nimn-date-parser-1.0.0.tgz#4ce55d1fd5ea206bbe82b76276f7b7c582139351"
-  integrity sha512-1Nf+x3EeMvHUiHsVuEhiZnwA8RMeOBVTQWfB1S2n9+i6PYCofHd2HRMD+WOHIHYshy4T4Gk8wQoCol7Hq3av8Q==
-
-nimn_schema_builder@^1.0.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/nimn_schema_builder/-/nimn_schema_builder-1.1.0.tgz#b370ccf5b647d66e50b2dcfb20d0aa12468cd247"
-  integrity sha512-DK5/B8CM4qwzG2URy130avcwPev4uO0ev836FbQyKo1ms6I9z/i6EJyiZ+d9xtgloxUri0W+5gfR8YbPq7SheA==
-
-nimnjs@^1.3.2:
-  version "1.3.2"
-  resolved "https://registry.yarnpkg.com/nimnjs/-/nimnjs-1.3.2.tgz#a6a877968d87fad836375a4f616525e55079a5ba"
-  integrity sha512-TIOtI4iqkQrUM1tiM76AtTQem0c7e56SkDZ7sj1d1MfUsqRcq2ZWQvej/O+HBTZV7u/VKnwlKTDugK/75IRPPw==
-  dependencies:
-    nimn-date-parser "^1.0.0"
-    nimn_schema_builder "^1.0.0"
-
 node-fetch@^2.2.0, node-fetch@^2.3.0, node-fetch@^2.5.0:
   version "2.6.0"
   resolved "https://registry.yarnpkg.com/node-fetch/-/node-fetch-2.6.0.tgz#e633456386d4aa55863f676a7ab0daa8fdecb0fd"
@@ -1814,15 +1794,15 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.4.13:
-  version "3.4.13"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.4.13.tgz#3cadef05dffa849ca70cd262bc70b1ea7b210550"
-  integrity sha512-kOkv9oyse9bZbjrwSkZyEX/NKoaZufDIBqe/DavrglO2Kb0rRVRLjAQE8cNSZ37z7U3iSA5vkz8QDMzyKUYAxA==
+quantified-self-lib@^3.5.2:
+  version "3.5.2"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.5.2.tgz#8edf0d38228721068c208669077334f4f4fefb0e"
+  integrity sha512-g04mhdGWpbjjgnBw2vNJvVVzjBo3QiVbe3hoNDjT/U+9Qh3sk1rMrT1ouAqpbyX26IwVkqP0B8NkOXew1XcyYw==
   dependencies:
-    "@types/node" "^12.7.1"
-    fast-xml-parser "^3.12.19"
-    fit-file-parser "^1.6.15"
-    geolib "^3.1.0"
+    "@types/node" "^13.1.4"
+    fast-xml-parser "^3.15.1"
+    fit-file-parser "^1.6.17"
+    geolib "^3.2.1"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
 
