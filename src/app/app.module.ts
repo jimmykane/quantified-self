@@ -112,8 +112,7 @@ export class SentryErrorHandler implements ErrorHandler {
     ActivitySelectionService,
     ActivityCursorService,
     ScreenTrackingService,
-    // UserTrackingService,
-    // {provide: ErrorHandler, useClass: SentryErrorHandler}
+    UserTrackingService,
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},
     {provide: CONFIG, useValue: {

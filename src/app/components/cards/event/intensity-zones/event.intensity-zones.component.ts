@@ -104,6 +104,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     categoryAxis.renderer.cellEndLocation = 0.95;
     categoryAxis.renderer.grid.template.fillOpacity = 1;
     categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
+
     // categoryAxis.renderer.axisFills.template.disabled = false;
     // categoryAxis.renderer.axisFills.template.fillOpacity = 0.4;
     // categoryAxis.fillRule = (dataItem) => {
