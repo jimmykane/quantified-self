@@ -105,26 +105,13 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     categoryAxis.renderer.grid.template.fillOpacity = 1;
     categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
     // categoryAxis.renderer.axisFills.template.disabled = false;
-    // categoryAxis.renderer.axisFills.template.fillOpacity = 0.2;
+    // categoryAxis.renderer.axisFills.template.fillOpacity = 0.4;
+    // categoryAxis.fillRule = (dataItem) => {
+    //   dataItem.axisFill.visible = true;
+    // };
     // categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
-    //   if (!target.dataItem.dataContext) {
-    //     return null;
-    //   }
-    //   switch (target.dataItem.dataContext['zone']) {
-    //     case `Zone 5`:
-    //       return am4core.color(AppColors.Red);
-    //     case `Zone 4`:
-    //       return am4core.color(AppColors.Yellow);
-    //     case `Zone 3`:
-    //       return am4core.color(AppColors.LightBlue);
-    //     case `Zone 2`:
-    //       return am4core.color(AppColors.LightGreen);
-    //     case `Zone 1`:
-    //     default:
-    //       return am4core.color(AppColors.Blue);
-    //   }
+    //   return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
     // });
-
 
     return chart;
   }
