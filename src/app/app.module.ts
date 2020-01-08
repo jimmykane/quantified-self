@@ -35,10 +35,9 @@ import {AppInfoService} from './services/app.info.service';
 import {WindowService} from './services/app.window.service';
 import {AgmCoreModule} from '@agm/core';
 import {
-  ANALYTICS_COLLECTION_ENABLED,
   AngularFireAnalyticsModule,
   APP_NAME,
-  APP_VERSION,
+  APP_VERSION, COLLECTION_ENABLED, CONFIG,
   DEBUG_MODE, ScreenTrackingService, UserTrackingService
 } from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
@@ -117,10 +116,14 @@ export class SentryErrorHandler implements ErrorHandler {
     // {provide: ErrorHandler, useClass: SentryErrorHandler}
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
     {provide: FunctionsRegionToken, useValue: 'europe-west2'},
+    {provide: CONFIG, useValue: {
+        allow_ad_personalization_signals: false,
+        anonymize_ip: true
+      }},
     {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: (environment.production ||  environment.beta)},
     {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production ||  environment.beta)},
     {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
-    {provide: ANALYTICS_COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
+    {provide: COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
     {provide: APP_VERSION, useValue: appPackage.version},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
     {provide: DEBUG_MODE, useValue: !!environment.beta},
