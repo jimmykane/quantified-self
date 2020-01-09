@@ -3,6 +3,7 @@ import {FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators} from 
 import {MatButtonToggleChange} from '@angular/material';
 import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 
 @Component({
   selector: 'app-event-search',
@@ -15,11 +16,14 @@ export class EventSearchComponent implements OnChanges, OnInit {
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;
   @Input() startOfTheWeek: DaysOfTheWeek;
-  @Output() searchChange: EventEmitter<{ searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }> = new EventEmitter<{ searchTerm: string, startDate: Date, endDate: Date, dateRange: DateRanges }>();
+  @Input() selectedActivityTypes: ActivityTypes[];
+
+  @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 
   public searchFormGroup: FormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
+  public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
   constructor() {
   }
@@ -39,6 +43,10 @@ export class EventSearchComponent implements OnChanges, OnInit {
       ]),
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
+      ]),
+      activityTypes: new FormControl(this.selectedActivityTypes, [
+        // Validators.required,
+        // Validators.minLength(4),
       ]),
     });
   }
@@ -60,6 +68,7 @@ export class EventSearchComponent implements OnChanges, OnInit {
       searchTerm: this.searchFormGroup.get('search').value,
       startDate: this.searchFormGroup.get('startDate').value,
       endDate: this.searchFormGroup.get('endDate').value,
+      activityTypes: this.searchFormGroup.get('activityTypes').value,
       dateRange: this.selectedDateRange,
     });
   }
@@ -85,9 +94,13 @@ export class EventSearchComponent implements OnChanges, OnInit {
   onDateChange(event) {
     this.selectedDateRange = this.dateRanges.custom;
     // Start date should be on 00:00:00 but end date needs fix
-    if (this.searchFormGroup.get('endDate').value){
+    if (this.searchFormGroup.get('endDate').value) {
       this.searchFormGroup.get('endDate').setValue(new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)));
     }
+  }
+
+  onActivityTypesChange(event){
+     this.search()
   }
 
   validateAllFormFields(formGroup: FormGroup) {
@@ -209,3 +222,11 @@ export const maxDateDistanceValidator: ValidatorFn = (control: FormGroup): Valid
   }
   return null;
 };
+
+export interface Search {
+  searchTerm: string,
+  startDate: Date,
+  endDate: Date,
+  dateRange: DateRanges,
+  activityTypes: ActivityTypes[]
+}

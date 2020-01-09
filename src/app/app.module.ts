@@ -124,7 +124,7 @@ export class SentryErrorHandler implements ErrorHandler {
     {provide: COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
     {provide: APP_VERSION, useValue: appPackage.version},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
-    {provide: DEBUG_MODE, useValue: !!environment.beta},
+    {provide: DEBUG_MODE, useValue: (environment.localhost)},
   ],
   bootstrap: [AppComponent],
 })

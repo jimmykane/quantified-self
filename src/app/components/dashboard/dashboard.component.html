@@ -6,6 +6,7 @@
                     [selectedStartDate]="searchStartDate"
                     [selectedEndDate]="searchEndDate"
                     [startOfTheWeek]="startOfTheWeek"
+                    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
                     (searchChange)="search($event)">
   </app-event-search>
 

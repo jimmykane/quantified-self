@@ -372,6 +372,7 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : UserService.getDefaultDateRange();
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
+    settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
     settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || UserService.getDefaultUserDashboardChartSettings();
     // Patch missing defaults
     settings.dashboardSettings.chartsSettings.forEach(chartSetting => chartSetting.dataCategoryType = chartSetting.dataCategoryType || ChartDataCategoryTypes.ActivityType);

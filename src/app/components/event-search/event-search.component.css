@@ -1,8 +1,8 @@
 mat-icon{
   vertical-align: middle;
 }
-mat-form-field{
-  width: calc(50% - 1em);
+mat-form-field.big{
+  width: calc(33% - 1em);
 }
 
 form{
