@@ -32,9 +32,9 @@ export class AppAuthService implements OnDestroy {
         if (user) {
           return this.userService.getUserByID(user.uid).pipe(map((dbUser: User) => {
             this.authState = !!dbUser;
-            if (dbUser) {
-              this.afa.setAnalyticsCollectionEnabled(true);
-            }
+            // if (dbUser) {
+            //   this.afa.setAnalyticsCollectionEnabled(true);
+            // }
             return dbUser;
           }));
         } else {
