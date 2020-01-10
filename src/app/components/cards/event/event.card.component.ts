@@ -32,7 +32,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public targetUserID: string;
   public currentUser: User;
   public tabIndex;
-  public streams: StreamInterface[] = [];
+  public positionStreams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
   public userUnitSettings = UserService.getDefaultUserUnitSettings();

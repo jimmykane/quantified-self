@@ -40,7 +40,7 @@ import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirm
 import {MatBottomSheet} from '@angular/material';
 import {animate, state, style, transition, trigger} from '@angular/animations';
 import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import {isNumber, isNumberOrString} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
 import {UserService} from '../../services/app.user.service';
 import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
@@ -282,7 +282,6 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
   }
 
   getColumnsToDisplayDependingOnScreenSize() {
-
     // push all the rest
     let columns = [
       'Expand',
@@ -301,6 +300,15 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       'Device Names',
       'Actions'
     ];
+
+    // Filter now on data
+    const t0 = performance.now();
+    columns = columns.filter(column => {
+      return this.data.data.find(row => {
+        return isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+      });
+    });
+    this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
       return columns;
