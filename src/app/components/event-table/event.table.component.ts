@@ -305,7 +305,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     const t0 = performance.now();
     columns = columns.filter(column => {
       return this.data.data.find(row => {
-        return isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+        return column === 'Checkbox' || column === 'Expand' || column === 'Actions' || isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
       });
     });
     this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
