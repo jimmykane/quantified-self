@@ -179,7 +179,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
         return EventRowElementsArray;
       }
 
-      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue(), this.user.settings.unitSettings);
+      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type))? (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue() : [ActivityTypes.unknown], this.user.settings.unitSettings);
 
       statRowElement['Privacy'] = event.privacy;
       statRowElement['Name'] = event.name;
