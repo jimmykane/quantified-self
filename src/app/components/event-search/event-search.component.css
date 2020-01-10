@@ -18,3 +18,5 @@ mat-button-toggle-group{
   margin-top: 0.5em;
   margin-right: 0.5em;
 }
+
+::ng-deep .mat-option:first-child .mat-pseudo-checkbox{ display: none; }

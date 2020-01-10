@@ -40,6 +40,7 @@
 
     <mat-form-field class="big">
       <mat-select placeholder="Filter by activities" formControlName="activityTypes" multiple (selectionChange)="onActivityTypesChange($event)">
+        <mat-option>None</mat-option>
         <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">
           {{activityType}}
         </mat-option>

@@ -4,6 +4,7 @@ import {MatButtonToggleChange} from '@angular/material';
 import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {MatSelectChange} from '@angular/material/select';
 
 @Component({
   selector: 'app-event-search',
@@ -99,8 +100,11 @@ export class EventSearchComponent implements OnChanges, OnInit {
     }
   }
 
-  onActivityTypesChange(event){
-     this.search()
+  onActivityTypesChange(event: MatSelectChange) {
+    if (event.value.indexOf(undefined) !== -1){
+      this.searchFormGroup.get('activityTypes').setValue([]);
+    }
+   this.search()
   }
 
   validateAllFormFields(formGroup: FormGroup) {
