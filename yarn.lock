@@ -9,10 +9,10 @@
   dependencies:
     tslib "^1.9.0"
 
-"@amcharts/amcharts4@4.7.20":
-  version "4.7.20"
-  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.7.20.tgz#e84cc49975073f5d0540b85cdd8db0325d39ff82"
-  integrity sha512-ghqrVP4uA4qOknAEmTr78rDDbdr2ogQ2+H5uTCHFtlY+jseDiZDCmOflAiMD/zcsEceftePAj1U7Swo/vkzuwA==
+"@amcharts/amcharts4@4.7.21":
+  version "4.7.21"
+  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.7.21.tgz#df5a2d6e63574ba2dd4ca2e84ddfa458a4bbcf1c"
+  integrity sha512-A0tcBPX9ZiMEFhxsSkW9Kc5SdGXc56RbbeQkbavox1ds9wKf3d3R0M0rCXsjrvDmUx1TFGhmH0eAo7TijjMNIg==
   dependencies:
     "@types/regression" "^2.0.0"
     canvg "^2.0.0"
@@ -4422,9 +4422,9 @@ handle-thing@^2.0.0:
   integrity sha512-d4sze1JNC454Wdo2fkuyzCr6aHcbL6PGGuFAz0Li/NcOm1tCHGnWDRmJP85dh9IhQErTc2svWFEX5xHIOo//kQ==
 
 handlebars@^4.1.2:
-  version "4.6.0"
-  resolved "https://registry.yarnpkg.com/handlebars/-/handlebars-4.6.0.tgz#33af6c3eda930d7a924f5d8f1c6d8edc3180512e"
-  integrity sha512-i1ZUP7Qp2JdkMaFon2a+b0m5geE8Z4ZTLaGkgrObkEd+OkUKyRbRWw4KxuFCoHfdETSY1yf9/574eVoNSiK7pw==
+  version "4.7.0"
+  resolved "https://registry.yarnpkg.com/handlebars/-/handlebars-4.7.0.tgz#8db186e9d7cb89a3705b61d503a6e152665f35cc"
+  integrity sha512-PaZ6G6nYzfJ0Hd1WIhOpsnUPWh1R0Pg//r4wEYOtzG65c2V8RJQ/++yYlVmuoQ7EMXcb4eri5+FB2XH1Lwed9g==
   dependencies:
     neo-async "^2.6.0"
     optimist "^0.6.1"
@@ -7047,10 +7047,10 @@ qs@~6.5.2:
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
 
-quantified-self-lib@^3.5.5:
-  version "3.5.5"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.5.5.tgz#1b7288af6a05f944b43a15a3c7ffe32305d8120d"
-  integrity sha512-51fkJJ4T1MTBFC3USQ6ViL8tp7FL9fAitWhsqDiy+qh1/K2EWxt8+l+UK6JgsA8yeUPoCmjAb24R78198d3JFw==
+quantified-self-lib@^3.5.7:
+  version "3.5.7"
+  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.5.7.tgz#2ea86d62a3a7c1f5b9daf6e04b57823cd8e4be4c"
+  integrity sha512-Ey1/WUM7hfGLuwV8DX3LW86m6b5cPyb0I2orWeaNT5djdPrlK18X7lnHWGk5PgZKoUIqrw2FzaF1jqXR7qFqKQ==
   dependencies:
     "@types/node" "^13.1.4"
     fast-xml-parser "^3.15.1"
