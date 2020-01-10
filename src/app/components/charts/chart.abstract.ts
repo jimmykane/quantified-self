@@ -125,7 +125,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
   }
 
   getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
-    return chart.colors.getIndex(index * 2);
+    return chart.colors.getIndex(index * 3);
   }
 
   getFillOpacity() {
