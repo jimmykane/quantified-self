@@ -124,12 +124,16 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           .getEventsForUserBy(user, where, 'startDate', false, limit);
       return returnObservable
         .pipe(map((eventsArray) => {
-          if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length){
+          const t0 = performance.now();
+          if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+            this.logger.info(`Took ${performance.now() - t0}ms to filter`);
             return eventsArray;
           }
-          return eventsArray.filter(event => {
+          const result = eventsArray.filter(event => {
             return event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0)
-          })
+          });
+          this.logger.info(`Took ${performance.now() - t0}ms to filter ${eventsArray.length}`);
+          return result;
         }))
         .pipe(map((events) => {
           return {events: events, user: user}
