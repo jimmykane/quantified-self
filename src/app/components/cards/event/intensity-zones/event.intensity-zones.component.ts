@@ -99,7 +99,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
     categoryAxis.cursorTooltipEnabled = false;
     categoryAxis.dataFields.category = 'zone';
     categoryAxis.renderer.labels.template.align = 'left';
-    categoryAxis.renderer.labels.template.fontWeight = 'bold';
+    // categoryAxis.renderer.labels.template.fontWeight = 'bold';
     categoryAxis.renderer.cellStartLocation = 0.05;
     categoryAxis.renderer.cellEndLocation = 0.95;
     categoryAxis.renderer.grid.template.fillOpacity = 1;
@@ -207,7 +207,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       series.dataFields.valueX = intensityZone.type;
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
-      series.legendSettings.labelText = `[bold]${intensityZone.type}[/]`;
+      series.legendSettings.labelText = `${intensityZone.type}`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = am4core.percent(80);
