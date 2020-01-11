@@ -78,6 +78,7 @@ import {
   ActivityCursorInterface,
   ActivityCursorService
 } from '../../../../services/activity-cursor/activity-cursor.service';
+import {DateAxisDataItem} from '@amcharts/amcharts4/charts';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -1050,54 +1051,63 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
               .getLaps()
               .filter(lap => lap.type === lapType)
               .forEach((lap, lapIndex) => {
-                if (lapIndex === activity.getLaps().length - 1) {
-                  return;
+                  if (lapIndex === activity.getLaps().length - 1) {
+                    return;
+                  }
+                  let range
+                  if (xAxisType === XAxisTypes.Time) {
+                    range = xAxis.axisRanges.create();
+                    range.value = lap.endDate.getTime();
+                  } else if (xAxisType === XAxisTypes.Duration) {
+                    range = xAxis.axisRanges.create();
+                    range.value = (new Date(0).getTimezoneOffset() * 60000) + +lap.endDate - +activity.startDate;
+                  } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
+                    const data = this.distanceAxesForActivitiesMap
+                      .get(activity.getID())
+                      .getStreamDataByTime(activity.startDate, true)
+                      .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
+                    // There can be a case that the distance stream does not have data for this?
+                    // So if there is a lap, done and the watch did not update the distance example: last 2s lap
+                    if (!data[0]) {
+                      return;
+                    }
+                    range = xAxis.axisRanges.create();
+                    range.value = data[0].value;
+                  }
+                  range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity));
+                  range.grid.strokeWidth = 1;
+                  range.grid.strokeOpacity = 0.8;
+                  range.grid.strokeDasharray = '2,5';
+
+                  range.grid.above = true;
+                  range.grid.zIndex = 1;
+                  range.grid.tooltipText = `[${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
+                  range.grid.tooltipPosition = 'pointer';
+                  range.label.tooltipText = range.grid.tooltipText;
+                  range.label.inside = true;
+                  range.label.adapter.add('text', () => {
+                    return `${lapIndex + 1}`;
+                  });
+                  range.label.paddingTop = 2;
+                  range.label.paddingBottom = 2;
+                  range.label.zIndex = 11;
+                  range.label.fontSize = '1em';
+                  range.label.background.fillOpacity = 1;
+                  range.label.background.stroke = range.grid.stroke;
+                  range.label.background.strokeWidth = 1;
+                  range.label.tooltipText = range.grid.tooltipText;
+
+                  // range.label.interactionsEnabled = true;
+
+                  range.label.background.width = 1;
+                  // range.label.fill = range.grid.stroke;
+                  range.label.horizontalCenter = 'middle';
+                  range.label.valign = 'bottom';
+                  range.label.textAlign = 'middle';
+                  range.label.dy = 6;
+                  // range.grid.filters.push(ChartHelper.getShadowFilter())
                 }
-                const range = xAxis.axisRanges.create();
-                if (xAxisType === XAxisTypes.Time) {
-                  range.value = lap.endDate.getTime();
-                } else if (xAxisType === XAxisTypes.Duration) {
-                  range.value = (new Date(0).getTimezoneOffset() * 60000) + +lap.endDate - +activity.startDate;
-                } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
-                  const data = this.distanceAxesForActivitiesMap
-                    .get(activity.getID())
-                    .getStreamDataByTime(activity.startDate, true)
-                    .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
-                  range.value = data[0].value
-                }
-                range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity));
-                range.grid.strokeWidth = 1;
-                range.grid.strokeOpacity = 0.8;
-                range.grid.strokeDasharray = '2,5';
-
-                range.grid.above = true;
-                range.grid.zIndex = 1;
-                range.grid.tooltipText = `[${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
-                range.grid.tooltipPosition = 'pointer';
-                range.label.tooltipText = range.grid.tooltipText;
-                range.label.inside = true;
-                range.label.adapter.add('text', () => {
-                  return `${lapIndex + 1}`;
-                });
-                range.label.paddingTop = 2;
-                range.label.paddingBottom = 2;
-                range.label.zIndex = 11;
-                range.label.fontSize = '1em';
-                range.label.background.fillOpacity = 1;
-                range.label.background.stroke = range.grid.stroke;
-                range.label.background.strokeWidth = 1;
-                range.label.tooltipText = range.grid.tooltipText;
-
-                // range.label.interactionsEnabled = true;
-
-                range.label.background.width = 1;
-                // range.label.fill = range.grid.stroke;
-                range.label.horizontalCenter = 'middle';
-                range.label.valign = 'bottom';
-                range.label.textAlign = 'middle';
-                range.label.dy = 6;
-                // range.grid.filters.push(ChartHelper.getShadowFilter())
-              })
+              )
           });
       })
   }

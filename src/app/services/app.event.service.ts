@@ -187,6 +187,7 @@ export class EventService implements OnDestroy {
       return combineLatest(
         event.getActivities().map((activity) => {
           return this.getAllStreams(user, event.getID(), activity.getID()).pipe(map((streams) => {
+            streams = streams || [];
             // debugger;
             // This time we dont want to just get the streams but we want to attach them to the parent obj
             activity.clearStreams();
