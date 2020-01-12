@@ -101,7 +101,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     if (this.type === 'columns' || this.type === 'pyramids') {
       series = this.vertical && this.type === 'pyramids' ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
-      series.columns.template.tension = this.vertical && this.type === 'pyramids'  ?  1 : 0;
+      series.columns.template.tension = this.vertical && this.type === 'pyramids' ? 1 : 0;
       series.columns.template.strokeOpacity = this.getStrokeOpacity();
       series.columns.template.strokeWidth = this.getStrokeWidth();
       series.columns.template.stroke = am4core.color('#175e84');
@@ -122,6 +122,11 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
 
       series.columns.template.filters.push(ChartHelper.getShadowFilter())
+
+      if (this.type === 'columns') {
+        this.vertical ? series.columns.template.column.cornerRadiusTopLeft = 2 : series.columns.template.column.cornerRadiusTopRight = 2;
+        this.vertical ? series.columns.template.column.cornerRadiusTopRight = 2 : series.columns.template.column.cornerRadiusBottomRight = 2;
+      }
 
     } else {
       series = chart.series.push(new am4charts.LineSeries());
