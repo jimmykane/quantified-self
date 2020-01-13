@@ -179,7 +179,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
         return EventRowElementsArray;
       }
 
-      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type))? (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue() : [ActivityTypes.unknown], this.user.settings.unitSettings);
+      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type)) ? (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue() : [ActivityTypes.unknown], this.user.settings.unitSettings);
 
       statRowElement['Privacy'] = event.privacy;
       statRowElement['Name'] = event.name;
@@ -193,6 +193,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       // Add the sorts
       statRowElement['sort.Start Date'] = event.startDate.getTime();
       statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
+      statRowElement['sort.Description'] = statRowElement['Activity Types'];
       statRowElement['sort.Device Names'] = statRowElement['Device Names'];
 
       EventRowElementsArray.push(statRowElement);
@@ -287,6 +288,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       'Expand',
       'Checkbox',
       'Start Date',
+      'Description',
       'Activity Types',
       'Duration',
       'Distance',
@@ -315,27 +317,27 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
-      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Description', 'Energy'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'VO2 Max', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
     }
 
     return columns
@@ -383,7 +385,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe();
     }
-    if (this.sortSubscription){
+    if (this.sortSubscription) {
       this.sortSubscription.unsubscribe();
     }
   }

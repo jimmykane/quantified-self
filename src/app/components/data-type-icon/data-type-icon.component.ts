@@ -56,8 +56,6 @@ export class DataTypeIconComponent {
         return 'date_range';
       case DataDeviceNames.type:
         return 'watch';
-      case 'name':
-        return 'font_download';
       case DataActivityTypes.type:
         return 'filter_none';
       case 'privacy':
@@ -97,7 +95,11 @@ export class DataTypeIconComponent {
         return 'trending_up';
       case 'Type':
         return 'assignment';
+      case 'Description':
+      case 'description':
+        return 'font_download';
       case 'Name':
+      case 'name':
         return 'title';
       case 'Battery Status':
         return 'battery_unknown';

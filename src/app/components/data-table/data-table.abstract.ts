@@ -30,7 +30,7 @@ export abstract class DataTableAbstract extends ScreenSizeAbstract {
   abstract getColumnsToDisplayDependingOnScreenSize();
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['Start Date', 'Distance', 'Activity Types', 'Average Power', 'Average Speed', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'VO2 Max', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
+    return ['Start Date', 'Distance', 'Activity Types', 'Description', 'Average Power', 'Average Speed', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'VO2 Max', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
   }
 
   getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface): StatRowElement {
@@ -119,4 +119,5 @@ export interface StatRowElement {
   'sort.Average Heart Rate'?: number,
   'sort.Duration': number,
   'sort.Device Names'?: string,
+  'sort.Description'?: string,
 }
