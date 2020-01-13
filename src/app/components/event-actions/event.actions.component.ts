@@ -78,6 +78,17 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     // });
   }
 
+  editEvent() {
+    const dialogRef = this.dialog.open(EventFormComponent, {
+      width: '75vw',
+      disableClose: false,
+      data: {
+        event: this.event,
+        user: this.user
+      },
+    });
+  }
+
   async reGenerateStatistics() {
     this.snackBar.open('Re-calculating activity statistics', null, {
       duration: 2000,

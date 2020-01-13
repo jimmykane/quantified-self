@@ -1,24 +1,24 @@
 <mat-dialog-content>
   <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)">
 
-    <span class="mat-headline">Editing event</span>
+    <span class="mat-headline">{{event.name}}</span>
 
-    <mat-form-field>
-      <input matInput placeholder="Name" formControlName="name">
-      <!--<mat-hint></mat-hint>-->
-      <mat-error *ngIf="hasError('name')">
-        Name must not be empty
-      </mat-error>
-    </mat-form-field>
+<!--    <mat-form-field>-->
+<!--      <input matInput placeholder="Name" formControlName="name">-->
+<!--      &lt;!&ndash;<mat-hint></mat-hint>&ndash;&gt;-->
+<!--      <mat-error *ngIf="hasError('name')">-->
+<!--        Name must not be empty-->
+<!--      </mat-error>-->
+<!--    </mat-form-field>-->
 
 
-    <mat-form-field>
-      <textarea matInput placeholder="Description" formControlName="description"></textarea>
-      <!--<mat-hint></mat-hint>-->
-      <mat-error *ngIf="hasError('name')">
-        Something is wrong with the description
-      </mat-error>
-    </mat-form-field>
+<!--    <mat-form-field>-->
+<!--      <textarea matInput placeholder="Description" formControlName="description"></textarea>-->
+<!--      &lt;!&ndash;<mat-hint></mat-hint>&ndash;&gt;-->
+<!--      <mat-error *ngIf="hasError('name')">-->
+<!--        Something is wrong with the description-->
+<!--      </mat-error>-->
+<!--    </mat-form-field>-->
 
     <div class="radio-container">
       <mat-radio-group formControlName="privacy">

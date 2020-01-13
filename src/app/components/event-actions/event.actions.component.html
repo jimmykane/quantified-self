@@ -6,9 +6,13 @@
     <mat-icon>share</mat-icon>
     <span>Share</span>
   </button>
+  <button  mat-menu-item (click)="editEvent()">
+    <mat-icon>drive_file_rename_outline</mat-icon>
+    <span>Edit settings</span>
+  </button>
   <button *ngIf="event.getActivities().length === 1" mat-menu-item (click)="editEventActivity()">
     <mat-icon>edit</mat-icon>
-    <span>Edit</span>
+    <span>Edit activity</span>
   </button>
   <!--<button mat-menu-item (click)="downloadEventAsTCX(event)">-->
     <!--<mat-icon>file_download</mat-icon>-->

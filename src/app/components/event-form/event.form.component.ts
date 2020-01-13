@@ -47,14 +47,14 @@ export class EventFormComponent implements OnInit {
 
   ngOnInit(): void {
     this.eventFormGroup = new FormGroup({
-      name: new FormControl(this.event.name, [
-        Validators.required,
-        // Validators.minLength(4),
-      ]),
-      description: new FormControl(this.event.description, [
-        // Validators.required,
-        // Validators.minLength(4),
-      ]),
+      // name: new FormControl(this.event.name, [
+      //   Validators.required,
+      //   // Validators.minLength(4),
+      // ]),
+      // description: new FormControl(this.event.description, [
+      //   // Validators.required,
+      //   // Validators.minLength(4),
+      // ]),
       privacy: new FormControl(this.event.privacy, [
         Validators.required,
         // Validators.minLength(4),
@@ -78,9 +78,9 @@ export class EventFormComponent implements OnInit {
     }
     try {
       await this.eventService.updateEventProperties(this.user, this.event.getID(), {
-        name: this.eventFormGroup.get('name').value,
+        // name: this.eventFormGroup.get('name').value,
         privacy: this.eventFormGroup.get('privacy').value,
-        description: this.eventFormGroup.get('description').value,
+        // description: this.eventFormGroup.get('description').value,
         isMerge: this.eventFormGroup.get('isMerge').value,
       });
       this.snackBar.open('Event saved', null, {
