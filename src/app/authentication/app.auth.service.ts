@@ -17,7 +17,7 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 @Injectable()
 export class AppAuthService implements OnDestroy {
   user: Observable<User | null>;
-  private authState = false;
+  private authState = null;
   userSubscription: Subscription;
 
   constructor(

@@ -11,10 +11,13 @@
      </span>
   </mat-grid-tile>
   <mat-grid-tile class="app-icon">
-    <button mat-flat-button color="primary" *ngIf="authService.authenticated()" (click)="router.navigate(['/dashboard']);">
+    <button mat-flat-button color="accent" *ngIf="authService.authenticated() === null" disabled>
+      Loading
+    </button>
+    <button mat-flat-button color="primary" *ngIf="authService.authenticated() === true" (click)="router.navigate(['/dashboard']);">
       Go to your dashboard
     </button>
-    <button mat-flat-button color="accent" *ngIf="!authService.authenticated()" (click)="router.navigate(['/login']);">
+    <button mat-flat-button color="accent" *ngIf="authService.authenticated() === false" (click)="router.navigate(['/login']);">
       Login or Register
     </button>
   </mat-grid-tile>
