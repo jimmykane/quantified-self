@@ -59,12 +59,6 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
   styleUrls: ['./event.table.component.css'],
   animations: [
     rowsAnimation,
-    trigger('detailExpand', [
-      state('collapsed, void', style({height: '0px', minHeight: '0', display: 'none'})),
-      state('expanded', style({height: '*'})),
-      transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
-      transition('expanded <=> void', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)'))
-    ]),
   ],
   providers: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -80,22 +74,12 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
 
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
-  expandedElement: StatRowElement | null;
-  expandAll: boolean;
-
-  feeling: Feelings;
-  rpe: RPEBorgCR10SCale;
-  feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
-  rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
 
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
 
   private logger = Log.create('EventTableComponent');
   private searchSubject: Subject<string> = new Subject();
-
-
-  // isExpansionDetailRow = (i: number, row: Object) => row.hasOwnProperty('detailRow');
 
   constructor(private snackBar: MatSnackBar,
               private eventService: EventService,
@@ -285,7 +269,6 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
   getColumnsToDisplayDependingOnScreenSize() {
     // push all the rest
     let columns = [
-      'Expand',
       'Checkbox',
       'Start Date',
       'Description',
@@ -307,7 +290,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     const t0 = performance.now();
     columns = columns.filter(column => {
       return this.data.data.find(row => {
-        return column === 'Checkbox' || column === 'Expand' || column === 'Actions' || isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+        return column === 'Checkbox' || column === 'Actions' || isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
       });
     });
     this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
