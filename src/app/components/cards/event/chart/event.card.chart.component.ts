@@ -78,7 +78,7 @@ import {
   ActivityCursorInterface,
   ActivityCursorService
 } from '../../../../services/activity-cursor/activity-cursor.service';
-import {DateAxisDataItem} from '@amcharts/amcharts4/charts';
+import {Chart, DateAxisDataItem, XYSeries} from '@amcharts/amcharts4/charts';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -566,7 +566,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
-    // @todo try runoutisde angular
+    // @todo try run outside angular
     let series = this.chart.series.values.find(seriesItem => seriesItem.id === this.getSeriesIDFromActivityAndStream(activity, stream));
     // If there is already a series with this id only data update should be done
     if (series) {
@@ -574,18 +574,33 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return series
     }
 
+    // Create a new series if not found
+    series = new am4charts.LineSeries();
+    series.showOnInit = false;
+    series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
+    series.simplifiedProcessing = true;
+    series.name = this.getSeriesName(stream.type);
+
+    this.attachSeriesEventListeners(series);
+
+    this.chart.series.sort((left, right) => {
+      if (left.name < right.name) {
+        return -1;
+      }
+      if (left.name > right.name) {
+        return 1;
+      }
+      return 0;
+    });
+
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
 
     // Check if we have a series with the same name aka type
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(stream.type));
     if (!sameTypeSeries) {
       // Create a new axis
-      yAxis = this.chart.yAxes.push(this.getYAxisForSeries(stream.type));
-      yAxis.extraMax = 0.2;
+      yAxis = this.chart.yAxes.push(this.createYAxisForSeries(stream.type));
 
-      if (stream.type === DataPower.type) {
-        yAxis.extraMax = this.extraMaxForPower;
-      }
 
       // yAxis.tooltip.disabled = true;
       // yAxis.interpolationDuration = 500;
@@ -633,7 +648,32 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis.renderer.ticks.template.strokeOpacity = 1;
       yAxis.renderer.ticks.template.strokeWidth = 1;
       yAxis.renderer.ticks.template.length = 5;
-      yAxis.renderer.minGridDistance = 20;
+      yAxis.renderer.minGridDistance = 15;
+
+      // Data specifics setup
+      if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
+        yAxis.renderer.inversed = true;
+        yAxis.baseValue = Infinity;
+        yAxis.extraMin = 0.1;
+        // yAxis.max = 1800;
+        yAxis.extraMax = -0.5; // @todo make this a setting
+        // yAxis.min = 0
+        // yAxis.minY = 0;
+
+        yAxis.renderer.labels.template.adapter.add('text', (text, target) => {
+          if (target.dataItem && isNumber(target.dataItem['value']) && (target.dataItem['value'] < 0)) {
+            return undefined;
+          }
+          return text;
+        });
+        // yAxis.strictMinMax = true;
+        // yAxis.extraMax = 0.5
+        // series.baseAxis = yAxis;
+        series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+      } else {
+        stream.type === DataPower.type ? yAxis.extraMax = this.extraMaxForPower : yAxis.extraMax = 0.1;
+        series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+      }
 
       yAxis.title.adapter.add('text', () => {
         if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
@@ -646,57 +686,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     } else {
       // Share
       yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
+
     }
-
-    // Then create a series
-    series = new am4charts.LineSeries();
-    series.showOnInit = false;
-    series = this.chart.series.push(series);
-    series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
-    series.simplifiedProcessing = true;
-    series.name = this.getSeriesName(stream.type);
-
-    this.attachSeriesEventListeners(series);
-
-    this.chart.series.sort((left, right) => {
-      if (left.name < right.name) {
-        return -1;
-      }
-      if (left.name > right.name) {
-        return 1;
-      }
-      return 0;
-    });
-
-    // Set the axis
-    series.yAxis = yAxis;
-
-
-    // Setup the series
-
-    series.dummyData = {
-      activity: activity,
-      stream: stream,
-    };
-
-    // @todo use base type
-    if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
-      yAxis.renderer.inversed = true;
-      yAxis.baseValue = Infinity;
-      yAxis.extraMin = 0.0;
-      yAxis.extraMax = -0.1;
-      // yAxis.min = 0
-      // yAxis.minY = 0;
-
-      // yAxis.strictMinMax = true;
-      // yAxis.extraMax = 0.5
-      // series.baseAxis = yAxis;
-      series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-    } else {
-      series.tooltipText = `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
-    }
-
-    // series.hideTooltipWhileZooming = true;
 
     series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 ? '' : activity.creator.name}[/]`;
 
@@ -707,9 +698,17 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       return this.getSeriesColor(target);
     });
 
+    // Set the axis
+    series.yAxis = yAxis;
 
+    // Setup the series
+    series.dummyData = {
+      activity: activity,
+      stream: stream,
+    };
+
+    // series.hideTooltipWhileZooming = true;
     // yAxis.title.rotation = 0;
-
 
     series.strokeWidth = this.strokeWidth;
     series.strokeOpacity = this.strokeOpacity;
@@ -752,10 +751,10 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       this.logger.info('Series ready');
     });
 
-    // Finally set the data and return
-    this.zone.runOutsideAngular(() => {
-      series.data = this.convertStreamDataToSeriesData(activity, stream);
-    });
+    series.data = this.convertStreamDataToSeriesData(activity, stream);
+
+    series = this.chart.series.push(series);
+
     return series;
   }
 
@@ -1179,7 +1178,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
     });
   }
 
-  protected getYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
+  protected createYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
       yAxis = new am4charts.DurationAxis();
