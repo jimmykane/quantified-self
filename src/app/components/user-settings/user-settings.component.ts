@@ -123,6 +123,10 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      chartExtraMaxForPace: new FormControl(this.user.settings.chartSettings.extraMaxForPace, [
+        Validators.required,
+        // Validators.minLength(1),
+      ]),
 
       chartFillOpacity: new FormControl(this.user.settings.chartSettings.fillOpacity, [
         Validators.required,
@@ -281,6 +285,7 @@ export class UserSettingsComponent implements OnChanges {
         strokeWidth: this.userSettingsFormGroup.get('chartStrokeWidth').value,
         strokeOpacity: this.userSettingsFormGroup.get('chartStrokeOpacity').value,
         extraMaxForPower: this.userSettingsFormGroup.get('chartExtraMaxForPower').value,
+        extraMaxForPace: this.userSettingsFormGroup.get('chartExtraMaxForPace').value,
         fillOpacity: this.userSettingsFormGroup.get('chartFillOpacity').value,
         lapTypes: this.userSettingsFormGroup.get('chartLapTypes').value,
         showLaps: this.userSettingsFormGroup.get('showChartLaps').value,

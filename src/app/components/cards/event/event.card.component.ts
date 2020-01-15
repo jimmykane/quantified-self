@@ -50,6 +50,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
   public chartFillOpacity: number = UserService.getDefaultChartFillOpacity();
   public chartExtraMaxForPower: number = UserService.getDefaultExtraMaxForPower();
+  public chartExtraMaxForPace: number = UserService.getDefaultExtraMaxForPace();
   public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold();
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
@@ -124,6 +125,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
       this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
       this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
+      this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
       this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
         if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
           dataTypesToUse.push(dataTypeSettingsKey);

@@ -338,17 +338,32 @@
 
           <section>
             <mat-hint matTooltip="Improves the scalability for power analysis">
-              Extra max for Power series
+              Extra max for Power
             </mat-hint>
             <mat-slider
-              [max]="1"
-              [min]="0.00"
+              [max]="0.9"
+              [min]="-0.9"
               [step]="0.05"
               [thumbLabel]="true"
               formControlName="chartExtraMaxForPower">
             </mat-slider>
             <br/>
-            <mat-hint><b>Tip:</b> this will compress the power series</mat-hint>
+            <mat-hint><b>Tip:</b> this will compress/decompress the power chart</mat-hint>
+          </section>
+
+          <section>
+            <mat-hint matTooltip="Improves the scalability for pace analysis">
+              Extra max for Pace
+            </mat-hint>
+            <mat-slider
+              [max]="0.9"
+              [min]="-0.9"
+              [step]="0.05"
+              [thumbLabel]="true"
+              formControlName="chartExtraMaxForPace">
+            </mat-slider>
+            <br/>
+            <mat-hint><b>Tip:</b> this will compress/decompress the pace chart</mat-hint>
           </section>
 
           <section>

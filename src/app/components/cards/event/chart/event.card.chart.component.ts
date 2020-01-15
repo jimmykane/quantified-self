@@ -113,6 +113,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   @Input() strokeOpacity: number;
   @Input() fillOpacity: number;
   @Input() extraMaxForPower: number;
+  @Input() extraMaxForPace: number;
   @Input() dataTypesToUse: string[];
 
 
@@ -165,6 +166,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       || simpleChanges.showGrid
       || simpleChanges.stackYAxes
       || simpleChanges.extraMaxForPower
+      || simpleChanges.extraMaxForPace
       || simpleChanges.hideAllSeriesOnInit
       || simpleChanges.strokeWidth
       || simpleChanges.fillOpacity
@@ -178,12 +180,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (!this.event || !this.selectedActivities.length) {
         return;
       }
-
-
       await this.processChanges();
       return;
     }
-
   }
 
   private async processChanges() {
@@ -651,12 +650,12 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       yAxis.renderer.minGridDistance = 15;
 
       // Data specifics setup
-      if ([DataPace.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
+      if ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) {
         yAxis.renderer.inversed = true;
         yAxis.baseValue = Infinity;
-        yAxis.extraMin = 0.1;
+        yAxis.extraMin = 0.0;
         // yAxis.max = 1800;
-        yAxis.extraMax = -0.5; // @todo make this a setting
+        yAxis.extraMax = this.extraMaxForPace;
         // yAxis.min = 0
         // yAxis.minY = 0;
 
