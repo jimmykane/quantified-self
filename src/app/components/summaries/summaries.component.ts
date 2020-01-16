@@ -253,7 +253,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     switch (categoryType) {
       case ChartDataCategoryTypes.ActivityType:
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-        // Abort and crash if not found
+        // this should not happen :-)
         if (!eventTypeDisplayStat) {
           Sentry.captureException(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
           return '??'
