@@ -126,7 +126,7 @@ export class UserFormComponent implements OnInit {
     this.isDeleting = true;
     try {
       await this.userService.deleteAllUserData(this.user);
-      await this.afa.logEvent('user_delete', {});
+      this.afa.logEvent('user_delete', {});
       await this.authService.signOut();
       await this.router.navigate(['home']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {

@@ -58,7 +58,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
     this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
-    await this.afa.logEvent('share', {method: 'event_actions', content_type: 'event'});
+    this.afa.logEvent('share', {method: 'event_actions', content_type: 'event'});
     this.snackBar.open('Privacy is changed to public and link copied to your clipboard', null, {
       duration: 20000,
     })
