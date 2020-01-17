@@ -39,12 +39,12 @@ export class SideNavComponent implements OnInit {
   }
 
   async donate() {
-    await this.afa.logEvent('donate_click', {method: 'PayPal'});
+    this.afa.logEvent('donate_click', {method: 'PayPal'});
     window.open('https://paypal.me/DKanellopoulos');
   }
 
   async logout() {
-    await this.afa.logEvent('logout', {});
+    this.afa.logEvent('logout', {});
     this.router.navigate(['/home']).then(async () => {
       await this.authService.signOut();
       localStorage.clear();

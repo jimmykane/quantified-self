@@ -162,7 +162,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
     this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    await this.afa.logEvent('dashboard_search', {method: DateRanges[search.dateRange]});
+    this.afa.logEvent('dashboard_search', {method: DateRanges[search.dateRange]});
     await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 

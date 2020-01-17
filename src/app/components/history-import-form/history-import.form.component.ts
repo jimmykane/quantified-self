@@ -132,7 +132,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
-      await this.afa.logEvent('imported_history', {method: ServiceNames.SuuntoApp});
+      this.afa.logEvent('imported_history', {method: ServiceNames.SuuntoApp});
       this.dialogRef.close();
     } catch (e) {
       // debugger;
