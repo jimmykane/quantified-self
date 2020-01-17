@@ -228,10 +228,11 @@ export class ActivityFormComponent implements OnInit {
         this.activity.clearStats();
         EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
         EventUtilities.reGenerateStatsForEvent(this.event);
+        await this.eventService.writeAllEventData(this.user, this.event);
+      } else {
+        await this.eventService.setActivity(this.user, this.event, this.activity);
+        await this.eventService.setEvent(this.user, this.event);
       }
-
-
-      await this.eventService.setEvent(this.user, this.event);
 
       this.snackBar.open('Activity saved', null, {
         duration: 2000,

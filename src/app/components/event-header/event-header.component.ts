@@ -53,7 +53,7 @@ export class EventHeaderComponent implements OnChanges {
 
   async saveEventDescription(description: string, event: EventInterface) {
     event.description = description;
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
@@ -64,7 +64,7 @@ export class EventHeaderComponent implements OnChanges {
       return;
     }
     event.addStat(new DataFeeling(feeling));
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
@@ -75,7 +75,7 @@ export class EventHeaderComponent implements OnChanges {
       return;
     }
     event.addStat(new DataRPE(rpe));
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });

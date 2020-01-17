@@ -265,7 +265,7 @@ export class EventService implements OnDestroy {
     });
   }
 
-  public async setEvent(user: User, event: EventInterface) {
+  public async writeAllEventData(user: User, event: EventInterface) {
     const writePromises: Promise<void>[] = [];
     event.setID(event.getID() || this.afs.createId());
     event.getActivities()
@@ -309,6 +309,10 @@ export class EventService implements OnDestroy {
       await this.deleteAllEventData(user, event.getID());
       throw new Error('Could not parse event');
     }
+  }
+
+  public async setEvent(user: User, event: EventInterface) {
+    return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
   }
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {

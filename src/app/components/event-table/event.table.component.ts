@@ -212,7 +212,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
           const events = await Promise.all(promises);
           const mergedEvent = EventUtilities.mergeEvents(events);
           try {
-            await this.eventService.setEvent(this.user, mergedEvent);
+            await this.eventService.writeAllEventData(this.user, mergedEvent);
             this.afa.logEvent('merge_events');
             await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
             this.snackBar.open('Events merged', null, {
@@ -328,7 +328,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
 
   async saveEventDescription(description: string, event: EventInterface) {
     event.description = description;
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
@@ -336,7 +336,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
 
   async saveEventName(name: string, event: EventInterface) {
     event.name = name;
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
@@ -347,7 +347,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       return;
     }
     event.addStat(new DataRPE(rpe));
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });
@@ -358,7 +358,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       return;
     }
     event.addStat(new DataFeeling(feeling));
-    await this.eventService.setEvent(this.user, event);
+    await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });

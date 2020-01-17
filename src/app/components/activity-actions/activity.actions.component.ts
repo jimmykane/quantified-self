@@ -65,7 +65,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     this.activity.clearStats();
     EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
     EventUtilities.reGenerateStatsForEvent(this.event);
-    await this.eventService.setEvent(this.user, this.event);
+    await this.eventService.writeAllEventData(this.user, this.event);
     this.snackBar.open('Activity and event statistics have been recalculated', null, {
       duration: 2000,
     });
@@ -80,7 +80,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
       this.event.removeActivity(this.activity);
       await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
       EventUtilities.reGenerateStatsForEvent(this.event);
-      await this.eventService.setEvent(this.user, this.event);
+      await this.eventService.writeAllEventData(this.user, this.event);
       this.snackBar.open('Activity deleted', null, {
         duration: 2000,
       });

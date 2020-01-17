@@ -132,7 +132,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
       } else {
         const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
-        await this.eventService.setEvent(this.user, newEvent);
+        await this.eventService.writeAllEventData(this.user, newEvent);
         this.afa.logEvent('imported_fit_file', {method: ServiceNames.SuuntoApp});
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }

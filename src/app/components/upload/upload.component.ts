@@ -85,7 +85,7 @@ export class UploadComponent implements OnInit {
           return;
         }
         try {
-          await this.eventService.setEvent(this.user, newEvent);
+          await this.eventService.writeAllEventData(this.user, newEvent);
           metaData.status = UPLOAD_STATUS.PROCESSED;
         } catch (e) {
           // debugger;

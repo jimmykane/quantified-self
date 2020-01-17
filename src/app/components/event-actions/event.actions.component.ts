@@ -99,7 +99,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     this.event.getFirstActivity().clearStats();
     EventUtilities.generateMissingStreamsAndStatsForActivity(this.event.getFirstActivity());
     EventUtilities.reGenerateStatsForEvent(this.event);
-    await this.eventService.setEvent(this.user, this.event);
+    await this.eventService.writeAllEventData(this.user, this.event);
     this.snackBar.open('Activity and event statistics have been recalculated', null, {
       duration: 2000,
     });

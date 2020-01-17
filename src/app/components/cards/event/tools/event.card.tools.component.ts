@@ -128,7 +128,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
     //   },
     // );
     // Add and update via service
-    // this.eventService.setEvent(this.event);
+    // this.eventService.writeAllEventData(this.event);
     this.snackBar.open('Filters applied! Go to the chart to see the result', null, {
       duration: 2000,
     });
