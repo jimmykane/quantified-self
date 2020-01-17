@@ -335,7 +335,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      this.afa.logEvent('user_settings_update');
+      await this.afa.logEvent('user_settings_update');
     } catch (e) {
       this.logger.error(e);
       this.snackBar.open('Could not update user', null, {

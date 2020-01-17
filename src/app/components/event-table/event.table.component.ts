@@ -213,7 +213,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
           const mergedEvent = EventUtilities.mergeEvents(events);
           try {
             await this.eventService.writeAllEventData(this.user, mergedEvent);
-            this.afa.logEvent('merge_events');
+            await this.afa.logEvent('merge_events');
             await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
             this.snackBar.open('Events merged', null, {
               duration: 2000,
@@ -252,7 +252,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
             this.selection.selected.map(selected => selected.Event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
             this.selection.clear();
             await Promise.all(deletePromises);
-            this.afa.logEvent('delete_events');
+            await this.afa.logEvent('delete_events');
             this.snackBar.open('Events deleted', null, {
               duration: 2000,
             });

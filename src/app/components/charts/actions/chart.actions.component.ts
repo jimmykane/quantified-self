@@ -124,7 +124,7 @@ export class ChartActionsComponent implements OnInit {
   ];
 
   async changeChartType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartType'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'changeChartType'});
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).type = event.value;
     // If its pie show only totals
     if (event.value === ChartTypes.Pie) {
@@ -134,25 +134,25 @@ export class ChartActionsComponent implements OnInit {
   }
 
   async changeChartDataType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataType'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataType'});
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataValueType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataValueType'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataValueType'});
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataCategoryType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataCategoryType'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataCategoryType'});
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async addNewChart($event: MouseEvent) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'addNewChart'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'addNewChart'});
     const chart = Object.assign({}, this.user.settings.dashboardSettings.chartsSettings.find((chartSetting: UserDashboardChartSettingsInterface) => chartSetting.order === this.chartOrder));
     chart.order = this.user.settings.dashboardSettings.chartsSettings.length;
     this.user.settings.dashboardSettings.chartsSettings.push(chart);
@@ -160,13 +160,13 @@ export class ChartActionsComponent implements OnInit {
   }
 
   async switchFilterLowValues(event){
-    this.afa.logEvent('dashboard_chart_action', {method: 'switchFilterLowValues'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'switchFilterLowValues'});
     this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).filterLowValues = this.filterLowValues;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async deleteChart(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'deleteChart'});
+    await this.afa.logEvent('dashboard_chart_action', {method: 'deleteChart'});
     if (this.user.settings.dashboardSettings.chartsSettings.length === 1) {
       throw new Error('Cannot delete chart there is only one left');
     }

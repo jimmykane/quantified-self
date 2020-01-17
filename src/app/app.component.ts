@@ -140,7 +140,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async toggleTheme() {
-    this.afa.logEvent('change_theme');
+    await this.afa.logEvent('change_theme');
     await this.themeService.toggleTheme(this.user);
   }
 
