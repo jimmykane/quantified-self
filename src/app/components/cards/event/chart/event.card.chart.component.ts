@@ -285,8 +285,9 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       if (this.showLaps) {
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
-      // Store at local storage the visible / non visible series
+      // Show if needed
       series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
+      // Store at local storage the visible / non visible series
       series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
       this.loaded();
     });
@@ -576,7 +577,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
     // Create a new series if not found
     series = new am4charts.LineSeries();
-    series.hidden = true;
     series.showOnInit = false;
     series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
