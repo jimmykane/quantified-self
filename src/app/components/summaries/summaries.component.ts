@@ -326,11 +326,11 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   // @todo refactor
   private getRowHeight() {
     const angle = (window.screen && window.screen.orientation && window.screen.orientation.angle) || window.orientation || 0;
-    return (angle === 90 || angle === -90) ? '50vw' : '50vh';
+    return (angle === 90 || angle === -90) ? '35vw' : '35vh';
   }
 
   private getNumberOfColumns() {
-    if (window.innerWidth < 1080) {
+    if (window.innerWidth < 860) {
       return 1;
     }
     if (window.innerWidth < 1500) {

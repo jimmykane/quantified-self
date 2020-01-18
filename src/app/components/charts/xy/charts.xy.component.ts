@@ -71,12 +71,16 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     categoryAxis.renderer.cellEndLocation = 0.9;
     categoryAxis.renderer.opposite = !this.vertical;
     categoryAxis.renderer.minGridDistance = this.vertical ? 1 : 1;
+    categoryAxis.renderer.grid.template.disabled = this.vertical && this.type === 'pyramids';
+
     categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
       if (this.vertical && target.dataItem && target.dataItem.index % 2) {
         return dy + 20;
       }
       return dy;
     });
+
+
 
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());

@@ -1,5 +1,5 @@
 import {ChartAbstract} from './chart.abstract';
-import { AfterViewInit, ChangeDetectorRef, Input, NgZone, OnChanges, Directive } from '@angular/core';
+import {AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summaries/summaries.component';
 import {
@@ -147,18 +147,20 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
     }
   }
 
+  // @todo this needs major refactor
   protected filterOutLowValues(data: SummariesChartDataInterface[]): SummariesChartDataInterface[] {
     const chartData = [];
     let otherData: SummariesChartDataInterface;
     const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
+    const totalValue = <number>this.getAggregateData(data, ChartDataValueTypes.Total).getValue();
     data.forEach((dataItem: SummariesChartDataInterface, index) => {
-      const percent = (dataItem.value * 100) / baseValue; // problem with 0 base value
+      const percent = (dataItem.value * 100) / totalValue; // problem with 0 base value
       if (percent < 5) {
         if (!otherData) {
           otherData = {type: 'Other', value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
           return;
         }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue(); // Important the -dataItem.value
+        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue();
         otherData.count++;
         return
       }
