@@ -25,13 +25,13 @@ import {ActivitySelectionService} from '../../../services/activity-selection-ser
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
   styleUrls: ['./event.card.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public targetUserID: string;
   public currentUser: User;
-  public tabIndex;
   public positionStreams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
@@ -63,17 +63,12 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
 
 
-  private userSubscription: Subscription;
-  private parametersSubscription: Subscription;
-  private eventSubscription: Subscription;
-  private chartThemeSubscription: Subscription;
-  private appThemeSubscription: Subscription;
-  private mapThemeSubscription: Subscription;
-  private selectedActivitiesSubscription: Subscription;
+  private subscriptions: Subscription[] = [];
 
   private logger = Log.create('EventCardComponent');
 
   constructor(
+    private changeDetectorRef: ChangeDetectorRef,
     public router: Router,
     private route: ActivatedRoute,
     private authService: AppAuthService,
@@ -94,12 +89,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Set a "user from params"
     this.targetUserID = userID;
 
-    this.parametersSubscription = this.route.queryParamMap.subscribe(((queryParams) => {
-      this.tabIndex = +queryParams.get('tabIndex');
-    }));
-
     // Subscribe to authService and set the current user if possible
-    this.userSubscription = this.authService.user.subscribe((user) => {
+    this.subscriptions .push(this.authService.user.subscribe((user) => {
       this.currentUser = user;
       if (!this.currentUser) {
         return;
@@ -132,25 +123,29 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         }
         return dataTypesToUse;
       }, []);
-    });
+      this.changeDetectorRef.detectChanges();
+    }));
 
     // Subscribe to the chartTheme changes
-    this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
+    this.subscriptions.push(this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
-    });
+      this.changeDetectorRef.detectChanges();
+    }));
 
     // Subscribe to the appTheme changes
-    this.appThemeSubscription = this.themeService.getAppTheme().subscribe((appTheme) => {
+    this.subscriptions.push(this.themeService.getAppTheme().subscribe((appTheme) => {
       this.appTheme = appTheme;
-    });
+      this.changeDetectorRef.detectChanges();
+    }));
 
     // Subscribe to the appTheme changes
-    this.mapThemeSubscription = this.themeService.getMapTheme().subscribe((mapTheme) => {
+    this.subscriptions.push(this.themeService.getMapTheme().subscribe((mapTheme) => {
       this.mapTheme = mapTheme;
-    });
+      this.changeDetectorRef.detectChanges();
+    }));
 
     // Subscribe to the actual subject our event
-    this.eventSubscription = this.eventService.getEventAndActivities(new User(this.targetUserID), eventID).subscribe((event) => {
+    this.subscriptions.push(this.eventService.getEventAndActivities(new User(this.targetUserID), eventID).subscribe((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']).then(() => {
           this.snackBar.open('Not found', null, {
@@ -162,12 +157,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.event = event;
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...event.getActivities());
-    });
+      this.changeDetectorRef.detectChanges();
+    }));
 
     // Subscribe to selected activities
-    this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
+    this.subscriptions.push(this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
       this.selectedActivities = selectedActivities.source.selected;
-    });
+      this.changeDetectorRef.detectChanges();
+    }));
   }
 
 
@@ -176,13 +173,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
-    this.userSubscription.unsubscribe();
-    this.parametersSubscription.unsubscribe();
-    this.eventSubscription.unsubscribe();
-    this.chartThemeSubscription.unsubscribe();
-    this.appThemeSubscription.unsubscribe();
-    this.mapThemeSubscription.unsubscribe();
-    this.selectedActivitiesSubscription.unsubscribe();
+    this.subscriptions.forEach(subscription => subscription.unsubscribe())
   }
 
   hasLaps(event: EventInterface): boolean {
