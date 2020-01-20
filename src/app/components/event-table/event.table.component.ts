@@ -266,6 +266,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     }
   }
 
+  // Todo cache this please
   getColumnsToDisplayDependingOnScreenSize() {
     // push all the rest
     let columns = [
@@ -336,28 +337,6 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
 
   async saveEventName(name: string, event: EventInterface) {
     event.name = name;
-    await this.eventService.writeAllEventData(this.user, event);
-    this.snackBar.open('Event saved', null, {
-      duration: 2000,
-    });
-  }
-
-  async saveEventRPE(rpe: RPEBorgCR10SCale, event: EventInterface) {
-    if (!isNumber(rpe)) {
-      return;
-    }
-    event.addStat(new DataRPE(rpe));
-    await this.eventService.writeAllEventData(this.user, event);
-    this.snackBar.open('Event saved', null, {
-      duration: 2000,
-    });
-  }
-
-  async saveEventFeeling(feeling: Feelings, event: EventInterface) {
-    if (!isNumber(feeling)) {
-      return;
-    }
-    event.addStat(new DataFeeling(feeling));
     await this.eventService.writeAllEventData(this.user, event);
     this.snackBar.open('Event saved', null, {
       duration: 2000,
