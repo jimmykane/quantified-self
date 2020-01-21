@@ -92,7 +92,7 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
         {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
         {'type': 'json', 'label': 'JSON'},
         {'type': 'csv', 'label': 'CSV'},
-        {'type': 'xlsx', 'label': 'XLSX'},
+        // {'type': 'xlsx', 'label': 'XLSX'},
         // {"label": "Print", "type": "print"},
       ],
     }];
