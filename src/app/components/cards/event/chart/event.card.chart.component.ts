@@ -861,15 +861,15 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
 
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
-    this.logger.info(`Stream data for ${stream.type} ${stream.data.length}`);
+    this.logger.info(`Stream data for ${stream.type} ${stream.getData().length}`);
     let data = [];
     // this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
-      distanceStream.data.reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
-        if (isNumber(stream.data[index]) && stream.data[index] !== Infinity && isNumber(distanceStreamDataItem)) {
+      distanceStream.getData().reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
+        if (isNumber(stream.getData()[index]) && stream.getData()[index] !== Infinity && isNumber(distanceStreamDataItem)) {
           // debugger;
-          dataMap.set(distanceStreamDataItem, stream.data[index])
+          dataMap.set(distanceStreamDataItem, stream.getData()[index]) // Here it could be improved with finding the nearby perhaps but not sure
         }
         return dataMap;
       }, new Map<number, number>()).forEach((value, distance) => {

@@ -296,7 +296,7 @@ export class EventService implements OnDestroy {
             .doc(stream.type)
             .set({
               type: stream.type,
-              data: this.getBlobFromStreamData(stream.data),
+              data: this.getBlobFromStreamData(stream.getData()),
             }))
         });
       });
