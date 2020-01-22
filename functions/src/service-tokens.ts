@@ -9,8 +9,8 @@ import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/serv
 //
 export const refreshTheRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
   console.log('This will be run every 2 hours!');
-  // Suunto app refresh tokens should be refreshed every 180days we target at 15 days before 165 days
-  const querySnapshot = await admin.firestore().collectionGroup('tokens').where("dateRefreshed", "<=", (new Date()).getTime() - (165 * 24 * 60 * 60 * 1000)).limit(50).get();
+  // Suunto app refresh tokens should be refreshed every 180days we target at half days before 90 days
+  const querySnapshot = await admin.firestore().collectionGroup('tokens').where("dateRefreshed", "<=", (new Date()).getTime() - (90 * 24 * 60 * 60 * 1000)).limit(50).get();
   console.log(`Found ${querySnapshot.size} auth tokens to process`);
   let count = 0;
   for (const authToken of querySnapshot.docs){
