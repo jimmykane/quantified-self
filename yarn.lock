@@ -216,13 +216,6 @@
   resolved "https://registry.yarnpkg.com/@angular/forms/-/forms-9.0.0-rc.9.tgz#ffd8b1571fdb305dcee4aa8903c4c08a10c03fcb"
   integrity sha512-7cJd0ROkRyoA1TwHJ31tbvrJEMVTysuNjT3MTgutYV9oMKp10/M5qqqUvQdXfeLxu1a9qknN/8yNRTqn3h6j3A==
 
-"@angular/http@7.2.16":
-  version "7.2.16"
-  resolved "https://registry.yarnpkg.com/@angular/http/-/http-7.2.16.tgz#f05337dd56faa86ce05b0dc378218a00fb337040"
-  integrity sha512-yvjbNyzFSmmz4UTjCdy5M8mk0cZqf9TvSf8yN5UVIwtw4joyuUdlgJCuin0qSbQOKIf/JjHoofpO2JkPCGSNww==
-  dependencies:
-    tslib "^1.9.0"
-
 "@angular/material@^8.2.3":
   version "8.2.3"
   resolved "https://registry.yarnpkg.com/@angular/material/-/material-8.2.3.tgz#16543e4e06a3fde2651a25cfe126e88e714ae105"
