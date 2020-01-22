@@ -187,7 +187,7 @@ async function setEvent(userID: string, eventID:string , event: EventInterface, 
             .doc(stream.type)
             .set({
               type: stream.type,
-              data: Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'),
+              data: Buffer.from((Pako.gzip(JSON.stringify(stream.getData()), {to: 'string'})), 'binary'),
             }))
       });
     });

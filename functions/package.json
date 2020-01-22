@@ -4,25 +4,25 @@
   "main": "lib/index.js",
   "license": "MIT",
   "dependencies": {
-    "@types/bs58": "^4.0.0",
-    "@types/cookie-parser": "^1.4.1",
-    "@types/cors": "^2.8.5",
-    "@types/node-fetch": "^2.3.7",
+    "@types/bs58": "^4.0.1",
+    "@types/cookie-parser": "^1.4.2",
+    "@types/cors": "^2.8.6",
+    "@types/node-fetch": "^2.5.4",
     "@types/pako": "^1.0.1",
-    "@types/request": "^2.48.1",
-    "@types/request-promise-native": "^1.0.16",
-    "@types/simple-oauth2": "^2.2.1",
+    "@types/request": "^2.48.4",
+    "@types/request-promise-native": "^1.0.17",
+    "@types/simple-oauth2": "^2.5.2",
     "bs58": "^4.0.1",
     "cookie-parser": "^1.4.3",
     "cors": "^2.8.5",
-    "firebase-admin": "^8.2.0",
-    "firebase-functions": "^3.0.2",
+    "firebase-admin": "^8.9.1",
+    "firebase-functions": "^3.3.0",
     "node-fetch": "^2.5.0",
     "pako": "^1.0.10",
-    "quantified-self-lib": "^3.5.9",
+    "quantified-self-lib": "^3.7.0",
     "request": "^2.74.0",
-    "request-promise-native": "^1.0.3",
-    "simple-oauth2": "^2.2.1"
+    "request-promise-native": "^1.0.8",
+    "simple-oauth2": "^3.1.0"
   },
   "scripts": {
     "lint": "tslint --project tsconfig.json",
@@ -37,8 +37,8 @@
     "node": "10"
   },
   "devDependencies": {
-    "firebase-functions-test": "^0.1.6",
-    "tslint": "^5.18.0",
-    "typescript": "^3.5.2"
+    "firebase-functions-test": "^0.1.7",
+    "tslint": "^6.0.0",
+    "typescript": "^3.7.5"
   }
 }
