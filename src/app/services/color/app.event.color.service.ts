@@ -2,6 +2,7 @@ import {Injectable} from '@angular/core';
 import {AppDeviceColors} from './app.device.colors';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 
 @Injectable()
 export class EventColorService {
@@ -37,5 +38,9 @@ export class EventColorService {
     }
     // Else it's not the first one, then return the global activity index color
     return this.getColorByNumber(activityIndex);
+  }
+
+  getColorForActivityType(activityType: ActivityTypes): string | null{
+    return null;
   }
 }
