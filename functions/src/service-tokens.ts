@@ -32,7 +32,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSa
   const token = oauth2.accessToken.create({
     'access_token': serviceTokenData.accessToken,
     'refresh_token': serviceTokenData.refreshToken,
-    'expires_at': serviceTokenData.expiresAt
+    'expires_at': new Date(serviceTokenData.expiresAt) // We need to convert to date here for the lib to be able to check .expired()
   });
 
   if (!token.expired() && !forceRefreshAndSave){
