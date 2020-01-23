@@ -9600,10 +9600,10 @@ void-elements@^2.0.0:
   resolved "https://registry.yarnpkg.com/void-elements/-/void-elements-2.0.1.tgz#c066afb582bb1cb4128d60ea92392e94d5e9dbec"
   integrity sha1-wGavtYK7HLQSjWDqkjkulNXp2+w=
 
-wasm-flate@1.0.2:
-  version "1.0.2"
-  resolved "https://registry.yarnpkg.com/wasm-flate/-/wasm-flate-1.0.2.tgz#7fa2d50f1fdfa2b8abf51f5abce31bb9a93b0878"
-  integrity sha512-bL5ziZMr9nIda8LPBWmzMfTZk/yuK2lPJ3Wrp3TCA5UR3NXxvA6mIIkdMG+SVmvp9kCk0VZ2tgV15OVgdvQ+pw==
+wasm-flate@0.1.0-beta:
+  version "0.1.0-beta"
+  resolved "https://registry.yarnpkg.com/wasm-flate/-/wasm-flate-0.1.0-beta.tgz#a0f61ac7aaea2102e911b91eb4acf3496fb9530c"
+  integrity sha512-0Aer1SOSF53sj2mVTvr3CZQ7Ag0ms0HH8fJNXmo2gzdIK0N1Oq3KVkyz75mfo1VRtFjyTKrQXCWnOpIvsIyEBg==
 
 watchpack@^1.6.0:
   version "1.6.0"
