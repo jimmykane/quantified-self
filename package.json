@@ -22,7 +22,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.1.0",
-    "@amcharts/amcharts4": "4.8.1",
+    "@amcharts/amcharts4": "4.8.2",
     "@angular/animations": "9.0.0-rc.9",
     "@angular/cdk": "^8.2.3",
     "@angular/common": "9.0.0-rc.9",
@@ -47,7 +47,7 @@
     "quantified-self-lib": "^3.7.0",
     "rxjs": "^6.5.4",
     "tslib": "^1.10.0",
-    "wasm-flate": "0.1.0-beta",
+    "wasm-flate": "1.0.2",
     "zone.js": "~0.10.2"
   },
   "devDependencies": {
@@ -55,7 +55,7 @@
     "@angular/cli": "^8.3.23",
     "@angular/compiler-cli": "9.0.0-rc.9",
     "@types/jasmine": "3.5.1",
-    "@types/node": "^13.1.8",
+    "@types/node": "^13.5.0",
     "codelyzer": "^5.1.2",
     "first-input-delay": "^0.1.3",
     "jasmine-core": "^3.5.0",
