@@ -184,6 +184,10 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
+      categoryLabel.label.background = new am4core.RoundedRectangle();
+      categoryLabel.label.background.fillOpacity = 0.5;
+      categoryLabel.label.background.strokeOpacity = 1;
+      categoryLabel.label.padding(1, 4, 0, 4);
     }
 
     categoryLabel.label.hideOversized = false;
