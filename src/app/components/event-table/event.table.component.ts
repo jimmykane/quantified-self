@@ -2,7 +2,8 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   ChangeDetectorRef,
-  Component, Injectable,
+  Component,
+  Injectable,
   Input,
   OnChanges,
   OnDestroy,
@@ -28,29 +29,17 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {Subject, Subscription} from 'rxjs';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
 import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
-import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {MatBottomSheet} from '@angular/material';
-import {animate, state, style, transition, trigger} from '@angular/animations';
-import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
-import {isNumber, isNumberOrString} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
+import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {UserService} from '../../services/app.user.service';
-import {ScreenBreakPoints, ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
-import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
+import {ScreenBreakPoints} from '../screen-size/sreen-size.abstract';
+import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataTableAbstract, StatRowElement} from '../data-table/data-table.abstract';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {EventColorService} from '../../services/color/app.event.color.service';
 
 
 @Component({
@@ -88,6 +77,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
               private userService: UserService,
               private afa: AngularFireAnalytics,
               changeDetector: ChangeDetectorRef,
+              private eventColorService: EventColorService,
               private router: Router, private  datePipe: DatePipe) {
     super(changeDetector);
   }
@@ -172,6 +162,9 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       statRowElement['Merged Event'] = event.isMerge;
       statRowElement['Description'] = event.description;
       statRowElement['Device Names'] = event.getDeviceNamesAsString();
+      statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
+        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
+      );
       statRowElement['Event'] = event;
 
       // Add the sorts

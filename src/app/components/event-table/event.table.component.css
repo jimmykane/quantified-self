@@ -10,6 +10,8 @@ mat-cell, .mat-header-cell {
   padding-right: 0.5em;
 }
 
+
+
 .mat-column-Checkbox, .mat-column-Privacy, .mat-column-Actions{
  min-width: 20px;
  max-width: 20px;

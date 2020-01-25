@@ -28,7 +28,8 @@
           </th>
 
       </ng-container>
-      <td mat-cell *matCellDef="let row">
+<!--      <td mat-cell *matCellDef="let row" [ngStyle]="{'background-color': row['Color']}">-->
+      <td mat-cell *matCellDef="let row" [ngStyle]="{'background-color': row['Color']}">
         <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
                       (change)="$event ? checkBoxClick(row) : null"
                       [checked]="selection.isSelected(row)">
