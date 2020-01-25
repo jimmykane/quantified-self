@@ -72,7 +72,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     categoryAxis.renderer.cellEndLocation = 0.9;
     categoryAxis.renderer.opposite = !this.vertical;
     categoryAxis.renderer.minGridDistance = this.vertical ? 1 : 1;
-    categoryAxis.renderer.grid.template.disabled = this.vertical && this.type === 'pyramids';
+    categoryAxis.renderer.grid.template.disabled = this.vertical || (categoryAxis instanceof am4charts.CategoryAxis);
 
     categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
       if (this.vertical && target.dataItem && target.dataItem.index % 2) {
@@ -95,6 +95,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       // console.log(target.dataItem.index);
       return (target.dataItem.index === 2 && !this.vertical) ? 15 : 0;
     });
+
     // valueAxis.renderer.minLabelPosition = this.vertical ? 0 : 0.005;
     // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
     valueAxis.min = 0;
@@ -137,12 +138,22 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       series = chart.series.push(new am4charts.LineSeries());
       series.filters.push(ChartHelper.getShadowFilter());
 
-      series.stroke = chart.colors.getIndex(0);
+      series.stroke = chart.colors.getIndex(9); // Init stroke
       series.tension = 0.5;
       const bullet = series.bullets.push(new am4charts.CircleBullet());
       bullet.adapter.add('fill', (fill, target) => {
         if (!target.dataItem) {
           return fill;
+        }
+        if (categoryAxis instanceof am4charts.CategoryAxis) {
+          return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+        }
+        return this.getFillColor(chart, target.dataItem.index);
+      });
+
+      bullet.adapter.add('stroke', (stroke, target) => {
+        if (!target.dataItem) {
+          return stroke;
         }
         if (categoryAxis instanceof am4charts.CategoryAxis) {
           return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
