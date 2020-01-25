@@ -1,12 +1,11 @@
 import {
-  AfterViewInit,
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   Input,
   NgZone,
   OnChanges,
   OnDestroy,
-  OnInit,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
@@ -15,6 +14,8 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
+
+import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
 
 
 @Component({
@@ -81,8 +82,6 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     });
 
 
-
-
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.renderer.opposite = this.vertical;
     valueAxis.extraMax = this.vertical ? 0.15 : 0.20;
@@ -102,6 +101,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     valueAxis.min = 0;
 
     let series;
+    let regressionSeries;
 
     if (this.type === 'columns' || this.type === 'pyramids') {
       series = this.vertical && this.type === 'pyramids' ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
@@ -155,6 +155,13 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
       bullet.filters.push(ChartHelper.getShadowFilter());
 
+
+      // Add the trend
+      regressionSeries = chart.series.push(new am4charts.LineSeries());
+      regressionSeries.strokeWidth = 2;
+      regressionSeries.name = 'Linear Regression';
+
+      regressionSeries.plugins.push(new am4plugins_regression.Regression());
     }
 
 
@@ -162,21 +169,40 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     if (this.vertical) {
       if (categoryAxis instanceof am4charts.CategoryAxis) {
         series.dataFields.categoryX = 'type';
+        if (regressionSeries) {
+          regressionSeries.dataFields.categoryX = 'type';
+        }
       } else if (categoryAxis instanceof am4charts.DateAxis) {
         series.dataFields.dateX = 'time';
+        if (regressionSeries) {
+          regressionSeries.dataFields.dateX = 'time';
+        }
       }
       series.dataFields.valueY = 'value';
+      if (regressionSeries) {
+        regressionSeries.dataFields.valueY = 'value';
+      }
       categoryLabel.dy = -15;
 
     } else {
       if (categoryAxis instanceof am4charts.CategoryAxis) {
         series.dataFields.categoryY = 'type';
+        if (regressionSeries) {
+          regressionSeries.dataFields.categoryY = 'type';
+        }
       } else if (categoryAxis instanceof am4charts.DateAxis) {
         series.dataFields.dateY = 'time';
+        if (regressionSeries) {
+          regressionSeries.dataFields.dateY = 'time';
+        }
       }
       series.dataFields.valueX = 'value';
+      if (regressionSeries) {
+        regressionSeries.dataFields.valueX = 'value';
+      }
       categoryLabel.label.dx = 50;
     }
+
 
     // @todo refactor
     if (this.type === 'columns' || this.type === 'pyramids') {
