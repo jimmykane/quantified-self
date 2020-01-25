@@ -180,16 +180,16 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
   private getColorForZone(zone: string): am4core.Color {
     switch (zone) {
       case `Zone 5`:
-        return am4core.color(AppColors.LightRed);
+        return am4core.color(AppColors.Red);
       case `Zone 4`:
-        return am4core.color(AppColors.LightOrange);
+        return am4core.color(AppColors.Orange);
       case `Zone 3`:
         return am4core.color(AppColors.Yellow);
       case `Zone 2`:
         return am4core.color(AppColors.Green);
       case `Zone 1`:
       default:
-        return am4core.color(AppColors.LightBlue);
+        return am4core.color(AppColors.Blue);
     }
   }
 
@@ -222,7 +222,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       categoryLabel.label.verticalCenter = 'middle';
       categoryLabel.label.truncate = false;
       categoryLabel.label.hideOversized = false;
-      categoryLabel.label.fontSize = '0.65em';
+      categoryLabel.label.fontSize = '0.75em';
       categoryLabel.label.dx = 10;
       categoryLabel.label.padding(1, 2, 0, 2);
 
@@ -238,7 +238,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
 
       switch (intensityZone.type) {
         case DataHeartRate.type:
-          series.fill = am4core.color(AppColors.LightRed);
+          series.fill = am4core.color(AppColors.Red);
           break;
         case DataPower.type:
           series.fill = am4core.color(AppColors.Orange);

@@ -1,12 +1,11 @@
 import {
-  AfterViewInit,
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   Input,
   NgZone,
   OnChanges,
   OnDestroy,
-  OnInit,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
@@ -15,6 +14,8 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
+import {EventColorService} from '../../../services/color/app.event.color.service';
+import {ActivityTypes} from '../../../../../../quantified-self-lib/lib/activities/activity.types';
 
 
 @Component({
@@ -29,7 +30,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
   protected logger = Log.create('ChartsXYComponent');
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: EventColorService) {
     super(zone, changeDetector);
   }
 
@@ -80,9 +81,6 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       return dy;
     });
 
-
-
-
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.renderer.opposite = this.vertical;
     valueAxis.extraMax = this.vertical ? 0.15 : 0.20;
@@ -121,11 +119,14 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
       // Add distinctive colors for each column using adapter
       series.columns.template.adapter.add('fill', (fill, target) => {
+        if (categoryAxis instanceof am4charts.CategoryAxis) {
+          return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+        }
         return this.getFillColor(chart, target.dataItem.index);
       });
 
 
-      series.columns.template.filters.push(ChartHelper.getShadowFilter())
+      series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
       if (this.type === 'columns') {
         this.vertical ? series.columns.template.column.cornerRadiusTopLeft = 2 : series.columns.template.column.cornerRadiusTopRight = 2;
@@ -143,6 +144,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         if (!target.dataItem) {
           return fill;
         }
+        if (categoryAxis instanceof am4charts.CategoryAxis) {
+          return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+        }
         return this.getFillColor(chart, target.dataItem.index);
       });
 
@@ -157,7 +161,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     }
 
-
+    // @todo refactor this
     const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
     if (this.vertical) {
       if (categoryAxis instanceof am4charts.CategoryAxis) {
@@ -178,6 +182,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       categoryLabel.label.dx = 50;
     }
 
+
     // @todo refactor
     if (this.type === 'columns' || this.type === 'pyramids') {
       categoryLabel.label.adapter.add('text', (text, target) => {
@@ -187,12 +192,21 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       categoryLabel.label.background = new am4core.RoundedRectangle();
       categoryLabel.label.background.fillOpacity = 0.5;
       categoryLabel.label.background.strokeOpacity = 1;
+      categoryLabel.label.adapter.add('stroke', (stroke, target) => {
+        if (categoryAxis instanceof am4charts.CategoryAxis) {
+          return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+        }
+        return this.getFillColor(chart, target.dataItem.index)
+      });
       categoryLabel.label.padding(1, 4, 0, 4);
     }
 
     categoryLabel.label.hideOversized = false;
     categoryLabel.label.truncate = false;
     categoryLabel.label.adapter.add('fill', (fill, target) => {
+      if (categoryAxis instanceof am4charts.CategoryAxis) {
+        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+      }
       return this.getFillColor(chart, target.dataItem.index)
     });
 

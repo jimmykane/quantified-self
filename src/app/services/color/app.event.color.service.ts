@@ -3,6 +3,8 @@ import {AppDeviceColors} from './app.device.colors';
 import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {ActivityTypesHelper} from '../../../../../quantified-self-lib/src/activities/activity.types';
+import {AppActivityTypeGroupColors} from './app.activity-type-group.colors';
 
 @Injectable()
 export class EventColorService {
@@ -40,7 +42,7 @@ export class EventColorService {
     return this.getColorByNumber(activityIndex);
   }
 
-  getColorForActivityType(activityType: ActivityTypes): string | null{
-    return null;
+  getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string{
+    return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
   }
 }

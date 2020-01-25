@@ -21,6 +21,8 @@ import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGroup
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
+import {ActivityTypes} from '../../../../../../quantified-self-lib/src/activities/activity.types';
+import {EventColorService} from '../../../services/color/app.event.color.service';
 
 
 @Component({
@@ -33,7 +35,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
 
   protected logger = Log.create('ChartsPieComponent');
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: EventColorService) {
     super(zone, changeDetector);
   }
 
@@ -67,6 +69,9 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     });
 
     pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {
+      if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
+        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]))
+      }
       return this.getFillColor(chart, target.dataItem.index);
     });
 
