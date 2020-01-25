@@ -59,7 +59,6 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       return `[font-size: 1.2em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
     });
 
-
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     if (categoryAxis instanceof am4charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';
