@@ -190,7 +190,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         series.dataFields.dateY = 'time';
       }
       series.dataFields.valueX = 'value';
-      categoryLabel.label.dx = 50;
+      categoryLabel.label.dx = 35;
     }
 
 
