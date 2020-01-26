@@ -70,8 +70,6 @@ export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy
     this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
       this.setChartThemes(this.chartTheme, this.useAnimations);
-      // Create a chart
-      // am4core.options.queue = true // Use this for apearing after the other (eg big data)
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       this.logger.info(`Created outsize of zone chart with id ${chart.uid}`);
       // chart.pixelPerfect = true;

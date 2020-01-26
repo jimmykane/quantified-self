@@ -298,6 +298,8 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
   }
 
   protected createChart(): am4charts.XYChart {
+    am4core.options.onlyShowOnViewport = false ;
+    am4core.options.queue = false ;
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
     chart.fontSize = '1em';
     chart.padding(0, 10, 0, 0);

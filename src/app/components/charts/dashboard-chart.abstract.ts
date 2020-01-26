@@ -9,6 +9,7 @@ import {
 import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+import * as am4core from '@amcharts/amcharts4/core';
 
 
 @Directive()
@@ -26,6 +27,8 @@ export abstract class DashboardChartAbstract extends ChartAbstract implements On
   }
 
   ngAfterViewInit(): void {
+    am4core.options.queue = true;
+    am4core.options.onlyShowOnViewport = false;
     this.chart = <am4charts.XYChart>this.createChart();
     this.chart.data = this.data || [];
   }
