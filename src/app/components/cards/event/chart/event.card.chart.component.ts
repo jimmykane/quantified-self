@@ -1325,7 +1325,7 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         }
         break;
       default:
-        throw new Error(`Not implemented`)
+        throw new Error(`Not implemented for ${xAxisType}`)
     }
 
     xAxis.title.text = this.xAxisType;
