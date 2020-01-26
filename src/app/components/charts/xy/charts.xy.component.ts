@@ -16,6 +16,7 @@ import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
 import {EventColorService} from '../../../services/color/app.event.color.service';
 import {ActivityTypes} from '../../../../../../quantified-self-lib/lib/activities/activity.types';
+import {AppColors} from '../../../services/color/app.colors';
 
 
 @Component({
@@ -200,8 +201,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       categoryLabel.label.background = new am4core.RoundedRectangle();
-      categoryLabel.label.background.fillOpacity = 0.5;
+      categoryLabel.label.background.fillOpacity = 1;
       categoryLabel.label.background.strokeOpacity = 1;
+      // categoryLabel.label.background.fill = am4core.color(AppColors.LightGray);
       categoryLabel.label.adapter.add('stroke', (stroke, target) => {
         if (categoryAxis instanceof am4charts.CategoryAxis) {
           return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))

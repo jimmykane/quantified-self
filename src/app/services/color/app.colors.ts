@@ -12,4 +12,5 @@ export enum AppColors {
   LightRed = '#f44336',
   LightGreen = '#bcf15b',
   DeepBlue = '#00688b',
+  LightGray = '#F0F0F0',
 }

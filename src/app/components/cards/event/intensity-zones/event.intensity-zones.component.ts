@@ -227,7 +227,7 @@ export class EventIntensityZonesComponent extends ChartAbstract implements After
       categoryLabel.label.padding(1, 2, 0, 2);
 
       categoryLabel.label.background = new am4core.RoundedRectangle();
-      categoryLabel.label.background.fillOpacity = 0.5;
+      categoryLabel.label.background.fillOpacity = 1;
       categoryLabel.label.background.strokeOpacity = 1;
       categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
         return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
