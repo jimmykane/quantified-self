@@ -14,6 +14,7 @@ import {User} from 'quantified-self-lib/lib/users/user';
 import {UPLOAD_STATUS} from './upload.status';
 import {Log} from 'ng2-logger/browser';
 import {EventImporterSuuntoSML} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
+import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Component({
   selector: 'app-upload',
@@ -36,6 +37,7 @@ export class UploadComponent implements OnInit {
     private snackBar: MatSnackBar,
     public dialog: MatDialog,
     private eventService: EventService,
+    private afa: AngularFireAnalytics,
     private router: Router) {
   }
 
@@ -86,6 +88,7 @@ export class UploadComponent implements OnInit {
         }
         try {
           await this.eventService.writeAllEventData(this.user, newEvent);
+          this.afa.logEvent('upload_file', {method: metaData.extension});
           metaData.status = UPLOAD_STATUS.PROCESSED;
         } catch (e) {
           // debugger;
