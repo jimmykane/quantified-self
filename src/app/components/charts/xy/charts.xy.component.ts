@@ -7,16 +7,19 @@ import {
   OnChanges,
   OnDestroy,
 } from '@angular/core';
-import {Log} from 'ng2-logger/browser'
+import { Log } from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {ChartHelper} from '../../cards/event/chart/chart-helper';
-import {EventColorService} from '../../../services/color/app.event.color.service';
-import {ActivityTypes} from '../../../../../../quantified-self-lib/lib/activities/activity.types';
-import {AppColors} from '../../../services/color/app.colors';
+import { DynamicDataLoader } from 'quantified-self-lib/lib/data/data.store';
+import { DashboardChartAbstract } from '../dashboard-chart.abstract';
+import { ChartHelper } from '../../cards/event/chart/chart-helper';
+import { EventColorService } from '../../../services/color/app.event.color.service';
+import { ActivityTypes } from '../../../../../../quantified-self-lib/lib/activities/activity.types';
+
+import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
+import { ChartDataCategoryTypes } from '../../../../../../quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+import { AppColors } from '../../../services/color/app.colors';
 
 
 @Component({
@@ -101,6 +104,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     valueAxis.min = 0;
 
     let series;
+    let regressionSeries;
 
     if (this.type === 'columns' || this.type === 'pyramids') {
       series = this.vertical && this.type === 'pyramids' ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
@@ -169,27 +173,32 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
       bullet.filters.push(ChartHelper.getShadowFilter());
+    }
 
+    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
+      // Add the trend
+      regressionSeries = chart.series.push(new am4charts.LineSeries());
+      regressionSeries.strokeWidth = 3;
+      regressionSeries.name = 'Linear Regression';
+      regressionSeries.stroke = am4core.color(AppColors.DarkGray);
+      regressionSeries.strokeOpacity = 0.8;
+      regressionSeries.strokeDasharray = '2,5';
+      regressionSeries.plugins.push(new am4plugins_regression.Regression());
     }
 
     // @todo refactor this
     const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-    if (this.vertical) {
-      if (categoryAxis instanceof am4charts.CategoryAxis) {
-        series.dataFields.categoryX = 'type';
-      } else if (categoryAxis instanceof am4charts.DateAxis) {
-        series.dataFields.dateX = 'time';
-      }
-      series.dataFields.valueY = 'value';
-      categoryLabel.dy = -15;
+    series.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
+    series.dataFields[this.getSeriesValuesFieldName()] = 'value';
 
+    if (regressionSeries) {
+      regressionSeries.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
+      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = 'value';
+    }
+
+    if (this.vertical) {
+      categoryLabel.dy = -15;
     } else {
-      if (categoryAxis instanceof am4charts.CategoryAxis) {
-        series.dataFields.categoryY = 'type';
-      } else if (categoryAxis instanceof am4charts.DateAxis) {
-        series.dataFields.dateY = 'time';
-      }
-      series.dataFields.valueX = 'value';
       categoryLabel.label.dx = 35;
     }
 
@@ -225,5 +234,26 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
 
     return chart;
+  }
+
+  private getSeriesCategoryFieldName(): string {
+    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
+      return 'categoryX';
+    }
+    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
+      return 'dateX';
+    }
+    return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'categoryY' : 'dateY';
+  }
+
+  private getSeriesValueFieldName(): string {
+    return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
+  }
+
+  private getSeriesValuesFieldName(): string {
+    if (this.vertical) {
+      return 'valueY';
+    }
+    return 'valueX';
   }
 }
