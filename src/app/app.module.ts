@@ -121,6 +121,7 @@ export class SentryErrorHandler implements ErrorHandler {
       }},
     {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: (environment.production ||  environment.beta)},
     {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
+    {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production ||  environment.beta)},
     {provide: COLLECTION_ENABLED, useValue: (environment.production ||  environment.beta)},
     {provide: APP_VERSION, useValue: appPackage.version},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
