@@ -19,6 +19,8 @@ import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
+import { EventColorService } from "../../../services/color/app.event.color.service";
+import { ActivityTypes } from "../../../../../../quantified-self-lib/src/activities/activity.types";
 
 @Component({
   selector: 'app-timeline-chart',
@@ -30,7 +32,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
   protected logger = Log.create('ChartsTimelineComponent');
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: EventColorService) {
     super(zone, changeDetector);
   }
 
@@ -114,6 +116,9 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
 
     series.columns.template.adapter.add('fill', (fill, target) => {
+      if (categoryAxis instanceof am4charts.CategoryAxis) {
+        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]));
+      }
       return this.getFillColor(chart, target.dataItem.index);
     });
 
