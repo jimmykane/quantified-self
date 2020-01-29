@@ -193,6 +193,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'github_logo',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/github_logo.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'tte',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/tte.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'epoc',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/epoc.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {

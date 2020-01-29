@@ -33,6 +33,8 @@ import {
   DataVerticalSpeedAvgMetersPerMinute,
   DataVerticalSpeedAvgMilesPerHour
 } from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
+import { DataTotalTrainingEffect } from "../../../../../quantified-self-lib/src/data/data.total-training-effect";
+import { DataPeakEPOC } from "../../../../../quantified-self-lib/src/data/data.peak-epoc";
 
 @Component({
   selector: 'app-data-type-icon',
@@ -125,6 +127,10 @@ export class DataTypeIconComponent {
       case DataSwimPaceAvg.type:
       case DataSwimPaceAvgMinutesPer100Yard.type:
         return 'swimmer';
+      case DataTotalTrainingEffect.type:
+        return 'tte';
+      case DataPeakEPOC.type:
+        return 'epoc';
       default:
         return null;
     }
