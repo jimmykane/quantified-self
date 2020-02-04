@@ -348,7 +348,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || UserService.getDefaultUserChartSettingsDataTypeSettings();
     settings.chartSettings.theme = settings.chartSettings.theme || UserService.getDefaultChartTheme();
     settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
-    settings.chartSettings.xAxisType = settings.chartSettings.xAxisType || UserService.getDefaultXAxisType();
+    settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || UserService.getDefaultXAxisType();
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
     settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || UserService.getDefaultDownSamplingLevel();
     settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || UserService.getDefaultChartCursorBehaviour();
