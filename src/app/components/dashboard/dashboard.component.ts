@@ -63,8 +63,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.isLoading = true;
       // Get the user
       if (!user) {
-        this.router.navigate(['home']).then(() => {
-          this.snackBar.open('Logged out')
+        this.router.navigate(['login']).then(() => {
+          this.snackBar.open('Login first')
         });
         return of({user: null, events: null});
       }
