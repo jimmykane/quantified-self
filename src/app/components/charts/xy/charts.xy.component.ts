@@ -104,7 +104,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     valueAxis.min = 0;
 
     let series;
-    let regressionSeries;
+    let regressionSeries: am4charts.XYSeries;
 
     if (this.type === 'columns' || this.type === 'pyramids') {
       series = this.vertical && this.type === 'pyramids' ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
@@ -178,12 +178,13 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
       // Add the trend
       regressionSeries = chart.series.push(new am4charts.LineSeries());
-      regressionSeries.strokeWidth = 3;
+      regressionSeries.strokeWidth = 1;
       regressionSeries.name = 'Linear Regression';
       regressionSeries.stroke = am4core.color(AppColors.DarkGray);
-      regressionSeries.strokeOpacity = 0.8;
-      regressionSeries.strokeDasharray = '2,5';
+      regressionSeries.strokeOpacity = 1;
+      regressionSeries.strokeDasharray = '10,5';
       regressionSeries.plugins.push(new am4plugins_regression.Regression());
+      regressionSeries.filters.push(ChartHelper.getShadowFilter());
     }
 
     // @todo refactor this
