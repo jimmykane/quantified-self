@@ -1,6 +1,6 @@
 import {Injectable} from '@angular/core';
 import {CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router} from '@angular/router';
-import {Observable} from 'rxjs';
+import { Observable, of } from 'rxjs';
 import {AppAuthService} from './app.auth.service';
 import {map, take, tap} from 'rxjs/operators';
 import {Log} from 'ng2-logger/browser';
@@ -26,7 +26,7 @@ export class AppAuthGuard implements CanActivate {
         this.snackBar.open('Access denied', null, {
           duration: 2000,
         });
-        this.router.navigate(['/login']);
+        return this.router.navigate(['/login']);
       }
     }))
 
