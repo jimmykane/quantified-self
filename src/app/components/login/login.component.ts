@@ -12,7 +12,6 @@ import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
-import * as firebase from 'firebase/app'
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
@@ -31,7 +30,7 @@ export class LoginComponent implements OnInit {
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
     this.isLoading = true;
-    const loggedInUser = await this.afAuth.auth.signInWithCustomToken(event.detail.firebaseAuthToken);
+    const loggedInUser = await this.afAuth.signInWithCustomToken(event.detail.firebaseAuthToken);
     this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
   }
 
@@ -51,7 +50,7 @@ export class LoginComponent implements OnInit {
     // Should the router guard this for logged in users
     this.isLoading = true;
     try {
-      const result = await this.afAuth.auth.getRedirectResult();
+      const result = await this.afAuth.getRedirectResult();
       if (result.user) {
         await this.redirectOrShowDataPrivacyDialog(result);
       }

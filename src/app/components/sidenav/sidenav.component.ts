@@ -5,9 +5,6 @@ import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {SideNavService} from '../../services/side-nav/side-nav.service';
-import * as firebase from 'firebase/app';
-import Firestore = firebase.firestore.Firestore;
-import {AngularFirestore} from '@angular/fire/firestore';
 import {WindowService} from '../../services/app.window.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 

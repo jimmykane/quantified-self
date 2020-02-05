@@ -1,4 +1,4 @@
-import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit,} from '@angular/core';
+import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {of, Subscription} from 'rxjs';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
@@ -34,8 +34,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public searchStartDate: Date;
   public searchEndDate: Date;
   public startOfTheWeek: DaysOfTheWeek;
-  public showUpload: boolean = this.authService.isCurrentUserAnonymous();
   public isLoading: boolean;
+  public showUpload = false;
   public isInitialized = false;
 
   private shouldSearch: boolean;
@@ -56,6 +56,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
+    this.showUpload = await this.authService.isCurrentUserAnonymous();
     this.shouldSearch = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.logger.info(`User subscription`);

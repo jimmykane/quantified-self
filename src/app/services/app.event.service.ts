@@ -4,7 +4,6 @@ import {EventImporterJSON} from 'quantified-self-lib/lib/events/adapters/importe
 import {combineLatest, from, Observable, Observer, of, zip} from 'rxjs';
 import {Action, AngularFirestore, AngularFirestoreCollection,} from '@angular/fire/firestore';
 import {bufferCount, catchError, concatMap, map, switchMap, take} from 'rxjs/operators';
-import {AngularFireStorage} from '@angular/fire/storage';
 import {firestore} from 'firebase/app';
 import * as Pako from 'pako';
 import {EventJSONInterface} from 'quantified-self-lib/lib/events/event.json.interface';
@@ -27,7 +26,6 @@ export class EventService implements OnDestroy {
   protected logger = Log.create('EventService');
 
   constructor(
-    private storage: AngularFireStorage,
     private windowService: WindowService,
     private afs: AngularFirestore) {
   }

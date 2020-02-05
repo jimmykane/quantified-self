@@ -1,7 +1,6 @@
 import {Injectable, OnDestroy} from '@angular/core';
 
 import {auth} from 'firebase/app';
-import {User as FireBaseUser} from 'firebase/app';
 
 import {Observable, of, Subscription} from 'rxjs';
 import {map, switchMap, take} from 'rxjs/operators';
@@ -10,8 +9,6 @@ import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {UserService} from '../services/app.user.service';
-import {WindowService} from '../services/app.window.service';
-import {LocalStorageService} from '../services/storage/app.local.storage.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Injectable()
@@ -45,8 +42,9 @@ export class AppAuthService implements OnDestroy {
     );
   }
 
-  isCurrentUserAnonymous() {
-    return this.afAuth.auth.currentUser && this.afAuth.auth.currentUser.isAnonymous;
+  async isCurrentUserAnonymous() {
+    const currentUser = await this.afAuth.currentUser;
+    return currentUser && currentUser.isAnonymous;
   }
 
   authenticated(): boolean {
@@ -80,7 +78,8 @@ export class AppAuthService implements OnDestroy {
 
   oAuthLoginWithRedirect(provider: any) {
     try {
-      return this.afAuth.auth.signInWithRedirect(provider);
+
+      return this.afAuth.signInWithRedirect(provider);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -91,7 +90,7 @@ export class AppAuthService implements OnDestroy {
 
   async anonymousLogin() {
     try {
-      return await this.afAuth.auth.signInAnonymously();
+      return await this.afAuth.signInAnonymously();
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -102,7 +101,7 @@ export class AppAuthService implements OnDestroy {
 
   async emailSignUp(email: string, password: string) {
     try {
-      return this.afAuth.auth.createUserWithEmailAndPassword(email, password);
+      return this.afAuth.createUserWithEmailAndPassword(email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -111,7 +110,7 @@ export class AppAuthService implements OnDestroy {
 
   async emailLogin(email: string, password: string) {
     try {
-      return this.afAuth.auth.signInWithEmailAndPassword(email, password);
+      return this.afAuth.signInWithEmailAndPassword(email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -130,7 +129,7 @@ export class AppAuthService implements OnDestroy {
   }
 
   async signOut(): Promise<void> {
-    await this.afAuth.auth.signOut();
+    await this.afAuth.signOut();
     await this.afs.firestore.terminate();
     return this.afs.firestore.clearPersistence();
   }

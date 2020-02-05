@@ -93,7 +93,7 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isLoading = true;
     this.changeDetector.detectChanges();
     try {
-      this.windowRef.confirmationResult = await this.afAuth.auth.signInWithPhoneNumber(this.phoneNumberFormGroup.get('phoneNumber').value, this.windowRef.recaptchaVerifier);
+      this.windowRef.confirmationResult = await this.afAuth.signInWithPhoneNumber(this.phoneNumberFormGroup.get('phoneNumber').value, this.windowRef.recaptchaVerifier);
     } catch (e) {
       this.snackBar.open(`Could not verify login number due to ${e.message}`, null, {
         duration: 2000,

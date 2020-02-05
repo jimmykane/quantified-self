@@ -1,3 +1,5 @@
+import 'firebase/database';
+import 'firebase/firestore';
 import {ErrorHandler, Injectable, NgModule} from '@angular/core';
 import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
@@ -10,8 +12,7 @@ import {HttpClientModule} from '@angular/common/http';
 import {AngularFireModule} from '@angular/fire';
 import {AngularFirestoreModule} from '@angular/fire/firestore';
 import {AngularFireAuthModule} from '@angular/fire/auth';
-import {AngularFireStorageModule} from '@angular/fire/storage';
-import {AngularFireFunctionsModule, FunctionsRegionToken} from '@angular/fire/functions';
+import { AngularFireFunctionsModule, REGION } from '@angular/fire/functions';
 import * as Sentry from '@sentry/browser';
 import {
   AngularFirePerformanceModule,
@@ -78,9 +79,9 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFirestoreModule,
     AngularFirestoreModule.enablePersistence({synchronizeTabs: false}),
     AngularFireFunctionsModule,
-    AngularFireStorageModule,
+    // AngularFireStorageModule,
     AngularFireAuthModule,
-    // AngularFirePerformanceModule,
+    AngularFirePerformanceModule,
     AngularFireAnalyticsModule,
     MaterialModule,
     AgmCoreModule.forRoot({
@@ -114,7 +115,7 @@ export class SentryErrorHandler implements ErrorHandler {
     ScreenTrackingService,
     UserTrackingService,
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},
-    {provide: FunctionsRegionToken, useValue: 'europe-west2'},
+    {provide: REGION, useValue: 'europe-west2'},
     {provide: CONFIG, useValue: {
         allow_ad_personalization_signals: false,
         anonymize_ip: true
