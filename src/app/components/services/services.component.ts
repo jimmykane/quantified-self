@@ -31,13 +31,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppLinkFormGroup: FormGroup;
   public isLoading = false;
   public user: User;
+  public isGuest: boolean;
   public serviceTokens: ServiceTokenInterface[];
   private userSubscription: Subscription;
 
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
-    await this.userService.setServiceAuthToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse)
+    await this.userService.setServiceAuthToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse);
     this.isLoading = false;
     this.snackBar.open(`Connected successfully`, null, {
       duration: 2000,
@@ -69,9 +70,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         return of(null);
       }
       this.user = user;
-      if (this.authService.isCurrentUserAnonymous()) {
-        return of(null);
-      }
+      this.isGuest = this.authService.isGuest();
       return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
     })).subscribe((tokens) => {
       this.serviceTokens = tokens;

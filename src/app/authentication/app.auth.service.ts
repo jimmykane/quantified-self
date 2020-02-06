@@ -15,6 +15,7 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 export class AppAuthService implements OnDestroy {
   user: Observable<User | null>;
   private authState = null;
+  private guest: boolean;
   userSubscription: Subscription;
 
   constructor(
@@ -27,6 +28,7 @@ export class AppAuthService implements OnDestroy {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
         if (user) {
+          this.guest = user.isAnonymous;
           return this.userService.getUserByID(user.uid).pipe(map((dbUser: User) => {
             this.authState = !!dbUser;
             // if (dbUser) {
@@ -49,6 +51,10 @@ export class AppAuthService implements OnDestroy {
 
   authenticated(): boolean {
     return this.authState;
+  }
+
+  isGuest(): boolean {
+    return !!this.guest;
   }
 
   googleLoginWithRedirect() {
