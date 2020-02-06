@@ -57,7 +57,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   async ngOnInit() {
     this.logger.info(`On Init`);
-    this.showUpload = await this.authService.isCurrentUserAnonymous();
     this.shouldSearch = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.logger.info(`User subscription`);
@@ -69,6 +68,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
         return of({user: null, events: null});
       }
+
+      this.showUpload = this.authService.isGuest();
 
       if (this.user && (
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange

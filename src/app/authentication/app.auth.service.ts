@@ -44,11 +44,6 @@ export class AppAuthService implements OnDestroy {
     );
   }
 
-  async isCurrentUserAnonymous() {
-    const currentUser = await this.afAuth.currentUser;
-    return currentUser && currentUser.isAnonymous;
-  }
-
   authenticated(): boolean {
     return this.authState;
   }
