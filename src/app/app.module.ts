@@ -79,7 +79,6 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFirestoreModule,
     AngularFirestoreModule.enablePersistence({synchronizeTabs: false}),
     AngularFireFunctionsModule,
-    // AngularFireStorageModule,
     AngularFireAuthModule,
     AngularFirePerformanceModule,
     AngularFireAnalyticsModule,
