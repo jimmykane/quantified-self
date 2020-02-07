@@ -9,8 +9,8 @@ import {ActivityFormComponent} from '../activity-form/activity.form.component';
 import {User} from 'quantified-self-lib/lib/users/user';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
 import {take} from 'rxjs/operators';
-import {MatBottomSheet} from '@angular/material';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
+import { MatBottomSheet } from "@angular/material/bottom-sheet";
 
 @Component({
   selector: 'app-activity-actions',

@@ -1,24 +1,22 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-// import {EventExporterTCX} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.tcx';
 import {EventService} from '../../services/app.event.service';
 import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
-import {MatDialog} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
 import {EventExporterJSON} from 'quantified-self-lib/lib/events/adapters/exporters/exporter.json';
 import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
 import {ClipboardService} from '../../services/app.clipboard.service';
 import {SharingService} from '../../services/app.sharing.service';
 import {User} from 'quantified-self-lib/lib/users/user';
-import {MatBottomSheet} from '@angular/material';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
-import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
 import {take} from 'rxjs/operators';
 import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-event-actions',
@@ -146,7 +144,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.deleteConfirmationSubscription){
+    if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe()
     }
   }

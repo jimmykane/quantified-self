@@ -32,7 +32,6 @@ import {Log} from 'ng2-logger/browser';
 import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
-import {MatBottomSheet} from '@angular/material';
 import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
 import {UserService} from '../../services/app.user.service';
 import {ScreenBreakPoints} from '../screen-size/sreen-size.abstract';
@@ -40,6 +39,7 @@ import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
 import {DataTableAbstract, StatRowElement} from '../data-table/data-table.abstract';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {EventColorService} from '../../services/color/app.event.color.service';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 
 
 @Component({

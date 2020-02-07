@@ -1,5 +1,5 @@
 import {Component} from '@angular/core';
-import {MatBottomSheetRef} from '@angular/material';
+import { MatBottomSheetRef } from '@angular/material/bottom-sheet';
 
 @Component({
   selector: 'app-delete-confirmation',

@@ -1,10 +1,10 @@
 import {Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges} from '@angular/core';
 import {FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators} from '@angular/forms';
-import {MatButtonToggleChange} from '@angular/material';
 import {DateRanges} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
 import {DaysOfTheWeek} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
 import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
 import {MatSelectChange} from '@angular/material/select';
+import { MatButtonToggleChange } from '@angular/material/button-toggle';
 
 @Component({
   selector: 'app-event-search',
@@ -101,7 +101,7 @@ export class EventSearchComponent implements OnChanges, OnInit {
   }
 
   onActivityTypesChange(event: MatSelectChange) {
-    if (event.value.indexOf(undefined) !== -1){
+    if (event.value.indexOf(undefined) !== -1) {
       this.searchFormGroup.get('activityTypes').setValue([]);
     }
    this.search()
