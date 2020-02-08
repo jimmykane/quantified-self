@@ -56,6 +56,9 @@ import { isNumber } from 'quantified-self-lib/lib/events/utilities/helpers';
 import { UserExportToCsvSettingsInterface } from 'quantified-self-lib/lib/users/user.export-to-csv.settings.interface';
 import { DataAltitude } from 'quantified-self-lib/lib/data/data.altitude';
 import { DataHeartRate } from 'quantified-self-lib/lib/data/data.heart-rate';
+import { ActivityTypes } from "../../../../quantified-self-lib/src/activities/activity.types";
+import set = Reflect.set;
+import { UserSummariesSettingsInterface } from "../../../../quantified-self-lib/src/users/user.summaries.settings.interface";
 
 
 @Injectable()
@@ -219,6 +222,10 @@ export class UserService implements OnDestroy {
     }
   }
 
+  static getDefaultActivityTypesToRemoveAscentFromSummaries(): ActivityTypes[] {
+    return [ActivityTypes.AlpineSki, ActivityTypes.Snowboard]
+  }
+
   constructor(
     private afs: AngularFirestore,
     private eventService: EventService,
@@ -368,7 +375,6 @@ export class UserService implements OnDestroy {
     settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
     settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
     settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || UserService.getDefaultGainAndLossThreshold();
-
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || UserService.getDefaultSpeedUnits();
@@ -388,6 +394,9 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
     settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || UserService.getDefaultTableSettings();
+    // Summaries
+    settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
+    settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || UserService.getDefaultActivityTypesToRemoveAscentFromSummaries();
     // Map
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || UserService.getDefaultMapTheme();
@@ -396,7 +405,6 @@ export class UserService implements OnDestroy {
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || UserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || UserService.getDefaultMapType();
     settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || UserService.getDefaultMapStrokeWidth();
-
     // Export to CSV
     settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
     settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;

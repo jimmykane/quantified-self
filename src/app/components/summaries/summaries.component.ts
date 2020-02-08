@@ -81,22 +81,27 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
   ngOnChanges(simpleChanges: SimpleChanges) {
     if (simpleChanges.events || simpleChanges.user) {
-      this.unsibscribeAndCreateCharts();
+      this.unsubscribeAndCreateCharts();
     }
   }
 
-  private unsibscribeAndCreateCharts() {
+  private unsubscribeAndCreateCharts() {
     this.unsubscribeFromAll();
     // Subscribe to the chartTheme changes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
       this.chartTheme = chartTheme;
     });
     if (this.events) {
-      this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
+      this.events = this.events.filter(event => {
+        if (event.isMerge){
+          return false;
+        }
+        return event.getActivityTypesAsArray().filter(eventActivityType => this.user.settings.summariesSettings.removeAscentForEventTypes.indexOf(ActivityTypes[eventActivityType]) === -1).length
+      }).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
     }
 
     const newCharts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
-    // if there are no current charts get and asign and get done
+    // if there are no current charts get and assign and get done
     if (!this.charts.length && newCharts.length) {
       this.charts = newCharts;
       this.loaded();

@@ -101,6 +101,16 @@
             </mat-select>
             <mat-hint><b>Tip:</b> the more selected the slower the app will load on the dashboard view</mat-hint>
           </mat-form-field>
+
+          <mat-form-field>
+            <mat-select placeholder="Hide ascent for activity types" formControlName="removeAscentForActivitiesSummaries" multiple >
+              <mat-option>None</mat-option>
+              <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">
+                {{activityType}}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
         </mat-card>
       </mat-tab>
 

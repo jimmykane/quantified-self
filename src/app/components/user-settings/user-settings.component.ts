@@ -29,6 +29,7 @@ import {MapThemes, MapTypes, UserMapSettingsInterface} from 'quantified-self-lib
 import {LapTypesHelper} from 'quantified-self-lib/lib/laps/lap.types';
 import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { ActivityTypesHelper } from "../../../../../quantified-self-lib/src/activities/activity.types";
 
 @Component({
   selector: 'app-user-settings',
@@ -69,6 +70,9 @@ export class UserSettingsComponent implements OnChanges {
   public paceUnits = PaceUnits;
   public swimPaceUnits = SwimPaceUnits;
   public userSettingsFormGroup: FormGroup;
+
+  public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
+
 
   constructor(private authService: AppAuthService,
               private route: ActivatedRoute,
@@ -213,6 +217,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      removeAscentForActivitiesSummaries: new FormControl(this.user.settings.summariesSettings.removeAscentForEventTypes, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       pinUploadSection: new FormControl(this.user.settings.dashboardSettings.pinUploadSection, [
         // Validators.required,
         // Validators.minLength(1),
@@ -328,6 +337,9 @@ export class UserSettingsComponent implements OnChanges {
               direction: this.user.settings.dashboardSettings.tableSettings.direction,
               eventsPerPage: this.userSettingsFormGroup.get('eventsPerPage').value
             }
+          },
+          summariesSettings: {
+            removeAscentForEventTypes:  this.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value
           },
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
