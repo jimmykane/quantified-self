@@ -28,7 +28,6 @@
           </th>
 
       </ng-container>
-<!--      <td mat-cell *matCellDef="let row" [ngStyle]="{'background-color': row['Color']}">-->
       <td mat-cell *matCellDef="let row">
         <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
                       (change)="$event ? checkBoxClick(row) : null"
@@ -50,7 +49,7 @@
 
 
     <tr mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></tr>
-    <tr mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
+    <tr mat-row matRipple *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
             [routerLink]="['/user', user.uid, 'event', row.Event.getID()]"
             [class.merged]="row['Merged Event']"
             class="normal-row">

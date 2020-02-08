@@ -3,7 +3,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatCardModule} from '@angular/material/card';
 import {MatIconModule} from '@angular/material/icon';
-import {MatCommonModule, MatNativeDateModule} from '@angular/material/core';
+import { MatCommonModule, MatNativeDateModule, MatRippleModule } from '@angular/material/core';
 import {MatMenuModule} from '@angular/material/menu';
 import {MatTabsModule} from '@angular/material/tabs';
 import {MatSidenavModule} from '@angular/material/sidenav';
@@ -63,6 +63,7 @@ import {MatExpansionModule} from '@angular/material/expansion';
     MatStepperModule,
     MatBottomSheetModule,
     MatExpansionModule,
+    MatRippleModule
   ],
   declarations: [],
   providers: [

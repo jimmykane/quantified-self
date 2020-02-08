@@ -26,7 +26,7 @@ import {MatPaginatorIntl} from '@angular/material/paginator';
     CommonModule,
     SharedModule,
     MaterialModule,
-    DashboardRoutingModule
+    DashboardRoutingModule,
   ],
   exports: [
   ],
