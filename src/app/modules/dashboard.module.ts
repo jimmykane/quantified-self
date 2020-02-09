@@ -17,9 +17,8 @@ import {UploadErrorComponent} from '../components/upload-error/upload-error.comp
 import {ActivityMetadataComponent} from '../components/activity-metadata/activity-metadata.component';
 import {UploadComponent} from '../components/upload/upload.component';
 import {EventTableComponent, MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
-import {ChartAbstract} from '../components/charts/chart.abstract';
 import {MatPaginatorIntl} from '@angular/material/paginator';
-
+import { EventsMapComponent } from '../components/events-map/events-map.component';
 
 @NgModule({
   imports: [
@@ -44,6 +43,7 @@ import {MatPaginatorIntl} from '@angular/material/paginator';
     UploadErrorComponent,
     ActivityMetadataComponent,
     EventTableComponent,
+    EventsMapComponent,
   ],
   entryComponents: [
     UploadErrorComponent,
