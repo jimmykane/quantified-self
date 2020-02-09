@@ -77,7 +77,7 @@ export class SentryErrorHandler implements ErrorHandler {
     HttpClientModule,
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
-    AngularFirestoreModule.enablePersistence({synchronizeTabs: false}),
+    AngularFirestoreModule.enablePersistence({synchronizeTabs: true}),
     AngularFireFunctionsModule,
     AngularFireAuthModule,
     AngularFirePerformanceModule,
