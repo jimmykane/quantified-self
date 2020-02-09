@@ -62,26 +62,26 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
 
 
     categoryAxis.renderer.labels.template.disabled = true;
-    // const categoryAxisLabelTemplate = categoryAxis.renderer.labels.template;
-    // categoryAxisLabelTemplate.paddingLeft = 20;
-    // categoryAxisLabelTemplate.horizontalCenter = 'left';
-    // categoryAxisLabelTemplate.adapter.add('rotation', (rotation, target) => {
-    //   const position = valueAxis.valueToPosition(valueAxis.min);
-    //   return valueAxis.renderer.positionToAngle(position) + 90;
-    // });
-    // categoryAxisLabelTemplate.adapter.add('text', (text, target, key) => {
-    //   let chartDataItem;
-    //   if (target.dataItem instanceof am4charts.DateAxisDataItem && target.axis) {
-    //     chartDataItem = target.axis.chart.data.find((chartData: SummariesChartDataInterface) => chartData.time === (<am4charts.DateAxisDataItem>target.dataItem).value);
-    //   } else if (target.dataItem instanceof am4charts.CategoryAxisDataItem) {
-    //     chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
-    //   }
-    //   if (!chartDataItem) {
-    //     return `[bold font-size: 0.8em]${text}[/]`;
-    //   }
-    //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem.value);
-    //   return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
-    // });
+    const categoryAxisLabelTemplate = categoryAxis.renderer.labels.template;
+    categoryAxisLabelTemplate.paddingLeft = 20;
+    categoryAxisLabelTemplate.horizontalCenter = 'left';
+    categoryAxisLabelTemplate.adapter.add('rotation', (rotation, target) => {
+      const position = valueAxis.valueToPosition(valueAxis.min);
+      return valueAxis.renderer.positionToAngle(position) + 90;
+    });
+    categoryAxisLabelTemplate.adapter.add('text', (text, target, key) => {
+      let chartDataItem;
+      if (target.dataItem instanceof am4charts.DateAxisDataItem && target.axis) {
+        chartDataItem = target.axis.chart.data.find((chartData: SummariesChartDataInterface) => chartData.time === (<am4charts.DateAxisDataItem>target.dataItem).value);
+      } else if (target.dataItem instanceof am4charts.CategoryAxisDataItem) {
+        chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
+      }
+      if (!chartDataItem) {
+        return `[bold font-size: 0.8em]${text}[/]`;
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem.value);
+      return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
+    });
 
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 100;
