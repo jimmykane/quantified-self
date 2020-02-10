@@ -4,12 +4,12 @@ import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
-import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
+import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 

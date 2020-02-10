@@ -7,7 +7,7 @@ import {map, switchMap, take} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {UserService} from '../services/app.user.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 

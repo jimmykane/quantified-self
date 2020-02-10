@@ -2,23 +2,23 @@ import {
   ChangeDetectorRef,
 } from '@angular/core';
 import {ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {DataRPE, RPEBorgCR10SCale} from 'quantified-self-lib/lib/data/data.rpe';
-import {DataFeeling, Feelings} from 'quantified-self-lib/lib/data/data.feeling';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
-import {DataSpeedAvg} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib/lib/data/data.rpe';
+import {DataFeeling, Feelings} from '@sports-alliance/sports-lib/lib/data/data.feeling';
+import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
+import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
+import {DataEnergy} from '@sports-alliance/sports-lib/lib/data/data.energy';
+import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import {DataSpeedAvg} from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
+import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {DataDuration} from '@sports-alliance/sports-lib/lib/data/data.duration';
+import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 
 export abstract class DataTableAbstract extends ScreenSizeAbstract {
 

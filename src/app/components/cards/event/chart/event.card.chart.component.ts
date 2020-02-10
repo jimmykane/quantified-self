@@ -12,30 +12,30 @@ import {
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
 import {EventColorService} from '../../../../services/color/app.event.color.service';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {XYSeries} from '@amcharts/amcharts4/charts';
 import {combineLatest, Subscription} from 'rxjs';
 import {EventService} from '../../../../services/app.event.service';
-import {DataAltitude} from 'quantified-self-lib/lib/data/data.altitude';
+import {DataAltitude} from '@sports-alliance/sports-lib/lib/data/data.altitude';
 import {debounceTime, map, take} from 'rxjs/operators';
-import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {DataPace, DataPaceMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace';
-import {ChartCursorBehaviours, XAxisTypes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
+import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
+import {DataPace, DataPaceMinutesPerMile} from '@sports-alliance/sports-lib/lib/data/data.pace';
+import {ChartCursorBehaviours, XAxisTypes} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
 import {ChartAbstract} from '../../../charts/chart.abstract';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
-import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
-import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
-import {DataSwimPaceMaxMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-max';
-import {DataGPSAltitude} from 'quantified-self-lib/lib/data/data.altitude-gps';
-import {DataAccumulatedPower} from 'quantified-self-lib/lib/data/data.accumulated-power';
-import {DataTemperature} from 'quantified-self-lib/lib/data/data.temperature';
+import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
+import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
+import {DataSwimPaceMaxMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
+import {DataGPSAltitude} from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
+import {DataAccumulatedPower} from '@sports-alliance/sports-lib/lib/data/data.accumulated-power';
+import {DataTemperature} from '@sports-alliance/sports-lib/lib/data/data.temperature';
 import {
   DataSpeed,
   DataSpeedFeetPerMinute,
@@ -43,11 +43,11 @@ import {
   DataSpeedKilometersPerHour,
   DataSpeedMetersPerMinute,
   DataSpeedMilesPerHour
-} from 'quantified-self-lib/lib/data/data.speed';
-import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
+} from '@sports-alliance/sports-lib/lib/data/data.speed';
+import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import {AppDataColors} from '../../../../services/color/app.data.colors';
 import {WindowService} from '../../../../services/app.window.service';
-import {DataStrydSpeed} from 'quantified-self-lib/lib/data/data.stryd-speed';
+import {DataStrydSpeed} from '@sports-alliance/sports-lib/lib/data/data.stryd-speed';
 import {
   DataVerticalSpeed,
   DataVerticalSpeedFeetPerHour,
@@ -57,24 +57,24 @@ import {
   DataVerticalSpeedMetersPerHour,
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
-} from 'quantified-self-lib/lib/data/data.vertical-speed';
-import {DataPower} from 'quantified-self-lib/lib/data/data.power';
-import {DataPowerRight} from 'quantified-self-lib/lib/data/data.power-right';
-import {DataPowerLeft} from 'quantified-self-lib/lib/data/data.power-left';
-import {DataLeftBalance} from 'quantified-self-lib/lib/data/data.left-balance';
-import {DataRightBalance} from 'quantified-self-lib/lib/data/data.right-balance';
-import {DataStrydDistance} from 'quantified-self-lib/lib/data/data.stryd-distance';
-import {DataEHPE} from 'quantified-self-lib/lib/data/data.ehpe';
-import {DataSeaLevelPressure} from 'quantified-self-lib/lib/data/data.sea-level-pressure';
-import {DataStrydAltitude} from 'quantified-self-lib/lib/data/data.stryd-altitude';
-import {DataEVPE} from 'quantified-self-lib/lib/data/data.evpe';
-import {DataAbsolutePressure} from 'quantified-self-lib/lib/data/data.absolute-pressure';
+} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
+import {DataPower} from '@sports-alliance/sports-lib/lib/data/data.power';
+import {DataPowerRight} from '@sports-alliance/sports-lib/lib/data/data.power-right';
+import {DataPowerLeft} from '@sports-alliance/sports-lib/lib/data/data.power-left';
+import {DataLeftBalance} from '@sports-alliance/sports-lib/lib/data/data.left-balance';
+import {DataRightBalance} from '@sports-alliance/sports-lib/lib/data/data.right-balance';
+import {DataStrydDistance} from '@sports-alliance/sports-lib/lib/data/data.stryd-distance';
+import {DataEHPE} from '@sports-alliance/sports-lib/lib/data/data.ehpe';
+import {DataSeaLevelPressure} from '@sports-alliance/sports-lib/lib/data/data.sea-level-pressure';
+import {DataStrydAltitude} from '@sports-alliance/sports-lib/lib/data/data.stryd-altitude';
+import {DataEVPE} from '@sports-alliance/sports-lib/lib/data/data.evpe';
+import {DataAbsolutePressure} from '@sports-alliance/sports-lib/lib/data/data.absolute-pressure';
 import {ChartHelper, LabelData} from './chart-helper';
 import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
-import {DataAirPower} from 'quantified-self-lib/lib/data/data.air-power';
+import {DataAirPower} from '@sports-alliance/sports-lib/lib/data/data.air-power';
 import {UserService} from '../../../../services/app.user.service';
 import {ChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ActivityCursorInterface,
   ActivityCursorService

@@ -26,7 +26,7 @@ import {AppAuthService} from './authentication/app.auth.service';
 import {SideNavService} from './services/side-nav/side-nav.service';
 import {DomSanitizer, Title} from '@angular/platform-browser';
 import {ThemeService} from './services/app.theme.service';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
 import {slideInAnimation} from './animations/animations';

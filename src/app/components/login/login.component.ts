@@ -3,14 +3,14 @@ import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Router} from '@angular/router';
 import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {take} from 'rxjs/operators';
 import {UserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
-import {ServiceTokenInterface} from 'quantified-self-lib/lib/service-tokens/service-token.interface';
+import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 

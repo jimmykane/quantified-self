@@ -1,28 +1,28 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
-import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
-import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
-import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
+import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
+import {DataDuration} from '@sports-alliance/sports-lib/lib/data/data.duration';
+import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import {DataDeviceNames} from '@sports-alliance/sports-lib/lib/data/data.device-names';
+import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
+import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import {DataCadenceAvg} from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
 import {
   DataSpeedAvg, DataSpeedAvgFeetPerMinute, DataSpeedAvgFeetPerSecond,
   DataSpeedAvgKilometersPerHour, DataSpeedAvgMetersPerMinute,
   DataSpeedAvgMilesPerHour
-} from 'quantified-self-lib/lib/data/data.speed-avg';
-import {DataPaceAvg, DataPaceAvgMinutesPerMile} from 'quantified-self-lib/lib/data/data.pace-avg';
-import {DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace-avg';
-import {DataSwimPaceMinutesPer100Yard} from 'quantified-self-lib/lib/data/data.swim-pace';
-import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
-import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
-import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
+} from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import {DataPaceAvg, DataPaceAvgMinutesPerMile} from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
+import {DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
+import {DataSwimPaceMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
+import {DataTemperatureAvg} from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
+import {DataRecoveryTime} from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
+import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
+import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import {DataEnergy} from '@sports-alliance/sports-lib/lib/data/data.energy';
+import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
+import {DataAltitudeMin} from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
 import {
   DataVerticalSpeedAvg,
   DataVerticalSpeedAvgFeetPerHour,
@@ -32,9 +32,9 @@ import {
   DataVerticalSpeedAvgMetersPerHour,
   DataVerticalSpeedAvgMetersPerMinute,
   DataVerticalSpeedAvgMilesPerHour
-} from 'quantified-self-lib/lib/data/data.vertical-speed-avg';
-import { DataTotalTrainingEffect } from "../../../../../quantified-self-lib/src/data/data.total-training-effect";
-import { DataPeakEPOC } from "../../../../../quantified-self-lib/src/data/data.peak-epoc";
+} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-avg';
+import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 
 @Component({
   selector: 'app-data-type-icon',

@@ -12,9 +12,9 @@ import {
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
 import {EventColorService} from '../../../../services/color/app.event.color.service';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {LapInterface} from 'quantified-self-lib/lib/laps/lap.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {LapInterface} from '@sports-alliance/sports-lib/lib/laps/lap.interface';
 import {
   ControlPosition,
   MapTypeControlOptions,
@@ -23,17 +23,17 @@ import {
 } from '@agm/core';
 import {Log} from 'ng2-logger/browser';
 import {EventService} from '../../../../services/app.event.service';
-import {DataLatitudeDegrees} from 'quantified-self-lib/lib/data/data.latitude-degrees';
-import {DataLongitudeDegrees} from 'quantified-self-lib/lib/data/data.longitude-degrees';
+import {DataLatitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
+import {DataLongitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
-import {User} from 'quantified-self-lib/lib/users/user';
-import {DataPositionInterface} from 'quantified-self-lib/lib/data/data.position.interface';
-import {LapTypes} from 'quantified-self-lib/lib/laps/lap.types';
-import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import {DataPositionInterface} from '@sports-alliance/sports-lib/lib/data/data.position.interface';
+import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import {MapThemes} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../../services/app.user.service';
 import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
-import {GeoLibAdapter} from 'quantified-self-lib/lib/geodesy/adapters/geolib.adapter';
+import {GeoLibAdapter} from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
 import {debounceTime} from 'rxjs/operators';
 
 declare function require(moduleName: string): any;

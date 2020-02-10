@@ -7,7 +7,7 @@ import {
   Input, OnDestroy,
   OnInit
 } from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {
   FormBuilder,
   FormControl,

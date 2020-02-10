@@ -1,5 +1,5 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {
   FormBuilder,
@@ -15,17 +15,17 @@ import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {EventUtilities} from 'quantified-self-lib/lib/events/utilities/event.utilities';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {take} from 'rxjs/operators';
 import {Log} from 'ng2-logger/browser';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataDeviceNames} from 'quantified-self-lib/lib/data/data.device-names';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {ActivityTypes, ActivityTypesHelper} from 'quantified-self-lib/lib/activities/activity.types';
-import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
+import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
+import {DataDeviceNames} from '@sports-alliance/sports-lib/lib/data/data.device-names';
+import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
+import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 
 
 @Component({

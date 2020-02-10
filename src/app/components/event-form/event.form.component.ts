@@ -1,13 +1,13 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {EventService} from '../../services/app.event.service';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 
 
 @Component({

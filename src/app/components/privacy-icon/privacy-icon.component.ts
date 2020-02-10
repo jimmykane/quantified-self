@@ -1,5 +1,5 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 
 @Component({
   selector: 'app-privacy-icon',

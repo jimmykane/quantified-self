@@ -1,7 +1,7 @@
 import {Component, Inject, OnDestroy, OnInit} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
-import {Privacy} from 'quantified-self-lib/lib/privacy/privacy.class.interface';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {of, Subscription} from 'rxjs';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';

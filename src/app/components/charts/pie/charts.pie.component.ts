@@ -11,18 +11,18 @@ import {
 import {Log} from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
-import {ActivityTypes} from '../../../../../../quantified-self-lib/src/activities/activity.types';
 import {EventColorService} from '../../../services/color/app.event.color.service';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 
 @Component({
@@ -65,7 +65,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? ``: `.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')`}} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+      return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? `` : `.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')`}} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
     });
 
     pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {

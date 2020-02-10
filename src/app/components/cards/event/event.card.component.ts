@@ -2,21 +2,21 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDest
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
 import {EventService} from '../../../services/app.event.service';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {StreamInterface} from 'quantified-self-lib/lib/streams/stream.interface';
+import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
 import {AppAuthService} from '../../../authentication/app.auth.service';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   XAxisTypes
-} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
 import {ThemeService} from '../../../services/app.theme.service';
-import {AppThemes} from 'quantified-self-lib/lib/users/user.app.settings.interface';
-import {MapThemes} from 'quantified-self-lib/lib/users/user.map.settings.interface';
+import {AppThemes} from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
+import {MapThemes} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
 import {UserService} from '../../../services/app.user.service';
 import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
 

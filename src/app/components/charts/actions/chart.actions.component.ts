@@ -1,41 +1,41 @@
 import {MatDialog} from '@angular/material/dialog';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {Component, Input, OnInit} from '@angular/core';
-import {DataDistance} from 'quantified-self-lib/lib/data/data.distance';
-import {DataTotalTrainingEffect} from 'quantified-self-lib/lib/data/data.total-training-effect';
-import {DataDuration} from 'quantified-self-lib/lib/data/data.duration';
-import {DataEnergy} from 'quantified-self-lib/lib/data/data.energy';
-import {DataAscent} from 'quantified-self-lib/lib/data/data.ascent';
-import {DataDescent} from 'quantified-self-lib/lib/data/data.descent';
-import {DataHeartRateAvg} from 'quantified-self-lib/lib/data/data.heart-rate-avg';
+import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
+import {DataTotalTrainingEffect} from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import {DataDuration} from '@sports-alliance/sports-lib/lib/data/data.duration';
+import {DataEnergy} from '@sports-alliance/sports-lib/lib/data/data.energy';
+import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
+import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   UserDashboardChartSettingsInterface
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
 import {UserService} from '../../../services/app.user.service';
-import {DataAltitudeMax} from 'quantified-self-lib/lib/data/data.altitude-max';
-import {DataAltitudeMin} from 'quantified-self-lib/lib/data/data.altitude-min';
-import {DataAltitudeAvg} from 'quantified-self-lib/lib/data/data.altitude-avg';
-import {DataHeartRateMax} from 'quantified-self-lib/lib/data/data.heart-rate-max';
-import {DataHeartRateMin} from 'quantified-self-lib/lib/data/data.heart-rate-min';
-import {DataPowerMax} from 'quantified-self-lib/lib/data/data.power-max';
-import {DataPowerMin} from 'quantified-self-lib/lib/data/data.power-min';
-import {DataPowerAvg} from 'quantified-self-lib/lib/data/data.power-avg';
-import {DataTemperatureMax} from 'quantified-self-lib/lib/data/data.temperature-max';
-import {DataTemperatureAvg} from 'quantified-self-lib/lib/data/data.temperature-avg';
-import {DataTemperatureMin} from 'quantified-self-lib/lib/data/data.temperature-min';
-import {DataCadenceMax} from 'quantified-self-lib/lib/data/data.cadence-max';
-import {DataCadenceAvg} from 'quantified-self-lib/lib/data/data.cadence-avg';
-import {DataCadenceMin} from 'quantified-self-lib/lib/data/data.cadence-min';
-import {DataVO2Max} from 'quantified-self-lib/lib/data/data.vo2-max';
-import {DataPeakEPOC} from 'quantified-self-lib/lib/data/data.peak-epoc';
+import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
+import {DataAltitudeMin} from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
+import {DataAltitudeAvg} from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
+import {DataHeartRateMax} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
+import {DataHeartRateMin} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-min';
+import {DataPowerMax} from '@sports-alliance/sports-lib/lib/data/data.power-max';
+import {DataPowerMin} from '@sports-alliance/sports-lib/lib/data/data.power-min';
+import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import {DataTemperatureMax} from '@sports-alliance/sports-lib/lib/data/data.temperature-max';
+import {DataTemperatureAvg} from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
+import {DataTemperatureMin} from '@sports-alliance/sports-lib/lib/data/data.temperature-min';
+import {DataCadenceMax} from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
+import {DataCadenceAvg} from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
+import {DataCadenceMin} from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
+import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import * as firebase from 'firebase/app';
-import {DataFeeling} from 'quantified-self-lib/lib/data/data.feeling';
-import {DataRPE} from 'quantified-self-lib/lib/data/data.rpe';
+import {DataFeeling} from '@sports-alliance/sports-lib/lib/data/data.feeling';
+import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import {DataRecoveryTime} from 'quantified-self-lib/lib/data/dataRecoveryTime';
+import {DataRecoveryTime} from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
 
 @Component({
   selector: 'app-chart-actions',

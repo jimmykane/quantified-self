@@ -1,9 +1,8 @@
 import {Injectable} from '@angular/core';
 import {AppDeviceColors} from './app.device.colors';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
-import {ActivityTypesHelper} from '../../../../../quantified-self-lib/src/activities/activity.types';
+import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {AppActivityTypeGroupColors} from './app.activity-type-group.colors';
 
 @Injectable()

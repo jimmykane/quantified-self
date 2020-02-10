@@ -8,13 +8,13 @@ import {
   OnInit,
   Output
 } from '@angular/core';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {ActivityInterface} from 'quantified-self-lib/lib/activities/activity.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {EventColorService} from '../../../../services/color/app.event.color.service';
 import {ActivitySelectionService} from '../../../../services/activity-selection-service/activity-selection.service';
 import {Subscription} from 'rxjs';
 import {MatSlideToggleChange} from '@angular/material/slide-toggle';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 
 @Component({
   selector: 'app-activity-toggle',

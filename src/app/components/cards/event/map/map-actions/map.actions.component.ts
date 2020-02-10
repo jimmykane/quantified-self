@@ -5,7 +5,7 @@ import {
   OnChanges,
   Output,
 } from '@angular/core';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {UserService} from '../../../../../services/app.user.service';
 
 @Component({

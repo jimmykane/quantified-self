@@ -15,12 +15,12 @@ import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {ChartHelper} from '../../cards/event/chart/chart-helper';
-import { EventColorService } from "../../../services/color/app.event.color.service";
-import { ActivityTypes } from "../../../../../../quantified-self-lib/src/activities/activity.types";
+import { EventColorService } from '../../../services/color/app.event.color.service';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 @Component({
   selector: 'app-timeline-chart',

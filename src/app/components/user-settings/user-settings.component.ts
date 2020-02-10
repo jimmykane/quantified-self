@@ -1,35 +1,35 @@
 import {Component, Input, OnChanges} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {UserService} from '../../services/app.user.service';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
 import * as Sentry from '@sentry/browser';
-import {UserSettingsInterface} from 'quantified-self-lib/lib/users/user.settings.interface';
+import {UserSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.settings.interface';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   UserChartSettingsInterface,
   XAxisTypes,
-} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
 import {Log} from 'ng2-logger/browser';
-import {AppThemes, UserAppSettingsInterface} from 'quantified-self-lib/lib/users/user.app.settings.interface';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {AppThemes, UserAppSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
-} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {UserDashboardSettingsInterface} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
-import {MapThemes, MapTypes, UserMapSettingsInterface} from 'quantified-self-lib/lib/users/user.map.settings.interface';
-import {LapTypesHelper} from 'quantified-self-lib/lib/laps/lap.types';
+} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {UserDashboardSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.dashboard.settings.interface';
+import {MapThemes, MapTypes, UserMapSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+import {LapTypesHelper} from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import { ActivityTypesHelper } from "../../../../../quantified-self-lib/src/activities/activity.types";
+import { ActivityTypesHelper } from "@sports-alliance/sports-lib/lib/activities/activity.types";
 
 @Component({
   selector: 'app-user-settings',

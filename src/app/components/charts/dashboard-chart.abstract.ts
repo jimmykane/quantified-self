@@ -5,10 +5,10 @@ import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summa
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
+import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
+import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import * as am4core from '@amcharts/amcharts4/core';
 
 

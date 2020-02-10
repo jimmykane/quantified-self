@@ -9,12 +9,12 @@ import {
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';
 import {UserService} from '../../services/app.user.service';
-import {UserServiceMetaInterface} from 'quantified-self-lib/lib/users/user.service.meta.interface';
+import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
-import {ServiceNames} from 'quantified-self-lib/lib/meta-data/meta-data.interface';
+import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 

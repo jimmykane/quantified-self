@@ -2,20 +2,20 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { Log } from 'ng2-logger/browser';
 import { AngularFirestore, AngularFirestoreDocument } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
-import { User } from 'quantified-self-lib/lib/users/user';
-import { Privacy } from 'quantified-self-lib/lib/privacy/privacy.class.interface';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { EventService } from './app.event.service';
 import { map, take } from 'rxjs/operators';
-import { AppThemes, UserAppSettingsInterface } from 'quantified-self-lib/lib/users/user.app.settings.interface';
+import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   DataTypeSettings,
   UserChartSettingsInterface,
   XAxisTypes
-} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
-import { DynamicDataLoader } from 'quantified-self-lib/lib/data/data.store';
-import { UserSettingsInterface } from 'quantified-self-lib/lib/users/user.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.settings.interface';
 import {
   DaysOfTheWeek,
   PaceUnits,
@@ -23,42 +23,42 @@ import {
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
-} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import { ServiceTokenInterface } from 'quantified-self-lib/lib/service-tokens/service-token.interface';
+import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import * as Sentry from '@sentry/browser';
-import { ServiceNames } from 'quantified-self-lib/lib/meta-data/meta-data.interface';
-import { UserServiceMetaInterface } from 'quantified-self-lib/lib/users/user.service.meta.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {
   DateRanges,
   TableSettings,
   UserDashboardSettingsInterface
-} from 'quantified-self-lib/lib/users/user.dashboard.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/user.dashboard.settings.interface';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   UserDashboardChartSettingsInterface
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import { DataDuration } from 'quantified-self-lib/lib/data/data.duration';
-import { DataDistance } from 'quantified-self-lib/lib/data/data.distance';
-import { DataEnergy } from 'quantified-self-lib/lib/data/data.energy';
-import { DataAscent } from 'quantified-self-lib/lib/data/data.ascent';
+} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
+import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {
   MapThemes,
   MapTypes,
   UserMapSettingsInterface
-} from 'quantified-self-lib/lib/users/user.map.settings.interface';
-import { LapTypes } from 'quantified-self-lib/lib/laps/lap.types';
-import { isNumber } from 'quantified-self-lib/lib/events/utilities/helpers';
-import { UserExportToCsvSettingsInterface } from 'quantified-self-lib/lib/users/user.export-to-csv.settings.interface';
-import { DataAltitude } from 'quantified-self-lib/lib/data/data.altitude';
-import { DataHeartRate } from 'quantified-self-lib/lib/data/data.heart-rate';
-import { ActivityTypes } from "../../../../quantified-self-lib/src/activities/activity.types";
+} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { UserExportToCsvSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.export-to-csv.settings.interface';
+import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
+import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
 import set = Reflect.set;
-import { UserSummariesSettingsInterface } from "../../../../quantified-self-lib/src/users/user.summaries.settings.interface";
+import { UserSummariesSettingsInterface } from "@sports-alliance/sports-lib/lib/users/user.summaries.settings.interface";
+import { ActivityTypes } from "@sports-alliance/sports-lib/lib/activities/activity.types";
 
 
 @Injectable()

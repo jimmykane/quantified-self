@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} from '@angular/core';
-import {DataInterface} from 'quantified-self-lib/lib/data/data.interface';
-import {UserUnitSettingsInterface} from 'quantified-self-lib/lib/users/user.unit.settings.interface';
-import {DynamicDataLoader} from 'quantified-self-lib/lib/data/data.store';
+import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 
 @Component({
   selector: 'app-header-stats',

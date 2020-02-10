@@ -11,23 +11,23 @@ import {
 } from '@angular/core';
 import {EventService} from '../../services/app.event.service';
 import {Subscription} from 'rxjs';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from 'quantified-self-lib/lib/users/user';
-import {ChartThemes} from 'quantified-self-lib/lib/users/user.chart.settings.interface';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
 import {ThemeService} from '../../services/app.theme.service';
-import {DataActivityTypes} from 'quantified-self-lib/lib/data/data.activity-types';
-import {ActivityTypes} from 'quantified-self-lib/lib/activities/activity.types';
+import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
+import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes,
   UserDashboardChartSettingsInterface
-} from 'quantified-self-lib/lib/users/user.dashboard.chart.settings.interface';
-import {isNumber} from 'quantified-self-lib/lib/events/utilities/helpers';
+} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {MatDialog} from '@angular/material/dialog';
 import {LoadingAbstract} from '../loading/loading.abstract';
 import * as equal from 'fast-deep-equal';

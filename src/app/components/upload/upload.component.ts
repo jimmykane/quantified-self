@@ -4,16 +4,16 @@ import {Router} from '@angular/router';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {EventInterface} from 'quantified-self-lib/lib/events/event.interface';
-import {EventImporterSuuntoJSON} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
-import {EventImporterFIT} from 'quantified-self-lib/lib/events/adapters/importers/fit/importer.fit';
-import {EventImporterTCX} from 'quantified-self-lib/lib/events/adapters/importers/tcx/importer.tcx';
-import {EventImporterGPX} from 'quantified-self-lib/lib/events/adapters/importers/gpx/importer.gpx';
+import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {EventImporterSuuntoJSON} from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
+import {EventImporterFIT} from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import {EventImporterTCX} from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
+import {EventImporterGPX} from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
-import {User} from 'quantified-self-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {UPLOAD_STATUS} from './upload.status';
 import {Log} from 'ng2-logger/browser';
-import {EventImporterSuuntoSML} from 'quantified-self-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
+import {EventImporterSuuntoSML} from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 @Component({

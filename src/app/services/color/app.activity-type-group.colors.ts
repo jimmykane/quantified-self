@@ -1,4 +1,4 @@
-import {ActivityTypeGroups} from '../../../../../quantified-self-lib/src/activities/activity.types';
+import { ActivityTypeGroups } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 export const AppActivityTypeGroupColors: {[key in ActivityTypeGroups]: string} = {
   [ActivityTypeGroups.Running]: '#FDD300',
