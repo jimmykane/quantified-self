@@ -61,7 +61,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     categoryAxis.cursorTooltipEnabled = false;
 
 
-    categoryAxis.renderer.labels.template.disabled = true;
+    // categoryAxis.renderer.labels.template.disabled = true;
     const categoryAxisLabelTemplate = categoryAxis.renderer.labels.template;
     categoryAxisLabelTemplate.paddingLeft = 20;
     categoryAxisLabelTemplate.horizontalCenter = 'left';
