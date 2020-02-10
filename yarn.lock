@@ -1309,6 +1309,18 @@
     "@sentry/types" "5.12.0"
     tslib "^1.9.3"
 
+"@sports-alliance/sports-lib@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.0.0.tgz#fb82dd0d322c3789cde99090055f3cabcf5ed10f"
+  integrity sha512-x/g08bvUUFP1NZ2jULIzwSQnt03PGElAEAkd0Bg5UHyXU0kpAsDuqlFiAWGjne0BOKNKwSSSvyuFCrerbtJtTQ==
+  dependencies:
+    "@types/node" "^13.1.4"
+    fast-xml-parser "^3.15.1"
+    fit-file-parser "^1.6.17"
+    geolib "^3.2.1"
+    lowpassf "^0.5.0"
+    moving-median "^1.0.0"
+
 "@types/bytebuffer@^5.0.40":
   version "5.0.40"
   resolved "https://registry.yarnpkg.com/@types/bytebuffer/-/bytebuffer-5.0.40.tgz#d6faac40dcfb09cd856cdc4c01d3690ba536d3ee"
@@ -6492,7 +6504,7 @@ node-libs-browser@^2.2.1:
     util "^0.11.0"
     vm-browserify "^1.0.1"
 
-node-pre-gyp@*, node-pre-gyp@^0.14.0:
+node-pre-gyp@^0.14.0:
   version "0.14.0"
   resolved "https://registry.yarnpkg.com/node-pre-gyp/-/node-pre-gyp-0.14.0.tgz#9a0596533b877289bcad4e143982ca3d904ddc83"
   integrity sha512-+CvDC7ZttU/sSt9rFjix/P05iS43qHCOOGzcr3Ry99bXG7VX953+vFyEuph/tfqoYu8dttBkE86JSKBO2OzcxA==
@@ -7728,18 +7740,6 @@ qs@~6.5.2:
   version "6.5.2"
   resolved "https://registry.yarnpkg.com/qs/-/qs-6.5.2.tgz#cb3ae806e8740444584ef154ce8ee98d403f3e36"
   integrity sha512-N5ZAX4/LxJmF+7wN74pUD6qAh9/wnvdQcjq9TZjevvXzSUo7bfmw91saqMjzGS2xq91/odN2dW/WOl7qQHNDGA==
-
-quantified-self-lib@^3.7.0:
-  version "3.7.0"
-  resolved "https://registry.yarnpkg.com/quantified-self-lib/-/quantified-self-lib-3.7.0.tgz#3f6455e7a86ab21d185873f24211b0d69ac59c49"
-  integrity sha512-xhdGpmJ3LSGpLxu9NcclKde+JhiFkAMOHi+uZz/+wmrYsx73TdoHFRkwOAVA67OKsCiWeKdryjmsogBhf0Yknw==
-  dependencies:
-    "@types/node" "^13.1.4"
-    fast-xml-parser "^3.15.1"
-    fit-file-parser "^1.6.17"
-    geolib "^3.2.1"
-    lowpassf "^0.5.0"
-    moving-median "^1.0.0"
 
 query-string@^4.1.0:
   version "4.3.4"
