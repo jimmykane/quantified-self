@@ -1,7 +1,7 @@
 // import * as functions from "firebase-functions";
 // import * as admin from "firebase-admin";
-// import {DataActivityTypes} from "quantified-self-lib/lib/data/data.activity-types";
-// import {DataDeviceNames} from "quantified-self-lib/lib/data/data.device-names";
+// import {DataActivityTypes} from "'@sports-alliance/sports-lib/lib/data/data.activity-types";
+// import {DataDeviceNames} from "'@sports-alliance/sports-lib/lib/data/data.device-names";
 //
 // export const migrateDates = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
 //   return;

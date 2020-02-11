@@ -3,14 +3,14 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {EventImporterFIT} from "quantified-self-lib/lib/events/adapters/importers/fit/importer.fit";
-import {EventInterface} from "quantified-self-lib/lib/events/event.interface";
+import {EventImporterFIT} from "@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit";
+import {EventInterface} from "@sports-alliance/sports-lib/lib/events/event.interface";
 import * as Pako from "pako";
 import {generateIDFromParts} from "./utils";
-import {MetaData} from "quantified-self-lib/lib/meta-data/meta-data";
-import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
+import {MetaData} from "@sports-alliance/sports-lib/lib/meta-data/meta-data";
+import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import {getTokenData} from "./service-tokens";
-import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.interface";
+import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
 
 
 const TIMEOUT_IN_SECONDS = 540;

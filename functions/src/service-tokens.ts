@@ -4,7 +4,7 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import {suuntoAppAuth} from "./suunto-app-auth";
-import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
+import {ServiceTokenInterface} from "@sports-alliance/sports-lib/lib/service-tokens/service-token.interface";
 
 //
 export const refreshTheRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
