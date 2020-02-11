@@ -110,14 +110,14 @@ export async function processQueueItem(queueItem: any) {
       // await queueItem.ref.delete();
     } catch (e) {
       // @todo should delete event  or separate catch
-      console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`, e);
+      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`));
       await increaseRetryCountForQueueItem(queueItem, e);
       continue;
     }
   }
 
   if (processedCount !== tokenQuerySnapshots.size) {
-    console.error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`);
+    console.error(new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
     return;
   }
 
@@ -141,7 +141,7 @@ async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
     await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
     console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + 1}`);
   } catch (e) {
-    console.error(`Could not update retry count on ${queueItem.id}`, e)
+    console.error(new Error(`Could not update retry count on ${queueItem.id}`))
   }
 }
 
@@ -153,8 +153,7 @@ async function updateToProcessed(queueItem: any) {
     });
     console.log(`Updated to processed  ${queueItem.id}`);
   } catch (e) {
-    console.error(e);
-    console.error(`Could not update processed state for ${queueItem.id}`)
+    console.error(new Error(`Could not update processed state for ${queueItem.id}`));
   }
 }
 
