@@ -35,10 +35,11 @@ import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
 import {GeoLibAdapter} from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
 import {debounceTime} from 'rxjs/operators';
+import { MapAbstract } from '../../../map/map.abstract';
 
-declare function require(moduleName: string): any;
+// declare function require(moduleName: string): any;
 
-const mapStyles = require('./map-styles.json');
+// const mapStyles = require('./map-styles.json');
 
 @Component({
   selector: 'app-event-card-map',
@@ -47,7 +48,7 @@ const mapStyles = require('./map-styles.json');
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapComponent extends LoadingAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardMapComponent extends MapAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() targetUserID: string;
@@ -235,38 +236,38 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     })
   }
 
-  getBounds(): LatLngBoundsLiteral {
-    const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
-    if (!pointsWithPosition.length) {
-      return <LatLngBoundsLiteral>{
-        east: 0,
-        west: 0,
-        north: 0,
-        south: 0,
-      };
-    }
-    const mostEast = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-      return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
-    });
-    const mostWest = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-      return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
-    });
-
-    const mostNorth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-      return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
-    });
-
-    const mostSouth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-      return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
-    });
-
-    return <LatLngBoundsLiteral>{
-      east: mostEast.longitudeDegrees,
-      west: mostWest.longitudeDegrees,
-      north: mostNorth.latitudeDegrees,
-      south: mostSouth.latitudeDegrees,
-    };
-  }
+  // getBounds(): LatLngBoundsLiteral {
+  //   const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
+  //   if (!pointsWithPosition.length) {
+  //     return <LatLngBoundsLiteral>{
+  //       east: 0,
+  //       west: 0,
+  //       north: 0,
+  //       south: 0,
+  //     };
+  //   }
+  //   const mostEast = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
+  //   });
+  //   const mostWest = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
+  //   });
+  //
+  //   const mostNorth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
+  //   });
+  //
+  //   const mostSouth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
+  //   });
+  //
+  //   return <LatLngBoundsLiteral>{
+  //     east: mostEast.longitudeDegrees,
+  //     west: mostWest.longitudeDegrees,
+  //     north: mostNorth.latitudeDegrees,
+  //     south: mostSouth.latitudeDegrees,
+  //   };
+  // }
 
   openLapMarkerInfoWindow(lap) {
     this.openedLapMarkerInfoWindow = lap;
@@ -339,9 +340,9 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
     }
   }
 
-  getStyles(mapTheme: MapThemes) {
-    return mapStyles[mapTheme]
-  }
+  // getStyles(mapTheme: MapThemes) {
+  //   return mapStyles[mapTheme]
+  // }
 
   async lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
     this.activityCursorService.clear();
@@ -407,7 +408,7 @@ export class EventCardMapComponent extends LoadingAbstract implements OnChanges,
       if (!this.agmMap) {
         return;
       }
-      this.agmMap._mapsWrapper.fitBounds(this.getBounds())
+      this.agmMap._mapsWrapper.fitBounds(this.getBounds(this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), [])))
     });
   }
 }

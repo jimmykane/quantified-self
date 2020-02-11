@@ -54,6 +54,7 @@
     "@angular-devkit/build-angular": "~0.900.0",
     "@angular/cli": "^9.0.0",
     "@angular/compiler-cli": "9.0.0",
+    "@types/googlemaps": "^3.39.2",
     "@types/jasmine": "3.5.3",
     "@types/node": "^13.7.1",
     "codelyzer": "^5.1.2",

@@ -19,6 +19,7 @@ import {UploadComponent} from '../components/upload/upload.component';
 import {EventTableComponent, MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
 import {MatPaginatorIntl} from '@angular/material/paginator';
 import { EventsMapComponent } from '../components/events-map/events-map.component';
+import { AgmCoreModule } from '@agm/core';
 
 @NgModule({
   imports: [
@@ -26,6 +27,8 @@ import { EventsMapComponent } from '../components/events-map/events-map.componen
     SharedModule,
     MaterialModule,
     DashboardRoutingModule,
+    AgmCoreModule,
+    // If not used go away
   ],
   exports: [
   ],

@@ -55,7 +55,6 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
 
-
   @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
   resizeOROrientationChange(event?) {
