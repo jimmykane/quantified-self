@@ -1,5 +1,7 @@
-<agm-map style="height:300px; width: 300px; display:block;"
-         [controlSize]="32"
+<mat-card class="mat-elevation-z0">
+<app-shade [isActive]="isLoading"></app-shade>
+<agm-map [controlSize]="32"
          [streetViewControl]="false"
          [styles]="getStyles(theme)">
 </agm-map>
+</mat-card>

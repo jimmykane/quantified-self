@@ -35,6 +35,7 @@
     "@angular/platform-browser-dynamic": "9.0.0",
     "@angular/platform-server": "9.0.0",
     "@angular/router": "9.0.0",
+    "@google/markerclustererplus": "^5.0.1",
     "@sentry/browser": "^5.12.1",
     "@sports-alliance/sports-lib": "^4.0.1",
     "@types/pako": "^1.0.1",

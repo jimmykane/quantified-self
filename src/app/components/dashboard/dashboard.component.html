@@ -1,8 +1,6 @@
-
 <mat-card>
   <app-shade [isActive]="isLoading && !isInitialized"></app-shade>
   <app-upload *ngIf="(user && showUpload) || (user && user.settings.dashboardSettings.pinUploadSection)" [user]="user"></app-upload>
-  <app-events-map [events]="events" [theme]="user?.settings.mapSettings.theme"></app-events-map>
   <app-event-search *ngIf="user"
                     [selectedDateRange]="user.settings.dashboardSettings.dateRange"
                     [selectedStartDate]="searchStartDate"
@@ -11,6 +9,8 @@
                     [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
                     (searchChange)="search($event)">
   </app-event-search>
+
+  <app-events-map *ngIf="user" [isLoading]="isLoading" [events]="events" [theme]="user.settings.mapSettings.theme"></app-events-map>
 
   <app-summaries  *ngIf="user && user.settings.dashboardSettings.showSummaries"
                   [isLoading]="isLoading"
