@@ -31,6 +31,7 @@ import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers
 import {MatDialog} from '@angular/material/dialog';
 import {LoadingAbstract} from '../loading/loading.abstract';
 import * as equal from 'fast-deep-equal';
+import { DataAscent } from "@sports-alliance/sports-lib/lib/data/data.ascent";
 
 @Component({
   selector: 'app-summaries',
@@ -92,12 +93,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       this.chartTheme = chartTheme;
     });
     if (this.events) {
-      this.events = this.events.filter(event => {
-        if (event.isMerge){
-          return false;
-        }
-        return event.getActivityTypesAsArray().filter(eventActivityType => this.user.settings.summariesSettings.removeAscentForEventTypes.indexOf(ActivityTypes[eventActivityType]) === -1).length
-      }).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
+      this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
     }
 
     const newCharts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
@@ -194,6 +190,12 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   }
 
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes) {
+    // Return empty if ascent is to be skipped
+    if (dataType === DataAscent.type){
+      events = events.filter(event => {
+        return event.getActivityTypesAsArray().filter(eventActivityType => this.user.settings.summariesSettings.removeAscentForEventTypes.indexOf(ActivityTypes[eventActivityType]) === -1).length
+      })
+    }
     // @todo can the below if be better ? we need return there for switch
     // We care sums to ommit 0s
     if (this.getValueSum(events, dataType) === 0 && valueType === ChartDataValueTypes.Total) {
@@ -355,6 +357,7 @@ export interface SummariesChartDataInterface {
 export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
   dataDateRange: SummariesChartDataDateRages
   data: SummariesChartDataInterface[]
+  order: number
 }
 
 export enum SummariesChartDataDateRages {
