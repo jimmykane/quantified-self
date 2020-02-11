@@ -19,7 +19,6 @@
     "firebase-functions": "^3.3.0",
     "node-fetch": "^2.5.0",
     "pako": "^1.0.10",
-    "quantified-self-lib": "^3.7.0",
     "request": "^2.74.0",
     "request-promise-native": "^1.0.8",
     "simple-oauth2": "^3.1.0"
