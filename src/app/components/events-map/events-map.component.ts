@@ -66,7 +66,9 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
       this.markerClusterer = new MarkerClusterer(map,
         this.markers,
         {
-          imagePath: '/assets/icons/heatmap/m'
+          imagePath: '/assets/icons/heatmap/m',
+          enableRetinaIcons: true,
+          averageCenter: true
         });
       this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
     });
