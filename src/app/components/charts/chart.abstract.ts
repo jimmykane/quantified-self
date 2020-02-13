@@ -4,7 +4,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import {Log} from 'ng2-logger/browser';
 import {Subscription} from 'rxjs';
 import {DataPaceMinutesPerMile, DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 
 
 // Chart Themes

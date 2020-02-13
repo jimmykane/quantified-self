@@ -11,9 +11,9 @@ import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes,
-  UserDashboardChartSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+  ChartTypes, TileChartSettingsInterface,
+  TileSettingsInterface
+} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {UserService} from '../../../services/app.user.service';
 import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
@@ -125,53 +125,53 @@ export class ChartActionsComponent implements OnInit {
 
   async changeChartType(event) {
     this.afa.logEvent('dashboard_chart_action', {method: 'changeChartType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).type = event.value;
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)).type = event.value;
     // If its pie show only totals
     if (event.value === ChartTypes.Pie) {
-      this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = ChartDataValueTypes.Total;
+      (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)).dataValueType = ChartDataValueTypes.Total;
     }
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataType(event) {
     this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataType = event.value;
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)).dataType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataValueType(event) {
     this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataValueType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = event.value;
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)).dataValueType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataCategoryType(event) {
     this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataCategoryType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataCategoryType = event.value;
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async addNewChart($event: MouseEvent) {
     this.afa.logEvent('dashboard_chart_action', {method: 'addNewChart'});
-    const chart = Object.assign({}, this.user.settings.dashboardSettings.chartsSettings.find((chartSetting: UserDashboardChartSettingsInterface) => chartSetting.order === this.chartOrder));
-    chart.order = this.user.settings.dashboardSettings.chartsSettings.length;
-    this.user.settings.dashboardSettings.chartsSettings.push(chart);
+    const chart = Object.assign({}, (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)));
+    chart.order = this.user.settings.dashboardSettings.tiles.length;
+    this.user.settings.dashboardSettings.tiles.push(chart);
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async switchFilterLowValues(event){
     this.afa.logEvent('dashboard_chart_action', {method: 'switchFilterLowValues'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).filterLowValues = this.filterLowValues;
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.chartOrder)).filterLowValues = this.filterLowValues;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async deleteChart(event) {
     this.afa.logEvent('dashboard_chart_action', {method: 'deleteChart'});
-    if (this.user.settings.dashboardSettings.chartsSettings.length === 1) {
+    if (this.user.settings.dashboardSettings.tiles.length === 1) {
       throw new Error('Cannot delete chart there is only one left');
     }
     // should search and replace order index according to the remaining order indexes after the splice
-    this.user.settings.dashboardSettings.chartsSettings = this.user.settings.dashboardSettings.chartsSettings
+    this.user.settings.dashboardSettings.tiles = this.user.settings.dashboardSettings.tiles
       .filter((chartSetting) => chartSetting.order !== this.chartOrder)
       .map((chartSetting, index) => {
         chartSetting.order = index;

@@ -16,7 +16,7 @@ import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';

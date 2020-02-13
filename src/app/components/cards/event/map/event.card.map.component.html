@@ -16,7 +16,7 @@
     <!-- Map -->
     <section class="placeholder" *ngIf="activitiesMapData.length === 0"></section>
     <agm-map *ngIf="activitiesMapData.length > 0"
-             [mapTypeId]="user && user.settings ? user.settings.mapSettings.mapType: 'roadmap'"
+             [mapTypeId]="user && user.settings ? user.settings.mapSettings.mapType : 'roadmap'"
              (mapTypeIdChange)="changeMapType($event)"
              [fullscreenControl]="true"
              [mapTypeControl]="true"

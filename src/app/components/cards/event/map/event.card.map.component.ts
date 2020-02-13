@@ -27,19 +27,13 @@ import {DataLatitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.lat
 import {DataLongitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {DataPositionInterface} from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import {UserService} from '../../../../services/app.user.service';
-import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
 import {GeoLibAdapter} from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
 import {debounceTime} from 'rxjs/operators';
 import { MapAbstract } from '../../../map/map.abstract';
-
-// declare function require(moduleName: string): any;
-
-// const mapStyles = require('./map-styles.json');
 
 @Component({
   selector: 'app-event-card-map',

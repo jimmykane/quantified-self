@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { AgmMap } from '@agm/core';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import { DataPositionInterface } from '../../../../../sports-lib/src/data/data.position.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { MapAbstract } from '../map/map.abstract';
@@ -29,7 +29,10 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   @ViewChild(AgmMap) agmMap;
   @Input() events: EventInterface[];
   @Input() theme: MapThemes;
+  @Input() type: MapTypes;
   @Input() isLoading: boolean;
+  @Input() showHeatMap: boolean;
+  @Input() clusterMarkers: boolean;
 
   public latLngArray: google.maps.LatLng[] = [];
   public markers: google.maps.Marker[] = [];
@@ -51,45 +54,44 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
       this.infoWindow = new google.maps.InfoWindow({
         // content: ``
       });
-      // const trafficLayer = new google.maps.TrafficLayer();
-      // trafficLayer.setMap(map);
-      // Latlng and heatmap
-      this.latLngArray = this.getLatLngArray(this.events);
-      this.heatMap = new google.maps.visualization.HeatmapLayer({
-        map: this.nativeMap,
-        data: this.latLngArray,
-        radius: 30,
-        // dissipating: false,
-      });
+      if (this.showHeatMap) {
+        // const trafficLayer = new google.maps.TrafficLayer();
+        // trafficLayer.setMap(map);
+        // Latlng and heatmap
+        this.latLngArray = this.getLatLngArray(this.events);
+        this.heatMap = new google.maps.visualization.HeatmapLayer({
+          map: this.nativeMap,
+          data: this.latLngArray,
+          radius: 50,
+          // dissipating: false,
+        });
+      }
       // Markers + layer
       this.markers = this.getMarkersFromEvents(this.events);
-      this.markerClusterer = new MarkerClusterer(map,
-        this.markers,
-        {
-          imagePath: '/assets/icons/heatmap/m',
-          enableRetinaIcons: true,
-          averageCenter: true,
-          maxZoom: 20
-        });
+      this.markers.forEach(marker => marker.setMap(this.nativeMap));
+      if (this.clusterMarkers) {
+        this.markerClusterer = new MarkerClusterer(map,
+          this.markers,
+          {
+            imagePath: '/assets/icons/heatmap/m',
+            enableRetinaIcons: true,
+            averageCenter: true,
+            maxZoom: 20
+          });
+      }
       this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
     });
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.events) {
+    if (!this.nativeMap) {
       return;
     }
-
-    if (!changes.events) {
-      return;
-    }
-
     // Only process heatmaps once Google is initialized (map on load)
     if (this.heatMap) {
       this.latLngArray = this.getLatLngArray(this.events);
       this.heatMap.setData(this.latLngArray);
       // this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
-
     }
     // Only process custers once Google is initialized (map on load)
     if (this.markerClusterer) {
@@ -98,9 +100,7 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
       this.markerClusterer.addMarkers(this.markers);
       this.markerClusterer.repaint();
     }
-    if (this.nativeMap) {
-      this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
-    }
+    this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
   }
 
   getStartPositionsFromEvents(events: EventInterface[]): DataPositionInterface[] {
@@ -120,8 +120,6 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
         const location = eventStartPositionStat.getValue();
         const marker = new google.maps.Marker({
           position: {lat: location.latitudeDegrees, lng: location.longitudeDegrees},
-          // url: '/1111',
-          // label: labels[i % labels.length]
           title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayUnit()}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
@@ -130,11 +128,9 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
             strokeWeight: 1,
             strokeColor: 'black',
             scale: 10,
-            // labelOrigin: labelOriginFilled
-            // path: "M 12,2 C 8.1340068,2 5,5.1340068 5,9 c 0,5.25 7,13 7,13 0,0 7,-7.75 7,-13 0,-3.8659932 -3.134007,-7 -7,-7 z"
           }
         });
-        markersArray.push(marker)
+        markersArray.push(marker);
         marker.addListener('click', () => {
           this.infoWindow.setContent(`<div class="mat-title">${event.name}</div>`)
           this.infoWindow.open(this.nativeMap, marker);

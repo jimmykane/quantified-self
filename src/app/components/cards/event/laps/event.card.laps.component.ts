@@ -9,7 +9,7 @@ import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-
 import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {DataTableAbstract} from '../../../data-table/data-table.abstract';
 import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {EventColorService} from '../../../../services/color/app.event.color.service';
 
 @Component({

@@ -2,7 +2,7 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  <section class="first" *ngIf="user.settings.dashboardSettings.chartsSettings.length <= 10">
+  <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 10">
     <button mat-menu-item class="big" (click)="addNewChart($event)">
       <mat-icon>add</mat-icon>
       <span>Add new</span>
@@ -70,7 +70,7 @@
       </span>
     </mat-slide-toggle>
   </section>
-  <section *ngIf="user.settings.dashboardSettings.chartsSettings.length > 1">
+  <section *ngIf="user.settings.dashboardSettings.tiles.length > 1">
     <button class="big" mat-menu-item (click)="deleteChart($event)">
       <mat-icon>delete_outline</mat-icon>
     </button>

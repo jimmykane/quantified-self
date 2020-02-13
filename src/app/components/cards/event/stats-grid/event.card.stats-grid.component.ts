@@ -22,7 +22,7 @@ import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import {DataTemperatureAvg} from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
 import {DataSpeedAvg} from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
 import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import {DataTotalTrainingEffect} from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
 

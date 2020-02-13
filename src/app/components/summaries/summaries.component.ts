@@ -16,7 +16,7 @@ import {Router} from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {ThemeService} from '../../services/app.theme.service';
 import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -24,14 +24,15 @@ import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes,
-  UserDashboardChartSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+  ChartTypes, TileChartSettingsInterface,
+  TileMapSettingsInterface,
+  TileSettingsInterface, TileTypes
+} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {MatDialog} from '@angular/material/dialog';
 import {LoadingAbstract} from '../loading/loading.abstract';
 import * as equal from 'fast-deep-equal';
-import { DataAscent } from "@sports-alliance/sports-lib/lib/data/data.ascent";
+import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 
 @Component({
   selector: 'app-summaries',
@@ -49,8 +50,9 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   public numberOfCols;
 
 
-  public charts: SummariesChartInterface[] = [];
+  public tiles: (SummariesChartTileInterface|SummariesMapTileInterface)[] = [];
   public chartTypes = ChartTypes;
+  public tileTypes = TileTypes;
 
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
@@ -95,48 +97,62 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
       this.events = this.events.filter(event => !event.isMerge).sort((eventA: EventInterface, eventB: EventInterface) => +eventA.startDate - +eventB.startDate)
     }
 
-    const newCharts = this.getChartsAndData(this.user.settings.dashboardSettings.chartsSettings, this.events);
+    const newTiles = this.getChartsAndData(this.user.settings.dashboardSettings.tiles, this.events);
     // if there are no current charts get and assign and get done
-    if (!this.charts.length && newCharts.length) {
-      this.charts = newCharts;
+    if (!this.tiles.length && newTiles.length) {
+      this.tiles = newTiles;
       this.loaded();
       return;
     }
-
 
     // Here we need to update:
     // 1. Go over the new ones
     // 2. If there is a current one and differs update it
     // 3. If not leave it alone so no change detection is triggered to the children
-    newCharts.forEach(newChart => {
+    newTiles.forEach(newChart => {
       // Find one with the same order
-      const sameOrderChart = this.charts.find(chart => chart.order === newChart.order);
+      const sameOrderChart = this.tiles.find(chart => chart.order === newChart.order);
       // If none of the same order then its new so only push
       if (!sameOrderChart) {
-        this.charts.push(newChart);
+        this.tiles.push(newChart);
         return;
       }
       // If we found one with the same order then compare for changes
       // if its equal then noop / no equal replace the current index
       if (!equal(sameOrderChart, newChart)) {
-        this.charts[this.charts.findIndex(chart => chart === sameOrderChart)] = newChart;
+        this.tiles[this.tiles.findIndex(chart => chart === sameOrderChart)] = newChart;
       }
     });
     // Here we need to remove non existing ones
-    this.charts = this.charts.filter(chart => newCharts.find(newChart => newChart.order === chart.order));
+    this.tiles = this.tiles.filter(chart => newTiles.find(newChart => newChart.order === chart.order));
     this.loaded();
   }
 
-  private getChartsAndData(userDashboardChartSettings: UserDashboardChartSettingsInterface[], events?: EventInterface[]): SummariesChartInterface[] {
-    return userDashboardChartSettings.reduce((chartsAndData: SummariesChartInterface[], chartSettings) => {
-      chartsAndData.push({
-        ...chartSettings, ...{
-          dataDateRange: events && events.length ? this.getEventsDateRange(events) : SummariesChartDataDateRages.Daily, // Default to daily
-          data: events ? // The below will create a new instance of this events due to filtering
-            this.getChartData(events, chartSettings.dataType, chartSettings.dataValueType, chartSettings.dataCategoryType)
-            : [] // We send null if there are no events for the input date range
-        }
-      });
+  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface|SummariesMapTileInterface)[] {
+    return tiles.reduce((chartsAndData: (SummariesChartTileInterface|SummariesMapTileInterface)[], tile) => {
+      switch (tile.type) {
+        case TileTypes.Chart:
+          const chartTile = <TileChartSettingsInterface>tile;
+          chartsAndData.push({
+            ...chartTile, ...{
+              dataDateRange: events && events.length ? this.getEventsDateRange(events) : SummariesChartDataDateRages.Daily, // Default to daily
+              data: events ? // The below will create a new instance of this events due to filtering
+                this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType)
+                : [] // We send null if there are no events for the input date range
+            }
+          });
+          break;
+        case TileTypes.Map:
+          const mapTile = <TileMapSettingsInterface>tile;
+          chartsAndData.push({
+            ...mapTile, ...{
+              events: this.events,
+            }
+          });
+          break;
+        default:
+          throw new Error(`Not implemented for ${tile.type}`);
+      }
       return chartsAndData;
     }, [])
   }
@@ -353,10 +369,13 @@ export interface SummariesChartDataInterface {
   count: number
 }
 
-export interface SummariesChartInterface extends UserDashboardChartSettingsInterface {
+export interface SummariesChartTileInterface extends TileChartSettingsInterface {
   dataDateRange: SummariesChartDataDateRages
   data: SummariesChartDataInterface[]
-  order: number
+}
+
+export interface SummariesMapTileInterface extends TileMapSettingsInterface {
+  events: EventInterface[];
 }
 
 export enum SummariesChartDataDateRages {

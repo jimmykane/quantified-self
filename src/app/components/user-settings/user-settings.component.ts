@@ -7,15 +7,15 @@ import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
 import * as Sentry from '@sentry/browser';
-import {UserSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.settings.interface';
+import {UserSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   UserChartSettingsInterface,
   XAxisTypes,
-} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {Log} from 'ng2-logger/browser';
-import {AppThemes, UserAppSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
+import {AppThemes, UserAppSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {
   PaceUnits,
@@ -23,13 +23,16 @@ import {
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
-} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
-import {UserDashboardSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.dashboard.settings.interface';
-import {MapThemes, MapTypes, UserMapSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import {UserDashboardSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import {LapTypesHelper} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import { ActivityTypesHelper } from "@sports-alliance/sports-lib/lib/activities/activity.types";
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import {
+  MapThemes,
+  MapTypes,
+  UserMapSettingsInterface
+} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 
 @Component({
   selector: 'app-user-settings',
@@ -326,7 +329,7 @@ export class UserSettingsComponent implements OnChanges {
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
           dashboardSettings: <UserDashboardSettingsInterface>{
-            chartsSettings: this.user.settings.dashboardSettings.chartsSettings,
+            tiles: this.user.settings.dashboardSettings.tiles,
             showSummaries: this.userSettingsFormGroup.get('showSummaries').value,
             pinUploadSection: this.userSettingsFormGroup.get('pinUploadSection').value,
             startDate: this.user.settings.dashboardSettings.startDate,

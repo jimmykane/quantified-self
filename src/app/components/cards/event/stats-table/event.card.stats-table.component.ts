@@ -5,7 +5,7 @@ import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/acti
 import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
 import {AppColors} from '../../../../services/color/app.colors';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
 import {DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';

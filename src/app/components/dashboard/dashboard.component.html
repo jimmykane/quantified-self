@@ -10,7 +10,7 @@
                     (searchChange)="search($event)">
   </app-event-search>
 
-  <app-events-map *ngIf="user" [isLoading]="isLoading" [events]="events" [theme]="user.settings.mapSettings.theme"></app-events-map>
+<!--  <app-events-map *ngIf="user" [isLoading]="isLoading" [events]="events" [theme]="user.settings.mapSettings.theme"></app-events-map>-->
 
   <app-summaries  *ngIf="user && user.settings.dashboardSettings.showSummaries"
                   [isLoading]="isLoading"

@@ -1,7 +1,8 @@
-<mat-card class="mat-elevation-z0">
-<app-shade [isActive]="isLoading"></app-shade>
-<agm-map [controlSize]="32"
-         [streetViewControl]="false"
-         [styles]="getStyles(theme)">
-</agm-map>
+<mat-card class="mat-elevation-z1">
+  <app-shade [isActive]="isLoading"></app-shade>
+  <agm-map [controlSize]="32"
+           [streetViewControl]="false"
+           [mapTypeId]="type"
+           [styles]="getStyles(theme)">
+  </agm-map>
 </mat-card>
