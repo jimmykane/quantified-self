@@ -31,7 +31,6 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   @Input() theme: MapThemes;
   @Input() isLoading: boolean;
 
-  public dataPositions: DataPositionInterface[] = [];
   public latLngArray: google.maps.LatLng[] = [];
   public markers: google.maps.Marker[] = [];
 
@@ -39,6 +38,7 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   private nativeMap: google.maps.Map;
   private heatMap: google.maps.visualization.HeatmapLayer;
   private markerClusterer: MarkerClusterer;
+  private infoWindow: google.maps.InfoWindow;
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef, private eventColorService: EventColorService) {
@@ -48,6 +48,9 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   ngAfterViewInit() {
     this.agmMap.mapReady.subscribe(map => {
       this.nativeMap = map;
+      this.infoWindow = new google.maps.InfoWindow({
+        // content: ``
+      });
       // const trafficLayer = new google.maps.TrafficLayer();
       // trafficLayer.setMap(map);
       // Latlng and heatmap
@@ -112,22 +115,27 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
       const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
       if (eventStartPositionStat) {
         const location = eventStartPositionStat.getValue();
-        markersArray.push(new google.maps.Marker({
+        const marker = new google.maps.Marker({
           position: {lat: location.latitudeDegrees, lng: location.longitudeDegrees},
+          // url: '/1111',
           // label: labels[i % labels.length]
+          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayUnit()}`,
           icon: {
-            path: 'M256 8C119 8 8 119 8 256s111 248 248 248 248-111 248-248S393 8 256 8z',
-            // url: "/assets/icons/circle.svg",
-            anchor: new google.maps.Point(264, 244), // Magic dont ask me
+            path: google.maps.SymbolPath.CIRCLE,
             fillOpacity: 1,
             fillColor: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]),
             strokeWeight: 1,
             strokeColor: 'black',
-            scale: 0.04,
+            scale: 10,
             // labelOrigin: labelOriginFilled
             // path: "M 12,2 C 8.1340068,2 5,5.1340068 5,9 c 0,5.25 7,13 7,13 0,0 7,-7.75 7,-13 0,-3.8659932 -3.134007,-7 -7,-7 z"
           }
-        }))
+        });
+        markersArray.push(marker)
+        marker.addListener('click', () => {
+          this.infoWindow.setContent(`<div class="mat-title">${event.name}</div>`)
+          this.infoWindow.open(this.nativeMap, marker);
+        });
       }
       return markersArray;
     }, []);
