@@ -68,7 +68,8 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
         {
           imagePath: '/assets/icons/heatmap/m',
           enableRetinaIcons: true,
-          averageCenter: true
+          averageCenter: true,
+          maxZoom: 20
         });
       this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
     });
