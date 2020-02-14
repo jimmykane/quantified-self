@@ -1,65 +1,77 @@
 <section class="pie" *ngIf="tiles.length">
   <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
     <mat-grid-tile colspan="1" *ngFor="let tile of tiles">
-      <app-events-map *ngIf="tile.events"
-                      [events]="tile.events"
-                      [isLoading]="isLoading"
-                      [theme]="tile.mapTheme"
-                      [type]="tile.mapType"
-                      [showHeatMap]="tile.showHeatMap"
-                      [clusterMarkers]="tile.clusterMarkers"
-      ></app-events-map>
-      <app-pie-chart *ngIf="tile.type === tileTypes.Chart  && tile.chartType === chartTypes.Pie"
-                     [isLoading]="isLoading"
-                     [data]="tile.data"
-                     [chartTheme]="chartTheme"
-                     [chartDataType]="tile.dataType"
-                     [chartDataValueType]="tile.dataValueType"
-                     [chartDataCategoryType]="tile.dataCategoryType"
-                     [filterLowValues]="tile.filterLowValues"
-                     [chartDataDateRange]="tile.dataDateRange">
-      </app-pie-chart>
-      <app-xy-chart
-        *ngIf="
+      <mat-card>
+        <mat-card-header>
+          <mat-card-title>
+            {{tile.name}}
+          </mat-card-title>
+          <mat-card-subtitle>
+            {{tile.chartType}}  {{tile.mapType}}  {{tile.mapTheme}}
+          </mat-card-subtitle>
+          <app-chart-actions align="end"
+                             [user]="user"
+                             [chartType]="tile.type"
+                             [chartDataType]="tile.dataType"
+                             [chartDataCategoryType]="tile.dataCategoryType"
+                             [chartOrder]="tile.order"
+                             [filterLowValues]="tile.filterLowValues"
+                             [chartDataValueType]="tile.dataValueType">
+          </app-chart-actions>
+        </mat-card-header>
+        <app-events-map *ngIf="tile.events"
+                        [events]="tile.events"
+                        [isLoading]="isLoading"
+                        [theme]="tile.mapTheme"
+                        [type]="tile.mapType"
+                        [showHeatMap]="tile.showHeatMap"
+                        [clusterMarkers]="tile.clusterMarkers"
+        ></app-events-map>
+        <app-pie-chart *ngIf="tile.type === tileTypes.Chart  && tile.chartType === chartTypes.Pie"
+                       [isLoading]="isLoading"
+                       [data]="tile.data"
+                       [chartTheme]="chartTheme"
+                       [chartDataType]="tile.dataType"
+                       [chartDataValueType]="tile.dataValueType"
+                       [chartDataCategoryType]="tile.dataCategoryType"
+                       [filterLowValues]="tile.filterLowValues"
+                       [chartDataDateRange]="tile.dataDateRange">
+        </app-pie-chart>
+        <app-xy-chart
+          *ngIf="
         tile.type === tileTypes.Chart  && (
         tile.chartType === chartTypes.ColumnsHorizontal
         || tile.chartType === chartTypes.ColumnsVertical
         || tile.chartType === chartTypes.PyramidsVertical
         || tile.chartType === chartTypes.LinesHorizontal
         || tile.chartType === chartTypes.LinesVertical)"
-        [isLoading]="isLoading"
-        [data]="tile.data"
-        [chartTheme]="chartTheme"
-        [type]="
+          [isLoading]="isLoading"
+          [data]="tile.data"
+          [chartTheme]="chartTheme"
+          [type]="
         (tile.chartType === chartTypes.LinesHorizontal || tile.chartType === chartTypes.LinesVertical) ? 'lines' :
         (tile.chartType === chartTypes.ColumnsVertical || tile.chartType === chartTypes.ColumnsHorizontal) ? 'columns'
         : 'pyramids'"
-        [vertical]="(tile.chartType === chartTypes.PyramidsVertical || tile.chartType === chartTypes.LinesHorizontal) || tile.chartType === chartTypes.ColumnsVertical"
-        [chartDataType]="tile.dataType"
-        [chartDataValueType]="tile.dataValueType"
-        [chartDataCategoryType]="tile.dataCategoryType"
-        [filterLowValues]="tile.filterLowValues"
-        [chartDataDateRange]="tile.dataDateRange">
-      </app-xy-chart>
-      <app-timeline-chart
-        *ngIf="tile.type === tileTypes.Chart  && tile.chartType === chartTypes.Spiral"
-        [isLoading]="isLoading"
-        [data]="tile.data"
-        [chartTheme]="chartTheme"
-        [chartDataType]="tile.dataType"
-        [chartDataValueType]="tile.dataValueType"
-        [chartDataCategoryType]="tile.dataCategoryType"
-        [filterLowValues]="tile.filterLowValues"
-        [chartDataDateRange]="tile.dataDateRange">
-      </app-timeline-chart>
-      <app-chart-actions [user]="user"
-                         [chartType]="tile.type"
-                         [chartDataType]="tile.dataType"
-                         [chartDataCategoryType]="tile.dataCategoryType"
-                         [chartOrder]="tile.order"
-                         [filterLowValues]="tile.filterLowValues"
-                         [chartDataValueType]="tile.dataValueType">
-      </app-chart-actions>
+          [vertical]="(tile.chartType === chartTypes.PyramidsVertical || tile.chartType === chartTypes.LinesHorizontal) || tile.chartType === chartTypes.ColumnsVertical"
+          [chartDataType]="tile.dataType"
+          [chartDataValueType]="tile.dataValueType"
+          [chartDataCategoryType]="tile.dataCategoryType"
+          [filterLowValues]="tile.filterLowValues"
+          [chartDataDateRange]="tile.dataDateRange">
+        </app-xy-chart>
+        <app-timeline-chart
+          *ngIf="tile.type === tileTypes.Chart  && tile.chartType === chartTypes.Spiral"
+          [isLoading]="isLoading"
+          [data]="tile.data"
+          [chartTheme]="chartTheme"
+          [chartDataType]="tile.dataType"
+          [chartDataValueType]="tile.dataValueType"
+          [chartDataCategoryType]="tile.dataCategoryType"
+          [filterLowValues]="tile.filterLowValues"
+          [chartDataDateRange]="tile.dataDateRange">
+        </app-timeline-chart>
+
+      </mat-card>
     </mat-grid-tile>
   </mat-grid-list>
 </section>
