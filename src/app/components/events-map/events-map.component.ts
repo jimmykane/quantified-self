@@ -49,6 +49,7 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   }
 
   ngAfterViewInit() {
+
     this.agmMap.mapReady.subscribe(map => {
       this.nativeMap = map;
       this.infoWindow = new google.maps.InfoWindow({

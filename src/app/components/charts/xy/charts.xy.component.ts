@@ -46,7 +46,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 0, 0, 1);
     chart.paddingBottom = this.vertical ? 20 : 0;
-    chart.fontSize = '1.1em';
+    chart.fontSize = '0.8em';
 
     // top container for labels
     const topContainer = chart.chartContainer.createChild(am4core.Container);

@@ -1,0 +1,51 @@
+<mat-card class="mat-elevation-z0">
+  <mat-card-header>
+    <div mat-card-avatar>
+      <mat-icon>map</mat-icon>
+    </div>
+    <mat-card-subtitle>
+      <mat-form-field>
+        <mat-label>Type</mat-label>
+        <mat-select placeholder="Map or Chart" [value]="tileTypes.Map" (selectionChange)="changeTileType($event)">
+          <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">
+            {{tileType.value}}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Map Type</mat-label>
+        <mat-select placeholder="Map type" [value]="mapType" (selectionChange)="changeMapType($event)">
+          <mat-option *ngFor="let mapType of mapTypes | keyvalue" [value]="mapType.value">
+            {{mapType.key}}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Map Theme</mat-label>
+        <mat-select placeholder="Map theme" [value]="mapTheme" (selectionChange)="changeMapTheme($event)">
+          <mat-option *ngFor="let mapTheme of mapThemes | keyvalue" [value]="mapTheme.value">
+            {{mapTheme.key}}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </mat-card-subtitle>
+    <!--    <app-chart-actions align="end"-->
+    <!--                       [user]="user"-->
+    <!--                       [chartType]="chtype"-->
+    <!--                       [chartDataType]="tile.dataType"-->
+    <!--                       [chartDataCategoryType]="tile.dataCategoryType"-->
+    <!--                       [chartOrder]="tile.order"-->
+    <!--                       [filterLowValues]="tile.filterLowValues"-->
+    <!--                       [chartDataValueType]="tile.dataValueType">-->
+    <!--    </app-chart-actions>-->
+  </mat-card-header>
+
+  <app-events-map *ngIf="events"
+                  [events]="events"
+                  [isLoading]="isLoading"
+                  [theme]="mapTheme"
+                  [type]="mapType"
+                  [showHeatMap]="showHeatMap"
+                  [clusterMarkers]="clusterMarkers">
+  </app-events-map>
+</mat-card>

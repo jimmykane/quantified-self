@@ -108,6 +108,7 @@ export class UserService implements OnDestroy {
       mapTheme: MapThemes.Tron,
       showHeatMap: true,
       clusterMarkers: true,
+      size: 1,
     }, <TileChartSettingsInterface>{
       name: 'Duration',
       order: 1,
@@ -117,6 +118,7 @@ export class UserService implements OnDestroy {
       dataType: DataDuration.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
+      size: 1,
     }, <TileChartSettingsInterface>{
       name: 'Distance',
       order: 2,
@@ -126,6 +128,7 @@ export class UserService implements OnDestroy {
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
+      size: 1,
     }, <TileChartSettingsInterface>{
       name: 'Ascent',
       order: 3,
@@ -135,6 +138,7 @@ export class UserService implements OnDestroy {
       dataType: DataAscent.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
+      size: 1,
     }]
   }
 

@@ -1,0 +1,26 @@
+mat-card {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+.mat-card-avatar {
+  text-align: center;
+  height: auto;
+  width: auto;
+  padding-top: 12px;
+}
+
+mat-card-subtitle{
+  margin-bottom: 0;
+}
+
+mat-form-field {
+  width: 20%;
+}
+
+::ng-deep .mat-card-header-text {
+  width: 100%;
+  /*margin: 0;*/
+}

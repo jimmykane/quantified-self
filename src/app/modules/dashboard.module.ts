@@ -20,6 +20,8 @@ import {EventTableComponent, MatPaginatorIntlFireStore} from '../components/even
 import {MatPaginatorIntl} from '@angular/material/paginator';
 import { EventsMapComponent } from '../components/events-map/events-map.component';
 import { AgmCoreModule } from '@agm/core';
+import { TileChartComponent } from "../components/tile/chart/tile.chart.component";
+import { TileMapComponent } from "../components/tile/map/tile.map.component";
 
 @NgModule({
   imports: [
@@ -47,6 +49,8 @@ import { AgmCoreModule } from '@agm/core';
     ActivityMetadataComponent,
     EventTableComponent,
     EventsMapComponent,
+    TileChartComponent,
+    TileMapComponent,
   ],
   entryComponents: [
     UploadErrorComponent,

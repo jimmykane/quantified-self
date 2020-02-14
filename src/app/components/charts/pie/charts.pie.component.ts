@@ -41,7 +41,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
 
   protected createChart(): am4charts.PieChart {
     const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
-
+    chart.fontSize = '0.8em'
     // chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 5, 0, 5);
     chart.radius = am4core.percent(65);

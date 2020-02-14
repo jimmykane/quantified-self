@@ -24,7 +24,7 @@ import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes, TileChartSettingsInterface,
+  TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface, TileTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
@@ -51,8 +51,9 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
 
   public tiles: (SummariesChartTileInterface|SummariesMapTileInterface)[] = [];
-  public chartTypes = ChartTypes;
+
   public tileTypes = TileTypes;
+
 
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
