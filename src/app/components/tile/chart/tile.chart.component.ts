@@ -8,32 +8,32 @@ import {
 import { TileAbstract } from '../tile.abstract';
 import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import { SummariesChartDataDateRages } from '../../summaries/summaries.component';
-import { DataDuration } from "@sports-alliance/sports-lib/lib/data/data.duration";
-import { DataDistance } from "@sports-alliance/sports-lib/lib/data/data.distance";
-import { DataEnergy } from "@sports-alliance/sports-lib/lib/data/data.energy";
-import { DataAscent } from "@sports-alliance/sports-lib/lib/data/data.ascent";
-import { DataDescent } from "@sports-alliance/sports-lib/lib/data/data.descent";
-import { DataAltitudeMax } from "@sports-alliance/sports-lib/lib/data/data.altitude-max";
-import { DataAltitudeMin } from "@sports-alliance/sports-lib/lib/data/data.altitude-min";
-import { DataAltitudeAvg } from "@sports-alliance/sports-lib/lib/data/data.altitude-avg";
-import { DataHeartRateMax } from "@sports-alliance/sports-lib/lib/data/data.heart-rate-max";
-import { DataHeartRateMin } from "@sports-alliance/sports-lib/lib/data/data.heart-rate-min";
-import { DataHeartRateAvg } from "@sports-alliance/sports-lib/lib/data/data.heart-rate-avg";
-import { DataCadenceMax } from "@sports-alliance/sports-lib/lib/data/data.cadence-max";
-import { DataCadenceMin } from "@sports-alliance/sports-lib/lib/data/data.cadence-min";
-import { DataCadenceAvg } from "@sports-alliance/sports-lib/lib/data/data.cadence-avg";
-import { DataPowerMax } from "@sports-alliance/sports-lib/lib/data/data.power-max";
-import { DataPowerMin } from "@sports-alliance/sports-lib/lib/data/data.power-min";
-import { DataPowerAvg } from "@sports-alliance/sports-lib/lib/data/data.power-avg";
-import { DataTemperatureMax } from "@sports-alliance/sports-lib/lib/data/data.temperature-max";
-import { DataTemperatureMin } from "@sports-alliance/sports-lib/lib/data/data.temperature-min";
-import { DataTemperatureAvg } from "@sports-alliance/sports-lib/lib/data/data.temperature-avg";
-import { DataFeeling } from "@sports-alliance/sports-lib/lib/data/data.feeling";
-import { DataRPE } from "@sports-alliance/sports-lib/lib/data/data.rpe";
-import { DataVO2Max } from "@sports-alliance/sports-lib/lib/data/data.vo2-max";
-import { DataTotalTrainingEffect } from "@sports-alliance/sports-lib/lib/data/data.total-training-effect";
-import { DataPeakEPOC } from "@sports-alliance/sports-lib/lib/data/data.peak-epoc";
-import { DataRecoveryTime } from "@sports-alliance/sports-lib/lib/data/dataRecoveryTime";
+import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
+import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
+import { DataAltitudeMax } from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
+import { DataAltitudeMin } from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
+import { DataAltitudeAvg } from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
+import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
+import { DataHeartRateMin } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-min';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import { DataCadenceMax } from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
+import { DataCadenceMin } from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
+import { DataCadenceAvg } from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
+import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
+import { DataPowerMin } from '@sports-alliance/sports-lib/lib/data/data.power-min';
+import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import { DataTemperatureMax } from '@sports-alliance/sports-lib/lib/data/data.temperature-max';
+import { DataTemperatureMin } from '@sports-alliance/sports-lib/lib/data/data.temperature-min';
+import { DataTemperatureAvg } from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
+import { DataFeeling } from '@sports-alliance/sports-lib/lib/data/data.feeling';
+import { DataRPE } from '@sports-alliance/sports-lib/lib/data/data.rpe';
+import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
 
 @Component({
   selector: 'app-tile-chart',
@@ -153,7 +153,7 @@ export class TileChartComponent extends TileAbstract {
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  async switchFilterLowValues(event){
+  async switchFilterLowValues(event) {
     this.afa.logEvent('dashboard_tile_action', {method: 'switchFilterLowValues'});
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).filterLowValues = this.filterLowValues;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})

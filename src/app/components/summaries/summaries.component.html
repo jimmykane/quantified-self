@@ -1,6 +1,6 @@
 <section class="pie" *ngIf="tiles.length">
   <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
-    <mat-grid-tile colspan="1" *ngFor="let tile of tiles">
+    <mat-grid-tile [colspan]="tile.size > numberOfCols ? numberOfCols : tile.size" *ngFor="let tile of tiles">
       <app-tile-chart
         *ngIf="tile.type === tileTypes.Chart"
         [user]="user"
@@ -13,6 +13,7 @@
         [dataCategoryType]="tile.dataCategoryType"
         [filterLowValues]="tile.filterLowValues"
         [dataDateRange]="tile.dataDateRange"
+        [size]="tile.size"
         [order]="tile.order"
       ></app-tile-chart>
       <app-tile-map
@@ -24,6 +25,7 @@
         [mapType]="tile.mapType"
         [showHeatMap]="tile.showHeatMap"
         [clusterMarkers]="tile.clusterMarkers"
+        [size]="tile.size"
         [order]="tile.order"
       ></app-tile-map>
     </mat-grid-tile>

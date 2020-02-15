@@ -16,11 +16,8 @@ mat-card-subtitle{
   margin-bottom: 0;
 }
 
-mat-form-field {
-  width: 20%;
-}
 
-::ng-deep .mat-card-header-text {
+mat-tab-group{
   width: 100%;
-  /*margin: 0;*/
+  height: 100%;
 }
