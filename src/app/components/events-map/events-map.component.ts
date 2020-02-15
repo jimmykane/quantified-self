@@ -77,8 +77,8 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
             imagePath: '/assets/icons/heatmap/m',
             enableRetinaIcons: true,
             averageCenter: true,
-            maxZoom: 20,
-            minimumClusterSize: 10,
+            maxZoom: 18,
+            minimumClusterSize: 15,
           });
       }
       this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
@@ -93,7 +93,6 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
     if (this.heatMap) {
       this.latLngArray = this.getLatLngArray(this.events);
       this.heatMap.setData(this.latLngArray);
-      // this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
     }
     // Only process custers once Google is initialized (map on load)
     if (this.markerClusterer) {

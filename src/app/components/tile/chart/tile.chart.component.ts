@@ -152,4 +152,10 @@ export class TileChartComponent extends TileAbstract {
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
+
+  async switchFilterLowValues(event){
+    this.afa.logEvent('dashboard_tile_action', {method: 'switchFilterLowValues'});
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).filterLowValues = this.filterLowValues;
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
 }

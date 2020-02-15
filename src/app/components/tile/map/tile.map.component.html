@@ -28,6 +28,22 @@
           </mat-option>
         </mat-select>
       </mat-form-field>
+      <mat-slide-toggle
+        [color]="'accent'"
+        (change)="switchHeatMap($event)"
+        [(ngModel)]="showHeatMap">
+      <span matTooltip="If you want a heatmap overlay">
+        HeatMap
+      </span>
+      </mat-slide-toggle>
+      <mat-slide-toggle
+        [color]="'accent'"
+        (change)="switchClusterMarkers($event)"
+        [(ngModel)]="clusterMarkers">
+      <span matTooltip="If you want clusters of markers">
+        Clusters
+      </span>
+      </mat-slide-toggle>
     </mat-card-subtitle>
     <!--    <app-chart-actions align="end"-->
     <!--                       [user]="user"-->

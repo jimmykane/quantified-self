@@ -32,4 +32,16 @@ export class TileMapComponent extends TileAbstract {
     (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).mapTheme = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
+
+  async switchHeatMap(event){
+    this.afa.logEvent('dashboard_tile_action', {method: 'switchHeatmap'});
+    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).showHeatMap = this.showHeatMap;
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async switchClusterMarkers(event){
+    this.afa.logEvent('dashboard_tile_action', {method: 'switchClusterMarkers'});
+    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).clusterMarkers = this.clusterMarkers;
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
 }

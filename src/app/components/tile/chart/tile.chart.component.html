@@ -55,6 +55,14 @@
           </section>
         </mat-select>
       </mat-form-field>
+      <mat-slide-toggle
+        [color]="'accent'"
+        (change)="switchFilterLowValues($event)"
+        [(ngModel)]="filterLowValues">
+      <span matTooltip="Turn this on to declutter the charts and show what is important instead of all">
+        Filter out low values
+      </span>
+      </mat-slide-toggle>
     </mat-card-subtitle>
 <!--    <app-chart-actions align="end"-->
 <!--                       [user]="user"-->
