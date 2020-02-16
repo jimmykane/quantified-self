@@ -3,7 +3,8 @@
   <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0" [errorMessage]="'Nothing to show'"></app-shade>
 
   <mat-form-field>
-    <input matInput (keyup)="onKeyUp($event)" placeholder="Filter">
+    <mat-label>Filter</mat-label>
+    <input matInput (keyup)="onKeyUp($event)" placeholder="Date, name, type, etc...">
   </mat-form-field>
 
   <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active" [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear multiTemplateDataRows>

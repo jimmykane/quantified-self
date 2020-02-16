@@ -13,6 +13,7 @@ mat-icon.tooltip {
 
 mat-form-field {
   padding: 0 1em;
+  width: 100%
 }
 
 mat-table{
