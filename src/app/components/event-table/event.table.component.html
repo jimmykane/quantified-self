@@ -49,7 +49,7 @@
     </ng-container>
 
 
-    <tr mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize()"></tr>
+    <tr mat-header-row *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize(); sticky: true;"></tr>
     <tr mat-row  *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
             [routerLink]="['/user', user.uid, 'event', row.Event.getID()]"
             [class.merged]="row['Merged Event']"

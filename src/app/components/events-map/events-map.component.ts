@@ -17,12 +17,14 @@ import { MapAbstract } from '../map/map.abstract';
 import MarkerClusterer from '@google/markerclustererplus'
 import { EventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DatePipe } from "@angular/common";
 
 @Component({
   selector: 'app-events-map',
   templateUrl: './events-map.component.html',
   styleUrls: ['./events-map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [DatePipe],
 })
 
 export class EventsMapComponent extends MapAbstract implements OnChanges, AfterViewInit {
@@ -36,15 +38,14 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
 
   public latLngArray: google.maps.LatLng[] = [];
   public markers: google.maps.Marker[] = [];
-
+  public infoCard: {title: string, subtitle: string, url?: string};
 
   private nativeMap: google.maps.Map;
   private heatMap: google.maps.visualization.HeatmapLayer;
   private markerClusterer: MarkerClusterer;
-  private infoWindow: google.maps.InfoWindow;
 
   constructor(
-    private changeDetectorRef: ChangeDetectorRef, private eventColorService: EventColorService) {
+    private changeDetectorRef: ChangeDetectorRef, private eventColorService: EventColorService, private  datePipe: DatePipe) {
     super(changeDetectorRef);
   }
 
@@ -52,9 +53,6 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
 
     this.agmMap.mapReady.subscribe(map => {
       this.nativeMap = map;
-      this.infoWindow = new google.maps.InfoWindow({
-        // content: ``
-      });
       if (this.showHeatMap) {
         // const trafficLayer = new google.maps.TrafficLayer();
         // trafficLayer.setMap(map);
@@ -133,8 +131,11 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
         });
         markersArray.push(marker);
         marker.addListener('click', () => {
-          this.infoWindow.setContent(`<div class="mat-title">${event.name}</div>`)
-          this.infoWindow.open(this.nativeMap, marker);
+          this.infoCard = {
+            title: event.getActivityTypesAsString(),
+            subtitle:  this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm')
+          }
+          this.changeDetectorRef.detectChanges()
         });
       }
       return markersArray;
