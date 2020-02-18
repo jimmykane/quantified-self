@@ -44,7 +44,6 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {
   MapThemes,
@@ -108,7 +107,7 @@ export class UserService implements OnDestroy {
       mapTheme: MapThemes.Tron,
       showHeatMap: true,
       clusterMarkers: true,
-      size: 1,
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Duration',
       order: 1,
@@ -118,7 +117,7 @@ export class UserService implements OnDestroy {
       dataType: DataDuration.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
-      size: 1,
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Distance',
       order: 2,
@@ -128,7 +127,7 @@ export class UserService implements OnDestroy {
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
-      size: 1,
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Ascent',
       order: 3,
@@ -138,7 +137,7 @@ export class UserService implements OnDestroy {
       dataType: DataAscent.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
-      size: 1,
+      size: { columns: 1, rows: 1 },
     }]
   }
 

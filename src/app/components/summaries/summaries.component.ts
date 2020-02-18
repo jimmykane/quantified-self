@@ -47,7 +47,7 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   @Input() isLoading: boolean;
 
   public rowHeight;
-  public numberOfCols;
+  public numberOfCols: number;
 
 
   public tiles: (SummariesChartTileInterface|SummariesMapTileInterface)[] = [];

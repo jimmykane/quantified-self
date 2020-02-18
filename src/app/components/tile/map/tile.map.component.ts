@@ -1,13 +1,14 @@
-import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Directive, Input } from '@angular/core';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import { TileAbstract } from '../tile.abstract';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { TileMapSettingsInterface } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+import { LoadingAbstract } from '../../loading/loading.abstract';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { TileAbstract } from '../tile.abstract';
 
 @Component({
   selector: 'app-tile-map',
   templateUrl: './tile.map.component.html',
-  styleUrls: ['../tile.abstract.css', './tile.map.component.css'],
+  styleUrls: ['./tile.map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
@@ -20,28 +21,4 @@ export class TileMapComponent extends TileAbstract {
 
   public mapTypes = MapTypes;
   public mapThemes = MapThemes;
-
-
-  async changeMapType(event) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'changeMapType'});
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).mapType = event.value;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-  async changeMapTheme(event) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'changeMapTheme'});
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).mapTheme = event.value;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-
-  async switchHeatMap(event){
-    this.afa.logEvent('dashboard_tile_action', {method: 'switchHeatmap'});
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).showHeatMap = this.showHeatMap;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-
-  async switchClusterMarkers(event){
-    this.afa.logEvent('dashboard_tile_action', {method: 'switchClusterMarkers'});
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).clusterMarkers = this.clusterMarkers;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
 }

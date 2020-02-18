@@ -3,11 +3,21 @@
 </button>
 <mat-menu #menu="matMenu">
   <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 10">
-    <button mat-menu-item class="big" (click)="addNewChart($event)">
+    <button mat-menu-item class="big" (click)="addNewTile($event)">
       <mat-icon>add</mat-icon>
       <span>Add new</span>
-      <mat-icon class="toolTip" matTooltip="This will copy the current chart and create a new one">info</mat-icon>
+      <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
     </button>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Type</mat-label>
+      <mat-select placeholder="Type of tile" [value]="tileTypes.Chart" (selectionChange)="changeTileType($event)">
+        <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">
+          {{tileType.value}}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
   </section>
   <section mat-menu-item>
     <mat-form-field>
@@ -61,6 +71,50 @@
     </mat-form-field>
   </section>
   <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Column Size</mat-label>
+      <mat-select placeholder="Size" [value]="size.columns"
+                  (selectionChange)="changeTileColumnSize($event)">
+        <section>
+          <mat-option [value]="1">
+            Single
+          </mat-option>
+          <mat-option [value]="2">
+            Double
+          </mat-option>
+          <mat-option [value]="3">
+            Triple
+          </mat-option>
+          <mat-option [value]="4">
+            Quad
+          </mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Row Size</mat-label>
+      <mat-select placeholder="Size" [value]="size.rows"
+                  (selectionChange)="changeTileRowSize($event)">
+        <section>
+          <mat-option [value]="1">
+            Single
+          </mat-option>
+          <mat-option [value]="2">
+            Double
+          </mat-option>
+          <mat-option [value]="3">
+            Triple
+          </mat-option>
+          <mat-option [value]="4">
+            Quad
+          </mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
     <mat-slide-toggle
       [color]="'accent'"
       (change)="switchFilterLowValues($event)"
@@ -71,7 +125,7 @@
     </mat-slide-toggle>
   </section>
   <section *ngIf="user.settings.dashboardSettings.tiles.length > 1">
-    <button class="big" mat-menu-item (click)="deleteChart($event)">
+    <button class="big" mat-menu-item (click)="deleteTile($event)">
       <mat-icon>delete_outline</mat-icon>
     </button>
   </section>

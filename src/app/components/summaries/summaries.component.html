@@ -1,6 +1,10 @@
 <section class="pie" *ngIf="tiles.length">
   <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
-    <mat-grid-tile [colspan]="tile.size > numberOfCols ? numberOfCols : tile.size" *ngFor="let tile of tiles">
+    <mat-grid-tile
+      *ngFor="let tile of tiles"
+      [colspan]="tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns"
+      [rowspan]="tile.size.rows">
+<!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
       <app-tile-chart
         *ngIf="tile.type === tileTypes.Chart"
         [user]="user"

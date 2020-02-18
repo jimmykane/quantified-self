@@ -1,12 +1,29 @@
-
-    <app-events-map *ngIf="events"
-                    [events]="events"
-                    [isLoading]="isLoading"
-                    [theme]="mapTheme"
-                    [type]="mapType"
-                    [showHeatMap]="showHeatMap"
-                    [clusterMarkers]="clusterMarkers">
-    </app-events-map>
+<app-tile-map-actions
+  [user]="user"
+  [order]="order"
+  [size]="size"
+  [mapType]="mapType"
+  [mapTheme]="mapTheme"
+  [showHeatMap]="showHeatMap"
+  [clusterMarkers]="clusterMarkers">
+</app-tile-map-actions>
+<app-events-map *ngIf="events"
+                [events]="events"
+                [isLoading]="isLoading"
+                [theme]="mapTheme"
+                [type]="mapType"
+                [showHeatMap]="showHeatMap"
+                [clusterMarkers]="clusterMarkers">
+</app-events-map>
+<!--    <app-tile-actions-->
+<!--      [user]="user"-->
+<!--      [chartType]="chartType"-->
+<!--      [chartDataType]="dataType"-->
+<!--      [chartDataCategoryType]="dataCategoryType"-->
+<!--      [chartOrder]="order"-->
+<!--      [filterLowValues]="filterLowValues"-->
+<!--      [chartDataValueType]="dataValueType">-->
+<!--    </app-tile-actions>-->
 
 <!--      <mat-form-field>-->
 <!--        <mat-label>Type</mat-label>-->

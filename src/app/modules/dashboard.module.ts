@@ -5,14 +5,9 @@ import {CommonModule} from '@angular/common';
 import {DashboardRoutingModule} from '../dashboard-routing.module';
 import {DashboardComponent} from '../components/dashboard/dashboard.component';
 import {UploadInfoComponent} from '../components/upload-info/upload-info.component';
-import {ChartsPieComponent} from '../components/charts/pie/charts.pie.component';
-import {ChartsXYComponent} from '../components/charts/xy/charts.xy.component';
 import {SummariesComponent} from '../components/summaries/summaries.component';
-import {ChartActionsComponent} from '../components/charts/actions/chart.actions.component';
 import {EventSearchComponent} from '../components/event-search/event-search.component';
 import {EventsExportFormComponent} from '../components/events-export-form/events-export.form.component';
-import {ChartsTimelineComponent} from '../components/charts/timeline/charts.timeline.component';
-import {EditInputComponent} from '../components/edit-input/edit-input.component';
 import {UploadErrorComponent} from '../components/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from '../components/activity-metadata/activity-metadata.component';
 import {UploadComponent} from '../components/upload/upload.component';
@@ -22,6 +17,8 @@ import { EventsMapComponent } from '../components/events-map/events-map.componen
 import { AgmCoreModule } from '@agm/core';
 import { TileChartComponent } from "../components/tile/chart/tile.chart.component";
 import { TileMapComponent } from "../components/tile/map/tile.map.component";
+import { TileChartActionsComponent } from "../components/tile/actions/chart/tile.chart.actions.component";
+import { TileMapActionsComponent } from "../components/tile/actions/map/tile.map.actions.component";
 
 @NgModule({
   imports: [
@@ -42,7 +39,8 @@ import { TileMapComponent } from "../components/tile/map/tile.map.component";
     // ChartsXYComponent,
     // ChartsTimelineComponent,
     SummariesComponent,
-    ChartActionsComponent,
+    TileChartActionsComponent,
+    TileMapActionsComponent,
     EventSearchComponent,
     EventsExportFormComponent,
     UploadErrorComponent,
