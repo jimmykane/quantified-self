@@ -8,7 +8,7 @@ import { TileAbstract } from '../tile.abstract';
 @Component({
   selector: 'app-tile-map',
   templateUrl: './tile.map.component.html',
-  styleUrls: ['./tile.map.component.css'],
+  styleUrls: ['../tile.abstract.css', './tile.map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 

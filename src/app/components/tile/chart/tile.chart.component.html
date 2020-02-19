@@ -1,141 +1,53 @@
-<app-tile-chart-actions
-  [user]="user"
-  [chartType]="chartType"
-  [order]="order"
-  [size]="size"
-  [chartDataType]="dataType"
-  [chartDataCategoryType]="dataCategoryType"
-  [filterLowValues]="filterLowValues"
-  [chartDataValueType]="dataValueType">
-</app-tile-chart-actions>
-<app-pie-chart *ngIf="chartType === chartTypes.Pie"
-               [isLoading]="isLoading"
-               [data]="data"
-               [chartTheme]="chartTheme"
-               [chartDataType]="dataType"
-               [chartDataValueType]="dataValueType"
-               [chartDataCategoryType]="dataCategoryType"
-               [filterLowValues]="filterLowValues"
-               [chartDataDateRange]="dataDateRange">
-</app-pie-chart>
-<app-xy-chart
-  *ngIf="chartType === chartTypes.ColumnsHorizontal
+<section>
+  <app-tile-chart-actions class="actions"
+    [user]="user"
+    [chartType]="chartType"
+    [order]="order"
+    [size]="size"
+    [chartDataType]="dataType"
+    [chartDataCategoryType]="dataCategoryType"
+    [filterLowValues]="filterLowValues"
+    [chartDataValueType]="dataValueType">
+  </app-tile-chart-actions>
+  <app-pie-chart *ngIf="chartType === chartTypes.Pie"
+                 [isLoading]="isLoading"
+                 [data]="data"
+                 [chartTheme]="chartTheme"
+                 [chartDataType]="dataType"
+                 [chartDataValueType]="dataValueType"
+                 [chartDataCategoryType]="dataCategoryType"
+                 [filterLowValues]="filterLowValues"
+                 [chartDataDateRange]="dataDateRange">
+  </app-pie-chart>
+  <app-xy-chart
+    *ngIf="chartType === chartTypes.ColumnsHorizontal
         || chartType === chartTypes.ColumnsVertical
         || chartType === chartTypes.PyramidsVertical
         || chartType === chartTypes.LinesHorizontal
         || chartType === chartTypes.LinesVertical"
-  [isLoading]="isLoading"
-  [data]="data"
-  [chartTheme]="chartTheme"
-  [type]="
+    [isLoading]="isLoading"
+    [data]="data"
+    [chartTheme]="chartTheme"
+    [type]="
         (chartType === chartTypes.LinesHorizontal || chartType === chartTypes.LinesVertical) ? 'lines' :
         (chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal) ? 'columns'
         : 'pyramids'"
-  [vertical]="(chartType === chartTypes.PyramidsVertical || chartType === chartTypes.LinesHorizontal) || chartType === chartTypes.ColumnsVertical"
-  [chartDataType]="dataType"
-  [chartDataValueType]="dataValueType"
-  [chartDataCategoryType]="dataCategoryType"
-  [filterLowValues]="filterLowValues"
-  [chartDataDateRange]="dataDateRange">
-</app-xy-chart>
-<app-timeline-chart
-  *ngIf="chartType === chartTypes.Spiral"
-  [isLoading]="isLoading"
-  [data]="data"
-  [chartTheme]="chartTheme"
-  [chartDataType]="dataType"
-  [chartDataValueType]="dataValueType"
-  [chartDataCategoryType]="dataCategoryType"
-  [filterLowValues]="filterLowValues"
-  [chartDataDateRange]="dataDateRange">
-</app-timeline-chart>
-
-
-<!--      <mat-form-field>-->
-<!--        <mat-label>Type</mat-label>-->
-<!--        <mat-select placeholder="Type of tile" [value]="tileTypes.Chart" (selectionChange)="changeTileType($event)">-->
-<!--          <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">-->
-<!--            {{tileType.value}}-->
-<!--          </mat-option>-->
-<!--        </mat-select>-->
-<!--      </mat-form-field>-->
-<!--      <mat-form-field>-->
-<!--        <mat-label>Chart Type</mat-label>-->
-<!--        <mat-select placeholder="Type of chart" [value]="chartType" (selectionChange)="changeChartType($event)">-->
-<!--          <mat-option *ngFor="let chartType of chartTypes | keyvalue" [value]="chartType.value">-->
-<!--            {{chartType.value}}-->
-<!--          </mat-option>-->
-<!--        </mat-select>-->
-<!--      </mat-form-field>-->
-<!--      <mat-form-field>-->
-<!--        <mat-label>Data Type</mat-label>-->
-<!--        <mat-select placeholder="Type of data" [value]="dataType" (selectionChange)="changeChartDataType($event)">-->
-<!--          <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"-->
-<!--                        [disabled]="dataGroup.disabled">-->
-<!--            <mat-option *ngFor="let data of dataGroup.data" [value]="data">-->
-<!--              {{data}}-->
-<!--            </mat-option>-->
-<!--          </mat-optgroup>-->
-<!--        </mat-select>-->
-<!--      </mat-form-field>-->
-<!--      <mat-form-field>-->
-<!--        <mat-label>Calc Type</mat-label>-->
-<!--        <mat-select placeholder="Type of calculation" [value]="dataValueType"-->
-<!--                    (selectionChange)="changeChartDataValueType($event)">-->
-<!--          <section *ngIf="chartType !== chartTypes.Pie">-->
-<!--            <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue"-->
-<!--                        [value]="chartValueType.value">-->
-<!--              {{chartValueType.value}}-->
-<!--            </mat-option>-->
-<!--          </section>-->
-<!--        </mat-select>-->
-<!--      </mat-form-field>-->
-<!--      <mat-form-field>-->
-<!--        <mat-label>Category Type</mat-label>-->
-<!--        <mat-select placeholder="Category type" [value]="dataCategoryType"-->
-<!--                    (selectionChange)="changeChartDataCategoryType($event)">-->
-<!--          <section>-->
-<!--            <mat-option *ngFor="let chartCategoryType of chartCategoryTypes | keyvalue"-->
-<!--                        [value]="chartCategoryType.value">-->
-<!--              {{chartCategoryType.value}}-->
-<!--            </mat-option>-->
-<!--          </section>-->
-<!--        </mat-select>-->
-<!--      </mat-form-field>-->
-<!--      <mat-form-field>-->
-<!--        <mat-label>Size</mat-label>-->
-<!--        <mat-select placeholder="Size" [value]="size"-->
-<!--                    (selectionChange)="changeTileSize($event)">-->
-<!--          <section>-->
-<!--            <mat-option [value]="1">-->
-<!--              Single-->
-<!--            </mat-option>-->
-<!--            <mat-option [value]="2">-->
-<!--              Double-->
-<!--            </mat-option>-->
-<!--            <mat-option [value]="3">-->
-<!--              Triple-->
-<!--            </mat-option>-->
-<!--            <mat-option [value]="4">-->
-<!--              Quad-->
-<!--            </mat-option>-->
-<!--          </section>-->
-<!--        </mat-select>-->
-<!--      </mat-form-field>-->
-<!--      <mat-slide-toggle-->
-<!--        [color]="'accent'"-->
-<!--        (change)="switchFilterLowValues($event)"-->
-<!--        [(ngModel)]="filterLowValues">-->
-<!--      <span matTooltip="Turn this on to declutter the charts and show what is important instead of all">-->
-<!--        Filter out low values-->
-<!--      </span>-->
-<!--      </mat-slide-toggle>-->
-<!--    <app-chart-actions align="end"-->
-<!--                       [user]="user"-->
-<!--                       [chartType]="chtype"-->
-<!--                       [chartDataType]="tile.dataType"-->
-<!--                       [chartDataCategoryType]="tile.dataCategoryType"-->
-<!--                       [chartOrder]="tile.order"-->
-<!--                       [filterLowValues]="tile.filterLowValues"-->
-<!--                       [chartDataValueType]="tile.dataValueType">-->
-<!--    </app-chart-actions>-->
+    [vertical]="(chartType === chartTypes.PyramidsVertical || chartType === chartTypes.LinesHorizontal) || chartType === chartTypes.ColumnsVertical"
+    [chartDataType]="dataType"
+    [chartDataValueType]="dataValueType"
+    [chartDataCategoryType]="dataCategoryType"
+    [filterLowValues]="filterLowValues"
+    [chartDataDateRange]="dataDateRange">
+  </app-xy-chart>
+  <app-timeline-chart
+    *ngIf="chartType === chartTypes.Spiral"
+    [isLoading]="isLoading"
+    [data]="data"
+    [chartTheme]="chartTheme"
+    [chartDataType]="dataType"
+    [chartDataValueType]="dataValueType"
+    [chartDataCategoryType]="dataCategoryType"
+    [filterLowValues]="filterLowValues"
+    [chartDataDateRange]="dataDateRange">
+  </app-timeline-chart>
+</section>

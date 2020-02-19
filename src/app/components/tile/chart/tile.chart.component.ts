@@ -13,7 +13,7 @@ import { User } from "@sports-alliance/sports-lib/lib/users/user";
 @Component({
   selector: 'app-tile-chart',
   templateUrl: './tile.chart.component.html',
-  styleUrls: ['./tile.chart.component.css'],
+  styleUrls: ['../tile.abstract.css', './tile.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
