@@ -98,6 +98,33 @@ export class UserService implements OnDestroy {
     }, {})
   }
 
+  static getDefaultUserDashboardChartTile(): TileChartSettingsInterface {
+    return {
+      name: 'Distance',
+      order: 0,
+      type: TileTypes.Chart,
+      chartType: ChartTypes.ColumnsHorizontal,
+      dataType: DataDistance.type,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
+      dataValueType: ChartDataValueTypes.Total,
+      filterLowValues: true,
+      size: { columns: 1, rows: 1 },
+    };
+  }
+
+  static getDefaultUserDashboardMapTile(): TileMapSettingsInterface{
+    return {
+      name: 'Clustered HeatMap',
+      order: 0,
+      type: TileTypes.Map,
+      mapType: MapTypes.RoadMap,
+      mapTheme: MapThemes.Tron,
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    };
+  }
+
   static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
     return [<TileMapSettingsInterface>{
       name: 'Clustered HeatMap',

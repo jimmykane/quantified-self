@@ -12,7 +12,7 @@
   <section mat-menu-item>
     <mat-form-field>
       <mat-label>Type</mat-label>
-      <mat-select placeholder="Type of tile" [value]="tileTypes.Chart" (selectionChange)="changeTileType($event)">
+      <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
         <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">
           {{tileType.value}}
         </mat-option>

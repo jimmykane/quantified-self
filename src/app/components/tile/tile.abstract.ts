@@ -13,6 +13,7 @@ export class TileAbstract {
   @Input() user: User;
   @Input() order: number;
   @Input() size:  { columns: number, rows: number };
+  @Input() type:  TileTypes;
 
   public tileTypes = TileTypes;
 }

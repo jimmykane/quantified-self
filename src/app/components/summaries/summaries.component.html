@@ -8,6 +8,7 @@
       <app-tile-chart
         *ngIf="tile.type === tileTypes.Chart"
         [user]="user"
+        [type]="tile.type"
         [chartType]="tile.chartType"
         [isLoading]="isLoading"
         [data]="tile.data"
@@ -23,6 +24,7 @@
       <app-tile-map
         *ngIf="tile.type === tileTypes.Map"
         [user]="user"
+        [type]="tile.type"
         [isLoading]="isLoading"
         [events]="tile.events"
         [mapTheme]="tile.mapTheme"

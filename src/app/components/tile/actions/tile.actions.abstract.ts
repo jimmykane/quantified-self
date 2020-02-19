@@ -1,5 +1,5 @@
 import {
-  TileSettingsInterface,
+  TileSettingsInterface, TileTypes,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { TileAbstract } from '../tile.abstract';
 import { UserService } from '../../../services/app.user.service';
@@ -11,6 +11,7 @@ export class TileActionsAbstract extends TileAbstract {
   @Input() isLoading: boolean;
   @Input() user: User;
   @Input() order: number;
+  @Input() type:  TileTypes;
   @Input() size:  { columns: number, rows: number };
 
   constructor(protected userService: UserService, protected afa: AngularFireAnalytics) {
@@ -19,7 +20,9 @@ export class TileActionsAbstract extends TileAbstract {
 
   async changeTileType(event) {
     this.afa.logEvent('dashboard_tile_action', {method: 'changeTileType'});
-    (<TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).type = event.value;
+    const tileIndex = this.user.settings.dashboardSettings.tiles.findIndex(tile => tile.order === this.order);
+    this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? UserService.getDefaultUserDashboardChartTile() : UserService.getDefaultUserDashboardMapTile();
+    this.user.settings.dashboardSettings.tiles[tileIndex].order = this.order;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
