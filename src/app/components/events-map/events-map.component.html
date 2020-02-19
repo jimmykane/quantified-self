@@ -1,18 +1,18 @@
-<app-shade [isActive]="isLoading"></app-shade>
-<mat-card *ngIf="infoCard">
-  <mat-card-header>
-    <mat-card-title>
-      {{infoCard.title}}
-    </mat-card-title>
-    <mat-card-subtitle>
-      {{infoCard.subtitle}}
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-icon align="end" (click)="infoCard=null">settings</mat-icon>
-</mat-card>
-<agm-map [controlSize]="32"
-         [streetViewControl]="false"
-         [mapTypeId]="type"
-         [styles]="getStyles(theme)">
-</agm-map>
-
+  <app-shade [isActive]="isLoading" [hasError]="markers && markers.length === 0"
+             [errorMessage]="'Nothing to show'"></app-shade>
+  <mat-card *ngIf="infoCard">
+    <mat-card-header>
+      <mat-card-title>
+        {{infoCard.title}}
+      </mat-card-title>
+      <mat-card-subtitle>
+        {{infoCard.subtitle}}
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-icon align="end" (click)="infoCard=null">settings</mat-icon>
+  </mat-card>
+  <agm-map [controlSize]="32"
+           [streetViewControl]="false"
+           [mapTypeId]="type"
+           [styles]="getStyles(theme)">
+  </agm-map>

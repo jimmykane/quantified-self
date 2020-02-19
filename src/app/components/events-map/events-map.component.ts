@@ -80,6 +80,7 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
           });
       }
       this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
+      this.changeDetectorRef.detectChanges();
     });
   }
 
