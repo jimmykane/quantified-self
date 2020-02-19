@@ -1,18 +1,41 @@
-  <app-shade [isActive]="isLoading" [hasError]="markers && markers.length === 0"
-             [errorMessage]="'Nothing to show'"></app-shade>
-  <mat-card *ngIf="infoCard">
-    <mat-card-header>
-      <mat-card-title>
-        {{infoCard.title}}
-      </mat-card-title>
-      <mat-card-subtitle>
-        {{infoCard.subtitle}}
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-icon align="end" (click)="infoCard=null">settings</mat-icon>
-  </mat-card>
-  <agm-map [controlSize]="32"
-           [streetViewControl]="false"
-           [mapTypeId]="type"
-           [styles]="getStyles(theme)">
-  </agm-map>
+<app-shade [isActive]="isLoading" [hasError]="markers && markers.length === 0"
+           [errorMessage]="'Nothing to show'"></app-shade>
+<mat-card mat-ripple *ngIf="selectedEvent">
+  <mat-card-header>
+    <button mat-icon-button (click)="selectedEvent=null" align="end">
+      <mat-icon style="vertical-align: top">close</mat-icon>
+    </button>
+    <mat-card-title>
+      <span>
+        <b>{{ selectedEvent.startDate | date:"d" }}</b>
+      </span>
+      <span style="font-size: 1em">
+         {{ selectedEvent.startDate | date:"MMM " }}
+      </span>
+      <span style="font-size: 0.8em">
+        <b>{{ selectedEvent.startDate | date:"yyyy" }}</b>
+      </span>
+      <span style="font-size: 0.7em;">
+        at {{ selectedEvent.startDate | date:"h:mm:ss a" }}
+      </span>
+    </mat-card-title>
+    <mat-card-subtitle style="font-size: 1.0em;">
+      <b>{{selectedEvent.getActivityTypesAsString()}}</b>
+      for {{selectedEvent.getDuration().getDisplayValue(false, false)}}
+      and {{selectedEvent.getDistance().getDisplayValue()}}{{selectedEvent.getDistance().getDisplayUnit()}}
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content *ngIf="selectedEvent.description">
+    {{selectedEvent.description}}
+  </mat-card-content>
+  <mat-card-actions align="end">
+    <button mat-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">Open</button>
+  </mat-card-actions>
+</mat-card>
+<agm-map [controlSize]="32"
+         [streetViewControl]="false"
+         [mapTypeId]="type"
+         [backgroundColor]="'none'"
+         [scaleControl]="true"
+         [styles]="getStyles(theme)">
+</agm-map>

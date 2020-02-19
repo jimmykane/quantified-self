@@ -17,7 +17,8 @@ import { MapAbstract } from '../map/map.abstract';
 import MarkerClusterer from '@google/markerclustererplus'
 import { EventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { DatePipe } from "@angular/common";
+import { DatePipe } from '@angular/common';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
 
 @Component({
   selector: 'app-events-map',
@@ -32,13 +33,14 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   @Input() events: EventInterface[];
   @Input() theme: MapThemes;
   @Input() type: MapTypes;
+  @Input() user: User;
   @Input() isLoading: boolean;
   @Input() showHeatMap: boolean;
   @Input() clusterMarkers: boolean;
 
   public latLngArray: google.maps.LatLng[] = [];
   public markers: google.maps.Marker[] = [];
-  public infoCard: {title: string, subtitle: string, url?: string};
+  public selectedEvent: EventInterface;
 
   private nativeMap: google.maps.Map;
   private heatMap: google.maps.visualization.HeatmapLayer;
@@ -132,10 +134,7 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
         });
         markersArray.push(marker);
         marker.addListener('click', () => {
-          this.infoCard = {
-            title: event.getActivityTypesAsString(),
-            subtitle:  this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm')
-          }
+          this.selectedEvent = event
           this.changeDetectorRef.detectChanges()
         });
       }

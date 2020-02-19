@@ -9,6 +9,7 @@
     [clusterMarkers]="clusterMarkers">
   </app-tile-map-actions>
   <app-events-map *ngIf="events"
+                  [user]="user"
                   [events]="events"
                   [isLoading]="isLoading"
                   [theme]="mapTheme"

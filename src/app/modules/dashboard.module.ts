@@ -19,6 +19,7 @@ import { TileChartComponent } from "../components/tile/chart/tile.chart.componen
 import { TileMapComponent } from "../components/tile/map/tile.map.component";
 import { TileChartActionsComponent } from "../components/tile/actions/chart/tile.chart.actions.component";
 import { TileMapActionsComponent } from "../components/tile/actions/map/tile.map.actions.component";
+import { EventHeaderComponent } from "../components/event-header/event-header.component";
 
 @NgModule({
   imports: [
