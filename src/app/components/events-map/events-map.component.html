@@ -2,7 +2,7 @@
            [errorMessage]="'Nothing to show'"></app-shade>
 <mat-card mat-ripple *ngIf="selectedEvent">
   <mat-card-header>
-    <button mat-icon-button (click)="selectedEvent=null" align="end">
+    <button mat-icon-button (click)="selectedEvent=null; selectedEventPositionsByActivity = []" align="end">
       <mat-icon style="vertical-align: top">close</mat-icon>
     </button>
     <mat-card-title>
@@ -28,7 +28,7 @@
   <mat-card-content *ngIf="selectedEvent.description">
     {{selectedEvent.description}}
   </mat-card-content>
-  <mat-card-actions align="end">
+  <mat-card-actions>
     <button mat-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">Open</button>
   </mat-card-actions>
 </mat-card>
@@ -38,4 +38,13 @@
          [backgroundColor]="'none'"
          [scaleControl]="true"
          [styles]="getStyles(theme)">
+  <agm-polyline *ngFor="let positionsByActivity of selectedEventPositionsByActivity"
+    [strokeColor]="positionsByActivity.color">
+    <!-- Points -->
+    <agm-polyline-point
+      *ngFor="let position of positionsByActivity.positions"
+      [latitude]="position.latitudeDegrees"
+      [longitude]="position.longitudeDegrees">
+    </agm-polyline-point>
+  </agm-polyline>
 </agm-map>

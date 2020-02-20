@@ -19,6 +19,11 @@ import { EventColorService } from '../../services/color/app.event.color.service'
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DatePipe } from '@angular/common';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { EventService } from "../../services/app.event.service";
+import { take } from "rxjs/operators";
+import { ActivityInterface } from "@sports-alliance/sports-lib/lib/activities/activity.interface";
+import { DataLatitudeDegrees } from "@sports-alliance/sports-lib/lib/data/data.latitude-degrees";
+import { DataLongitudeDegrees } from "@sports-alliance/sports-lib/lib/data/data.longitude-degrees";
 
 @Component({
   selector: 'app-events-map',
@@ -41,13 +46,15 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
   public latLngArray: google.maps.LatLng[] = [];
   public markers: google.maps.Marker[] = [];
   public selectedEvent: EventInterface;
+  public selectedEventPositionsByActivity: { activity: ActivityInterface, color: string, positions: DataPositionInterface[] }[]
 
   private nativeMap: google.maps.Map;
   private heatMap: google.maps.visualization.HeatmapLayer;
   private markerClusterer: MarkerClusterer;
 
+
   constructor(
-    private changeDetectorRef: ChangeDetectorRef, private eventColorService: EventColorService, private  datePipe: DatePipe) {
+    private changeDetectorRef: ChangeDetectorRef, private eventColorService: EventColorService, private eventService: EventService) {
     super(changeDetectorRef);
   }
 
@@ -133,10 +140,30 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
           }
         });
         markersArray.push(marker);
-        marker.addListener('click', () => {
+        marker.addListener('click', async () => {
+          this.loading();
+          this.selectedEventPositionsByActivity = [];
+          const activities = await this.eventService.getActivities(this.user, event.getID()).pipe(take(1)).toPromise()
+          for (const activity of activities) {
+            const streams = await this.eventService.getStreamsByTypes(
+              this.user.uid, event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
+            ).pipe(take(1)).toPromise();
+            activity.addStreams(streams);
+            this.selectedEventPositionsByActivity.push(
+              {
+                activity: activity,
+                color: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[activity.type]),
+                positions: activity.getSquashedPositionData()
+              }
+            )
+          }
+          this.nativeMap.fitBounds(this.getBounds(this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
+            return accu.concat(positionByActivity.positions)
+          }, [])))
           this.selectedEvent = event
-          this.changeDetectorRef.detectChanges()
+          this.loaded()
         });
+
       }
       return markersArray;
     }, []);

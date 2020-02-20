@@ -7,13 +7,13 @@ mat-card{
   position: absolute;
   top: 6%;
   left: 6%;
-  max-width: 84%;
+  width: 84%;
   max-height: 50%;
   z-index: 2;
 }
-/*::ng-deep .mat-card-header-text{*/
-/*  width: 100%;*/
-/*}*/
+::ng-deep .mat-card-header-text{
+  width: 100%;
+}
 
 /*button{*/
 /*  height: auto;*/
