@@ -1,12 +1,12 @@
 <app-shade [isActive]="isLoading" [hasError]="markers && markers.length === 0"
            [errorMessage]="'Nothing to show'"></app-shade>
-<mat-card mat-ripple *ngIf="selectedEvent">
+<mat-card *ngIf="selectedEvent">
   <mat-card-header>
-    <div mat-card-avatar class="avatar">
-      <button mat-icon-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">
-        <mat-icon>open_with</mat-icon>
-      </button>
-    </div>
+<!--    <div mat-card-avatar class="avatar">-->
+<!--      <button mat-icon-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">-->
+<!--        <mat-icon>open_with</mat-icon>-->
+<!--      </button>-->
+<!--    </div>-->
 
     <button mat-icon-button (click)="selectedEvent=null; selectedEventPositionsByActivity = []" align="end">
       <mat-icon style="vertical-align: top">close</mat-icon>
@@ -34,9 +34,9 @@
   <mat-card-content *ngIf="selectedEvent.description">
     {{selectedEvent.description}}
   </mat-card-content>
-<!--  <mat-card-actions>-->
-<!--    <button mat-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">Open</button>-->
-<!--  </mat-card-actions>-->
+  <mat-card-actions>
+    <button mat-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">Open</button>
+  </mat-card-actions>
 </mat-card>
 <agm-map [controlSize]="32"
          [streetViewControl]="false"
