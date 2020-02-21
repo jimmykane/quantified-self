@@ -47,7 +47,6 @@
     "material-design-icons-iconfont": "^5.0.1",
     "ng2-logger": "3.0.11",
     "rxjs": "^6.5.4",
-    "tslib": "^1.11.0",
     "wasm-flate": "1.0.2-bundler",
     "zone.js": "~0.10.2"
   },
@@ -71,6 +70,6 @@
     "protractor": "~6.0.0",
     "ts-node": "~8.6.2",
     "tslint": "~6.0.0",
-    "typescript": "3.8.2"
+    "typescript": "3.7.5"
   }
 }
