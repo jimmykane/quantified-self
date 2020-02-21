@@ -43,6 +43,8 @@ import {
 } from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
+import { DateAdapter } from "@angular/material/core";
+import { MondayDateAdapter } from "./adapters/date.adapter";
 
 declare function require(moduleName: string): any;
 

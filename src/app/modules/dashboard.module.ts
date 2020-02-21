@@ -20,6 +20,8 @@ import { TileMapComponent } from "../components/tile/map/tile.map.component";
 import { TileChartActionsComponent } from "../components/tile/actions/chart/tile.chart.actions.component";
 import { TileMapActionsComponent } from "../components/tile/actions/map/tile.map.actions.component";
 import { EventHeaderComponent } from "../components/event-header/event-header.component";
+import { DateAdapter } from "@angular/material/core";
+import { MondayDateAdapter } from "../adapters/date.adapter";
 
 @NgModule({
   imports: [
@@ -57,6 +59,8 @@ import { EventHeaderComponent } from "../components/event-header/event-header.co
   ],
   providers: [
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
+    // @todo get it from settings as a service perhaps
+    {provide: DateAdapter, useClass: MondayDateAdapter},
   ],
 })
 
