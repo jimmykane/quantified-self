@@ -7,7 +7,7 @@ mat-card{
   position: absolute;
   top: 0;
   left: 0;
-  margin: 6%;
+  margin: 2%;
   /*width: 84%;*/
   max-height: 50%;
   z-index: 2;
@@ -23,3 +23,10 @@ mat-card{
 /*mat-icon{*/
 /*  vertical-align: top !important;*/
 /*}*/
+
+.close-button{
+  position: absolute;
+  top: 4px;
+  right: 4px;
+
+}
