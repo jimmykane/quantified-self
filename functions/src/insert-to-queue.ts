@@ -10,7 +10,7 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
   // Check Auth first
   const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
   if (authentication !== req.headers.authorization){
-    console.error(`Not authorised to post here received:  ${req.headers.authorization}` );
+    console.error(new Error(`Not authorised to post here received: ${req.headers.authorization}`));
     res.status(403);
     res.send();
     return;

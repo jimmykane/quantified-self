@@ -1,0 +1,12 @@
+section{
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.actions{
+  position: absolute;
+  right: 2px;
+  top: 8px;
+  z-index: 2;
+}

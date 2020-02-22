@@ -12,7 +12,8 @@
 
 
       <mat-form-field>
-        <input matInput (keyup)="applyFilter($event)" placeholder="Filter">
+        <mat-label>Filter</mat-label>
+        <input matInput (keyup)="applyFilter($event)" placeholder="Type or value">
       </mat-form-field>
       <mat-table [dataSource]="data">
         <ng-container *ngFor="let column of columns" [matColumnDef]="column">
@@ -41,7 +42,7 @@
             <span *ngIf="column !== 'Difference'">{{ row[column] }}</span>
           </mat-cell>
         </ng-container>
-        <mat-header-row *matHeaderRowDef="columns"></mat-header-row>
+        <mat-header-row *matHeaderRowDef="columns; sticky: true;"></mat-header-row>
         <mat-row *matRowDef="let row; columns: columns;">
         </mat-row>
       </mat-table>

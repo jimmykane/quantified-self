@@ -1,10 +1,10 @@
 import {Injectable} from '@angular/core';
-import {AppThemes} from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
+import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {UserService} from './app.user.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {BehaviorSubject, Observable} from 'rxjs';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 
 
 @Injectable()

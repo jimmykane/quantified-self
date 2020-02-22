@@ -8,9 +8,9 @@ import {generateIDFromParts} from "./utils";
 import {Request} from "firebase-functions/lib/providers/https";
 import * as requestPromise from "request-promise-native";
 import {suuntoAppAuth} from "./suunto-app-auth";
-import {ServiceTokenInterface} from "quantified-self-lib/lib/service-tokens/service-token.interface";
+import {ServiceTokenInterface} from "@sports-alliance/sports-lib/lib/service-tokens/service-token.interface";
 import {getTokenData} from "./service-tokens";
-import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
+import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 
 
 // console.log(process.env)

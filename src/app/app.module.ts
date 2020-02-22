@@ -43,6 +43,8 @@ import {
 } from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
+import { DateAdapter } from "@angular/material/core";
+import { MondayDateAdapter } from "./adapters/date.adapter";
 
 declare function require(moduleName: string): any;
 
@@ -77,7 +79,7 @@ export class SentryErrorHandler implements ErrorHandler {
     HttpClientModule,
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
-    AngularFirestoreModule.enablePersistence({synchronizeTabs: true}),
+    AngularFirestoreModule.enablePersistence({synchronizeTabs: false}),
     AngularFireFunctionsModule,
     AngularFireAuthModule,
     AngularFirePerformanceModule,
@@ -85,7 +87,8 @@ export class SentryErrorHandler implements ErrorHandler {
     MaterialModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-      apiVersion: 'weekly'
+      apiVersion: 'weekly',
+      libraries: ['visualization']
     })
   ],
   declarations: [

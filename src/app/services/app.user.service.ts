@@ -6,16 +6,16 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { EventService } from './app.event.service';
 import { map, take } from 'rxjs/operators';
-import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
+import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   DataTypeSettings,
   UserChartSettingsInterface,
   XAxisTypes
-} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.settings.interface';
+import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
 import {
   DaysOfTheWeek,
   PaceUnits,
@@ -23,7 +23,7 @@ import {
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
-} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
@@ -35,30 +35,28 @@ import {
   DateRanges,
   TableSettings,
   UserDashboardSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes,
-  UserDashboardChartSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+  ChartTypes, TileChartSettingsInterface, TileMapSettingsInterface,
+  TileSettingsInterface, TileTypes,
+} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {
   MapThemes,
   MapTypes,
   UserMapSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { UserExportToCsvSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.export-to-csv.settings.interface';
 import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
 import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import set = Reflect.set;
-import { UserSummariesSettingsInterface } from "@sports-alliance/sports-lib/lib/users/user.summaries.settings.interface";
 import { ActivityTypes } from "@sports-alliance/sports-lib/lib/activities/activity.types";
+import { UserSummariesSettingsInterface } from "@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface";
 
 
 @Injectable()
@@ -100,39 +98,73 @@ export class UserService implements OnDestroy {
     }, {})
   }
 
-  static getDefaultUserDashboardChartSettings(): UserDashboardChartSettingsInterface[] {
-    return [{
-      name: 'Duration',
-      order: 0,
-      type: ChartTypes.Pie,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataType: DataDuration.type,
-      dataValueType: ChartDataValueTypes.Total,
-      filterLowValues: true,
-    }, {
+  static getDefaultUserDashboardChartTile(): TileChartSettingsInterface {
+    return {
       name: 'Distance',
-      order: 1,
-      type: ChartTypes.ColumnsHorizontal,
+      order: 0,
+      type: TileTypes.Chart,
+      chartType: ChartTypes.ColumnsHorizontal,
       dataType: DataDistance.type,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
-    }, {
-      name: 'Energy',
-      order: 2,
-      type: ChartTypes.Spiral,
+      size: { columns: 1, rows: 1 },
+    };
+  }
+
+  static getDefaultUserDashboardMapTile(): TileMapSettingsInterface{
+    return {
+      name: 'Clustered HeatMap',
+      order: 0,
+      type: TileTypes.Map,
+      mapType: MapTypes.RoadMap,
+      mapTheme: MapThemes.Tron,
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    };
+  }
+
+  static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
+    return [<TileMapSettingsInterface>{
+      name: 'Clustered HeatMap',
+      order: 0,
+      type: TileTypes.Map,
+      mapType: MapTypes.RoadMap,
+      mapTheme: MapThemes.Tron,
+      showHeatMap: true,
+      clusterMarkers: true,
+      size: { columns: 1, rows: 1 },
+    }, <TileChartSettingsInterface>{
+      name: 'Duration',
+      order: 1,
+      type: TileTypes.Chart,
+      chartType: ChartTypes.Pie,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataType: DataEnergy.type,
+      dataType: DataDuration.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
-    }, {
+      size: { columns: 1, rows: 1 },
+    }, <TileChartSettingsInterface>{
+      name: 'Distance',
+      order: 2,
+      type: TileTypes.Chart,
+      chartType: ChartTypes.ColumnsHorizontal,
+      dataType: DataDistance.type,
+      dataCategoryType: ChartDataCategoryTypes.ActivityType,
+      dataValueType: ChartDataValueTypes.Total,
+      filterLowValues: true,
+      size: { columns: 1, rows: 1 },
+    }, <TileChartSettingsInterface>{
       name: 'Ascent',
       order: 3,
-      type: ChartTypes.PyramidsVertical,
+      type: TileTypes.Chart,
+      chartType: ChartTypes.PyramidsVertical,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataType: DataAscent.type,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
+      size: { columns: 1, rows: 1 },
     }]
   }
 
@@ -388,9 +420,8 @@ export class UserService implements OnDestroy {
     settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
     settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
     settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
-    settings.dashboardSettings.chartsSettings = settings.dashboardSettings.chartsSettings || UserService.getDefaultUserDashboardChartSettings();
+    settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || UserService.getDefaultUserDashboardTiles();
     // Patch missing defaults
-    settings.dashboardSettings.chartsSettings.forEach(chartSetting => chartSetting.dataCategoryType = chartSetting.dataCategoryType || ChartDataCategoryTypes.ActivityType);
     settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
     settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || UserService.getDefaultTableSettings();

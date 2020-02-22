@@ -170,7 +170,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
       // Add the sorts
       statRowElement['sort.Start Date'] = event.startDate.getTime();
       statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];
-      statRowElement['sort.Description'] = statRowElement['Activity Types'];
+      statRowElement['sort.Description'] = statRowElement['Description'];
       statRowElement['sort.Device Names'] = statRowElement['Device Names'];
 
       EventRowElementsArray.push(statRowElement);

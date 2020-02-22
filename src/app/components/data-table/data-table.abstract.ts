@@ -16,7 +16,7 @@ import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-
 import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/user.unit.settings.interface';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {DataDuration} from '@sports-alliance/sports-lib/lib/data/data.duration';
 import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 

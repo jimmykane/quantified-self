@@ -1,0 +1,54 @@
+<section>
+  <app-tile-chart-actions class="actions"
+    [user]="user"
+    [chartType]="chartType"
+    [order]="order"
+    [size]="size"
+    [type]="type"
+    [chartDataType]="dataType"
+    [chartDataCategoryType]="dataCategoryType"
+    [filterLowValues]="filterLowValues"
+    [chartDataValueType]="dataValueType">
+  </app-tile-chart-actions>
+  <app-pie-chart *ngIf="chartType === chartTypes.Pie"
+                 [isLoading]="isLoading"
+                 [data]="data"
+                 [chartTheme]="chartTheme"
+                 [chartDataType]="dataType"
+                 [chartDataValueType]="dataValueType"
+                 [chartDataCategoryType]="dataCategoryType"
+                 [filterLowValues]="filterLowValues"
+                 [chartDataDateRange]="dataDateRange">
+  </app-pie-chart>
+  <app-xy-chart
+    *ngIf="chartType === chartTypes.ColumnsHorizontal
+        || chartType === chartTypes.ColumnsVertical
+        || chartType === chartTypes.PyramidsVertical
+        || chartType === chartTypes.LinesHorizontal
+        || chartType === chartTypes.LinesVertical"
+    [isLoading]="isLoading"
+    [data]="data"
+    [chartTheme]="chartTheme"
+    [type]="
+        (chartType === chartTypes.LinesHorizontal || chartType === chartTypes.LinesVertical) ? 'lines' :
+        (chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal) ? 'columns'
+        : 'pyramids'"
+    [vertical]="(chartType === chartTypes.PyramidsVertical || chartType === chartTypes.LinesHorizontal) || chartType === chartTypes.ColumnsVertical"
+    [chartDataType]="dataType"
+    [chartDataValueType]="dataValueType"
+    [chartDataCategoryType]="dataCategoryType"
+    [filterLowValues]="filterLowValues"
+    [chartDataDateRange]="dataDateRange">
+  </app-xy-chart>
+  <app-timeline-chart
+    *ngIf="chartType === chartTypes.Spiral"
+    [isLoading]="isLoading"
+    [data]="data"
+    [chartTheme]="chartTheme"
+    [chartDataType]="dataType"
+    [chartDataValueType]="dataValueType"
+    [chartDataCategoryType]="dataCategoryType"
+    [filterLowValues]="filterLowValues"
+    [chartDataDateRange]="dataDateRange">
+  </app-timeline-chart>
+</section>

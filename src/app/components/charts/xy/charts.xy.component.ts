@@ -18,8 +18,8 @@ import { EventColorService } from '../../../services/color/app.event.color.servi
 
 import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
 import { AppColors } from '../../../services/color/app.colors';
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
 import { ActivityTypes } from "@sports-alliance/sports-lib/lib/activities/activity.types";
+import { ChartDataCategoryTypes } from "@sports-alliance/sports-lib/lib/tiles/tile.settings.interface";
 
 
 @Component({
@@ -44,9 +44,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
-    chart.padding(0, 0, 0, 1);
+    chart.padding(10, 0, 0, 1);
     chart.paddingBottom = this.vertical ? 20 : 0;
-    chart.fontSize = '1.1em';
+    chart.fontSize = '0.8em';
 
     // top container for labels
     const topContainer = chart.chartContainer.createChild(am4core.Container);
@@ -60,9 +60,10 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.2em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
+      return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
     });
 
+    chartTitle.marginTop = am4core.percent(20);
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     if (categoryAxis instanceof am4charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';

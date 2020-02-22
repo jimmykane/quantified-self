@@ -11,10 +11,9 @@ import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes,
-  UserDashboardChartSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
-import {UserService} from '../../../services/app.user.service';
+  ChartTypes, TileChartSettingsInterface, TileTypes,
+} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+import {UserService} from '../../../../services/app.user.service';
 import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
 import {DataAltitudeAvg} from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
@@ -31,27 +30,25 @@ import {DataCadenceAvg} from '@sports-alliance/sports-lib/lib/data/data.cadence-
 import {DataCadenceMin} from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
 import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import * as firebase from 'firebase/app';
 import {DataFeeling} from '@sports-alliance/sports-lib/lib/data/data.feeling';
 import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {DataRecoveryTime} from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
+import { TileActionsAbstract } from '../tile.actions.abstract';
 
 @Component({
-  selector: 'app-chart-actions',
-  templateUrl: './chart.actions.component.html',
-  styleUrls: ['./chart.actions.component.css'],
+  selector: 'app-tile-chart-actions',
+  templateUrl: './tile.chart.actions.component.html',
+  styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
   providers: [],
 })
-export class ChartActionsComponent implements OnInit {
-  @Input() user: User;
+export class TileChartActionsComponent extends TileActionsAbstract implements OnInit {
   @Input() chartType: ChartTypes;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes; // @todo take in use
   @Input() chartOrder: number;
   @Input() filterLowValues: boolean;
-
 
   public chartTypes = ChartTypes;
   public chartValueTypes = ChartDataValueTypes;
@@ -123,67 +120,45 @@ export class ChartActionsComponent implements OnInit {
     },
   ];
 
+  constructor(
+    userService: UserService,
+    afa: AngularFireAnalytics) {
+    super(userService, afa);
+  }
+
   async changeChartType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).type = event.value;
+    this.afa.logEvent('dashboard_tile_action', {method: 'changeChartType'});
+    const chart = (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order));
+    chart.chartType = event.value;
     // If its pie show only totals
     if (event.value === ChartTypes.Pie) {
-      this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = ChartDataValueTypes.Total;
+      chart.dataValueType = ChartDataValueTypes.Total;
     }
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataType = event.value;
+    this.afa.logEvent('dashboard_tile_action', {method: 'changeChartDataType'});
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataValueType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataValueType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataValueType = event.value;
+    this.afa.logEvent('dashboard_tile_action', {method: 'changeChartDataValueType'});
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataValueType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeChartDataCategoryType(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'changeChartDataCategoryType'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).dataCategoryType = event.value;
+    this.afa.logEvent('dashboard_tile_action', {method: 'changeChartDataCategoryType'});
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  async addNewChart($event: MouseEvent) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'addNewChart'});
-    const chart = Object.assign({}, this.user.settings.dashboardSettings.chartsSettings.find((chartSetting: UserDashboardChartSettingsInterface) => chartSetting.order === this.chartOrder));
-    chart.order = this.user.settings.dashboardSettings.chartsSettings.length;
-    this.user.settings.dashboardSettings.chartsSettings.push(chart);
+  async switchFilterLowValues(event) {
+    this.afa.logEvent('dashboard_tile_action', {method: 'switchFilterLowValues'});
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).filterLowValues = this.filterLowValues;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-
-  async switchFilterLowValues(event){
-    this.afa.logEvent('dashboard_chart_action', {method: 'switchFilterLowValues'});
-    this.user.settings.dashboardSettings.chartsSettings.find(chartSetting => chartSetting.order === this.chartOrder).filterLowValues = this.filterLowValues;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-
-  async deleteChart(event) {
-    this.afa.logEvent('dashboard_chart_action', {method: 'deleteChart'});
-    if (this.user.settings.dashboardSettings.chartsSettings.length === 1) {
-      throw new Error('Cannot delete chart there is only one left');
-    }
-    // should search and replace order index according to the remaining order indexes after the splice
-    this.user.settings.dashboardSettings.chartsSettings = this.user.settings.dashboardSettings.chartsSettings
-      .filter((chartSetting) => chartSetting.order !== this.chartOrder)
-      .map((chartSetting, index) => {
-        chartSetting.order = index;
-        return chartSetting
-      });
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-
-  constructor(
-    private userService: UserService,
-    private afa: AngularFireAnalytics,
-    public dialog: MatDialog) {
   }
 
   ngOnInit(): void {

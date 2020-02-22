@@ -16,7 +16,7 @@ import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
-} from '@sports-alliance/sports-lib/lib/users/user.dashboard.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
@@ -41,7 +41,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
 
   protected createChart(): am4charts.PieChart {
     const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
-
+    chart.fontSize = '0.8em'
     // chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 5, 0, 5);
     chart.radius = am4core.percent(65);

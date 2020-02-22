@@ -13,10 +13,10 @@ import {
   ChartCursorBehaviours,
   ChartThemes,
   XAxisTypes
-} from '@sports-alliance/sports-lib/lib/users/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {ThemeService} from '../../../services/app.theme.service';
-import {AppThemes} from '@sports-alliance/sports-lib/lib/users/user.app.settings.interface';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/user.map.settings.interface';
+import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import {UserService} from '../../../services/app.user.service';
 import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
 

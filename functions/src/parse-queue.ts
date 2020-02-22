@@ -3,14 +3,14 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {EventImporterFIT} from "quantified-self-lib/lib/events/adapters/importers/fit/importer.fit";
-import {EventInterface} from "quantified-self-lib/lib/events/event.interface";
+import {EventImporterFIT} from "@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit";
+import {EventInterface} from "@sports-alliance/sports-lib/lib/events/event.interface";
 import * as Pako from "pako";
 import {generateIDFromParts} from "./utils";
-import {MetaData} from "quantified-self-lib/lib/meta-data/meta-data";
-import {ServiceNames} from "quantified-self-lib/lib/meta-data/meta-data.interface";
+import {MetaData} from "@sports-alliance/sports-lib/lib/meta-data/meta-data";
+import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import {getTokenData} from "./service-tokens";
-import {QueueItemInterface} from "quantified-self-lib/lib/queue-item/queue-item.interface";
+import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
 
 
 const TIMEOUT_IN_SECONDS = 540;
@@ -29,7 +29,8 @@ export const parseQueue = functions.region('europe-west2').runWith({timeoutSecon
       count++;
       console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
     } catch (e) {
-      console.error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`, e)
+      console.error(e);
+      console.error(new Error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`))
     }
   }
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
@@ -58,7 +59,8 @@ export async function processQueueItem(queueItem: any) {
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot);
     }catch (e) {
-      console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      console.error(e);
+      console.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
       continue
     }
 
@@ -91,7 +93,8 @@ export async function processQueueItem(queueItem: any) {
       //   // await queueItem.ref.delete();
       // }
       // @todo -> Update to max retry if 403 not found that happens quite often.
-      console.error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.error.toString('utf8')}`);
+      console.error(e);
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.error.toString('utf8')}`));
       await increaseRetryCountForQueueItem(queueItem, e);
       continue;
     }
@@ -110,14 +113,15 @@ export async function processQueueItem(queueItem: any) {
       // await queueItem.ref.delete();
     } catch (e) {
       // @todo should delete event  or separate catch
-      console.error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`, e);
+      console.error(e);
+      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`));
       await increaseRetryCountForQueueItem(queueItem, e);
       continue;
     }
   }
 
   if (processedCount !== tokenQuerySnapshots.size) {
-    console.error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`);
+    console.error(new Error(`Could not process all tokens for ${queueItem.id} will try again later. Processed ${processedCount}`));
     return;
   }
 
@@ -141,7 +145,7 @@ async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
     await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
     console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + 1}`);
   } catch (e) {
-    console.error(`Could not update retry count on ${queueItem.id}`, e)
+    console.error(new Error(`Could not update retry count on ${queueItem.id}`))
   }
 }
 
@@ -153,8 +157,7 @@ async function updateToProcessed(queueItem: any) {
     });
     console.log(`Updated to processed  ${queueItem.id}`);
   } catch (e) {
-    console.error(e);
-    console.error(`Could not update processed state for ${queueItem.id}`)
+    console.error(new Error(`Could not update processed state for ${queueItem.id}`));
   }
 }
 

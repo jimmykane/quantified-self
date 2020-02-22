@@ -1,0 +1,21 @@
+<section>
+  <app-tile-map-actions class="actions"
+    [user]="user"
+    [order]="order"
+    [size]="size"
+    [type]="type"
+    [mapType]="mapType"
+    [mapTheme]="mapTheme"
+    [showHeatMap]="showHeatMap"
+    [clusterMarkers]="clusterMarkers">
+  </app-tile-map-actions>
+  <app-events-map *ngIf="events"
+                  [user]="user"
+                  [events]="events"
+                  [isLoading]="isLoading"
+                  [theme]="mapTheme"
+                  [type]="mapType"
+                  [showHeatMap]="showHeatMap"
+                  [clusterMarkers]="clusterMarkers">
+  </app-events-map>
+</section>

@@ -30,7 +30,9 @@ import {EventIntensityZonesComponent} from '../components/cards/event/intensity-
     EventRoutingModule,
     AgmCoreModule
   ],
-  exports: [],
+    exports: [
+        EventHeaderComponent
+    ],
   declarations: [
     EventCardComponent,
     EventCardMapComponent,
