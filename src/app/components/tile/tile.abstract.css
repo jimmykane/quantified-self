@@ -6,7 +6,7 @@ section{
 
 .actions{
   position: absolute;
-  right: 8px;
+  right: 2px;
   top: 8px;
   z-index: 2;
 }

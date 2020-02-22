@@ -19,3 +19,7 @@ app-timeline-chart{
 
   position: relative;
 }
+
+.actions{
+  top: -4px;
+}
