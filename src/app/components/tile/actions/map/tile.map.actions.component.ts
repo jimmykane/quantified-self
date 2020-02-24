@@ -37,12 +37,11 @@ export class TileMapActionsComponent extends TileActionsAbstract implements OnIn
   ngOnChanges(changes: SimpleChanges): void {
     switch (this.mapTheme) {
       case MapThemes.Desert:
-        this.iconColor = '#FFFFFF';
-        break;
       case MapThemes.Dark:
-        this.iconColor = '#FFFFFF';
-        break;
       case MapThemes.Black:
+      case MapThemes.MidnightCommander:
+      case MapThemes.Night:
+      case MapThemes.DarkElectric:
         this.iconColor = '#FFFFFF';
         break;
       default:
