@@ -1,8 +1,8 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation();">
-  <mat-icon>more_vert</mat-icon>
+<button [ngStyle]="{'color': iconColor}" mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation();">
+  <mat-icon >more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 10">
+  <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 11">
     <button mat-menu-item class="big" (click)="addNewTile($event)">
       <mat-icon>add</mat-icon>
       <span>Add new</span>
@@ -13,7 +13,17 @@
     <mat-form-field>
       <mat-label>Type {{type}}</mat-label>
       <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
+        <mat-select-trigger>
+          <span *ngIf="type === tileTypes.Map">
+            <mat-icon>map</mat-icon>&nbsp;{{tileTypes.Map}}
+          </span>
+          <span *ngIf="type === tileTypes.Chart">
+            <mat-icon >show_chart</mat-icon>&nbsp;{{tileTypes.Chart}}
+          </span>
+        </mat-select-trigger>
         <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">
+          <mat-icon *ngIf="tileType.key === tileTypes.Map">map</mat-icon>
+          <mat-icon *ngIf="tileType.key === tileTypes.Chart">show_chart</mat-icon>
           {{tileType.value}}
         </mat-option>
       </mat-select>

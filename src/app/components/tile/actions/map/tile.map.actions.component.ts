@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { UserService } from '../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { TileActionsAbstract } from '../tile.actions.abstract';
@@ -11,7 +11,7 @@ import { TileMapSettingsInterface } from '@sports-alliance/sports-lib/lib/tiles/
   styleUrls: ['../tile.actions.abstract.css', './tile.map.actions.component.css'],
   providers: [],
 })
-export class TileMapActionsComponent extends TileActionsAbstract implements OnInit {
+export class TileMapActionsComponent extends TileActionsAbstract implements OnInit, OnChanges {
   @Input() mapType: MapTypes;
   @Input() mapTheme: MapThemes;
   @Input() showHeatMap: boolean;
@@ -19,6 +19,7 @@ export class TileMapActionsComponent extends TileActionsAbstract implements OnIn
 
   public mapTypes = MapTypes;
   public mapThemes = MapThemes;
+  public iconColor: string;
 
   constructor(
     userService: UserService,
@@ -30,6 +31,23 @@ export class TileMapActionsComponent extends TileActionsAbstract implements OnIn
   ngOnInit(): void {
     if (!this.user) {
       throw new Error('Component needs user');
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    switch (this.mapTheme) {
+      case MapThemes.Desert:
+        this.iconColor = '#FFFFFF';
+        break;
+      case MapThemes.Dark:
+        this.iconColor = '#FFFFFF';
+        break;
+      case MapThemes.Black:
+        this.iconColor = '#FFFFFF';
+        break;
+      default:
+        this.iconColor = '#000000'
+        break;
     }
   }
 

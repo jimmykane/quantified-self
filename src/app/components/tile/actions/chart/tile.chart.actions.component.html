@@ -2,7 +2,7 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 10">
+  <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 11">
     <button mat-menu-item class="big" (click)="addNewTile($event)">
       <mat-icon>add</mat-icon>
       <span>Add new</span>
