@@ -41,7 +41,7 @@ export class TileMapActionsComponent extends TileActionsAbstract implements OnIn
       case MapThemes.Black:
       case MapThemes.MidnightCommander:
       case MapThemes.Night:
-      case MapThemes.DarkElectric:
+      case MapThemes.DarkElectric :
         this.iconColor = '#FFFFFF';
         break;
       default:
