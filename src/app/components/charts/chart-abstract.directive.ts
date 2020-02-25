@@ -28,12 +28,12 @@ let am4ChartsTimeLineLicence;
 try {
   am4ChartsTimeLineLicence = require('../../../../licenses.json').am4ChartsTimeline;
 } catch (e) {
-  // Noope
+  // Noop
 }
 
 // @todo should dectate to implement on screen change
 @Directive()
-export abstract class ChartAbstract extends LoadingAbstract implements OnDestroy {
+export abstract class ChartAbstractDirective extends LoadingAbstract implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
 

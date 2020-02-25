@@ -13,7 +13,7 @@ import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {ChartAbstract} from '../../../charts/chart.abstract';
+import {ChartAbstractDirective} from '../../../charts/chart-abstract.directive';
 import {IntensityZonesInterface} from '@sports-alliance/sports-lib/lib/intensity-zones/intensity-zones.interface';
 import {IntensityZones} from '@sports-alliance/sports-lib/lib/intensity-zones/intensity-zones';
 import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
@@ -30,7 +30,7 @@ import {MatIconRegistry} from '@angular/material/icon';
   styleUrls: ['./event.intensity-zones.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EventIntensityZonesComponent extends ChartAbstract implements AfterViewInit, OnChanges, OnDestroy {
+export class EventIntensityZonesComponent extends ChartAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[];
 
   intensityZones: IntensityZonesInterface[] = [

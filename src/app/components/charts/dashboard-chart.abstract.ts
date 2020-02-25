@@ -1,4 +1,4 @@
-import {ChartAbstract} from './chart.abstract';
+import {ChartAbstractDirective} from './chart-abstract.directive';
 import {AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summaries/summaries.component';
@@ -13,7 +13,7 @@ import * as am4core from '@amcharts/amcharts4/core';
 
 
 @Directive()
-export abstract class DashboardChartAbstract extends ChartAbstract implements OnChanges, AfterViewInit {
+export abstract class DashboardChartAbstract extends ChartAbstractDirective implements OnChanges, AfterViewInit {
   @Input() data: any;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;

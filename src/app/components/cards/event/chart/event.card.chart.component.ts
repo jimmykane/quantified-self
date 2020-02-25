@@ -27,7 +27,7 @@ import {DataPace, DataPaceMinutesPerMile} from '@sports-alliance/sports-lib/lib/
 import {ChartCursorBehaviours, XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
-import {ChartAbstract} from '../../../charts/chart.abstract';
+import {ChartAbstractDirective} from '../../../charts/chart-abstract.directive';
 import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -89,7 +89,7 @@ const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
   styleUrls: ['./event.card.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class EventCardChartComponent extends ChartAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardChartComponent extends ChartAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 
   @Input() event: EventInterface;
   @Input() targetUserID: string;
