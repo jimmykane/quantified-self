@@ -4,7 +4,7 @@ import {HomeComponent} from './components/home/home.component';
 import {AppAuthGuard} from './authentication/app.auth.guard';
 
 const routes: Routes = [
-  {path: 'home', component: HomeComponent, data: {title: 'Home', animation: 'Home'}},
+  {path: 'home', loadChildren: () => import('./modules/home.module').then(module => module.HomeModule), data: {title: 'Home', animation: 'Home'}},
   {path: 'services', loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule), data: {title: 'Services', animation: 'Services'}},
   // {path: '', redirectTo: 'home', pathMatch: 'full'},
   {path: 'login', loadChildren: () => import('./modules/login.module').then(module => module.LoginModule), data: {title: 'Login', animation: 'Login'}},

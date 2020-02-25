@@ -4,7 +4,6 @@ import {ErrorHandler, Injectable, NgModule} from '@angular/core';
 import {BrowserModule} from '@angular/platform-browser';
 import {AppComponent} from './app.component';
 import {AppRoutingModule} from './app-routing.module';
-import {HomeComponent} from './components/home/home.component';
 import {BrowserAnimationsModule} from '@angular/platform-browser/animations';
 import {SideNavComponent} from './components/sidenav/sidenav.component';
 import {environment} from '../environments/environment';
@@ -43,8 +42,6 @@ import {
 } from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
-import { DateAdapter } from "@angular/material/core";
-import { MondayDateAdapter } from "./adapters/date.adapter";
 
 declare function require(moduleName: string): any;
 
@@ -94,7 +91,6 @@ export class SentryErrorHandler implements ErrorHandler {
   declarations: [
     AppComponent,
     SideNavComponent,
-    HomeComponent,
   ],
   entryComponents: [],
   providers: [
