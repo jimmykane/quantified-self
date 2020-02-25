@@ -28,3 +28,8 @@ mat-grid-tile.app-icon{
 a{
   padding: 0;
 }
+
+app-home-live-chart{
+  width: 100%;
+  height: 100%;
+}

@@ -113,6 +113,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstract implements 
         if (this.chart) {
           this.chart.dispose();
           // delete this.chart
+          this.logger.info(`Chart destroyed`);
         }
       });
     } catch (e) {

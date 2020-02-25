@@ -10,6 +10,10 @@
       Upload your <b>FIT</b>, <b>TCX</b>, <b>GPX</b> files or connect to <b>Suunto app</b>
      </span>
   </mat-grid-tile>
+  <mat-grid-tile>
+    <app-home-live-chart>
+    </app-home-live-chart>
+  </mat-grid-tile>
   <mat-grid-tile class="app-icon">
     <button mat-flat-button color="accent" *ngIf="authService.authenticated() === null" disabled>
       Loading
@@ -28,10 +32,6 @@
       <br/>
       Charts powered by <a mat-button
                            onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>
-    </span>
-  </mat-grid-tile>
-  <mat-grid-tile>
-    <span>
       <span class="mat-body-2"><b>Version</b>: {{appVersion}}</span>
       <br/>
       <span class="mat-body-2"><b>Source code:</b></span>
