@@ -289,6 +289,11 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
       series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
       // Store at local storage the visible / non visible series
       series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
+
+      // Snap to series if distance axis
+      if (this.xAxisType === XAxisTypes.Distance){
+        this.chart.cursor.snapToSeries = series;
+      }
       this.loaded();
     });
   }
@@ -1155,10 +1160,6 @@ export class EventCardChartComponent extends ChartAbstract implements OnChanges,
         this.getSeriesRangeLabelContainer(series).deepInvalidate();
       }
 
-      // Snap to the shown series
-      if (this.xAxisType === XAxisTypes.Distance) {
-        series.chart.cursor.snapToSeries = series;
-      }
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
       this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
