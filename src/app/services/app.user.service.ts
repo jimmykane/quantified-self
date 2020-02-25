@@ -118,7 +118,7 @@ export class UserService implements OnDestroy {
       order: 0,
       type: TileTypes.Map,
       mapType: MapTypes.RoadMap,
-      mapTheme: MapThemes.Tron,
+      mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
       size: { columns: 1, rows: 1 },
