@@ -37,7 +37,7 @@
     "@angular/router": "9.0.2",
     "@google/markerclustererplus": "^5.0.1",
     "@sentry/browser": "^5.12.4",
-    "@sports-alliance/sports-lib": "^4.0.2",
+    "@sports-alliance/sports-lib": "^4.0.3",
     "@types/pako": "^1.0.1",
     "@types/uuid": "^3.4.7",
     "buffer": "^5.4.3",
