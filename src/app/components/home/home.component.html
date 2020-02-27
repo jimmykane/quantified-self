@@ -2,40 +2,48 @@
   <mat-grid-tile>
     <span>
       <span class="mat-h1">
-        <mat-icon (click)="authService.authenticated() ? router.navigate(['/dashboard']) : router.navigate(['/login']) ">filter_hdr</mat-icon>
+        <mat-icon
+          (click)="authService.authenticated() ? router.navigate(['/dashboard']) : router.navigate(['/login']) ">filter_hdr</mat-icon>
         Quantified Self is...
       </span>
       <br/>
-      A free <b>premium</b><b> analytical tool</b> for any <b>fitness device data</b><br/>
+      A free <b>premium</b><b> analytical tool</b> for any <b>fitness device data</b>
+      <br/>
+      <br/>
       Upload your <b>FIT</b>, <b>TCX</b>, <b>GPX</b> files or connect to <b>Suunto app</b>
      </span>
   </mat-grid-tile>
-  <mat-grid-tile>
-    <app-home-live-chart>
-    </app-home-live-chart>
-  </mat-grid-tile>
+  <!--  <mat-grid-tile>-->
+  <!--    <app-home-live-chart>-->
+  <!--    </app-home-live-chart>-->
+  <!--  </mat-grid-tile>-->
   <mat-grid-tile class="app-icon">
     <button mat-flat-button color="accent" *ngIf="authService.authenticated() === null" disabled>
       Loading
     </button>
-    <button mat-flat-button color="primary" *ngIf="authService.authenticated() === true" (click)="router.navigate(['/dashboard']);">
+    <button mat-flat-button color="primary" *ngIf="authService.authenticated() === true"
+            (click)="router.navigate(['/dashboard']);">
       Go to your dashboard
     </button>
-    <button mat-flat-button color="accent" *ngIf="authService.authenticated() === false" (click)="router.navigate(['/login']);">
+    <button mat-flat-button color="accent" *ngIf="authService.authenticated() === false"
+            (click)="router.navigate(['/login']);">
       Login or Register
     </button>
   </mat-grid-tile>
   <mat-grid-tile>
     <span>
-      <span>Runs on<a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a>made with<a
+      <span>Runs on<a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a></span>
+      <br/>
+      <span>Made with<a
         mat-button onclick="window.open('//angular.io')"><b>Angular</b></a></span>
       <br/>
       Charts powered by <a mat-button
                            onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>
-      <span class="mat-body-2"><b>Version</b>: {{appVersion}}</span>
       <br/>
       <span class="mat-body-2"><b>Source code:</b></span>
       <button mat-button onclick="window.open('https://github.com/jimmykane/quantified-self')">GitHub</button>
+      <br/>
+      <span class="mat-body-2"><b>Version</b>: {{appVersion}}</span>
     </span>
   </mat-grid-tile>
 </mat-grid-list>

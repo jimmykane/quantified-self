@@ -16,7 +16,7 @@
 
         <!-- Start Date -->
         <mat-form-field>
-          <input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate">
+          <input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate" (click)="startDate.open()">
           <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
           <mat-datepicker #startDate></mat-datepicker>
           <mat-hint>The start date</mat-hint>
@@ -27,7 +27,7 @@
 
         <!-- End Date -->
         <mat-form-field>
-          <input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate">
+          <input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate"  (click)="endDate.open()">
           <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
           <mat-datepicker #endDate></mat-datepicker>
           <mat-hint>The end date</mat-hint>
