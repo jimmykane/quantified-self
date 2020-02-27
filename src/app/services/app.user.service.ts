@@ -117,7 +117,7 @@ export class UserService implements OnDestroy {
       name: 'Clustered HeatMap',
       order: 0,
       type: TileTypes.Map,
-      mapType: MapTypes.RoadMap,
+      mapType: MapTypes.Terrain,
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
