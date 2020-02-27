@@ -5,8 +5,10 @@
     </div>
     <mat-card-subtitle>
       <app-map-actions
-        [(showLaps)]="showLaps"
-        [(showArrows)]="showArrows"
+        [showLaps]="showLaps"
+        [showArrows]="showArrows"
+        (showArrowsChange)="showArrowsChanged($event)"
+        (showLapsChange)="showLapsChanged($event)"
         [user]="user">
       </app-map-actions>
     </mat-card-subtitle>

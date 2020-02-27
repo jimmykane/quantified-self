@@ -10,29 +10,30 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
-import {EventColorService} from '../../../../services/color/app.event.color.service';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {LapInterface} from '@sports-alliance/sports-lib/lib/laps/lap.interface';
 import {
+  AgmMap,
   ControlPosition,
   MapTypeControlOptions,
-  MapTypeId, RotateControlOptions,
+  PolyMouseEvent,
+  RotateControlOptions,
   ZoomControlOptions
 } from '@agm/core';
-import {Log} from 'ng2-logger/browser';
-import {EventService} from '../../../../services/app.event.service';
-import {DataLatitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import {DataLongitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
-import {Subscription} from 'rxjs';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import {UserService} from '../../../../services/app.user.service';
-import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
-import {GeoLibAdapter} from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
-import {debounceTime} from 'rxjs/operators';
+import { EventColorService } from '../../../../services/color/app.event.color.service';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { LapInterface } from '@sports-alliance/sports-lib/lib/laps/lap.interface';
+import { Log } from 'ng2-logger/browser';
+import { EventService } from '../../../../services/app.event.service';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { Subscription } from 'rxjs';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { UserService } from '../../../../services/app.user.service';
+import { ActivityCursorService } from '../../../../services/activity-cursor/activity-cursor.service';
+import { GeoLibAdapter } from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
+import { debounceTime } from 'rxjs/operators';
 import { MapAbstract } from '../../../map/map.abstract';
 
 @Component({
@@ -53,9 +54,6 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   @Input() showArrows: boolean;
   @Input() strokeWidth: number;
   @Input() lapTypes: LapTypes[] = [];
-
-
-  private streamsSubscriptions: Subscription[] = [];
   public activitiesMapData: MapData[] = [];
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
@@ -66,21 +64,16 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     position: ControlPosition.LEFT_TOP,
     style: 0
   };
-
   /** key is the activity id **/
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
-
-  private activitiesCursorSubscription: Subscription;
-
-
   public rotateControlOptions: RotateControlOptions = {
     position: ControlPosition.LEFT_BOTTOM,
   };
-
   public zoomControlOptions: ZoomControlOptions = {
     position: ControlPosition.RIGHT_TOP
   };
-
+  private streamsSubscriptions: Subscription[] = [];
+  private activitiesCursorSubscription: Subscription;
   private logger = Log.create('EventCardMapAGMComponent');
 
   constructor(
@@ -92,6 +85,10 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     super(changeDetectorRef);
   }
 
+  @HostListener('window:resize', ['$event.target.innerWidth'])
+  onResize(width) {
+    this.resizeMapToBounds();
+  }
 
   ngOnInit() {
     if (!this.targetUserID || !this.event) {
@@ -127,6 +124,174 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
   }
 
+  openLapMarkerInfoWindow(lap) {
+    this.openedLapMarkerInfoWindow = lap;
+    this.openedActivityStartMarkerInfoWindow = void 0;
+  }
+
+  // getBounds(): LatLngBoundsLiteral {
+  //   const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
+  //   if (!pointsWithPosition.length) {
+  //     return <LatLngBoundsLiteral>{
+  //       east: 0,
+  //       west: 0,
+  //       north: 0,
+  //       south: 0,
+  //     };
+  //   }
+  //   const mostEast = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
+  //   });
+  //   const mostWest = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
+  //   });
+  //
+  //   const mostNorth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
+  //   });
+  //
+  //   const mostSouth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+  //     return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
+  //   });
+  //
+  //   return <LatLngBoundsLiteral>{
+  //     east: mostEast.longitudeDegrees,
+  //     west: mostWest.longitudeDegrees,
+  //     north: mostNorth.latitudeDegrees,
+  //     south: mostSouth.latitudeDegrees,
+  //   };
+  // }
+
+  openActivityStartMarkerInfoWindow(activity) {
+    this.openedActivityStartMarkerInfoWindow = activity;
+    this.openedLapMarkerInfoWindow = void 0;
+  }
+
+  getMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M22-48h-44v43h16l6 5 6-5h16z',
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.5,
+      scale: 0.5,
+      labelOrigin: {
+        x: 0,
+        y: -24
+      }
+    }
+  }
+
+  //
+  getHomeMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
+      scale: 1.2,
+      anchor: {x: 12, y: 12}
+    }
+  }
+
+  getFlagMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
+      scale: 1,
+      anchor: {x: 6, y: 24}
+    }
+  }
+
+  getCursorMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 1,
+      scale: 1.2,
+      anchor: {x: 12, y: 12}
+    }
+  }
+
+  // @todo make prop
+  getLabel(text) {
+    return {
+      color: 'white',
+      fontSize: '14px',
+      text: text
+    }
+  }
+
+  async lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
+    this.activityCursorService.clear();
+    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
+      latitude: event.latLng.lat(),
+      longitude: event.latLng.lng()
+    }, activityMapData.positions.map(a => {
+      return {latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time}
+    }));
+
+    if (!nearest) {
+      return;
+    }
+
+    this.activityCursorService.setCursor({
+      activityID: activityMapData.activity.getID(),
+      time: nearest.time,
+    });
+  }
+
+  // getStyles(mapTheme: MapThemes) {
+  //   return mapStyles[mapTheme]
+  // }
+
+  lineMouseOut(event: PolyMouseEvent, activityMapData: MapData) {
+    // this.activitiesCursors.delete(activityMapData.activity.getID());
+  }
+
+  getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
+    return Array.from(map.values());
+  }
+
+  async changeMapType(mapType) {
+    if (!this.user) {
+      return;
+    }
+    this.user.settings.mapSettings.mapType = mapType;
+    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async showLapsChanged(showLaps) {
+    this.showLaps = showLaps
+    if (this.user) {
+      this.user.settings.mapSettings.showLaps = this.showLaps;
+      return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    }
+    this.bindToNewData();
+  }
+
+  async showArrowsChanged(showArrows) {
+    this.showArrows = showArrows
+    if (this.user) {
+      this.user.settings.mapSettings.showArrows = this.showArrows;
+      return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    }
+    this.bindToNewData();
+  }
+
+  ngOnDestroy(): void {
+    this.unSubscribeFromAll();
+    this.streamsSubscriptions.forEach((streamsSubscription) => {
+      streamsSubscription.unsubscribe()
+    })
+  }
+
   private bindToNewData() {
     this.logger.info(`Binding to new data`);
     this.loading();
@@ -147,7 +312,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       cursors.forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
         if (cursorActivityMapData) {
-          const position = cursorActivityMapData.positions.reduce((prev, curr) => Math.abs(curr.time -  cursor.time) < Math.abs(prev.time -  cursor.time) ? curr : prev);
+          const position = cursorActivityMapData.positions.reduce((prev, curr) => Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
           if (position) {
             this.activitiesCursors.set(cursor.activityID, {
               latitudeDegrees: position.latitudeDegrees,
@@ -227,161 +392,6 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
           this.loaded();
           this.resizeMapToBounds();
         }))
-    })
-  }
-
-  // getBounds(): LatLngBoundsLiteral {
-  //   const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
-  //   if (!pointsWithPosition.length) {
-  //     return <LatLngBoundsLiteral>{
-  //       east: 0,
-  //       west: 0,
-  //       north: 0,
-  //       south: 0,
-  //     };
-  //   }
-  //   const mostEast = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
-  //   });
-  //   const mostWest = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
-  //   });
-  //
-  //   const mostNorth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
-  //   });
-  //
-  //   const mostSouth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
-  //   });
-  //
-  //   return <LatLngBoundsLiteral>{
-  //     east: mostEast.longitudeDegrees,
-  //     west: mostWest.longitudeDegrees,
-  //     north: mostNorth.latitudeDegrees,
-  //     south: mostSouth.latitudeDegrees,
-  //   };
-  // }
-
-  openLapMarkerInfoWindow(lap) {
-    this.openedLapMarkerInfoWindow = lap;
-    this.openedActivityStartMarkerInfoWindow = void 0;
-  }
-
-  openActivityStartMarkerInfoWindow(activity) {
-    this.openedActivityStartMarkerInfoWindow = activity;
-    this.openedLapMarkerInfoWindow = void 0;
-  }
-
-  getMarkerIcon(activity: ActivityInterface) {
-    return {
-      path: 'M22-48h-44v43h16l6 5 6-5h16z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.5,
-      scale: 0.5,
-      labelOrigin: {
-        x: 0,
-        y: -24
-      }
-    }
-  }
-
-  //
-  getHomeMarkerIcon(activity: ActivityInterface) {
-    return {
-      path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.8,
-      scale: 1.2,
-      anchor: {x: 12, y: 12}
-    }
-  }
-
-  getFlagMarkerIcon(activity: ActivityInterface) {
-    return {
-      path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.8,
-      scale: 1,
-      anchor: {x: 6, y: 24}
-    }
-  }
-
-  getCursorMarkerIcon(activity: ActivityInterface) {
-    return {
-      path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 1,
-      scale: 1.2,
-      anchor: {x: 12, y: 12}
-    }
-  }
-
-  // @todo make prop
-  getLabel(text) {
-    return {
-      color: 'white',
-      fontSize: '14px',
-      text: text
-    }
-  }
-
-  // getStyles(mapTheme: MapThemes) {
-  //   return mapStyles[mapTheme]
-  // }
-
-  async lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
-    this.activityCursorService.clear();
-    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
-      latitude: event.latLng.lat(),
-      longitude: event.latLng.lng()
-    }, activityMapData.positions.map(a => {
-      return {latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time}
-    }));
-
-    if (!nearest) {
-      return;
-    }
-
-    this.activityCursorService.setCursor({
-      activityID: activityMapData.activity.getID(),
-      time: nearest.time,
-    });
-  }
-
-  lineMouseOut(event: PolyMouseEvent, activityMapData: MapData) {
-    // this.activitiesCursors.delete(activityMapData.activity.getID());
-  }
-
-  getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
-    return Array.from(map.values());
-  }
-
-  async changeMapType(mapType) {
-    if (!this.user) {
-      return;
-    }
-    this.user.settings.mapSettings.mapType = mapType;
-    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
-  }
-
-  @HostListener('window:resize', ['$event.target.innerWidth'])
-  onResize(width) {
-    this.resizeMapToBounds();
-  }
-
-  ngOnDestroy(): void {
-    this.unSubscribeFromAll();
-    this.streamsSubscriptions.forEach((streamsSubscription) => {
-      streamsSubscription.unsubscribe()
     })
   }
 
