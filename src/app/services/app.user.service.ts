@@ -390,7 +390,7 @@ export class UserService implements OnDestroy {
     settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
     settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || UserService.getDefaultUserChartSettingsDataTypeSettings();
     settings.chartSettings.theme = settings.chartSettings.theme || UserService.getDefaultChartTheme();
-    settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== false;
+    settings.chartSettings.useAnimations = settings.chartSettings.useAnimations !== true;
     settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || UserService.getDefaultXAxisType();
     settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
     settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || UserService.getDefaultDownSamplingLevel();

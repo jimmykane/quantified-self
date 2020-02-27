@@ -2,11 +2,12 @@
   <section class="item">
     <section class="item">
       <mat-slide-toggle
+        [disabled]="!user"
         [color]="'accent'"
         (change)="somethingChanged($event)"
         (click)="$event.stopPropagation();"
         [(ngModel)]="stackYAxes">
-      <span matTooltip="Show charts on top of each other">
+      <span [matTooltip]="user ? 'Show charts on top of each other' : 'You need to sign in to user this feature'">
         Stack Y Axes
       </span>
       </mat-slide-toggle>
@@ -14,11 +15,12 @@
 
     <section class="item">
       <mat-slide-toggle
+        [disabled]="!user"
         [color]="'accent'"
         (change)="somethingChanged($event)"
         (click)="$event.stopPropagation();"
         [(ngModel)]="showLaps">
-      <span matTooltip="When enabled auto lap markers will be added to the chart">
+      <span [matTooltip]="user ? 'When enabled auto lap markers will be added to the chart' :  'You need to sign in to user this feature'">
         Show laps
       </span>
       </mat-slide-toggle>
@@ -26,11 +28,12 @@
 
     <section class="item">
       <mat-slide-toggle
+        [disabled]="!user"
         [color]="'accent'"
         (change)="somethingChanged($event)"
         (click)="$event.stopPropagation();"
         [(ngModel)]="showAllData">
-      <span matTooltip="Show everything that was read from the file">
+      <span [matTooltip]="user ? 'Show everything that was read from the file' :  'You need to sign in to user this feature'">
         Show all data
       </span>
       </mat-slide-toggle>
@@ -40,7 +43,11 @@
   <section class="item">
     <mat-form-field>
       <mat-label>X Axis type</mat-label>
-      <mat-select placeholder="X Axis type" [(value)]="xAxisType" (selectionChange)="somethingChanged($event)">
+      <mat-select
+        [disabled]="!user"
+        placeholder="X Axis type"
+        [(value)]="xAxisType"
+        (selectionChange)="somethingChanged($event)">
         <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
           {{xAxisType.key}}
         </mat-option>

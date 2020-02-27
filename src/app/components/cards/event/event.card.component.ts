@@ -40,7 +40,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public showChartLaps = true;
   public showChartGrid = true;
   public stackChartYAxes = true;
-  public useChartAnimations = true;
+  public useChartAnimations = false;
   public chartDisableGrouping = false;
   public chartHideAllSeriesOnInit = false;
   public chartXAxisType = XAxisTypes.Duration;
