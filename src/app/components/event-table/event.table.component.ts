@@ -346,6 +346,7 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
   }
 
   async pageChanges(pageEvent: PageEvent) {
+    // @important This is nasty because it's called if anything almost changes
     this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
@@ -371,13 +372,4 @@ export class MatPaginatorIntlFireStore extends MatPaginatorIntl {
   itemsPerPageLabel = 'Items';
   nextPageLabel = 'Next';
   previousPageLabel = 'Previous';
-
-  // getRangeLabel = (page: number, pageSize: number, length: number): string => {
-  //   debugger;
-  //   if (length === (page + 2) * pageSize) {
-  //     return `${page * pageSize} - ${(page + 1) * pageSize}`
-  //   }
-  //
-  //   return `${page * pageSize} - ${length} `
-  // }
 }

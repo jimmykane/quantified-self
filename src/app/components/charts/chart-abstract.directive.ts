@@ -101,7 +101,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstract implements 
     this.zone.runOutsideAngular(() => {
       am4core.unuseAllThemes();
       am4core.useTheme(this.themes[chartTheme]);
-      if (useAnimations !== false) {
+      if (useAnimations === true) {
         am4core.useTheme(animated);
       }
     });
@@ -110,6 +110,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstract implements 
   protected destroyChart() {
     try {
       this.zone.runOutsideAngular(() => {
+        am4core.unuseAllThemes();
         if (this.chart) {
           this.chart.dispose();
           // delete this.chart

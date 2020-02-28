@@ -82,13 +82,13 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
   ngOnInit() {
   }
 
-  ngOnChanges(simpleChanges: SimpleChanges) {
+  async ngOnChanges(simpleChanges: SimpleChanges) {
     if (simpleChanges.events || simpleChanges.user) {
-      this.unsubscribeAndCreateCharts();
+      return this.unsubscribeAndCreateCharts();
     }
   }
 
-  private unsubscribeAndCreateCharts() {
+  private async unsubscribeAndCreateCharts() {
     this.unsubscribeFromAll();
     // Subscribe to the chartTheme changes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {

@@ -1,23 +1,35 @@
-import {Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges} from '@angular/core';
-import {FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators} from '@angular/forms';
-import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {MatSelectChange} from '@angular/material/select';
+import {
+  ChangeDetectionStrategy, ChangeDetectorRef,
+  Component,
+  EventEmitter,
+  Input,
+  OnChanges,
+  OnInit,
+  Output,
+  SimpleChanges
+} from '@angular/core';
+import { FormControl, FormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
+import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { MatSelectChange } from '@angular/material/select';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
+import { LoadingAbstract } from '../loading/loading.abstract';
 
 @Component({
   selector: 'app-event-search',
   templateUrl: './event-search.component.html',
   styleUrls: ['./event-search.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventSearchComponent implements OnChanges, OnInit {
+export class EventSearchComponent extends LoadingAbstract implements OnChanges, OnInit {
   @Input() selectedDateRange: DateRanges;
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;
   @Input() startOfTheWeek: DaysOfTheWeek;
   @Input() selectedActivityTypes: ActivityTypes[];
+  @Input() isLoading: boolean;
 
   @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 
@@ -26,7 +38,10 @@ export class EventSearchComponent implements OnChanges, OnInit {
   public currentYear = new Date().getFullYear();
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
-  constructor() {
+
+
+  constructor(changeDetector: ChangeDetectorRef) {
+    super(changeDetector);
   }
 
   ngOnInit(): void {

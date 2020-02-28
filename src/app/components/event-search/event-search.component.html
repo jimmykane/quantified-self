@@ -7,9 +7,9 @@
   <!--    </button>-->
   <!--    <mat-hint>Absolute name</mat-hint>-->
   <!--  </mat-form-field>-->
+  <app-shade [isActive]="isLoading"></app-shade>
 
   <section>
-
     <mat-form-field style=" margin-right: 1em;" class="big">
       <input matInput [matDatepicker]="startDatepicker" (click)="startDatepicker.open()" placeholder="From 00:00:00"
              (dateChange)="onDateChange($event)"
@@ -53,11 +53,7 @@
     <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select
       a range up to 3 months
     </mat-error>
-
-
   </section>
-
-
   <section>
     <mat-button-toggle-group [value]="selectedDateRange"
                              (change)="dateToggleChange($event)">
@@ -103,12 +99,7 @@
         mat-stroked-button class="search-button" color="primary" (click)="onSubmit($event)">search
       </button>
     </mat-button-toggle-group>
-
-
   </section>
-
-
-
 </form>
 
 

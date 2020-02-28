@@ -18,8 +18,8 @@ import { EventColorService } from '../../../services/color/app.event.color.servi
 
 import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
 import { AppColors } from '../../../services/color/app.colors';
-import { ActivityTypes } from "@sports-alliance/sports-lib/lib/activities/activity.types";
-import { ChartDataCategoryTypes } from "@sports-alliance/sports-lib/lib/tiles/tile.settings.interface";
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 
 
 @Component({
