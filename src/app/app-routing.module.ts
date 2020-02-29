@@ -4,9 +4,8 @@ import {HomeComponent} from './components/home/home.component';
 import {AppAuthGuard} from './authentication/app.auth.guard';
 
 const routes: Routes = [
-  {path: 'home', loadChildren: () => import('./modules/home.module').then(module => module.HomeModule), data: {title: 'Home', animation: 'Home'}},
   {path: 'services', loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule), data: {title: 'Services', animation: 'Services'}},
-  // {path: '', redirectTo: 'home', pathMatch: 'full'},
+  {path: '', loadChildren: () => import('./modules/home.module').then(module => module.HomeModule), data: {title: 'Home', animation: 'Home'}},
   {path: 'login', loadChildren: () => import('./modules/login.module').then(module => module.LoginModule), data: {title: 'Login', animation: 'Login'}},
   {path: 'dashboard', loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule ), data: {title: 'Dashboard', animation: 'Dashboard'}},
   {path: 'user/:userID', loadChildren: () => import('./modules/user.module').then(module => module.UserModule), data: {title: 'Profile', animation: 'User'}},
