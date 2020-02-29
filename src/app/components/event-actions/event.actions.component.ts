@@ -6,7 +6,6 @@ import {FileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {EventExporterJSON} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {ClipboardService} from '../../services/app.clipboard.service';
 import {SharingService} from '../../services/app.sharing.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
@@ -17,6 +16,7 @@ import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/e
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
+import { Clipboard } from '@angular/cdk/clipboard';
 
 @Component({
   selector: 'app-event-actions',
@@ -37,7 +37,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
-    private clipboardService: ClipboardService,
+    private clipboardService: Clipboard,
     private sharingService: SharingService,
     private fileService: FileService,
     private deleteConfirmationBottomSheet: MatBottomSheet,
@@ -55,7 +55,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (this.event.privacy !== Privacy.Public) {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
-    this.clipboardService.copyToClipboard(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
+    this.clipboardService.copy(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
     this.afa.logEvent('share', {method: 'event_actions', content_type: 'event'});
     this.snackBar.open('Privacy is changed to public and link copied to your clipboard', null, {
       duration: 20000,

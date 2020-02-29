@@ -1,16 +1,13 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-// import {EventExporterTCX} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.tcx';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import {EventExporterJSON} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {ClipboardService} from '../../services/app.clipboard.service';
 import {SharingService} from '../../services/app.sharing.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {UserService} from '../../services/app.user.service';
 import {UserFormComponent} from '../user-forms/user.form.component';
+import { Clipboard } from '@angular/cdk/clipboard';
 
 @Component({
   selector: 'app-user-actions',
@@ -28,7 +25,7 @@ export class UserActionsComponent implements OnInit {
     private userService: UserService,
     private router: Router,
     private snackBar: MatSnackBar,
-    private clipboardService: ClipboardService,
+    private clipboardService: Clipboard,
     private sharingService: SharingService,
     private dialog: MatDialog) {
   }
@@ -43,7 +40,7 @@ export class UserActionsComponent implements OnInit {
     if (this.user.privacy !== Privacy.Public) {
       await this.userService.setUserPrivacy(this.user, Privacy.Public);
     }
-    this.clipboardService.copyToClipboard(this.sharingService.getShareURLForUser(this.user.uid));
+    this.clipboardService.copy(this.sharingService.getShareURLForUser(this.user.uid));
     this.snackBar.open('Your user privacy is now changed to public and share url is copied to clipboard', null, {
       duration: 20000,
     });

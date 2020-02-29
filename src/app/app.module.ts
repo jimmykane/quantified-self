@@ -25,7 +25,6 @@ import {ChartSettingsLocalStorageService} from './services/storage/app.chart.set
 import {EventService} from './services/app.event.service';
 import {ActionButtonService} from './services/action-buttons/app.action-button.service';
 import {EventColorService} from './services/color/app.event.color.service';
-import {ClipboardService} from './services/app.clipboard.service';
 import {SharingService} from './services/app.sharing.service';
 import {FileService} from './services/app.file.service';
 import {UserService} from './services/app.user.service';
@@ -42,6 +41,7 @@ import {
 } from '@angular/fire/analytics';
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
+import { ClipboardModule } from '@angular/cdk/clipboard';
 
 declare function require(moduleName: string): any;
 
@@ -81,6 +81,7 @@ export class SentryErrorHandler implements ErrorHandler {
     AngularFireAuthModule,
     AngularFirePerformanceModule,
     AngularFireAnalyticsModule,
+    ClipboardModule,
     MaterialModule,
     AgmCoreModule.forRoot({
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
@@ -100,7 +101,6 @@ export class SentryErrorHandler implements ErrorHandler {
     EventService,
     ActionButtonService,
     EventColorService,
-    ClipboardService,
     SharingService,
     FileService,
     UserService,
