@@ -42,6 +42,7 @@ import {
 import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
 import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
 import { ClipboardModule } from '@angular/cdk/clipboard';
+import { ServiceWorkerModule } from '@angular/service-worker';
 
 declare function require(moduleName: string): any;
 
@@ -87,7 +88,8 @@ export class SentryErrorHandler implements ErrorHandler {
       apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
       apiVersion: 'weekly',
       libraries: ['visualization']
-    })
+    }),
+    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production })
   ],
   declarations: [
     AppComponent,
