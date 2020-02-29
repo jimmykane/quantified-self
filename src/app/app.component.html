@@ -8,7 +8,7 @@
 <!--    <a matTabLink (click)="sidenav.toggle()">-->
 <!--      <mat-icon class="larger_icon">menu</mat-icon>-->
 <!--    </a>-->
-    <a matTabLink *ngIf="title !== 'Dashboard'" [routerLink]="authService.authenticated() ? ['dashboard'] : title === 'Login' ? ['home'] : ['login']">
+    <a matTabLink *ngIf="title !== 'Dashboard'" [routerLink]="authService.authenticated() ? ['dashboard'] : title === 'Login' ? ['/'] : ['login']">
       <mat-icon class="app-icon">{{authService.authenticated()? 'dashboard' : 'filter_hdr' }}</mat-icon>
     </a>
     <a matTabLink *ngIf="title === 'Dashboard'" (click)="sidenav.toggle()">

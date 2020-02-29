@@ -1,7 +1,7 @@
 <mat-toolbar>
   <mat-toolbar-row
     class="mat-elevation-z0"
-    routerLink="/home"
+    routerLink="/"
     (click)="sideNav.close();">
       <mat-icon class="app-icon">filter_hdr</mat-icon>
       Quantified Self &nbsp;
@@ -15,7 +15,7 @@
   <mat-list-item
     *ngIf="!authService.authenticated()"
     routerLinkActive="mat-elevation-z0 active"
-    routerLink="/home"
+    routerLink="/"
     (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
     <span>Home</span>

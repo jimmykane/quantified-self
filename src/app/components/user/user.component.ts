@@ -46,7 +46,7 @@ export class UserComponent implements OnInit, OnDestroy {
     })).subscribe((targetUser) => {
       // 3. If no target shoo
       if (!targetUser) {
-        this.router.navigate(['home']).then(() => {
+        this.router.navigate(['/']).then(() => {
           this.snackBar.open('Not found...', null, {
             duration: 10000,
           });

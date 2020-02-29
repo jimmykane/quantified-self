@@ -128,7 +128,7 @@ export class UserFormComponent implements OnInit {
       await this.userService.deleteAllUserData(this.user);
       this.afa.logEvent('user_delete', {});
       await this.authService.signOut();
-      await this.router.navigate(['home']);
+      await this.router.navigate(['/']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {
         duration: 5000,
       });
