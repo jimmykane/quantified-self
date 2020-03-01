@@ -44,8 +44,8 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     chart.fontSize = '0.8em'
     // chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 5, 0, 5);
-    chart.radius = am4core.percent(65);
-    chart.innerRadius = am4core.percent(50);
+    chart.radius = am4core.percent(55);
+    chart.innerRadius = am4core.percent(45);
 
     const pieSeries = chart.series.push(new am4charts.PieSeries());
     pieSeries.dataFields.value = 'value';
@@ -81,11 +81,15 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       }
       try {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+        return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+        // return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       } catch (e) {
         Sentry.captureException(e);
       }
     });
+
+    pieSeries.labels.template.wrap = true
+    pieSeries.labels.template.maxWidth = 70
 
     const label = pieSeries.createChild(am4core.Label);
     label.horizontalCenter = 'middle';
@@ -105,9 +109,9 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     }
     label.adapter.add('textOutput', (text, target, key) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `[font-size: 1.3em]${data.getDisplayType()}[/]
-              [font-size: 1.4em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
-              [font-size: 1.0em]${this.chartDataValueType}[/]`
+      return `[font-size: 1.2em]${data.getDisplayType()}[/]
+              [font-size: 1.3em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
+              [font-size: 0.9em]${this.chartDataValueType}[/]`
     });
 
     // chart.exporting.menu = this.getExportingMenu();
