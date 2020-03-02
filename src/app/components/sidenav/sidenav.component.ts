@@ -42,7 +42,7 @@ export class SideNavComponent implements OnInit {
 
   async logout() {
     this.afa.logEvent('logout', {});
-    this.router.navigate(['/home']).then(async () => {
+    this.router.navigate(['/']).then(async () => {
       await this.authService.signOut();
       localStorage.clear();
       this.windowService.windowRef.location.reload();
