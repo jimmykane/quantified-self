@@ -11,7 +11,7 @@ const routes: Routes = [
   {path: 'user/:userID', loadChildren: () => import('./modules/user.module').then(module => module.UserModule), data: {title: 'Profile', animation: 'User'}},
   {path: 'user/:userID/event/:eventID', loadChildren: () => import('./modules/event.module').then(module => module.EventModule ), data: {title: 'Event Details', animation: 'Event'}},
   {path: 'policies', loadChildren: () => import('./modules/policies.module').then(module => module.PoliciesModule), data: {title: 'Policies', animation: 'Policies'}},
-  {path: '**', redirectTo: 'home', pathMatch: 'full' },
+  {path: '**', redirectTo: '/', pathMatch: 'full' },
 ];
 
 @NgModule({
