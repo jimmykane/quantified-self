@@ -63,6 +63,9 @@ export class TileActionsAbstract extends TileAbstract {
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
+  /**
+   * see https://github.com/angular/components/issues/11677
+   */
   fixDisappearIOSBug () {
     const styleNode = document.createElement('style');
     styleNode.type = 'text/css';
