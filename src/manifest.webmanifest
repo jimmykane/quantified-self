@@ -2,7 +2,7 @@
   "short_name": "Quantified Self",
   "name": "Quantified Self",
   "description": "A free premium analytical tool for any fitness device data. Upload your FIT, TCX, GPX files or connect to other services such as Suunto app",
-  "theme_color": "#ff4081",
+  "theme_color": "#03a9f4",
   "background_color": "#FFFFFF",
   "display": "standalone",
   "scope": "./",
