@@ -345,10 +345,11 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
     }
   }
 
+  // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
     // @important This is nasty because it's called if anything almost changes
-    this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    // this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
+    // return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   search(searchTerm) {
