@@ -2,7 +2,6 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  <ng-template matMenuContent>
     <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 11">
       <button mat-menu-item class="big" (click)="addNewTile($event)">
         <mat-icon>add</mat-icon>
@@ -130,5 +129,4 @@
         <mat-icon>delete_outline</mat-icon>
       </button>
     </section>
-  </ng-template>
 </mat-menu>
