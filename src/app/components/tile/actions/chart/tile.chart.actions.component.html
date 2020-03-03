@@ -1,4 +1,4 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation();">
+<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">

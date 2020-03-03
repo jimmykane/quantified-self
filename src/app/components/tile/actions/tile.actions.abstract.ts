@@ -62,5 +62,16 @@ export class TileActionsAbstract extends TileAbstract {
       });
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
+
+  fixDisappearIOSBug () {
+    const styleNode = document.createElement('style');
+    styleNode.type = 'text/css';
+    styleNode.id = 'panel-fix';
+    styleNode.appendChild(document.createTextNode('.mat-menu-panel{overflow: initial !important;}'));
+    document.getElementsByTagName('head')[0].appendChild(styleNode);
+    setTimeout(() => {
+      styleNode.remove();
+    }, 500);
+  }
 }
 
