@@ -17,7 +17,7 @@ import {
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
 import {
-  DaysOfTheWeek,
+  DaysOfTheWeek, GradeAdjustedPaceUnits, GradeAdjustedSpeedUnits,
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
@@ -208,8 +208,16 @@ export class UserService implements OnDestroy {
     return [SpeedUnits.MetersPerSecond];
   }
 
+  static getDefaultGradeAdjustedSpeedUnits(): GradeAdjustedSpeedUnits[] {
+    return [GradeAdjustedSpeedUnits.MetersPerSecond];
+  }
+
   static getDefaultPaceUnits(): PaceUnits[] {
     return [PaceUnits.MinutesPerKilometer];
+  }
+
+  static getDefaultGradeAdjustedPaceUnits(): GradeAdjustedPaceUnits[] {
+    return [GradeAdjustedPaceUnits.MinutesPerKilometer]
   }
 
   static getDefaultSwimPaceUnits(): SwimPaceUnits[] {
@@ -220,10 +228,12 @@ export class UserService implements OnDestroy {
     return [VerticalSpeedUnits.MetersPerSecond];
   }
 
-  static getDefaultUserUnitSettings(): UserUnitSettingsInterface{
+  static getDefaultUserUnitSettings(): UserUnitSettingsInterface {
     const unitSettings = <UserUnitSettingsInterface>{};
     unitSettings.speedUnits = UserService.getDefaultSpeedUnits();
+    unitSettings.gradeAdjustedSpeedUnits = UserService.getDefaultGradeAdjustedSpeedUnits();
     unitSettings.paceUnits = UserService.getDefaultPaceUnits();
+    unitSettings.gradeAdjustedPaceUnits = UserService.getDefaultGradeAdjustedPaceUnits();
     unitSettings.swimPaceUnits =  UserService.getDefaultSwimPaceUnits();
     unitSettings.verticalSpeedUnits = UserService.getDefaultVerticalSpeedUnits();
     unitSettings.startOfTheWeek = UserService.getDefaultStartOfTheWeek();
@@ -410,6 +420,8 @@ export class UserService implements OnDestroy {
     // Units
     settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
     settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || UserService.getDefaultSpeedUnits();
+    settings.unitSettings.gradeAdjustedSpeedUnits = settings.unitSettings.gradeAdjustedSpeedUnits || UserService.getDefaultGradeAdjustedSpeedUnits();
+    settings.unitSettings.gradeAdjustedPaceUnits = settings.unitSettings.gradeAdjustedPaceUnits || UserService.getDefaultGradeAdjustedPaceUnits();
     settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || UserService.getDefaultPaceUnits();
     settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || UserService.getDefaultSwimPaceUnits();
     settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || UserService.getDefaultVerticalSpeedUnits();

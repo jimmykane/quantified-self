@@ -79,6 +79,17 @@ import {
   ActivityCursorInterface,
   ActivityCursorService
 } from '../../../../services/activity-cursor/activity-cursor.service';
+import {
+  DataGradeAdjustedPace,
+  DataGradeAdjustedPaceMinutesPerMile
+} from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
+import {
+  DataGradeAdjustedSpeed,
+  DataGradeAdjustedSpeedFeetPerMinute,
+  DataGradeAdjustedSpeedFeetPerSecond, DataGradeAdjustedSpeedKilometersPerHour,
+  DataGradeAdjustedSpeedMetersPerMinute,
+  DataGradeAdjustedSpeedMilesPerHour
+} from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -245,6 +256,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           return [];
         }
         const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
+        const shouldRemoveGradeAdjustedSpeed = this.getNonUnitBasedDataTypes().indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
         const shouldRemoveDistance = this.getNonUnitBasedDataTypes().indexOf(DataDistance.type) === -1;
         const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
           return DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
@@ -252,7 +264,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return unitStreams.filter((stream) => {
           // Filter out pace if swimming
           if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1) {
-            return [DataPace.type, DataPaceMinutesPerMile.type].indexOf(stream.type) === -1;
+            return [DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) === -1;
           }
           // @todo remove speed etc from eg Running and so on
           return [DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type].indexOf(stream.type) === -1;
@@ -263,6 +275,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
               return false;
             }
             if (shouldRemoveSpeed && stream.type === DataSpeed.type) {
+              return false;
+            }
+            if (shouldRemoveGradeAdjustedSpeed && stream.type === DataGradeAdjustedSpeed.type) {
               return false;
             }
             return true;
@@ -608,7 +623,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       return 0;
     });
 
-    series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
+    series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
       `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`
       : `${this.event.getActivities().length === 1 ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
@@ -712,7 +727,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       yAxis.renderer.minGridDistance = 15;
 
       // Data specifics setup
-      if ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(series.dummyData.stream.type) !== -1) {
+      if ([DataPace.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(series.dummyData.stream.type) !== -1) {
         yAxis.renderer.inversed = true;
         yAxis.baseValue = Infinity;
         yAxis.extraMin = 0.0;
@@ -1188,7 +1203,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   protected createYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if ([DataPace.type, DataPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
+    if ([DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
       yAxis = new am4charts.DurationAxis();
     } else {
       yAxis = new am4charts.ValueAxis();
@@ -1232,6 +1247,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
       return 'Pace'
     }
+    if ([DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(name) !== -1) {
+      return 'Pace'
+    }
     if ([
       DataSpeed.type,
       DataStrydSpeed.type,
@@ -1239,7 +1257,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       DataSpeedFeetPerMinute.type,
       DataSpeedFeetPerSecond.type,
       DataSpeedMilesPerHour.type,
-      DataSpeedKilometersPerHour.type
+      DataSpeedKilometersPerHour.type,
+      DataGradeAdjustedSpeed.type,
+      DataGradeAdjustedSpeedMetersPerMinute.type,
+      DataGradeAdjustedSpeedFeetPerMinute.type,
+      DataGradeAdjustedSpeedFeetPerSecond.type,
+      DataGradeAdjustedSpeedMilesPerHour.type,
+      DataGradeAdjustedSpeedKilometersPerHour.type,
     ].indexOf(name) !== -1) {
       return 'Speed'
     }

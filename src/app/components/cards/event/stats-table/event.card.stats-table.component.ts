@@ -14,6 +14,7 @@ import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity
 import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
 import {DataTableAbstract} from '../../../data-table/data-table.abstract';
 import {EventColorService} from '../../../../services/color/app.event.color.service';
+import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -36,7 +37,7 @@ export class EventCardStatsTableComponent implements OnChanges {
   ngOnChanges(simpleChanges) {
     this.data = new MatTableDataSource<Object>();
     this.columns = [];
-    if (!this.selectedActivities.length) {
+    if (!this.selectedActivities.length || !this.userUnitSettings) {
       return;
     }
 
@@ -48,6 +49,7 @@ export class EventCardStatsTableComponent implements OnChanges {
 
     // Collect all the stat types from all the activities
     // @todo refactor and extract to service
+    // @todo perfromance this costs! Gets called more than 1-2 times, about 5
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
       Array.from(activity.getStats().values()).forEach((stat) => {
         // If its not derived set it
@@ -65,6 +67,14 @@ export class EventCardStatsTableComponent implements OnChanges {
         if (
           (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
           || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
+        ) {
+          statsMap.set(stat.getType(), stat);
+          return;
+        }
+
+        if (
+          (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataGradeAdjustedPace.type && this.userUnitSettings.gradeAdjustedPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
+          || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataGradeAdjustedPace.type && this.userUnitSettings.gradeAdjustedPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
         ) {
           statsMap.set(stat.getType(), stat);
           return;

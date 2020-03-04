@@ -25,6 +25,8 @@ import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/li
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import {DataTotalTrainingEffect} from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
+import { DataGradeAdjustedSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -78,6 +80,7 @@ export class EventCardStatsGridComponent implements OnChanges {
       DataVO2Max.type,
       DataTemperatureAvg.type,
       DataSpeedAvg.type,
+      // DataGradeAdjustedSpeedAvg.type,
     ].reduce((statsAccu, statType) => {
       if (statType === DataSpeedAvg.type) {
         return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
