@@ -15,7 +15,11 @@
             </p>
             <p class="mat-small mat-error" *ngIf="!user || this.isGuest">You must login with a non guest account to activate service syncing</p>
 
-            <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>
+            <app-upload-route class="button-block" *ngIf="serviceTokens && serviceTokens.length" [user]="user"></app-upload-route>
+
+<!--            <mat-divider [inset]="true"></mat-divider>-->
+
+            <button class="big button-block" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>
 
             <button  [class.big]="(!user || this.isGuest ) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
                     *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
@@ -46,9 +50,6 @@
             </section>
           </form>
         </section>
-      </section>
-      <section>
-        <app-upload-route *ngIf="serviceTokens && serviceTokens.length" [user]="user"></app-upload-route>
       </section>
     </mat-grid-tile>
   </mat-grid-list>

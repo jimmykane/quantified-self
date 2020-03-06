@@ -256,7 +256,7 @@ function determineRedirectURI(req: Request): string {
 export function setAccessControlHeadersOnResponse(req: Request, res: functions.Response) {
   res.set('Access-Control-Allow-Origin', `${req.get('origin')}`);
   res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept');
+  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept, authorization');
   return res;
 }
 

@@ -1,6 +1,7 @@
 mat-card {
   /*margin-bottom: 1vh;*/
   text-align: center;
+  padding: 0;
 }
 
 button {
@@ -16,3 +17,4 @@ a {
 a:last-child{
   margin-left: 2%;
 }
+

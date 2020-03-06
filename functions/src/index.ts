@@ -15,5 +15,6 @@ export * from "./service-tokens"
 export * from "./insert-to-queue"
 export * from "./parse-queue"
 export * from "./history-to-queue"
+export * from "./routes"
 // export * from "./migrations"
 

@@ -35,7 +35,10 @@ mat-icon.suunto{
   font-size: 0.75em;
 }
 
-.history{
+.button-block{
   display: block;
   margin-bottom: 2em;
+}
+
+app-upload-route{
 }

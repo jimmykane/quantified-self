@@ -10,7 +10,7 @@ import { Log } from 'ng2-logger/browser';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { environment } from '../../../environments/environment';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { FileMetaData } from '../upload/upload.component';
 
@@ -53,16 +53,38 @@ export class UploadRouteComponent implements OnInit {
    * @param metaData
    */
   async uploadRouteFromFile(metaData: FileMetaData) {
-    const formData: FormData = new FormData();
-    formData.append('gpx', metaData.file, metaData.name);
-    formData.append('firebaseAuthToken', await (await this.afAuth.currentUser).getIdToken(true));
-    try {
-      const result = await this.http.post(environment.functions.uploadRoute, formData).toPromise();
-    } catch (e) {
-      Sentry.captureException(e);
-      this.snackBar.open(`Could not upload ${metaData.filename}, reason: ${e.message}`);
-    }
-    debugger;
+    return new Promise((resolve, reject) => {
+      const fileReader = new FileReader;
+      fileReader.onload = async () => {
+        if (!(typeof fileReader.result === 'string') || metaData.extension !== 'gpx') {
+          reject(`Not a GPX file`)
+        }
+        try {
+          const result = await this.http.post(environment.functions.uploadRoute,
+            fileReader.result,
+            {
+              headers:
+                new HttpHeaders({
+                  // 'Content-Type': 'application/json',
+                  'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+                })
+            }).toPromise();
+        } catch (e) {
+          Sentry.captureException(e);
+          this.snackBar.open(`Could not upload ${metaData.filename}, reason: ${e.message}`);
+          reject(`Could not upload ${metaData.filename}, reason: ${e.message}`);
+          return;
+        }
+        resolve();
+      }
+
+      // Read it depending on the extension
+      if (metaData.extension === 'gpx') {
+        fileReader.readAsText(metaData.file);
+      } else {
+        resolve();
+      }
+    })
   }
 
   /**
