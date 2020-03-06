@@ -1,5 +1,5 @@
 import {Component, OnInit, Input} from '@angular/core';
-import {UPLOAD_STATUS} from "../upload/upload.status";
+import {UPLOAD_STATUS} from '../upload-status/upload.status';
 
 /**
  * Component responsible for displaying a progree bar

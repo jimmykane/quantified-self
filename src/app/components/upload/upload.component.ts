@@ -11,7 +11,7 @@ import {EventImporterTCX} from '@sports-alliance/sports-lib/lib/events/adapters/
 import {EventImporterGPX} from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import {UploadErrorComponent} from '../upload-error/upload-error.component';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UPLOAD_STATUS} from './upload.status';
+import {UPLOAD_STATUS} from '../upload-status/upload.status';
 import {Log} from 'ng2-logger/browser';
 import {EventImporterSuuntoSML} from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
@@ -174,4 +174,12 @@ export class UploadComponent implements OnInit {
     // Clear the target
     event.target.value = '';
   }
+}
+
+export interface FileMetaData {
+  file: File,
+  name: string,
+  status: UPLOAD_STATUS,
+  extension: string,
+  filename: string,
 }

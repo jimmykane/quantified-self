@@ -1,0 +1,16 @@
+<mat-card class="mat-elevation-z0"
+          (drop)="getFiles($event);"
+          ondragenter="event.stopPropagation(); event.preventDefault();"
+          ondragover="event.stopPropagation(); event.preventDefault();"
+          ondragleave="event.stopPropagation(); event.preventDefault();">
+  <button mat-stroked-button  color="primary" (click)="inputFile.click()">
+
+    <span>Select or drag files<span class="mat-small"></span></span><br/>
+    <span class="mat-small">GPX</span>
+  </button>
+  <input #inputFile type="file" accept=".gpx" multiple [style.display]="'none'"
+         (change)="getFiles($event)"/>
+<!--  <app-upload-info *ngIf="isUploadActive" [activitiesMetaData]="activitiesMetaData" ></app-upload-info>-->
+</mat-card>
+
+

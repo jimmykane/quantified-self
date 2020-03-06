@@ -47,6 +47,9 @@
           </form>
         </section>
       </section>
+      <section>
+        <app-upload-route *ngIf="serviceTokens && serviceTokens.length" [user]="user"></app-upload-route>
+      </section>
     </mat-grid-tile>
   </mat-grid-list>
 </mat-card>

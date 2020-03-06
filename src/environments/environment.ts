@@ -19,6 +19,7 @@ export const environment = {
   },
   functions: {
     deauthorizeSuuntoAppServiceURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorize',
+    uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRoute',
     historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addHistoryToQueue',
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
   }
