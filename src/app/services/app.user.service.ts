@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { EventService } from './app.event.service';
-import { map, take } from 'rxjs/operators';
+import { catchError, map, take } from 'rxjs/operators';
 import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {
   ChartCursorBehaviours,
@@ -305,7 +305,9 @@ export class UserService implements OnDestroy {
     }
     return this.afs
       .collection('suuntoAppAccessTokens')
-      .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges();
+      .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges().pipe(catchError(error => {
+        return [];
+      }));
   }
 
   private getAllUserMeta(user: User) {
