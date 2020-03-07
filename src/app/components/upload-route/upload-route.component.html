@@ -4,7 +4,7 @@
           ondragover="event.stopPropagation(); event.preventDefault();"
           ondragleave="event.stopPropagation(); event.preventDefault();">
   <button mat-stroked-button  color="primary" (click)="inputFile.click()">
-    <span>Upload a route to your Suunto app<span class="mat-small"></span></span><br/>
+    <span>Upload routes to your Suunto app<span class="mat-small"></span></span><br/>
   </button>
   <input #inputFile type="file" accept=".gpx" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>
