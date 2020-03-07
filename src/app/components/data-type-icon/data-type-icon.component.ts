@@ -35,6 +35,20 @@ import {
 } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-avg';
 import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
+import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
+import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
+import {
+  DataGradeAdjustedPaceAvg,
+  DataGradeAdjustedPaceAvgMinutesPerMile
+} from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace-avg';
+import {
+  DataGradeAdjustedSpeedAvg,
+  DataGradeAdjustedSpeedAvgFeetPerMinute,
+  DataGradeAdjustedSpeedAvgFeetPerSecond,
+  DataGradeAdjustedSpeedAvgKilometersPerHour,
+  DataGradeAdjustedSpeedAvgMetersPerMinute,
+  DataGradeAdjustedSpeedAvgMilesPerHour
+} from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -131,6 +145,16 @@ export class DataTypeIconComponent {
         return 'tte';
       case DataPeakEPOC.type:
         return 'epoc';
+      case DataGradeAdjustedPaceAvg.type:
+      case DataGradeAdjustedPaceAvgMinutesPerMile.type:
+        return 'gap';
+      case DataGradeAdjustedSpeedAvg.type:
+      case DataGradeAdjustedSpeedAvgFeetPerMinute.type:
+      case DataGradeAdjustedSpeedAvgFeetPerSecond.type:
+      case DataGradeAdjustedSpeedAvgKilometersPerHour.type:
+      case DataGradeAdjustedSpeedAvgMetersPerMinute.type:
+      case DataGradeAdjustedSpeedAvgMilesPerHour.type:
+        return 'gas';
       default:
         return null;
     }
