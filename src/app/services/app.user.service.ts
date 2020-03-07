@@ -25,7 +25,7 @@ import {
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { AngularFireAuth } from '@angular/fire/auth';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import * as Sentry from '@sentry/browser';
@@ -334,13 +334,24 @@ export class UserService implements OnDestroy {
         firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true),
         startDate: startDate,
         endDate: endDate
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+          })
       }).toPromise();
   }
 
   public async deauthorizeSuuntoAppService() {
     return this.http.post(
-      environment.functions.deauthorizeSuuntoAppServiceURI, {
-        firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true)
+      environment.functions.deauthorizeSuuntoAppServiceURI,
+      {firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true)},
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+          })
       }).toPromise();
   }
 

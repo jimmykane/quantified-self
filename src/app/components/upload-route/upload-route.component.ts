@@ -65,7 +65,6 @@ export class UploadRouteComponent implements OnInit {
             {
               headers:
                 new HttpHeaders({
-                  // 'Content-Type': 'application/json',
                   'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
                 })
             }).toPromise();

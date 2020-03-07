@@ -132,16 +132,16 @@ export const deauthorize = functions.region('europe-west2').https.onRequest(asyn
     return;
   }
 
-  if (!req.body.firebaseAuthToken) {
-    console.error(`No params provided. This call needs: 'firebaseAuthToken'`);
-    res.status(500);
+  if (!req.headers.authorization) {
+    console.error(`No authorization'`);
+    res.status(403);
     res.send();
     return
   }
 
   let decodedIdToken;
   try {
-    decodedIdToken = await admin.auth().verifyIdToken(req.body.firebaseAuthToken);
+    decodedIdToken = await admin.auth().verifyIdToken(req.headers.authorization);
   } catch (e) {
     console.error(e);
     console.error(`Could not verify user token aborting operation`);
@@ -263,23 +263,3 @@ export function setAccessControlHeadersOnResponse(req: Request, res: functions.R
 export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }
-
-// /**
-//  * Generates the HTML template that signs the user in Firebase using the given token and closes the
-//  * popup.
-//  */
-// function signInFirebaseTemplate(token) {
-//   return `
-//     <script src="https://www.gstatic.com/firebasejs/3.6.0/firebase.js"></script>
-//     <script>
-//       var token = '${token}';
-//       var config = {
-//         apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0'
-//       };
-//       var app = firebase.initializeApp(config);
-//       app.auth().tokensReceived(token).then(function(user) {
-//         // window.opener.dispatchEvent(new Event('tokensReceived'));
-//         // window.close();
-//       });
-//     </script>`;
-// }

@@ -33,8 +33,15 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     return;
   }
 
-  if (!req.body.firebaseAuthToken || !req.body.startDate || !req.body.endDate) {
-    console.error(`No params provided. This call needs: 'firebaseAuthToken', 'startDate' and 'endDate'`);
+  if (!req.headers.authorization) {
+    console.error(`No authorization'`);
+    res.status(403);
+    res.send();
+    return
+  }
+
+  if (!req.body.startDate || !req.body.endDate) {
+    console.error(`No params provided. 'startDate' or 'endDate' are missing`);
     res.status(500);
     res.send();
     return
@@ -45,7 +52,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
 
   let decodedIdToken;
   try {
-    decodedIdToken = await admin.auth().verifyIdToken(req.body.firebaseAuthToken);
+    decodedIdToken = await admin.auth().verifyIdToken(req.headers.authorization);
   } catch (e) {
     console.error(e);
     console.error(`Could not verify user token aborting operation`);

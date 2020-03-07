@@ -26,20 +26,19 @@ export const importRoute = functions.region('europe-west2').https.onRequest(asyn
     return;
   }
 
-  if (!req.body) {
-    console.error(`No file provided'`);
-    res.status(500);
-    res.send();
-    return
-  }
-
-  if (!req.headers.authorization || !req.headers.authorization) {
+  if (!req.headers.authorization) {
     console.error(`No authorization'`);
     res.status(403);
     res.send();
     return
   }
 
+  if (!req.body) {
+    console.error(`No file provided'`);
+    res.status(500);
+    res.send();
+    return
+  }
 
   let decodedIdToken;
   try {
