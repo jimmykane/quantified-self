@@ -753,7 +753,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
           return `${series.name}`
         } else {
-          return `${series.name} [font-size: 0.9em](${DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit})[/]`
+          return `${series.name}`
+          // return `${series.name} [font-size: 0.9em](${DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit})[/]`
         }
       });
 
