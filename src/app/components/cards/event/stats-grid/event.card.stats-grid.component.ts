@@ -80,7 +80,6 @@ export class EventCardStatsGridComponent implements OnChanges {
       DataVO2Max.type,
       DataTemperatureAvg.type,
       DataSpeedAvg.type,
-      // DataGradeAdjustedSpeedAvg.type,
     ].reduce((statsAccu, statType) => {
       if (statType === DataSpeedAvg.type) {
         return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
