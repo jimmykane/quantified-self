@@ -79,7 +79,6 @@ export class AppAuthService implements OnDestroy {
 
   oAuthLoginWithRedirect(provider: any) {
     try {
-
       return this.afAuth.signInWithRedirect(provider);
     } catch (e) {
       this.handleError(e);

@@ -201,6 +201,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'epoc',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/epoc.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'gas',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/gas.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'gap',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/gap.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {

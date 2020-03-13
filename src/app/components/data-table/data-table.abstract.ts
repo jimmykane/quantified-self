@@ -59,7 +59,7 @@ export abstract class DataTableAbstract extends ScreenSizeAbstract {
     statRowElement['RPE'] = rpe ? <RPEBorgCR10SCale>rpe.getValue() : undefined;
     statRowElement['Feeling'] = feeling ? <Feelings>feeling.getValue() : undefined;
     statRowElement['Average Speed'] = activityTypes.reduce((accu, activityType) => {
-      return [...accu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])]
+      return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
     }, []).reduce((accu, dataType) => {
       const stat = stats.find(iStat => iStat.getType() === dataType);
       return stat ?

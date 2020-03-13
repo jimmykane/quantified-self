@@ -22,7 +22,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
   @Input() chartDataDateRange?: SummariesChartDataDateRages;
   @Input() isLoading: boolean;
 
-  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+  protected constructor(protected zone: NgZone, public changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
   }
 
@@ -51,6 +51,9 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
       this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType));
       if (this.filterLowValues) {
         this.data = this.filterOutLowValues(this.data)
+      }
+      if (this.chart) {
+        this.chart.data = this.data || [];
       }
     }
   }
