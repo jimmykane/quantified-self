@@ -22,7 +22,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
   @Input() chartDataDateRange?: SummariesChartDataDateRages;
   @Input() isLoading: boolean;
 
-  protected constructor(protected zone: NgZone, public changeDetector: ChangeDetectorRef) {
+  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);
   }
 
