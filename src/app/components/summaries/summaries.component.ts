@@ -303,6 +303,13 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
     }
   }
 
+  public trackByTile(index: number, item: (SummariesChartTileInterface|SummariesMapTileInterface)) {
+    if (!item){
+      return null;
+    }
+    return item.order;
+  }
+
   /**
    * Does nothing rather to convert a map to an obj
    * sorry

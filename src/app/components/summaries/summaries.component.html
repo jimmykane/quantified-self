@@ -1,7 +1,7 @@
 <section class="pie" *ngIf="tiles.length">
   <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight">
     <mat-grid-tile
-      *ngFor="let tile of tiles"
+      *ngFor="let tile of tiles; trackBy: trackByTile"
       [colspan]="tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns"
       [rowspan]="tile.size.rows">
 <!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->

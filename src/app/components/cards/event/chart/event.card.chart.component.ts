@@ -953,7 +953,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // let dataTypes = DynamicDataLoader.basicDataTypes;
     // Set the datatypes to show if all is selected
     if (this.showAllData) {
-      return DynamicDataLoader.allDataTypes;
+      return [...DynamicDataLoader.basicDataTypes, ...DynamicDataLoader.advancedDataTypes];
     }
     if (!this.dataTypesToUse) {
       return DynamicDataLoader.basicDataTypes;
