@@ -205,7 +205,7 @@ export class UserService implements OnDestroy {
   }
 
   static getDefaultSpeedUnits(): SpeedUnits[] {
-    return [SpeedUnits.MetersPerSecond];
+    return [SpeedUnits.KilometersPerHour];
   }
 
   static getDefaultGradeAdjustedSpeedUnits(): GradeAdjustedSpeedUnits[] {
