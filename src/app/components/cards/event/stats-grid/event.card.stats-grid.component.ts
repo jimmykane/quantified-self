@@ -83,7 +83,7 @@ export class EventCardStatsGridComponent implements OnChanges {
     ].reduce((statsAccu, statType) => {
       if (statType === DataSpeedAvg.type) {
         return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
-          return [...new Set( [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedMetricsToUseForActivityType(ActivityTypes[activityType])]).values()];
+          return [...new Set( [...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]).values()];
         }, [])];
       }
       return [...statsAccu, statType];

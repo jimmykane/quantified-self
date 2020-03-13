@@ -255,32 +255,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         if (!streams.length) {
           return [];
         }
-        const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
-        const shouldRemoveGradeAdjustedSpeed = this.getNonUnitBasedDataTypes().indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
+        const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
+        const shouldRemoveGradeAdjustedSpeed = this.getNonUnitBasedDataTypes().indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
         const shouldRemoveDistance = this.getNonUnitBasedDataTypes().indexOf(DataDistance.type) === -1;
-        const unitStreams = EventUtilities.getUnitStreamsFromStreams(streams).filter(stream => {
-          return DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings).indexOf(stream.type) !== -1;
-        });
-        return unitStreams.filter((stream) => {
-          // Filter out pace if swimming
-          if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1) {
-            return [DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) === -1;
-          }
-          // @todo remove speed etc from eg Running and so on
-          return [DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type].indexOf(stream.type) === -1;
-        })
+
+        return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
           .concat(streams)
           .filter((stream) => {
-            if (shouldRemoveDistance && stream.type === DataDistance.type) {
-              return false;
+            switch (stream.type) {
+              case  DataDistance.type:
+                return !shouldRemoveDistance;
+              case DataSpeed.type:
+                return !shouldRemoveSpeed;
+              case DataGradeAdjustedSpeed.type:
+                return !shouldRemoveGradeAdjustedSpeed;
+              default:
+                return true
             }
-            if (shouldRemoveSpeed && stream.type === DataSpeed.type) {
-              return false;
-            }
-            if (shouldRemoveGradeAdjustedSpeed && stream.type === DataGradeAdjustedSpeed.type) {
-              return false;
-            }
-            return true;
           }).map((stream) => {
             return this.createOrUpdateChartSeries(activity, stream);
           });
@@ -775,7 +766,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
     } else {
       // Else try to check what we should show by default
-      if ([...UserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedMetricsToUseForActivityType(series.dummyData.activity.type)]
+      if ([...UserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(series.dummyData.activity.type)]
         .reduce((accu, dataType) => {
           return [...accu, ...DynamicDataLoader.getUnitBasedDataTypesFromDataType(dataType, this.userUnitSettings)]
         }, []).indexOf(series.dummyData.stream.type) === -1) {
