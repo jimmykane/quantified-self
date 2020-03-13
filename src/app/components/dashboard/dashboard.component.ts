@@ -55,7 +55,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.addUploadButton();
   }
 
-  async ngOnInit() {
+  ngOnInit() {
     this.logger.info(`On Init`);
     this.shouldSearch = true;
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
