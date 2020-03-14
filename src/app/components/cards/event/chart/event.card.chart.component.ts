@@ -220,6 +220,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return;
       }
 
+      // @todo fix scrollbar for cursor
       cursors.forEach((cursor) => {
         const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
 
@@ -324,6 +325,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
     chart.scrollbarX.marginTop = 0;
+    chart.scrollbarX.marginBottom = 0;
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);
