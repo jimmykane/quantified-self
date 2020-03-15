@@ -30,6 +30,11 @@ export class AppThemeService implements OnDestroy {
     this.mapTheme.next(this.getMapThemeFromStorage());
     this.userSubscription = this.authService.user.subscribe(user => {
       this.user = user;
+      if (this.user) {
+        this.setAppTheme(this.user.settings.appSettings.theme)
+        this.setChartTheme(this.user.settings.chartSettings.theme)
+        this.setMapTheme(this.user.settings.mapSettings.theme)
+      }
     })
   }
 
@@ -44,11 +49,12 @@ export class AppThemeService implements OnDestroy {
       await this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
+    }else {
+      // Save it to local storage to prevent flashes
+      this.setAppTheme(theme);
+      this.setChartTheme(chartTheme);
+      this.setMapTheme(mapTheme);
     }
-    // Save it to local storage to prevent flashes
-    this.setAppTheme(theme);
-    this.setChartTheme(chartTheme);
-    this.setMapTheme(mapTheme);
   }
 
   public setAppTheme(appTheme: AppThemes) {
@@ -81,8 +87,6 @@ export class AppThemeService implements OnDestroy {
 
   public async toggleTheme() {
     await this.changeTheme(localStorage.getItem('appTheme') === AppThemes.Dark ? AppThemes.Normal : AppThemes.Dark);
-    this.appTheme.next(this.getAppThemeFromStorage());
-    this.chartTheme.next(this.getChartThemeFromStorage());
   }
 
   private getAppThemeFromStorage(): AppThemes {
