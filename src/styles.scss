@@ -19,14 +19,14 @@ $candy-app-theme: mat-light-theme($candy-app-primary, $candy-app-accent);
 
 
 // Define an alternate dark theme.
-$dark-primary: mat-palette($mat-light-blue);
+$dark-primary: mat-palette($mat-blue);
 $dark-accent: mat-palette($mat-pink, A200, A100, A400);
 $dark-warn: mat-palette($mat-deep-orange);
 $dark-theme: mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
 
 // Include the alternative theme styles inside of a block with a CSS class. You can make this
 // CSS class whatever you want. In this example, any component inside of an element with
-// `.unicorn-dark-theme` will be affected by this alternate dark theme instead of the default theme.
+// `.dark-theme` will be affected by this alternate dark theme instead of the default theme.
 .dark-theme {
   @include angular-material-theme($dark-theme);
 }
