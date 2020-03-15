@@ -322,8 +322,10 @@ export class UserSettingsComponent implements OnChanges {
             strokeWidth: this.userSettingsFormGroup.get('mapStrokeWidth').value
           },
           unitSettings: <UserUnitSettingsInterface>{
-            speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value, // @todo should map here to 1:1 and copy for grade
-            paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value, // @todo should map here to 1:1 and copy for grade
+            speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
+            gradeAdjustedSpeedUnits: UserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.userSettingsFormGroup.get('speedUnitsToUse').value),
+            paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
+            gradeAdjustedPaceUnits: UserService.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
             swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
