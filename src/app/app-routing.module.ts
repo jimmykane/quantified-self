@@ -23,13 +23,13 @@ const routes: Routes = [
     path: 'dashboard',
     loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule),
     data: {title: 'Dashboard', animation: 'Dashboard'},
-    canActivate: [AppAuthGuard]
+    canLoad: [AppAuthGuard]
   },
   {
     path: 'settings',
     loadChildren: () => import('./modules/user.module').then(module => module.UserModule),
     data: {title: 'Settings', animation: 'User'},
-    canActivate: [AppAuthGuard],
+    canLoad: [AppAuthGuard],
   },
   {
     path: 'user/:userID/event/:eventID',
