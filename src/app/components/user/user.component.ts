@@ -24,9 +24,14 @@ export class UserComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-   this.userSubscription = this.route.data.subscribe((data) => {
+   this.userSubscription = this.authService.user.subscribe((user) => {
+     if (!user) {
+       this.router.navigate(['login']).then(() => {
+         this.snackBar.open('You were signed out out')
+       });
+     }
      // First get our current user
-     this.user = data.user;
+     this.user = user;
    })
   }
 

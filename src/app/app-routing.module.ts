@@ -30,9 +30,6 @@ const routes: Routes = [
     loadChildren: () => import('./modules/user.module').then(module => module.UserModule),
     data: {title: 'Settings', animation: 'User'},
     canActivate: [AppAuthGuard],
-    resolve: {
-      user: UserResolverService
-    }
   },
   {
     path: 'user/:userID/event/:eventID',

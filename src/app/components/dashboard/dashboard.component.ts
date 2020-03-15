@@ -61,6 +61,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.logger.info(`User subscription`);
       this.isLoading = true;
+      // Get the user
+      if (!user) {
+        this.router.navigate(['login']).then(() => {
+          this.snackBar.open('You were signed out out')
+        });
+        return of({user: null, events: null});
+      }
+
       this.showUpload = this.authService.isGuest();
 
       if (this.user && (
