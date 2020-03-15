@@ -310,6 +310,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   protected createChart(): am4charts.XYChart {
+    // @hack to 'fix' multisport
+    if (this.event.isMultiSport()){
+      this.xAxisType = XAxisTypes.Time;
+    }
     am4core.options.onlyShowOnViewport = false ;
     am4core.options.queue = false ;
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);

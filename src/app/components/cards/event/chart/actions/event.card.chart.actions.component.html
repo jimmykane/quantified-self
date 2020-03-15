@@ -44,7 +44,7 @@
     <mat-form-field>
       <mat-label>X Axis type</mat-label>
       <mat-select
-        [disabled]="!user"
+        [disabled]="!user || event.isMultiSport()"
         placeholder="X Axis type"
         [(value)]="xAxisType"
         (selectionChange)="somethingChanged($event)">

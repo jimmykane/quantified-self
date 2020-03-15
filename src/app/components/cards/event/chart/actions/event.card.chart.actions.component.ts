@@ -3,6 +3,7 @@ import {XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.ch
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppUserService} from '../../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
   selector: 'app-event-card-chart-actions',
@@ -14,6 +15,7 @@ import { AngularFireAnalytics } from '@angular/fire/analytics';
 
 export class EventCardChartActionsComponent implements OnChanges {
   @Input() user: User;
+  @Input() event: EventInterface;
   @Input() xAxisType: XAxisTypes;
   @Input() showAllData: boolean;
   @Input() showLaps: boolean;
