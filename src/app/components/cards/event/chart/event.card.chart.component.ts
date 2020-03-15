@@ -259,7 +259,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
         const shouldRemoveGradeAdjustedSpeed = this.getNonUnitBasedDataTypes().indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
         const shouldRemoveDistance = this.getNonUnitBasedDataTypes().indexOf(DataDistance.type) === -1;
-
         return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
           .concat(streams)
           .filter((stream) => {
@@ -602,6 +601,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     series.dummyData = {
       activity: activity,
       stream: stream,
+      displayName: DynamicDataLoader.getDataClassFromDataType(stream.type).displayType
     };
 
     this.attachSeriesEventListeners(series);
@@ -1389,6 +1389,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       marker.strokeWidth = 4;
       marker.strokeOpacity = 1;
       marker.stroke = am4core.color('#0a97ee');
+
     });
   }
 
