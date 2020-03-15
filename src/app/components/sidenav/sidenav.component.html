@@ -48,7 +48,7 @@
   <mat-list-item
     *ngIf="authService.authenticated()"
     routerLinkActive="mat-elevation-z0 active"
-    [routerLink]="['/user/' + (authService.user | async)?.uid]"
+    [routerLink]="'/settings'"
     (click)="sideNav.close();">
     <mat-icon>settings_applications</mat-icon>
     Preferences

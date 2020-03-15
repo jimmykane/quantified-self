@@ -55,7 +55,9 @@ Sentry.init({
 });
 
 
-@Injectable()
+@Injectable({
+  providedIn: 'root'
+})
 export class SentryErrorHandler implements ErrorHandler {
   constructor() {
   }

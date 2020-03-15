@@ -8,19 +8,27 @@
 <!--    <a matTabLink (click)="sidenav.toggle()">-->
 <!--      <mat-icon class="larger_icon">menu</mat-icon>-->
 <!--    </a>-->
-    <a matTabLink *ngIf="title !== 'Dashboard'" [routerLink]="authService.authenticated() ? ['dashboard'] : title === 'Login' ? ['/'] : ['login']">
-      <mat-icon class="app-icon">{{authService.authenticated()? 'dashboard' : 'filter_hdr' }}</mat-icon>
-    </a>
-    <a matTabLink *ngIf="title === 'Dashboard'" (click)="sidenav.toggle()">
+    <a matTabLink (click)="sidenav.toggle()">
       <mat-icon class="larger_icon">menu</mat-icon>
     </a>
 
     <span class="fill-space"></span>
 
-    <button matTabLink class="no-border theme" (click)="toggleTheme();" mat-stroked-button >
-      <mat-icon class="smaller icon-theme  mat-icon material-icons mat-icon-no-color theme">format_color_fill</mat-icon>
+<!--    <button *ngIf="authService.authenticated()" matTabLink class="no-border theme" (click)="toggleTheme();" mat-stroked-button >-->
+<!--      <mat-icon class="smaller icon-theme  mat-icon material-icons mat-icon-no-color theme">format_color_fill</mat-icon>-->
+<!--    </button>-->
+
+    <button mat-flat-button class="right" color="accent" *ngIf="authService.authenticated() === null && title !== 'Dashboard' && title !== 'Login' " disabled>
+      Loading
     </button>
-    <button matTabLink mat-stroked-button class="right " *ngIf="!authService.authenticated() && title !== 'Login'" [routerLink]="['login']"  color="accent">Login</button>
+    <button mat-flat-button class="right" color="primary" *ngIf="authService.authenticated() === true && title !== 'Dashboard'"
+            (click)="router.navigate(['/dashboard']);">
+      Go to your dashboard
+    </button>
+    <button mat-flat-button class="right" color="accent" *ngIf="authService.authenticated() === false && title !== 'Login'"
+            (click)="router.navigate(['/login']);">
+      Login or Register
+    </button>
 
   </nav>
 

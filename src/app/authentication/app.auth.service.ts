@@ -16,9 +16,11 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 })
 export class AppAuthService implements OnDestroy {
   user: Observable<User | null>;
+  // store the URL so we can redirect after logging in
+  redirectUrl: string;
   private authState = null;
   private guest: boolean;
-  userSubscription: Subscription;
+  private userSubscription: Subscription;
 
   constructor(
     private afAuth: AngularFireAuth,
