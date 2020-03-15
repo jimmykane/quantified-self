@@ -11,7 +11,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {Log} from 'ng2-logger/browser';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
 import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
@@ -46,7 +46,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
   constructor(
     public dialogRef: MatDialogRef<HistoryImportFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
-    private userService: UserService,
+    private userService: AppUserService,
     private snackBar: MatSnackBar,
     private afa: AngularFireAnalytics,
   ) {

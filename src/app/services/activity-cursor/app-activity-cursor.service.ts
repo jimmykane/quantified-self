@@ -2,8 +2,10 @@ import {Injectable} from '@angular/core';
 import {BehaviorSubject} from 'rxjs';
 import {Log} from 'ng2-logger/browser';
 
-@Injectable()
-export class ActivityCursorService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppActivityCursorService {
   public cursors: BehaviorSubject<ActivityCursorInterface[]> = new BehaviorSubject([]);
 
   private logger = Log.create('ActivityCursorService');

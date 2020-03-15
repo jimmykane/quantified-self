@@ -9,7 +9,7 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {Subscription} from 'rxjs';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {Router} from '@angular/router';
@@ -17,7 +17,7 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {ThemeService} from '../../services/app.theme.service';
+import {AppThemeService} from '../../services/app.theme.service';
 import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import * as Sentry from '@sentry/browser';
@@ -67,8 +67,8 @@ export class SummariesComponent extends LoadingAbstract implements OnInit, OnDes
 
   constructor(private router: Router,
               private authService: AppAuthService,
-              private eventService: EventService,
-              private themeService: ThemeService,
+              private eventService: AppEventService,
+              private themeService: AppThemeService,
               private snackBar: MatSnackBar,
               private dialog: MatDialog,
               changeDetector: ChangeDetectorRef,

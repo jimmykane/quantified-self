@@ -5,8 +5,8 @@ import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {FormsAbstract} from '../forms/forms.abstract';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UserService} from '../../services/app.user.service';
-import {FileService} from '../../services/app.file.service';
+import {AppUserService} from '../../services/app.user.service';
+import {AppFileService} from '../../services/app.file.service';
 import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
@@ -19,7 +19,7 @@ import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-
 import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
 import {DataPowerMax} from '@sports-alliance/sports-lib/lib/data/data.power-max';
 import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
-import {SharingService} from '../../services/app.sharing.service';
+import {AppSharingService} from '../../services/app.sharing.service';
 import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
@@ -52,9 +52,9 @@ export class EventsExportFormComponent extends FormsAbstract {
     public dialogRef: MatDialogRef<any>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     protected snackBar: MatSnackBar,
-    private userService: UserService,
-    private fileService: FileService,
-    private sharingService: SharingService,
+    private userService: AppUserService,
+    private fileService: AppFileService,
+    private sharingService: AppSharingService,
     private afa: AngularFireAnalytics,
   ) {
     super(dialogRef, data, snackBar);

@@ -1,8 +1,10 @@
 import {Injectable, NgZone} from '@angular/core';
 
 
-@Injectable()
-export class WindowService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppWindowService {
 
   get windowRef() {
     return window

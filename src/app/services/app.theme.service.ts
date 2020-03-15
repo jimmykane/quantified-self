@@ -1,21 +1,23 @@
 import {Injectable} from '@angular/core';
 import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import {UserService} from './app.user.service';
+import {AppUserService} from './app.user.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {BehaviorSubject, Observable} from 'rxjs';
 import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 
 
-@Injectable()
-export class ThemeService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppThemeService {
 
   private chartTheme: BehaviorSubject<ChartThemes> = new BehaviorSubject(null);
   private appTheme: BehaviorSubject<AppThemes> = new BehaviorSubject(null);
   private mapTheme: BehaviorSubject<MapThemes> = new BehaviorSubject(null);
 
   constructor(
-    private userService: UserService,
+    private userService: AppUserService,
   ) {
     this.appTheme.next(this.getAppThemeFromStorage());
     this.chartTheme.next(this.getChartThemeFromStorage());
@@ -74,15 +76,15 @@ export class ThemeService {
   }
 
   private getAppThemeFromStorage(): AppThemes {
-    return localStorage.getItem('appThemes') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appThemes'))] : UserService.getDefaultAppTheme();
+    return localStorage.getItem('appThemes') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appThemes'))] : AppUserService.getDefaultAppTheme();
   }
 
   private getMapThemeFromStorage(): MapThemes {
-    return localStorage.getItem('mapThemes') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapThemes'))] : UserService.getDefaultMapTheme();
+    return localStorage.getItem('mapThemes') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapThemes'))] : AppUserService.getDefaultMapTheme();
   }
 
   private getChartThemeFromStorage(): ChartThemes {
-    return localStorage.getItem('chartTheme') !== null ? ChartThemes[this.getEnumKeyByEnumValue(ChartThemes, localStorage.getItem('chartTheme'))] : UserService.getDefaultChartTheme();
+    return localStorage.getItem('chartTheme') !== null ? ChartThemes[this.getEnumKeyByEnumValue(ChartThemes, localStorage.getItem('chartTheme'))] : AppUserService.getDefaultChartTheme();
   }
 
   private getEnumKeyByEnumValue(myEnum, enumValue) {

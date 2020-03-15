@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
@@ -34,7 +34,7 @@ export class EventFormComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<EventFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
-    private eventService: EventService,
+    private eventService: AppEventService,
     private snackBar: MatSnackBar,
   ) {
     this.event = data.event;

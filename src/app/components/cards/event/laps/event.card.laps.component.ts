@@ -10,7 +10,7 @@ import {LoadingAbstract} from '../../../loading/loading.abstract';
 import {DataTableAbstract} from '../../../data-table/data-table.abstract';
 import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {EventColorService} from '../../../../services/color/app.event.color.service';
+import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -25,7 +25,7 @@ export class EventCardLapsComponent extends DataTableAbstract implements OnChang
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;
 
-  constructor(public eventColorService: EventColorService, protected changeDetectorRef: ChangeDetectorRef) {
+  constructor(public eventColorService: AppEventColorService, protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
   }
 

@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output} from '@angular/core';
 import {XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UserService} from '../../../../../services/app.user.service';
+import {AppUserService} from '../../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 
 @Component({
@@ -26,7 +26,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   public xAxisTypes = XAxisTypes;
 
   constructor(
-    private userService: UserService, private afa: AngularFireAnalytics) {
+      private userService: AppUserService, private afa: AngularFireAnalytics) {
   }
 
   async somethingChanged(event) {

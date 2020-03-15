@@ -5,12 +5,12 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import * as firebase from 'firebase/app';
 import {AngularFirestore} from '@angular/fire/firestore';
-import {WindowService} from '../../services/app.window.service';
+import {AppWindowService} from '../../services/app.window.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
@@ -41,11 +41,11 @@ export class UserFormComponent implements OnInit {
     public afa: AngularFireAnalytics,
     public dialogRef: MatDialogRef<UserFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
-    private userService: UserService,
+    private userService: AppUserService,
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private windowService: WindowService,
+    private windowService: AppWindowService,
   ) {
     this.user = data.user; // Perhaps move to service?
     if (!this.user) {

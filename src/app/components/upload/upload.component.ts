@@ -1,5 +1,5 @@
 import {Component, Input, OnInit} from '@angular/core';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -36,7 +36,7 @@ export class UploadComponent implements OnInit {
   constructor(
     private snackBar: MatSnackBar,
     public dialog: MatDialog,
-    private eventService: EventService,
+    private eventService: AppEventService,
     private afa: AngularFireAnalytics,
     private router: Router) {
   }

@@ -1,5 +1,5 @@
 import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {of, Subscription} from 'rxjs';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {Router} from '@angular/router';
@@ -8,9 +8,9 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import {getDatesForDateRange, Search} from '../event-search/event-search.component';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
+import {AppActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {map, switchMap} from 'rxjs/operators';
 import {MatDialog} from '@angular/material/dialog';
@@ -45,9 +45,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   constructor(private router: Router,
               public authService: AppAuthService,
-              private eventService: EventService,
-              private userService: UserService,
-              private actionButtonService: ActionButtonService,
+              private eventService: AppEventService,
+              private userService: AppUserService,
+              private actionButtonService: AppActionButtonService,
               private  changeDetector: ChangeDetectorRef,
               private afa: AngularFireAnalytics,
               private dialog: MatDialog,

@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { Log } from 'ng2-logger/browser'
 import * as am4charts from '@amcharts/amcharts4/charts';
-import { EventColorService } from '../../../services/color/app.event.color.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
 import { LinearGradient } from '@amcharts/amcharts4/core';
 import { range, Subscription, timer } from 'rxjs';
@@ -29,7 +29,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
   protected logger = Log.create('HomeLiveChartComponent');
   protected liveDataSubscription: Subscription;
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: EventColorService) {
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
 

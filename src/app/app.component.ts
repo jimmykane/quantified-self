@@ -7,7 +7,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {ActionButtonService} from './services/action-buttons/app.action-button.service';
+import {AppActionButtonService} from './services/action-buttons/app.action-button.service';
 import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatIconRegistry} from '@angular/material/icon';
 import {MatSidenav} from '@angular/material/sidenav';
@@ -23,16 +23,16 @@ import {
 } from '@angular/router';
 import {filter, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
-import {SideNavService} from './services/side-nav/side-nav.service';
+import {AppSideNavService} from './services/side-nav/app-side-nav.service';
 import {DomSanitizer, Title} from '@angular/platform-browser';
-import {ThemeService} from './services/app.theme.service';
+import {AppThemeService} from './services/app.theme.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
 import {slideInAnimation} from './animations/animations';
 
 import * as firebase from 'firebase/app'
-import {WindowService} from './services/app.window.service';
+import {AppWindowService} from './services/app.window.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 declare function require(moduleName: string): any;
@@ -63,14 +63,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public authService: AppAuthService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
-    private actionButtonService: ActionButtonService,
-    private sideNavService: SideNavService,
+    private actionButtonService: AppActionButtonService,
+    private sideNavService: AppSideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    public themeService: ThemeService,
+    public themeService: AppThemeService,
     public appInfoService: AppInfoService,
     private titleService: Title,
-    private windowService: WindowService,
+    private windowService: AppWindowService,
     private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar) {
 

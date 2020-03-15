@@ -11,9 +11,9 @@ import {
   SimpleChanges,
   ViewChild,
 } from '@angular/core';
-import {ActionButtonService} from '../../services/action-buttons/app.action-button.service';
+import {AppActionButtonService} from '../../services/action-buttons/app.action-button.service';
 import {ActionButton} from '../../services/action-buttons/app.action-button';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {Router} from '@angular/router';
 import {MatCard} from '@angular/material/card';
 import {MatPaginator, MatPaginatorIntl, PageEvent} from '@angular/material/paginator';
@@ -33,12 +33,12 @@ import {rowsAnimation} from '../../animations/animations';
 import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {ScreenBreakPoints} from '../screen-size/sreen-size.abstract';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {DataTableAbstract, StatRowElement} from '../data-table/data-table.abstract';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import {EventColorService} from '../../services/color/app.event.color.service';
+import {AppEventColorService} from '../../services/color/app.event.color.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 
 
@@ -71,13 +71,13 @@ export class EventTableComponent extends DataTableAbstract implements OnChanges,
   private searchSubject: Subject<string> = new Subject();
 
   constructor(private snackBar: MatSnackBar,
-              private eventService: EventService,
-              private actionButtonService: ActionButtonService,
+              private eventService: AppEventService,
+              private actionButtonService: AppActionButtonService,
               private deleteConfirmationBottomSheet: MatBottomSheet,
-              private userService: UserService,
+              private userService: AppUserService,
               private afa: AngularFireAnalytics,
               changeDetector: ChangeDetectorRef,
-              private eventColorService: EventColorService,
+              private eventColorService: AppEventColorService,
               private router: Router, private  datePipe: DatePipe) {
     super(changeDetector);
   }

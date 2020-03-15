@@ -4,7 +4,7 @@ import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.int
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {of, Subscription} from 'rxjs';
 import {AppAuthService} from '../../authentication/app.auth.service';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {MatDialog, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {catchError, map, switchMap} from 'rxjs/operators';
@@ -21,7 +21,7 @@ export class UserComponent implements OnInit, OnDestroy {
   public targetUser: User;
   private userSubscription: Subscription;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: UserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
+  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: AppUserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
   }
 
   ngOnInit(): void {

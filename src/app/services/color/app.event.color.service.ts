@@ -5,8 +5,10 @@ import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.inter
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {AppActivityTypeGroupColors} from './app.activity-type-group.colors';
 
-@Injectable()
-export class EventColorService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppEventColorService {
 
   public getColorByNumber(number: number): string {
     // Return fixed random

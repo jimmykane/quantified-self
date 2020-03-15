@@ -21,17 +21,17 @@ import {
 import {MaterialModule} from './modules/material.module';
 import {AppAuthService} from './authentication/app.auth.service';
 import {AppAuthGuard} from './authentication/app.auth.guard';
-import {ChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
-import {EventService} from './services/app.event.service';
-import {ActionButtonService} from './services/action-buttons/app.action-button.service';
-import {EventColorService} from './services/color/app.event.color.service';
-import {SharingService} from './services/app.sharing.service';
-import {FileService} from './services/app.file.service';
-import {UserService} from './services/app.user.service';
-import {SideNavService} from './services/side-nav/side-nav.service';
-import {ThemeService} from './services/app.theme.service';
+import {AppChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
+import {AppEventService} from './services/app.event.service';
+import {AppActionButtonService} from './services/action-buttons/app.action-button.service';
+import {AppEventColorService} from './services/color/app.event.color.service';
+import {AppSharingService} from './services/app.sharing.service';
+import {AppFileService} from './services/app.file.service';
+import {AppUserService} from './services/app.user.service';
+import {AppSideNavService} from './services/side-nav/app-side-nav.service';
+import {AppThemeService} from './services/app.theme.service';
 import {AppInfoService} from './services/app.info.service';
-import {WindowService} from './services/app.window.service';
+import {AppWindowService} from './services/app.window.service';
 import {AgmCoreModule} from '@agm/core';
 import {
   AngularFireAnalyticsModule,
@@ -39,8 +39,8 @@ import {
   APP_VERSION, COLLECTION_ENABLED, CONFIG,
   DEBUG_MODE, ScreenTrackingService, UserTrackingService
 } from '@angular/fire/analytics';
-import {ActivitySelectionService} from './services/activity-selection-service/activity-selection.service';
-import {ActivityCursorService} from './services/activity-cursor/activity-cursor.service';
+import {AppActivitySelectionService} from './services/activity-selection-service/app-activity-selection.service';
+import {AppActivityCursorService} from './services/activity-cursor/app-activity-cursor.service';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { ServiceWorkerModule } from '@angular/service-worker';
 
@@ -97,21 +97,6 @@ export class SentryErrorHandler implements ErrorHandler {
   ],
   entryComponents: [],
   providers: [
-    AppAuthService,
-    AppAuthGuard,
-    ChartSettingsLocalStorageService,
-    EventService,
-    ActionButtonService,
-    EventColorService,
-    SharingService,
-    FileService,
-    UserService,
-    SideNavService,
-    ThemeService,
-    AppInfoService,
-    WindowService,
-    ActivitySelectionService,
-    ActivityCursorService,
     ScreenTrackingService,
     UserTrackingService,
     {provide: ErrorHandler, useClass: (environment.production ||  environment.beta) ? SentryErrorHandler : ErrorHandler},

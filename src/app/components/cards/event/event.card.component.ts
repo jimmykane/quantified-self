@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
-import {EventService} from '../../../services/app.event.service';
+import {AppEventService} from '../../../services/app.event.service';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
@@ -14,11 +14,11 @@ import {
   ChartThemes,
   XAxisTypes
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {ThemeService} from '../../../services/app.theme.service';
+import {AppThemeService} from '../../../services/app.theme.service';
 import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import {UserService} from '../../../services/app.user.service';
-import {ActivitySelectionService} from '../../../services/activity-selection-service/activity-selection.service';
+import {AppUserService} from '../../../services/app.user.service';
+import {AppActivitySelectionService} from '../../../services/activity-selection-service/app-activity-selection.service';
 
 
 @Component({
@@ -35,7 +35,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public positionStreams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
-  public userUnitSettings = UserService.getDefaultUserUnitSettings();
+  public userUnitSettings = AppUserService.getDefaultUserUnitSettings();
   public showAllData = false;
   public showChartLaps = true;
   public showChartGrid = true;
@@ -44,23 +44,23 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartDisableGrouping = false;
   public chartHideAllSeriesOnInit = false;
   public chartXAxisType = XAxisTypes.Duration;
-  public mapLapTypes = UserService.getDefaultMapLapTypes();
-  public chartLapTypes = UserService.getDefaultChartLapTypes();
-  public chartStrokeWidth: number = UserService.getDefaultChartStrokeWidth();
-  public chartStrokeOpacity: number = UserService.getDefaultChartStrokeOpacity();
-  public chartFillOpacity: number = UserService.getDefaultChartFillOpacity();
-  public chartExtraMaxForPower: number = UserService.getDefaultExtraMaxForPower();
-  public chartExtraMaxForPace: number = UserService.getDefaultExtraMaxForPace();
-  public chartGainAndLossThreshold: number = UserService.getDefaultGainAndLossThreshold();
+  public mapLapTypes = AppUserService.getDefaultMapLapTypes();
+  public chartLapTypes = AppUserService.getDefaultChartLapTypes();
+  public chartStrokeWidth: number = AppUserService.getDefaultChartStrokeWidth();
+  public chartStrokeOpacity: number = AppUserService.getDefaultChartStrokeOpacity();
+  public chartFillOpacity: number = AppUserService.getDefaultChartFillOpacity();
+  public chartExtraMaxForPower: number = AppUserService.getDefaultExtraMaxForPower();
+  public chartExtraMaxForPace: number = AppUserService.getDefaultExtraMaxForPace();
+  public chartGainAndLossThreshold: number = AppUserService.getDefaultGainAndLossThreshold();
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
   public showMapArrows = true;
-  public chartDownSamplingLevel = UserService.getDefaultDownSamplingLevel();
+  public chartDownSamplingLevel = AppUserService.getDefaultDownSamplingLevel();
   public chartTheme: ChartThemes;
   public appTheme: AppThemes;
   public mapTheme: MapThemes;
-  public mapStrokeWidth: number = UserService.getDefaultMapStrokeWidth();
-  public chartCursorBehaviour: ChartCursorBehaviours = UserService.getDefaultChartCursorBehaviour();
+  public mapStrokeWidth: number = AppUserService.getDefaultMapStrokeWidth();
+  public chartCursorBehaviour: ChartCursorBehaviours = AppUserService.getDefaultChartCursorBehaviour();
 
 
   private subscriptions: Subscription[] = [];
@@ -72,10 +72,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     public router: Router,
     private route: ActivatedRoute,
     private authService: AppAuthService,
-    private eventService: EventService,
-    private activitySelectionService: ActivitySelectionService,
+    private eventService: AppEventService,
+    private activitySelectionService: AppActivitySelectionService,
     private snackBar: MatSnackBar,
-    private themeService: ThemeService) {
+    private themeService: AppThemeService) {
   }
 
   ngOnChanges() {

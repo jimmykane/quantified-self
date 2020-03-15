@@ -4,15 +4,15 @@ import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {HttpClient} from '@angular/common/http';
-import {FileService} from '../../services/app.file.service';
+import {AppFileService} from '../../services/app.file.service';
 import {AngularFireFunctions} from '@angular/fire/functions';
 import {combineLatest, of, Subscription} from 'rxjs';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {EventImporterFIT} from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {Router} from '@angular/router';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
@@ -54,11 +54,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  constructor(private http: HttpClient, private fileService: FileService,
+  constructor(private http: HttpClient, private fileService: AppFileService,
               private afa: AngularFireAnalytics,
-              private eventService: EventService,
+              private eventService: AppEventService,
               public authService: AppAuthService,
-              private userService: UserService,
+              private userService: AppUserService,
               private router: Router,
               private dialog: MatDialog,
               private snackBar: MatSnackBar) {

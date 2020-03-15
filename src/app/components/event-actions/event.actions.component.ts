@@ -1,12 +1,12 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {EventService} from '../../services/app.event.service';
-import {FileService} from '../../services/app.file.service';
+import {AppEventService} from '../../services/app.event.service';
+import {AppFileService} from '../../services/app.file.service';
 import {EventFormComponent} from '../event-form/event.form.component';
 import {EventExporterJSON} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {SharingService} from '../../services/app.sharing.service';
+import {AppSharingService} from '../../services/app.sharing.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
@@ -33,13 +33,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   private deleteConfirmationSubscription;
 
   constructor(
-    private eventService: EventService,
+    private eventService: AppEventService,
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
     private clipboardService: Clipboard,
-    private sharingService: SharingService,
-    private fileService: FileService,
+    private sharingService: AppSharingService,
+    private fileService: AppFileService,
     private deleteConfirmationBottomSheet: MatBottomSheet,
     private afa: AngularFireAnalytics,
     private dialog: MatDialog) {

@@ -22,7 +22,7 @@ import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {WindowService} from '../../../services/app.window.service';
+import {AppWindowService} from '../../../services/app.window.service';
 import {AngularFireAuth} from '@angular/fire/auth';
 import * as firebase from 'firebase/app';
 
@@ -49,7 +49,7 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     public dialogRef: MatDialogRef<PhoneFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     private snackBar: MatSnackBar,
-    private windowService: WindowService,
+    private windowService: AppWindowService,
     private afAuth: AngularFireAuth,
     private  changeDetector: ChangeDetectorRef,
   ) {

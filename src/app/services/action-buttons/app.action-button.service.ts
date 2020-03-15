@@ -2,8 +2,10 @@ import {Injectable} from '@angular/core';
 import {ActionButton} from './app.action-button';
 import {BehaviorSubject, Observable} from 'rxjs';
 
-@Injectable()
-export class ActionButtonService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppActionButtonService {
 
   private actionButtons: BehaviorSubject<Map<string, ActionButton>> = new BehaviorSubject(new Map<string, ActionButton>());
 

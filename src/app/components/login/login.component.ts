@@ -5,7 +5,7 @@ import {Router} from '@angular/router';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {take} from 'rxjs/operators';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
@@ -39,7 +39,7 @@ export class LoginComponent implements OnInit {
     public authService: AppAuthService,
     private afAuth: AngularFireAuth,
     private afa: AngularFireAnalytics,
-    public userService: UserService,
+    public userService: AppUserService,
     private router: Router,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,

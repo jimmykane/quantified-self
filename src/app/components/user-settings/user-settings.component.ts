@@ -2,7 +2,7 @@ import {Component, Input, OnChanges} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppAuthService} from '../../authentication/app.auth.service';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
@@ -79,7 +79,7 @@ export class UserSettingsComponent implements OnChanges {
 
   constructor(private authService: AppAuthService,
               private route: ActivatedRoute,
-              private userService: UserService,
+              private userService: AppUserService,
               private router: Router,
               private snackBar: MatSnackBar,
               private afa: AngularFireAnalytics,
@@ -323,9 +323,9 @@ export class UserSettingsComponent implements OnChanges {
           },
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
-            gradeAdjustedSpeedUnits: UserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.userSettingsFormGroup.get('speedUnitsToUse').value),
+            gradeAdjustedSpeedUnits: AppUserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.userSettingsFormGroup.get('speedUnitsToUse').value),
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
-            gradeAdjustedPaceUnits: UserService.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
+            gradeAdjustedPaceUnits: AppUserService.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
             swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,

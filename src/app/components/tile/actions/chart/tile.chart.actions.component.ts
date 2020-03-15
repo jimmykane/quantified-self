@@ -13,7 +13,7 @@ import {
   ChartDataValueTypes,
   ChartTypes, TileChartSettingsInterface, TileTypes,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import {UserService} from '../../../../services/app.user.service';
+import {AppUserService} from '../../../../services/app.user.service';
 import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
 import {DataAltitudeAvg} from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
@@ -121,7 +121,7 @@ export class TileChartActionsComponent extends TileActionsAbstract implements On
   ];
 
   constructor(
-    userService: UserService,
+    userService: AppUserService,
     afa: AngularFireAnalytics) {
     super(userService, afa);
   }
