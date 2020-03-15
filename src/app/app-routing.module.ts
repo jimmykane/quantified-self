@@ -17,7 +17,7 @@ const routes: Routes = [
   {
     path: 'login',
     loadChildren: () => import('./modules/login.module').then(module => module.LoginModule),
-    data: {title: 'Login', animation: 'Login'}
+    data: {title: 'Login', animation: 'Login'},
   },
   {
     path: 'dashboard',

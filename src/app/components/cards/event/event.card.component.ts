@@ -173,7 +173,11 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnDestroy(): void {
-    this.subscriptions.forEach(subscription => subscription.unsubscribe())
+    this.subscriptions.forEach(subscription => {
+      if (subscription) {
+        subscription.unsubscribe()
+      }
+    })
   }
 
   hasLaps(event: EventInterface): boolean {
