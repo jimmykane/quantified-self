@@ -110,9 +110,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       if (!user) {
         return;
       }
-      this.themeService.setAppTheme(user.settings.appSettings.theme);
-      this.themeService.setChartTheme(user.settings.chartSettings.theme);
-      this.themeService.setMapTheme(user.settings.mapSettings.theme);
     });
 
     this.appVersionSubscription = this.appInfoService.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
@@ -137,11 +134,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
     });
 
-  }
-
-  async toggleTheme() {
-    this.afa.logEvent('change_theme');
-    await this.themeService.toggleTheme(this.user);
   }
 
   private addIconsToRegistry() {

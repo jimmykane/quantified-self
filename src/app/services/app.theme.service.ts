@@ -1,44 +1,59 @@
-import {Injectable} from '@angular/core';
+import { Injectable, OnDestroy } from '@angular/core';
 import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {AppUserService} from './app.user.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {BehaviorSubject, Observable} from 'rxjs';
+import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { AppAuthService } from '../authentication/app.auth.service';
 
 
 @Injectable({
   providedIn: 'root',
 })
-export class AppThemeService {
+export class AppThemeService implements OnDestroy {
 
   private chartTheme: BehaviorSubject<ChartThemes> = new BehaviorSubject(null);
   private appTheme: BehaviorSubject<AppThemes> = new BehaviorSubject(null);
   private mapTheme: BehaviorSubject<MapThemes> = new BehaviorSubject(null);
 
+  private userSubscription: Subscription;
+
+  private user: User
+
   constructor(
     private userService: AppUserService,
+    private authService: AppAuthService,
   ) {
+    this.userSubscription = this.authService.user.subscribe(user => {
+      this.user = user;
+      if (this.user) {
+        this.setAppTheme(this.user.settings.appSettings.theme)
+        this.setChartTheme(this.user.settings.chartSettings.theme)
+        this.setMapTheme(this.user.settings.mapSettings.theme)
+      }
+    })
     this.appTheme.next(this.getAppThemeFromStorage());
     this.chartTheme.next(this.getChartThemeFromStorage());
     this.mapTheme.next(this.getMapThemeFromStorage());
   }
 
-  private async changeTheme(theme: AppThemes, user?: User) {
+  private async changeTheme(theme: AppThemes) {
     const chartTheme = theme === AppThemes.Normal ? ChartThemes.Material : ChartThemes.Dark;
     const mapTheme = theme === AppThemes.Normal ? MapThemes.Normal : MapThemes.Dark;
     // Save it to the user if he exists
-    if (user) {
-      user.settings.appSettings.theme = theme;
-      user.settings.chartSettings.theme = chartTheme;
-      user.settings.mapSettings.theme = mapTheme;
-      await this.userService.updateUserProperties(user, {
-        settings: user.settings
+    if (this.user) {
+      this.user.settings.appSettings.theme = theme;
+      this.user.settings.chartSettings.theme = chartTheme;
+      this.user.settings.mapSettings.theme = mapTheme;
+      await this.userService.updateUserProperties(this.user, {
+        settings: this.user.settings
       });
     }
     // Save it to local storage to prevent flashes
     this.setAppTheme(theme);
     this.setChartTheme(chartTheme);
+    this.setMapTheme(mapTheme);
   }
 
   public setAppTheme(appTheme: AppThemes) {
@@ -69,8 +84,8 @@ export class AppThemeService {
     return this.mapTheme.asObservable();
   }
 
-  public async toggleTheme(user?: User) {
-    await this.changeTheme(localStorage.getItem('appTheme') === AppThemes.Dark ? AppThemes.Normal : AppThemes.Dark, user);
+  public async toggleTheme() {
+    await this.changeTheme(localStorage.getItem('appTheme') === AppThemes.Dark ? AppThemes.Normal : AppThemes.Dark);
     this.appTheme.next(this.getAppThemeFromStorage());
     this.chartTheme.next(this.getChartThemeFromStorage());
   }
@@ -90,5 +105,11 @@ export class AppThemeService {
   private getEnumKeyByEnumValue(myEnum, enumValue) {
     const keys = Object.keys(myEnum).filter(x => myEnum[x] === enumValue);
     return keys.length > 0 ? keys[0] : null;
+  }
+
+  ngOnDestroy(): void {
+    if (this.userSubscription) {
+      this.userSubscription.unsubscribe()
+    }
   }
 }
