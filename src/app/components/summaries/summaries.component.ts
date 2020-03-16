@@ -9,28 +9,29 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import {AppEventService} from '../../services/app.event.service';
-import {Subscription} from 'rxjs';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {Router} from '@angular/router';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {AppThemeService} from '../../services/app.theme.service';
-import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { AppEventService } from '../../services/app.event.service';
+import { Subscription } from 'rxjs';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { Router } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { AppThemeService } from '../../services/app.theme.service';
+import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   TileChartSettingsInterface,
   TileMapSettingsInterface,
-  TileSettingsInterface, TileTypes
+  TileSettingsInterface,
+  TileTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import {MatDialog} from '@angular/material/dialog';
-import {LoadingAbstractDirective} from '../loading/loading-abstract.directive';
+import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { MatDialog } from '@angular/material/dialog';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import * as equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 
@@ -50,20 +51,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public numberOfCols: number;
 
 
-  public tiles: (SummariesChartTileInterface|SummariesMapTileInterface)[] = [];
+  public tiles: (SummariesChartTileInterface | SummariesMapTileInterface)[] = [];
 
   public tileTypes = TileTypes;
 
 
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
-
-  @HostListener('window:resize', ['$event'])
-  @HostListener('window:orientationchange', ['$event'])
-  resizeOROrientationChange(event?) {
-    this.numberOfCols = this.getNumberOfColumns();
-    this.rowHeight = this.getRowHeight();
-  }
 
   constructor(private router: Router,
               private authService: AppAuthService,
@@ -78,6 +72,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.numberOfCols = this.getNumberOfColumns();
   }
 
+  @HostListener('window:resize', ['$event'])
+  @HostListener('window:orientationchange', ['$event'])
+  resizeOROrientationChange(event?) {
+    this.numberOfCols = this.getNumberOfColumns();
+    this.rowHeight = this.getRowHeight();
+  }
 
   ngOnInit() {
   }
@@ -86,6 +86,50 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (simpleChanges.events || simpleChanges.user) {
       return this.unsubscribeAndCreateCharts();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.unsubscribeFromAll();
+  }
+
+  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes): string | number {
+    switch (categoryType) {
+      case ChartDataCategoryTypes.ActivityType:
+        const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+        // this should not happen :-)
+        if (!eventTypeDisplayStat) {
+          Sentry.captureException(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
+          return '??'
+        }
+        // Log an error to notify us what is missing
+        if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) {
+          Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
+          return '??';
+        }
+        return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
+      case ChartDataCategoryTypes.DateType:
+        switch (this.getEventsDateRange(events)) {
+          case SummariesChartDataDateRages.Yearly:
+            return new Date(event.startDate.getFullYear(), 0).getTime();
+          case SummariesChartDataDateRages.Monthly:
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
+          case SummariesChartDataDateRages.Daily:
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
+          case SummariesChartDataDateRages.Hourly:
+            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours(), event.startDate.getMinutes()).getTime();
+          default:
+            return event.startDate.getTime()
+        }
+    }
+  }
+
+  public trackByTile(index: number, item: (SummariesChartTileInterface | SummariesMapTileInterface)) {
+    if (!item) {
+      return null;
+    }
+    return isSummariesChartTile(item) ?
+      `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.dataDateRange}`
+      : `${item.clusterMarkers}${item.mapTheme}${item.mapType}${item.name}${item.order}${item.showHeatMap}`
   }
 
   private async unsubscribeAndCreateCharts() {
@@ -129,8 +173,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.loaded();
   }
 
-  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface|SummariesMapTileInterface)[] {
-    return tiles.reduce((chartsAndData: (SummariesChartTileInterface|SummariesMapTileInterface)[], tile) => {
+  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface | SummariesMapTileInterface)[] {
+    return tiles.reduce((chartsAndData: (SummariesChartTileInterface | SummariesMapTileInterface)[], tile) => {
       switch (tile.type) {
         case TileTypes.Chart:
           const chartTile = <TileChartSettingsInterface>tile;
@@ -162,10 +206,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     if (this.chartThemeSubscription) {
       this.chartThemeSubscription.unsubscribe();
     }
-  }
-
-  ngOnDestroy(): void {
-    this.unsubscribeFromAll();
   }
 
   private getValueMinOrMax(events: EventInterface[], dataType: string, min = false): number {
@@ -207,7 +247,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes) {
     // Return empty if ascent is to be skipped
-    if (dataType === DataAscent.type){
+    if (dataType === DataAscent.type) {
       events = events.filter(event => {
         return event.getActivityTypesAsArray().filter(eventActivityType => this.user.settings.summariesSettings.removeAscentForEventTypes.indexOf(ActivityTypes[eventActivityType]) === -1).length
       })
@@ -270,44 +310,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       });
     }
     return this.convertToCategories(valueByCategory);
-  }
-
-  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes): string | number {
-    switch (categoryType) {
-      case ChartDataCategoryTypes.ActivityType:
-        const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
-        // this should not happen :-)
-        if (!eventTypeDisplayStat) {
-          Sentry.captureException(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
-          return '??'
-        }
-        // Log an error to notify us what is missing
-        if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) {
-          Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
-          return '??';
-        }
-        return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
-      case ChartDataCategoryTypes.DateType:
-        switch (this.getEventsDateRange(events)) {
-          case SummariesChartDataDateRages.Yearly:
-            return new Date(event.startDate.getFullYear(), 0).getTime();
-          case SummariesChartDataDateRages.Monthly:
-            return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
-          case SummariesChartDataDateRages.Daily:
-            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
-          case SummariesChartDataDateRages.Hourly:
-            return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours(), event.startDate.getMinutes()).getTime();
-          default:
-            return event.startDate.getTime()
-        }
-    }
-  }
-
-  public trackByTile(index: number, item: (SummariesChartTileInterface|SummariesMapTileInterface)) {
-    if (!item){
-      return null;
-    }
-    return item.order;
   }
 
   /**
@@ -391,4 +393,8 @@ export enum SummariesChartDataDateRages {
   Daily,
   Monthly,
   Yearly,
+}
+
+export function isSummariesChartTile(tile): tile is SummariesChartTileInterface {
+  return 'dataDateRange' in tile;
 }
