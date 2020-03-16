@@ -338,6 +338,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       EventRowElementsArray.push(statRowElement);
       return EventRowElementsArray;
     }, []);
+    this.loaded();
     this.logger.info(`Changes processed`);
   }
 
