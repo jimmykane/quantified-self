@@ -4,13 +4,25 @@ mat-cell, .mat-header-cell {
 }
 
 
+
 .mat-cell{
   font-size: 0.85em ;
   padding-left: 0.5em;
   padding-right: 0.5em;
 }
 
+.container{
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-content: space-between;
+}
 
+.buttons{
+  display: flex;
+  align-items: center;
+}
 
 .mat-column-Checkbox, .mat-column-Privacy, .mat-column-Actions{
  min-width: 20px;
@@ -23,9 +35,6 @@ mat-cell, .mat-header-cell {
   max-width: 10vw;
 }
 
-mat-form-field{
-  width: 100%
-}
 
 td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:last-of-type{
   padding-right: 0;

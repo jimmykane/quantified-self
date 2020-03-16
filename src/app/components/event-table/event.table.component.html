@@ -2,26 +2,35 @@
 
   <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
              [errorMessage]="'Nothing to show'"></app-shade>
-  <mat-form-field>
-    <mat-label>Search</mat-label>
-    <input matInput (keyup)="onKeyUp($event)" placeholder="Date, name, type, etc...">
-  </mat-form-field>
-
-  <section [hidden]="!selection.selected.length">
-    {{selection.selected.length}}
-    <button
-      mat-icon-button
-      *ngIf="this.selection.selected.length > 1"
-      (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-      <mat-icon>compare_arrows</mat-icon>
-    </button>
-    <button mat-icon-button (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-      <mat-icon>download</mat-icon>
-    </button>
-    <button mat-icon-button (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection($event)">
-      <mat-icon>delete</mat-icon>
-    </button>
+  <section class="container">
+    <section>
+      <mat-label>Search</mat-label>
+      <input matInput (keyup)="onKeyUp($event)" placeholder="Date, name, type, etc...">
+    </section>
+    <section class="buttons" *ngIf="selection.selected.length">
+      <button
+        mat-icon-button
+        matTooltip="Merge {{selection.selected.length}} events"
+        *ngIf="this.selection.selected.length > 1"
+        (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
+        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="primary">compare_arrows</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        matTooltip="Download as csv {{selection.selected.length}} events"
+        (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
+        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="accent">description</mat-icon>
+      </button>
+      <button
+        mat-icon-button
+        matTooltip="Delete {{selection.selected.length}} events"
+        (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection($event)">
+        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="warn">delete</mat-icon>
+      </button>
+    </section>
   </section>
+
+  <mat-divider [inset]="true"></mat-divider>
 
 
   <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
@@ -49,8 +58,8 @@
         </th>
 
       </ng-container>
-      <td mat-cell matRipple *matCellDef="let row">
-        <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation()"
+      <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault()">
+        <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation();"
                       (change)="$event ? checkBoxClick(row) : null"
                       [ngStyle]="{'background-color': row['Color']}"
                       [checked]="selection.isSelected(row)">
@@ -70,7 +79,7 @@
     </ng-container>
 
 
-    <tr [hidden]="selection.selected.length" mat-header-row
+    <tr mat-header-row
         *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize(); sticky: true;"></tr>
     <tr mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
         [routerLink]="['/user', user.uid, 'event', row.Event.getID()]"

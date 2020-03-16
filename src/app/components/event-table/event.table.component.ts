@@ -309,6 +309,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private processChanges() {
     this.logger.info(`Processing changes`);
+    this.selection.clear();
     // this.data = new MatTableDataSource<any>(data);
     this.data.data = this.events.reduce((EventRowElementsArray, event) => {
       if (!event) {

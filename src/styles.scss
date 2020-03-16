@@ -31,6 +31,12 @@ $dark-theme: mat-dark-theme($dark-primary, $dark-accent, $dark-warn);
   @include angular-material-theme($dark-theme);
 }
 
+.mat-header-cell{
+  color: black!important;
+}
+.dark-theme .mat-header-cell{
+  color: white!important;
+}
 
 @font-face {
   font-family: 'QSFont';
