@@ -27,9 +27,10 @@
   <!--<mat-card>-->
     <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
   <!--</mat-card>-->
+<!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
+<!--      && routerOutlet.activatedRouteData['animation']">-->
 
-  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData
-      && routerOutlet.activatedRouteData['animation']">
+  <div>
     <mat-progress-bar
       *ngIf="loading" color="primary" mode="indeterminate">
     </mat-progress-bar>
