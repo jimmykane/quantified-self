@@ -48,12 +48,14 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
 
     if (simpleChanges.data) {
-      this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType));
+      this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
       if (this.filterLowValues) {
         this.data = this.filterOutLowValues(this.data)
       }
       if (this.chart) {
         this.chart.data = this.data || [];
+        // @todo should it also invalidate?
+        this.chart.invalidateLabels();
       }
     }
   }
