@@ -11,30 +11,33 @@
 
     <span class="fill-space"></span>
 
-    <button mat-stroked-button class="right" color="accent" *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'" disabled>
+    <button mat-stroked-button class="right" color="accent"
+            *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
+            disabled>
       Loading
     </button>
-    <button mat-stroked-button class="right" color="primary" *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
+    <button mat-stroked-button class="right" color="primary"
+            *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
             (click)="router.navigate(['/dashboard']);">
       Go to your dashboard
     </button>
-    <button mat-stroked-button class="right" color="accent" *ngIf="authService.authenticated() === false && title && title !== 'Login'"
+    <button mat-stroked-button class="right" color="accent"
+            *ngIf="authService.authenticated() === false && title && title !== 'Login'"
             (click)="router.navigate(['/login']);">
       Login or Register
     </button>
   </nav>
 
   <!--<mat-card>-->
-    <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
+  <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
   <!--</mat-card>-->
-<!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
-<!--      && routerOutlet.activatedRouteData['animation']">-->
+  <!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
+  <!--      && routerOutlet.activatedRouteData['animation']">-->
 
-  <div>
-    <mat-progress-bar
-      *ngIf="loading" color="primary" mode="indeterminate">
-    </mat-progress-bar>
-    <router-outlet #routerOutlet="outlet"></router-outlet>
-  </div>
+  <mat-progress-bar
+    *ngIf="loading" color="primary" mode="indeterminate">
+  </mat-progress-bar>
+
+  <router-outlet #routerOutlet="outlet"></router-outlet>
 
 </mat-sidenav-container>
