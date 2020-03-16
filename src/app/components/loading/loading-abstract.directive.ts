@@ -1,9 +1,10 @@
-import {ChangeDetectorRef} from '@angular/core';
+import { ChangeDetectorRef, Directive } from '@angular/core';
 
 /**
  * Class for handling loading with no change detection
  */
-export abstract class LoadingAbstract {
+@Directive()
+export abstract class LoadingAbstractDirective {
 
   public isLoading: boolean;
 

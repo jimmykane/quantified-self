@@ -7,8 +7,6 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {AppActionButtonService} from './services/action-buttons/app.action-button.service';
-import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatIconRegistry} from '@angular/material/icon';
 import {MatSidenav} from '@angular/material/sidenav';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -50,7 +48,6 @@ const {version: appVersion} = require('../../package.json');
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
   @ViewChild('sidenav', {static: true}) sideNav: MatSidenav;
-  public actionButtons: ActionButton[] = [];
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
@@ -63,11 +60,9 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public authService: AppAuthService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
-    private actionButtonService: AppActionButtonService,
     private sideNavService: AppSideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    public themeService: AppThemeService,
     public appInfoService: AppInfoService,
     private titleService: Title,
     private windowService: AppWindowService,
@@ -96,19 +91,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         default: {
           break;
         }
-      }
-    });
-    this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
-      this.sideNav.toggle();
-    }, 'material'));
-    this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
-      this.actionButtons = Array.from(actionButtons.values());
-      this.changeDetectorRef.detectChanges()
-    });
-    this.authService.user.subscribe((user) => {
-      this.user = user;
-      if (!user) {
-        return;
       }
     });
 

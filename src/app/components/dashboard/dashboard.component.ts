@@ -10,11 +10,7 @@ import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboa
 import {getDatesForDateRange, Search} from '../event-search/event-search.component';
 import {AppUserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {AppActionButtonService} from '../../services/action-buttons/app.action-button.service';
-import {ActionButton} from '../../services/action-buttons/app.action-button';
 import {map, switchMap} from 'rxjs/operators';
-import {MatDialog} from '@angular/material/dialog';
-import {EventsExportFormComponent} from '../events-export-form/events-export.form.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {Log} from 'ng2-logger/browser';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -47,12 +43,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
               public authService: AppAuthService,
               private eventService: AppEventService,
               private userService: AppUserService,
-              private actionButtonService: AppActionButtonService,
-              private  changeDetector: ChangeDetectorRef,
+              private changeDetector: ChangeDetectorRef,
               private afa: AngularFireAnalytics,
-              private dialog: MatDialog,
               private snackBar: MatSnackBar) {
-    this.addUploadButton();
   }
 
   ngOnInit() {
@@ -146,11 +139,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.shouldSearch = false;
       this.events = eventsAndUser.events || [];
       this.user = eventsAndUser.user;
-      if (this.events && this.events.length) {
-        this.addExportButton();
-      } else {
-        this.removeExportButton();
-      }
       this.isLoading = false;
       this.isInitialized = true;
     });
@@ -177,34 +165,5 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
-    this.removeExportButton();
-    this.removeUploadButton();
-  }
-
-  private addUploadButton() {
-    this.actionButtonService.addActionButton('turnOnUpload', new ActionButton('cloud_upload', () => {
-      this.showUpload = !this.showUpload;
-    }));
-  }
-
-  private removeUploadButton() {
-    this.actionButtonService.removeActionButton('turnOnUpload');
-  }
-
-  private addExportButton() {
-    this.actionButtonService.addActionButton('export', new ActionButton('arrow_downward', () => {
-      const dialogRef = this.dialog.open(EventsExportFormComponent, {
-        // width: '100vw',
-        disableClose: false,
-        data: {
-          events: this.events,
-          user: this.user,
-        },
-      });
-    }));
-  }
-
-  private removeExportButton() {
-    this.actionButtonService.removeActionButton('export');
   }
 }

@@ -38,16 +38,3 @@
   </div>
 
 </mat-sidenav-container>
-<div class="fabButtonsVertical" *ngIf="title === 'Dashboard'">
-  <div class="fabButtonsVertical-container">
-    <ng-container *ngFor="let actionButton of actionButtons; let i = index;">
-      <button *ngIf="i < 1" type="button" mat-fab color="primary" (click)="actionButton.action()">
-        <mat-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</mat-icon>
-      </button>
-      <button *ngIf="i > 0" type="button" mat-mini-fab (click)="actionButton.action()">
-        <mat-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</mat-icon>
-      </button>
-    </ng-container>
-  </div>
-
-</div>

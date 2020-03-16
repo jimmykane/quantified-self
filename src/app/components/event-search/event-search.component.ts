@@ -14,7 +14,7 @@ import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/us
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { MatSelectChange } from '@angular/material/select';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
-import { LoadingAbstract } from '../loading/loading.abstract';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
 @Component({
   selector: 'app-event-search',
@@ -23,7 +23,7 @@ import { LoadingAbstract } from '../loading/loading.abstract';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 
-export class EventSearchComponent extends LoadingAbstract implements OnChanges, OnInit {
+export class EventSearchComponent extends LoadingAbstractDirective implements OnChanges, OnInit {
   @Input() selectedDateRange: DateRanges;
   @Input() selectedStartDate: Date;
   @Input() selectedEndDate: Date;

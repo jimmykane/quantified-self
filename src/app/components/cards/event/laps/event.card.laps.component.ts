@@ -6,8 +6,8 @@ import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import {LoadingAbstract} from '../../../loading/loading.abstract';
-import {DataTableAbstract} from '../../../data-table/data-table.abstract';
+import {LoadingAbstractDirective} from '../../../loading/loading-abstract.directive';
+import {DataTableAbstractDirective} from '../../../data-table/data-table-abstract.directive';
 import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {AppEventColorService} from '../../../../services/color/app.event.color.service';
@@ -20,7 +20,7 @@ import {AppEventColorService} from '../../../../services/color/app.event.color.s
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardLapsComponent extends DataTableAbstract implements OnChanges {
+export class EventCardLapsComponent extends DataTableAbstractDirective implements OnChanges {
   @Input() event: EventInterface;
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;

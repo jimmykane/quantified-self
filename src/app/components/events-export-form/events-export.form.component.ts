@@ -31,7 +31,7 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
-  selector: 'app-phone-form',
+  selector: 'app-export-events-form',
   templateUrl: './events-export.form.component.html',
   styleUrls: ['./events-export.form.component.css'],
   providers: [],

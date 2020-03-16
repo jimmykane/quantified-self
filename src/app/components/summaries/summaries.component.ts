@@ -30,7 +30,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {MatDialog} from '@angular/material/dialog';
-import {LoadingAbstract} from '../loading/loading.abstract';
+import {LoadingAbstractDirective} from '../loading/loading-abstract.directive';
 import * as equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 
@@ -41,7 +41,7 @@ import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class SummariesComponent extends LoadingAbstract implements OnInit, OnDestroy, OnChanges {
+export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() isLoading: boolean;
