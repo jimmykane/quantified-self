@@ -49,7 +49,7 @@ export class AppThemeService implements OnDestroy {
       await this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
-    }else {
+    } else {
       // Save it to local storage to prevent flashes
       this.setAppTheme(theme);
       this.setChartTheme(chartTheme);
