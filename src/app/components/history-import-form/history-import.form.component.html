@@ -4,11 +4,6 @@
 
     <app-shade [isActive]="isLoading"></app-shade>
 
-    <section>
-      <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
-      <p style="margin-top: 0;">Import your history</p>
-    </section>
-
     <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
 
       <mat-step formGroupName="0" [stepControl]="formArray?.get([0])">
@@ -38,8 +33,7 @@
 
         <p><b>Note</b>: Please consider <a href="https://paypal.me/DKanellopoulos" target="_blank">donating</a> as history import is a costly operation.</p>
 
-        <button mat-stroked-button (click)="close($event)" type="button">Cancel</button>
-        <button mat-stroked-button color="primary" matStepperNext>Next</button>
+        <button mat-flat-button  color="primary" matStepperNext>Next</button>
       </mat-step>
 
       <mat-step formGroupName="1" [stepControl]="formArray?.get([1])">
@@ -61,7 +55,7 @@
         </mat-checkbox>
 
         <mat-error *ngIf="!isAllowedToDoHistoryImport">You cannot import your history at this moment</mat-error>
-        <button mat-stroked-button matStepperPrevious>Back</button>
+        <button mat-flat-button color="warn" matStepperPrevious>Back</button>
         <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!this.formGroup.valid">Import</button>
       </mat-step>
 

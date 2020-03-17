@@ -4,7 +4,7 @@ import {ServicesRoutingModule} from '../services-routing.module';
 import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
-import {HistoryImportFormComponent} from '../components/history-import-form/history-import.form.component';
+import { HistoryImportFormComponent } from '../components/history-import-form/history-import.form.component';
 
 
 @NgModule({
@@ -16,7 +16,7 @@ import {HistoryImportFormComponent} from '../components/history-import-form/hist
   ],
   exports: [],
   declarations: [ServicesComponent, HistoryImportFormComponent],
-  entryComponents: [HistoryImportFormComponent],
+  entryComponents: [],
   providers: []
 })
 

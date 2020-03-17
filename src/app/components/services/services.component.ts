@@ -1,12 +1,10 @@
 import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
 import {FormControl, FormGroup, Validators} from '@angular/forms';
-import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {HttpClient} from '@angular/common/http';
 import {AppFileService} from '../../services/app.file.service';
-import {AngularFireFunctions} from '@angular/fire/functions';
-import {combineLatest, of, Subscription} from 'rxjs';
+import {of, Subscription} from 'rxjs';
 import {AppEventService} from '../../services/app.event.service';
 import {EventImporterFIT} from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import {AppAuthService} from '../../authentication/app.auth.service';
@@ -16,9 +14,7 @@ import {AppUserService} from '../../services/app.user.service';
 import {switchMap} from 'rxjs/operators';
 import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import {HistoryImportFormComponent} from '../history-import-form/history-import.form.component';
 import {environment} from '../../../environments/environment';
-import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
@@ -60,7 +56,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
               public authService: AppAuthService,
               private userService: AppUserService,
               private router: Router,
-              private dialog: MatDialog,
               private snackBar: MatSnackBar) {
   }
 
@@ -184,23 +179,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       });
     }
     this.isLoading = false;
-  }
-
-  openHistoryImportForm() {
-    const dialogRef = this.dialog.open(HistoryImportFormComponent, {
-      minWidth: '75vw',
-      maxWidth: '95vw',
-      minHeight: '65vh',
-      maxHeight: '90vh',
-      disableClose: false,
-      data: {
-        user: this.user,
-      },
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      this.isLoading = false;
-    });
   }
 
   ngOnDestroy(): void {

@@ -1,4 +1,4 @@
-import {Component, Inject, OnDestroy, OnInit} from '@angular/core';
+import { Component, Inject, Input, OnDestroy, OnInit } from '@angular/core';
 import {
   AbstractControl,
   FormArray,
@@ -15,12 +15,11 @@ import {AppUserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
 import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
-  selector: 'app-activity-form',
+  selector: 'app-history-import-form',
   templateUrl: './history-import.form.component.html',
   styleUrls: ['./history-import.form.component.css'],
   providers: [],
@@ -28,9 +27,8 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 export class HistoryImportFormComponent implements OnInit, OnDestroy {
+  @Input() user: User;
   protected logger = Log.create('ActivityFormComponent');
-
-  public user: User;
 
   public formGroup: FormGroup;
 
@@ -44,13 +42,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
   public isLoading: boolean;
 
   constructor(
-    public dialogRef: MatDialogRef<HistoryImportFormComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: any,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
     private afa: AngularFireAnalytics,
   ) {
-    this.user = data.user;
   }
 
   async ngOnInit() {
@@ -133,7 +128,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
         duration: 2000,
       });
       this.afa.logEvent('imported_history', {method: ServiceNames.SuuntoApp});
-      this.dialogRef.close();
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
@@ -161,15 +155,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     if (this.userMetaForServiceSubscription) {
       this.userMetaForServiceSubscription.unsubscribe();
     }
-  }
-
-  close(event) {
-    if (this.userMetaForServiceSubscription) {
-      this.userMetaForServiceSubscription.unsubscribe();
-    }
-    event.stopPropagation();
-    event.preventDefault();
-    this.dialogRef.close();
   }
 }
 

@@ -7,7 +7,7 @@ mat-card{
 
 mat-card.service-card{
   width: 100%;
-  min-height: calc(100vh - 48px);
+  min-height: calc(100vh - 32px - 48px);
 }
 
 mat-form-field {
@@ -25,6 +25,7 @@ button.margin-left {
 
 button.big{
   width: 100%;
+  margin-top: 1em;
 }
 
 section{
