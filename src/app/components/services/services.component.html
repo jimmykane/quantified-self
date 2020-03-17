@@ -17,8 +17,40 @@
             <!--            <mat-divider [inset]="true"></mat-divider>-->
           </mat-card-subtitle>
         </mat-card-header>
-        <mat-tab-group [selectedIndex]="(!user || isGuest) ? 1 : 0"
-          [dynamicHeight]="true">
+        <mat-tab-group [selectedIndex]="(!user || isGuest) ? 0 : 1"
+                       [dynamicHeight]="true">
+
+          <mat-tab label="Download">
+            <!--            <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>-->
+            <ng-template matTabLabel>
+              <mat-icon matTooltip="Download">cloud_download</mat-icon>
+            </ng-template>
+
+            <section>
+              <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
+                <mat-form-field>
+                  <label>
+                    <input matInput placeholder="Link" formControlName="input">
+                  </label>
+                  <mat-hint>Paste a Suunto app link that is public</mat-hint>
+                  <mat-error *ngIf="hasError('input')">
+                    This cannot be empty
+                  </mat-error>
+                </mat-form-field>
+
+                <section>
+                  <button [class.big]="!user" mat-flat-button color="primary" (click)="onSubmit()">Download</button>
+                  <button *ngIf="user" class="margin-left" mat-flat-button color="accent" (click)="onImportAndOpen()">
+                    Import and open
+                  </button>
+                </section>
+              </form>
+            </section>
+
+
+          </mat-tab>
+
+
           <mat-tab label="Sync" [disabled]="!user || isGuest">
             <ng-template matTabLabel>
               <mat-icon matTooltip="Sync settings">sync</mat-icon>
@@ -50,50 +82,21 @@
               <!--              <p class="mat-small mat-error" *ngIf="!user || this.isGuest">You must login with a non guest account to-->
               <!--                activate service syncing</p>-->
 
-              <button
-                [class.big]="(!user || this.isGuest ) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"
-                mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
-                (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
-              </button>
+              <section>
+                <button
+                  [class.big]="(!user || this.isGuest ) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"
+                  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+                  *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
+                  (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
+                </button>
 
-              <button [class.big]="serviceTokens.length > 1" [class.margin-left]="serviceTokens.length <= 1"
-                      mat-flat-button color="warn" class="margin-left"
-                      *ngIf="serviceTokens && serviceTokens.length"
-                      (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
-              </button>
+                <button [class.big]="serviceTokens.length > 1" [class.margin-left]="serviceTokens.length <= 1"
+                        mat-flat-button color="warn" class="margin-left"
+                        *ngIf="serviceTokens && serviceTokens.length"
+                        (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
+                </button>
+              </section>
             </section>
-          </mat-tab>
-
-
-          <mat-tab label="Download">
-            <!--            <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>-->
-            <ng-template matTabLabel>
-              <mat-icon matTooltip="Download">cloud_download</mat-icon>
-            </ng-template>
-
-            <section>
-              <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
-                <mat-form-field>
-                  <label>
-                    <input matInput placeholder="Link" formControlName="input">
-                  </label>
-                  <mat-hint>Paste a Suunto app link that is public</mat-hint>
-                  <mat-error *ngIf="hasError('input')">
-                    This cannot be empty
-                  </mat-error>
-                </mat-form-field>
-
-                <section>
-                  <button [class.big]="!user" mat-flat-button color="primary" (click)="onSubmit()">Download</button>
-                  <button *ngIf="user" class="margin-left" mat-flat-button color="accent" (click)="onImportAndOpen()">
-                    Import and open
-                  </button>
-                </section>
-              </form>
-            </section>
-
-
           </mat-tab>
 
           <mat-tab label="History import" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
