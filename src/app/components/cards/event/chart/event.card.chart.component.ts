@@ -328,7 +328,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
     chart.scrollbarX.marginTop = 0;
-    chart.scrollbarX.marginBottom = 0;
+    chart.scrollbarX.marginBottom = 10;
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);
