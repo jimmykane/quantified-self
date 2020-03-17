@@ -43,7 +43,6 @@ export class EventHeaderComponent implements OnChanges {
     }
   }
 
-
   async toggleEventPrivacy() {
     if (!this.user) {
       return
@@ -51,9 +50,25 @@ export class EventHeaderComponent implements OnChanges {
     return this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy === Privacy.Private ? Privacy.Public : Privacy.Private);
   }
 
+  returnZero() {
+    return 0;
+  }
+
+  async saveEventName(name: string, event: EventInterface) {
+    event.description = name;
+    await this.eventService.updateEventProperties(this.user, event.getID(), {
+      name: event.name,
+    });
+    this.snackBar.open('Event saved', null, {
+      duration: 2000,
+    });
+  }
+
   async saveEventDescription(description: string, event: EventInterface) {
     event.description = description;
-    await this.eventService.writeAllEventData(this.user, event);
+    await this.eventService.updateEventProperties(this.user, event.getID(), {
+      description: event.description,
+    });
     this.snackBar.open('Event saved', null, {
       duration: 2000,
     });

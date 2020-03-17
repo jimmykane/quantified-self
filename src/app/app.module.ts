@@ -19,19 +19,6 @@ import {
   INSTRUMENTATION_ENABLED
 } from '@angular/fire/performance';
 import {MaterialModule} from './modules/material.module';
-import {AppAuthService} from './authentication/app.auth.service';
-import {AppAuthGuard} from './authentication/app.auth.guard';
-import {AppChartSettingsLocalStorageService} from './services/storage/app.chart.settings.local.storage.service';
-import {AppEventService} from './services/app.event.service';
-import {AppActionButtonService} from './services/action-buttons/app.action-button.service';
-import {AppEventColorService} from './services/color/app.event.color.service';
-import {AppSharingService} from './services/app.sharing.service';
-import {AppFileService} from './services/app.file.service';
-import {AppUserService} from './services/app.user.service';
-import {AppSideNavService} from './services/side-nav/app-side-nav.service';
-import {AppThemeService} from './services/app.theme.service';
-import {AppInfoService} from './services/app.info.service';
-import {AppWindowService} from './services/app.window.service';
 import {AgmCoreModule} from '@agm/core';
 import {
   AngularFireAnalyticsModule,
@@ -39,8 +26,6 @@ import {
   APP_VERSION, COLLECTION_ENABLED, CONFIG,
   DEBUG_MODE, ScreenTrackingService, UserTrackingService
 } from '@angular/fire/analytics';
-import {AppActivitySelectionService} from './services/activity-selection-service/app-activity-selection.service';
-import {AppActivityCursorService} from './services/activity-cursor/app-activity-cursor.service';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { ServiceWorkerModule } from '@angular/service-worker';
 
