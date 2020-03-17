@@ -1,52 +1,119 @@
-<mat-card>
+<mat-card class="mat-elevation-z0">
   <mat-grid-list [cols]="1" [rowHeight]="'fit'">
     <mat-grid-tile>
       <app-shade [isActive]="isLoading"></app-shade>
-      <section>
-        <section>
-          <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
-          <p *ngIf="serviceTokens && serviceTokens.length">Up to 2 Suunto app accounts</p>
-          <section>
-            <p class="mat-small" *ngFor="let serviceToken of serviceTokens; let i = index;">
-              {{ i+1 }}. Connected at {{serviceToken.dateCreated  | date:'medium'}}
-              <mat-icon matTooltip="Account with username '{{ serviceToken.userName }}' is connected. NOTE: Sync happens for activities done after this date">
-                info
-              </mat-icon>
-            </p>
-            <p class="mat-small mat-error" *ngIf="!user || this.isGuest">You must login with a non guest account to activate service syncing</p>
+      <mat-card class="mat-elevation-z0 service-card">
+        <mat-card-header>
+          <!--          <div mat-card-avatar>-->
+          <!--            <mat-icon class="suunto"  svgIcon="suunto"></mat-icon>-->
+          <!--          </div>-->
+          <mat-card-title>
+            <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
+          </mat-card-title>
+          <mat-card-subtitle>
+            Suunto is a trusted companion for athletes and adventurers.<br/>
+            The durable and precise sports watches are tested in the toughest conditions and built to last in adventures
+            from the deepest oceans to the highest mountains.
+            <!--            <mat-divider [inset]="true"></mat-divider>-->
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-tab-group [selectedIndex]="(!user || isGuest) ? 1 : 0"
+          [dynamicHeight]="true">
+          <mat-tab label="Sync" [disabled]="!user || isGuest">
+            <ng-template matTabLabel>
+              <mat-icon matTooltip="Sync settings">sync</mat-icon>
+            </ng-template>
+            <section class="tab-content" *ngIf="user && !isGuest">
 
-            <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent" (click)="openHistoryImportForm()">History import</button>
+              <p *ngIf="!serviceTokens.length">
+                Connect to Suunto app by Suunto and get almost realtime updates on your dashboard<br/>
+                This needs to be revised
+              </p>
+              <!--            <p *ngIf="serviceTokens && serviceTokens.length">Up to 2 Suunto app accounts</p>-->
+              <mat-list *ngIf="serviceTokens.length">
 
-            <button  [class.big]="(!user || this.isGuest ) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                    *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
-                    (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
-            </button>
-            <button  [class.big]="serviceTokens.length > 1" [class.margin-left]="serviceTokens.length <= 1" mat-flat-button color="warn" class="margin-left"
-                    *ngIf="serviceTokens && serviceTokens.length"
-                    (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
-            </button>
-          </section>
-        </section>
+                <div mat-subheader>Accounts</div>
 
-        <section>
-          <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
-            <mat-form-field>
-              <label>
-                <input matInput placeholder="Link" formControlName="input">
-              </label>
-              <mat-hint>Paste a Suunto app link that is public</mat-hint>
-              <mat-error *ngIf="hasError('input')">
-                This cannot be empty
-              </mat-error>
-            </mat-form-field>
+                <mat-list-item *ngFor="let serviceToken of serviceTokens; let i = index;">
+                  <mat-icon mat-list-icon>folder</mat-icon>
+                  <div mat-line>{{ serviceToken.userName }} </div>
+                  <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
+                </mat-list-item>
+              </mat-list>
+
+              <!--              <p class="mat-small" *ngFor="let serviceToken of serviceTokens; let i = index;">-->
+              <!--                {{ i+1 }}. Connected at {{serviceToken.dateCreated  | date:'medium'}}-->
+              <!--                <mat-icon matTooltip="Account with username '{{ serviceToken.userName }}' is connected. NOTE: Sync happens for activities done after this date">-->
+              <!--                  info-->
+              <!--                </mat-icon>-->
+              <!--              </p>-->
+              <!--              <p class="mat-small mat-error" *ngIf="!user || this.isGuest">You must login with a non guest account to-->
+              <!--                activate service syncing</p>-->
+
+              <button
+                [class.big]="(!user || this.isGuest ) || (serviceTokens && (serviceTokens.length === 0 || serviceTokens.length > 1))"
+                mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+                *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
+                (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
+              </button>
+
+              <button [class.big]="serviceTokens.length > 1" [class.margin-left]="serviceTokens.length <= 1"
+                      mat-flat-button color="warn" class="margin-left"
+                      *ngIf="serviceTokens && serviceTokens.length"
+                      (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
+              </button>
+            </section>
+          </mat-tab>
+
+
+          <mat-tab label="Download">
+            <!--            <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>-->
+            <ng-template matTabLabel>
+              <mat-icon matTooltip="Download">cloud_download</mat-icon>
+            </ng-template>
 
             <section>
-              <button [class.big]="!user"  mat-flat-button color="primary" (click)="onSubmit()">Download</button>
-              <button *ngIf="user" class="margin-left" mat-flat-button color="accent" (click)="onImportAndOpen()">Import and open</button>
+              <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
+                <mat-form-field>
+                  <label>
+                    <input matInput placeholder="Link" formControlName="input">
+                  </label>
+                  <mat-hint>Paste a Suunto app link that is public</mat-hint>
+                  <mat-error *ngIf="hasError('input')">
+                    This cannot be empty
+                  </mat-error>
+                </mat-form-field>
+
+                <section>
+                  <button [class.big]="!user" mat-flat-button color="primary" (click)="onSubmit()">Download</button>
+                  <button *ngIf="user" class="margin-left" mat-flat-button color="accent" (click)="onImportAndOpen()">
+                    Import and open
+                  </button>
+                </section>
+              </form>
             </section>
-          </form>
-        </section>
-      </section>
+
+
+          </mat-tab>
+
+          <mat-tab label="History import" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
+            <!--            <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>-->
+            <ng-template matTabLabel>
+              <mat-icon matTooltip="History import">history</mat-icon>
+            </ng-template>
+
+            <button class="big history" mat-flat-button *ngIf="serviceTokens && serviceTokens.length" color="accent"
+                    (click)="openHistoryImportForm()">History import
+            </button>
+
+
+          </mat-tab>
+
+
+        </mat-tab-group>
+
+
+      </mat-card>
     </mat-grid-tile>
   </mat-grid-list>
 </mat-card>
