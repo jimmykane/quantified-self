@@ -166,6 +166,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         return this.getFillColor(chart, target.dataItem.index);
       });
 
+      bullet.tooltipText = 'text';
       bullet.adapter.add('tooltipText', (text, target, key) => {
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
@@ -184,7 +185,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       regressionSeries.stroke = am4core.color(AppColors.DarkGray);
       regressionSeries.strokeOpacity = 1;
       regressionSeries.strokeDasharray = '10,5';
-      regressionSeries.plugins.push(new am4plugins_regression.Regression());
+      const regressionPlugin = new am4plugins_regression.Regression();
+      regressionPlugin.simplify = true;
+      regressionSeries.plugins.push(regressionPlugin);
       regressionSeries.filters.push(ChartHelper.getShadowFilter());
     }
 
