@@ -66,8 +66,8 @@
 
                 <div mat-subheader>Accounts</div>
 
-                <mat-list-item *ngFor="let serviceToken of serviceTokens; let i = index;">
-                  <mat-icon mat-list-icon>folder</mat-icon>
+                <mat-list-item style="text-align: left" *ngFor="let serviceToken of serviceTokens; let i = index;" >
+                  <mat-icon mat-list-icon>account_circle</mat-icon>
                   <div mat-line>{{ serviceToken.userName }} </div>
                   <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
                 </mat-list-item>

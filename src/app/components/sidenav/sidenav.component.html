@@ -54,18 +54,6 @@
     Settings
   </mat-list-item>
 
-  <mat-list-item>
-    <mat-slide-toggle
-      [disabled]="!appTheme"
-      (change)="themeService.toggleTheme()"
-      [color]="'accent'"
-      [checked]="appTheme === appThemes.Dark">
-      <span matTooltip="Use dark theme">
-         Dark theme
-      </span>
-    </mat-slide-toggle>
-  </mat-list-item>
-
   <mat-divider></mat-divider>
 
   <mat-list-item onclick="window.open('https://www.facebook.com/groups/361026511083969/')">
@@ -103,11 +91,26 @@
 
   <mat-divider></mat-divider>
 
+  <mat-list-item>
+    <mat-slide-toggle
+      [disabled]="!appTheme"
+      (change)="themeService.toggleTheme()"
+      [color]="'accent'"
+      [checked]="appTheme === appThemes.Dark">
+      <span matTooltip="Use dark theme">
+         Dark theme
+      </span>
+    </mat-slide-toggle>
+  </mat-list-item>
+
+  <mat-divider></mat-divider>
+
   <mat-list-item (click)="logout()"
                  *ngIf="authService.authenticated()">
     <mat-icon>power_settings_new</mat-icon>
     <span>Logout</span>
   </mat-list-item>
+
 
 </mat-nav-list>
 
