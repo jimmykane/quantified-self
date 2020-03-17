@@ -2,7 +2,7 @@ import {
   ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {EventService} from '../../../../services/app.event.service';
+import {AppEventService} from '../../../../services/app.event.service';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
@@ -33,7 +33,7 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
   movingWeightAverageValue = 5;
 
 
-  constructor(private snackBar: MatSnackBar, private eventService: EventService) {
+  constructor(private snackBar: MatSnackBar, private eventService: AppEventService) {
   }
 
   ngOnInit() {

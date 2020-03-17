@@ -1,8 +1,10 @@
 import {Injectable} from '@angular/core';
-import { MatSidenav } from "@angular/material/sidenav";
+import { MatSidenav } from '@angular/material/sidenav';
 
-@Injectable()
-export class SideNavService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppSideNavService {
 
   private sidenav: MatSidenav;
 

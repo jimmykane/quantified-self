@@ -16,17 +16,19 @@ import {fromPromise} from 'rxjs/internal-compatibility';
 import {EventExporterJSON} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {WindowService} from './app.window.service';
+import {AppWindowService} from './app.window.service';
 import {gzip_decode} from 'wasm-flate';
 
 
-@Injectable()
-export class EventService implements OnDestroy {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppEventService implements OnDestroy {
 
   protected logger = Log.create('EventService');
 
   constructor(
-    private windowService: WindowService,
+    private windowService: AppWindowService,
     private afs: AngularFirestore) {
   }
 

@@ -1,5 +1,4 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { EventService } from '../../services/app.event.service';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -13,6 +12,7 @@ import { environment } from '../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { FileMetaData } from '../upload/upload.component';
+import { AppEventService } from '../../services/app.event.service';
 
 @Component({
   selector: 'app-upload-route',
@@ -36,7 +36,7 @@ export class UploadRouteComponent implements OnInit {
     public dialog: MatDialog,
     private http: HttpClient,
     private afAuth: AngularFireAuth,
-    private eventService: EventService,
+    private eventService: AppEventService,
     private afa: AngularFireAnalytics,
     private router: Router) {
   }

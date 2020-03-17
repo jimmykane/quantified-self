@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
 import {Router} from '@angular/router';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -26,7 +26,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
   private deleteConfirmationSubscription;
 
   constructor(
-    private eventService: EventService,
+    private eventService: AppEventService,
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,

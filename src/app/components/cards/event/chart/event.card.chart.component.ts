@@ -11,14 +11,14 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
-import {EventColorService} from '../../../../services/color/app.event.color.service';
+import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {XYSeries} from '@amcharts/amcharts4/charts';
 import {combineLatest, Subscription} from 'rxjs';
-import {EventService} from '../../../../services/app.event.service';
+import {AppEventService} from '../../../../services/app.event.service';
 import {DataAltitude} from '@sports-alliance/sports-lib/lib/data/data.altitude';
 import {debounceTime, map, take} from 'rxjs/operators';
 import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
@@ -46,7 +46,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/data/data.speed';
 import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import {AppDataColors} from '../../../../services/color/app.data.colors';
-import {WindowService} from '../../../../services/app.window.service';
+import {AppWindowService} from '../../../../services/app.window.service';
 import {DataStrydSpeed} from '@sports-alliance/sports-lib/lib/data/data.stryd-speed';
 import {
   DataVerticalSpeed,
@@ -72,13 +72,13 @@ import {DataAbsolutePressure} from '@sports-alliance/sports-lib/lib/data/data.ab
 import {ChartHelper, LabelData} from './chart-helper';
 import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
 import {DataAirPower} from '@sports-alliance/sports-lib/lib/data/data.air-power';
-import {UserService} from '../../../../services/app.user.service';
-import {ChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
+import {AppUserService} from '../../../../services/app.user.service';
+import {AppChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ActivityCursorInterface,
-  ActivityCursorService
-} from '../../../../services/activity-cursor/activity-cursor.service';
+  AppActivityCursorService
+} from '../../../../services/activity-cursor/app-activity-cursor.service';
 import {
   DataGradeAdjustedPace,
   DataGradeAdjustedPaceMinutesPerMile
@@ -139,11 +139,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
-              private windowService: WindowService,
-              private eventService: EventService,
-              private chartSettingsLocalStorageService: ChartSettingsLocalStorageService,
-              private activityCursorService: ActivityCursorService,
-              private eventColorService: EventColorService) {
+              private windowService: AppWindowService,
+              private eventService: AppEventService,
+              private chartSettingsLocalStorageService: AppChartSettingsLocalStorageService,
+              private activityCursorService: AppActivityCursorService,
+              private eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
 
@@ -220,6 +220,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return;
       }
 
+      // @todo fix scrollbar for cursor
       cursors.forEach((cursor) => {
         const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
 
@@ -258,7 +259,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
         const shouldRemoveGradeAdjustedSpeed = this.getNonUnitBasedDataTypes().indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
         const shouldRemoveDistance = this.getNonUnitBasedDataTypes().indexOf(DataDistance.type) === -1;
-
         return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
           .concat(streams)
           .filter((stream) => {
@@ -310,6 +310,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   protected createChart(): am4charts.XYChart {
+    // @hack to 'fix' multisport
+    if (this.event.isMultiSport()){
+      this.xAxisType = XAxisTypes.Time;
+    }
     am4core.options.onlyShowOnViewport = false ;
     am4core.options.queue = false ;
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
@@ -324,6 +328,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
     chart.scrollbarX.marginTop = 0;
+    chart.scrollbarX.marginBottom = 10;
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);
@@ -600,6 +605,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     series.dummyData = {
       activity: activity,
       stream: stream,
+      displayName: DynamicDataLoader.getDataClassFromDataType(stream.type).displayType
     };
 
     this.attachSeriesEventListeners(series);
@@ -766,7 +772,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
     } else {
       // Else try to check what we should show by default
-      if ([...UserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(series.dummyData.activity.type)]
+      if ([...AppUserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(series.dummyData.activity.type)]
         .reduce((accu, dataType) => {
           return [...accu, ...DynamicDataLoader.getUnitBasedDataTypesFromDataType(dataType, this.userUnitSettings)]
         }, []).indexOf(series.dummyData.stream.type) === -1) {
@@ -1387,6 +1393,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       marker.strokeWidth = 4;
       marker.strokeOpacity = 1;
       marker.stroke = am4core.color('#0a97ee');
+
     });
   }
 

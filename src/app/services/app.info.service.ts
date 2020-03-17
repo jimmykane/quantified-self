@@ -1,17 +1,18 @@
 import {Injectable} from '@angular/core';
-import {UserService} from './app.user.service';
+import {AppUserService} from './app.user.service';
 import {AngularFirestore} from '@angular/fire/firestore';
 import {BehaviorSubject, Observable} from 'rxjs';
-import {environment} from '../../environments/environment';
 
 
-@Injectable()
+@Injectable({
+  providedIn: 'root',
+})
 export class AppInfoService {
 
   private appVersions: BehaviorSubject<{beta: string, production: string, localhost: string}> = new BehaviorSubject(null);
 
   constructor(
-    private userService: UserService,
+    private userService: AppUserService,
     private afs: AngularFirestore
   ) {
     this.afs.collection('appInfo').doc('version').snapshotChanges().subscribe((snapshot) => {

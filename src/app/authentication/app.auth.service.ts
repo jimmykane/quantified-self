@@ -8,21 +8,25 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {AngularFireAuth} from '@angular/fire/auth';
 import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestore';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UserService} from '../services/app.user.service';
+import {AppUserService} from '../services/app.user.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
-@Injectable()
+@Injectable({
+  providedIn: 'root',
+})
 export class AppAuthService implements OnDestroy {
   user: Observable<User | null>;
+  // store the URL so we can redirect after logging in
+  redirectUrl: string;
   private authState = null;
   private guest: boolean;
-  userSubscription: Subscription;
+  private userSubscription: Subscription;
 
   constructor(
     private afAuth: AngularFireAuth,
     private afs: AngularFirestore,
     private afa: AngularFireAnalytics,
-    private userService: UserService,
+    private userService: AppUserService,
     private snackBar: MatSnackBar,
   ) {
     this.user = this.afAuth.authState.pipe(

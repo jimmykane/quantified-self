@@ -6,7 +6,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
@@ -38,7 +38,7 @@ export class UserAgreementFormComponent implements OnInit {
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
-    private userService: UserService,
+    private userService: AppUserService,
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,

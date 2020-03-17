@@ -11,7 +11,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import {AgmMap, LatLngBoundsLiteral, PolyMouseEvent} from '@agm/core';
-import {EventColorService} from '../../../../services/color/app.event.color.service';
+import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {LapInterface} from '@sports-alliance/sports-lib/lib/laps/lap.interface';
@@ -22,15 +22,15 @@ import {
   ZoomControlOptions
 } from '@agm/core';
 import {Log} from 'ng2-logger/browser';
-import {EventService} from '../../../../services/app.event.service';
+import {AppEventService} from '../../../../services/app.event.service';
 import {DataLatitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import {DataLongitudeDegrees} from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import {Subscription} from 'rxjs';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import {UserService} from '../../../../services/app.user.service';
-import {ActivityCursorService} from '../../../../services/activity-cursor/activity-cursor.service';
+import {AppUserService} from '../../../../services/app.user.service';
+import {AppActivityCursorService} from '../../../../services/activity-cursor/app-activity-cursor.service';
 import {GeoLibAdapter} from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
 import {debounceTime} from 'rxjs/operators';
 import { MapAbstract } from '../../../map/map.abstract';
@@ -85,10 +85,10 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
-    private eventService: EventService,
-    private userService: UserService,
-    private activityCursorService: ActivityCursorService,
-    public eventColorService: EventColorService) {
+    private eventService: AppEventService,
+    private userService: AppUserService,
+    private activityCursorService: AppActivityCursorService,
+    public eventColorService: AppEventColorService) {
     super(changeDetectorRef);
   }
 

@@ -14,7 +14,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DashboardChartAbstract } from '../dashboard-chart.abstract';
 import { ChartHelper } from '../../cards/event/chart/chart-helper';
-import { EventColorService } from '../../../services/color/app.event.color.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 
 import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
 import { AppColors } from '../../../services/color/app.colors';
@@ -34,7 +34,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
   protected logger = Log.create('ChartsXYComponent');
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: EventColorService) {
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
 

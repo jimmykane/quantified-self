@@ -1,5 +1,6 @@
 User-agent: *
 Disallow: /user
 Disallow: /user/
+Disallow: /settings
 
 Sitemap: /sitemap.xml

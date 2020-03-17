@@ -19,7 +19,7 @@ import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
 import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
 import kelly from '@amcharts/amcharts4/themes/kelly';
 import * as am4core from '@amcharts/amcharts4/core';
-import {LoadingAbstract} from '../loading/loading.abstract';
+import {LoadingAbstractDirective} from '../loading/loading-abstract.directive';
 
 
 declare function require(moduleName: string): any;
@@ -33,7 +33,7 @@ try {
 
 // @todo should dectate to implement on screen change
 @Directive()
-export abstract class ChartAbstractDirective extends LoadingAbstract implements OnDestroy {
+export abstract class ChartAbstractDirective extends LoadingAbstractDirective implements OnDestroy {
   @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
   @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
 

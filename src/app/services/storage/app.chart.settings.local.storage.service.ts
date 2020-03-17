@@ -4,8 +4,10 @@ import {Log} from 'ng2-logger/browser';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 
-@Injectable()
-export class ChartSettingsLocalStorageService extends LocalStorageService {
+@Injectable({
+  providedIn: 'root',
+})
+export class AppChartSettingsLocalStorageService extends LocalStorageService {
   protected nameSpace = 'chart.settings.service.';
   protected logger = Log.create('ChartSettingsLocalStorageService');
 

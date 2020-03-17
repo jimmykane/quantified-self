@@ -2,7 +2,7 @@ import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} fro
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {EventService} from '../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {DataFeeling, Feelings} from '@sports-alliance/sports-lib/lib/data/data.feeling';
 import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
@@ -28,7 +28,7 @@ export class EventHeaderComponent implements OnChanges {
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
 
-  constructor(private eventService: EventService, private snackBar: MatSnackBar) {
+  constructor(private eventService: AppEventService, private snackBar: MatSnackBar) {
   }
 
   ngOnChanges(changes: SimpleChanges): void {

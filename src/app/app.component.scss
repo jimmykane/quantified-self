@@ -36,10 +36,6 @@ mat-icon{
   margin-right: 1.0em;
 }
 
-.right, .no-border{
-  border: 0;
-}
-
 mat-icon.larger-icon{
   //margin-right: 1em;
   padding: 0;
@@ -67,6 +63,11 @@ button{
   right: 2vh;
   //height: 50vh;
   z-index: 1;
+}
+
+nav button{
+  margin-bottom: 6px;
+  margin-top: 6px;
 }
 
 .fabButtonsVertical-container {

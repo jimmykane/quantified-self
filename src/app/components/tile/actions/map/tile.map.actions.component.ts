@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
-import { UserService } from '../../../../services/app.user.service';
+import { AppUserService } from '../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { TileActionsAbstract } from '../tile.actions.abstract';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
@@ -22,7 +22,7 @@ export class TileMapActionsComponent extends TileActionsAbstract implements OnIn
   public iconColor: string;
 
   constructor(
-    userService: UserService,
+    userService: AppUserService,
     afa: AngularFireAnalytics) {
     super(userService, afa);
   }

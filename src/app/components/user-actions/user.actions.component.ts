@@ -3,9 +3,9 @@ import {Router} from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {SharingService} from '../../services/app.sharing.service';
+import {AppSharingService} from '../../services/app.sharing.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {UserFormComponent} from '../user-forms/user.form.component';
 import { Clipboard } from '@angular/cdk/clipboard';
 
@@ -22,11 +22,11 @@ export class UserActionsComponent implements OnInit {
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
-    private userService: UserService,
+    private userService: AppUserService,
     private router: Router,
     private snackBar: MatSnackBar,
     private clipboardService: Clipboard,
-    private sharingService: SharingService,
+    private sharingService: AppSharingService,
     private dialog: MatDialog) {
   }
 

@@ -15,11 +15,11 @@ import { DataPositionInterface } from '../../../../../sports-lib/src/data/data.p
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { MapAbstract } from '../map/map.abstract';
 import MarkerClusterer from '@google/markerclustererplus'
-import { EventColorService } from '../../services/color/app.event.color.service';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DatePipe } from '@angular/common';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { EventService } from "../../services/app.event.service";
+import { AppEventService } from "../../services/app.event.service";
 import { take } from "rxjs/operators";
 import { ActivityInterface } from "@sports-alliance/sports-lib/lib/activities/activity.interface";
 import { DataLatitudeDegrees } from "@sports-alliance/sports-lib/lib/data/data.latitude-degrees";
@@ -54,7 +54,7 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
 
 
   constructor(
-    private changeDetectorRef: ChangeDetectorRef, private eventColorService: EventColorService, private eventService: EventService) {
+    private changeDetectorRef: ChangeDetectorRef, private eventColorService: AppEventColorService, private eventService: AppEventService) {
     super(changeDetectorRef);
   }
 

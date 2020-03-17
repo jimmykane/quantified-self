@@ -1,11 +1,11 @@
-import {Component, HostListener, OnInit} from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import {MatDialog} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Router} from '@angular/router';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {take} from 'rxjs/operators';
-import {UserService} from '../../services/app.user.service';
+import {AppUserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
@@ -13,6 +13,7 @@ import {AngularFireAuth} from '@angular/fire/auth';
 import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { Subscription } from 'rxjs';
 
 
 @Component({
@@ -20,11 +21,13 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.css'],
 })
-export class LoginComponent implements OnInit {
+export class LoginComponent implements OnInit, OnDestroy {
 
   isLoading: boolean;
   signInProviders = SignInProviders;
 
+
+  private userSubscription; Subscription
   private logger = Log.create('LoginComponent');
 
   @HostListener('window:tokensReceived', ['$event'])
@@ -39,7 +42,7 @@ export class LoginComponent implements OnInit {
     public authService: AppAuthService,
     private afAuth: AngularFireAuth,
     private afa: AngularFireAnalytics,
-    public userService: UserService,
+    public userService: AppUserService,
     private router: Router,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
@@ -47,7 +50,14 @@ export class LoginComponent implements OnInit {
   }
 
   async ngOnInit() {
-    // Should the router guard this for logged in users
+    this.userSubscription = this.authService.user.subscribe((user) => {
+      if (user) {
+        this.router.navigate(['/dashboard']);
+        this.snackBar.open(`You are already logged in`, null, {
+          duration: 5000,
+        });
+      }
+    })
     this.isLoading = true;
     try {
       const result = await this.afAuth.getRedirectResult();
@@ -171,6 +181,13 @@ export class LoginComponent implements OnInit {
       this.isLoading = false;
     });
   }
+
+  ngOnDestroy(): void {
+    if (this.userSubscription) {
+      this.userSubscription.unsubscribe();
+    }
+  }
+
 }
 
 

@@ -1,7 +1,7 @@
 import {
-  ChangeDetectorRef,
+  ChangeDetectorRef, Directive,
 } from '@angular/core';
-import {ScreenSizeAbstract} from '../screen-size/sreen-size.abstract';
+import {ScreenSizeAbstractDirective} from '../screen-size/sreen-size.abstract';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {DataFeeling, Feelings} from '@sports-alliance/sports-lib/lib/data/data.feeling';
@@ -20,8 +20,8 @@ import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/s
 import {DataDuration} from '@sports-alliance/sports-lib/lib/data/data.duration';
 import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 
-export abstract class DataTableAbstract extends ScreenSizeAbstract {
-
+@Directive()
+export abstract class DataTableAbstractDirective extends ScreenSizeAbstractDirective {
 
   constructor(changeDetector: ChangeDetectorRef) {
     super(changeDetector);

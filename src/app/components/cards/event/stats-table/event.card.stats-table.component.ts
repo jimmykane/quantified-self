@@ -12,8 +12,8 @@ import {DataVerticalSpeed} from '@sports-alliance/sports-lib/lib/data/data.verti
 import {DataSwimPace} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
-import {DataTableAbstract} from '../../../data-table/data-table.abstract';
-import {EventColorService} from '../../../../services/color/app.event.color.service';
+import {DataTableAbstractDirective} from '../../../data-table/data-table-abstract.directive';
+import {AppEventColorService} from '../../../../services/color/app.event.color.service';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
 
 @Component({
@@ -31,7 +31,7 @@ export class EventCardStatsTableComponent implements OnChanges {
   columns: Array<Object>;
   appColors = AppColors;
 
-  constructor(private eventColorService: EventColorService) {
+  constructor(private eventColorService: AppEventColorService) {
   }
 
   ngOnChanges(simpleChanges) {

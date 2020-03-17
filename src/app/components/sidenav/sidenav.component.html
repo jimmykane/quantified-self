@@ -48,10 +48,22 @@
   <mat-list-item
     *ngIf="authService.authenticated()"
     routerLinkActive="mat-elevation-z0 active"
-    [routerLink]="['/user/' + (authService.user | async)?.uid]"
+    [routerLink]="'/settings'"
     (click)="sideNav.close();">
     <mat-icon>settings_applications</mat-icon>
-    Preferences
+    Settings
+  </mat-list-item>
+
+  <mat-list-item>
+    <mat-slide-toggle
+      [disabled]="!appTheme"
+      (change)="themeService.toggleTheme()"
+      [color]="'accent'"
+      [checked]="appTheme === appThemes.Dark">
+      <span matTooltip="Use dark theme">
+         Dark theme
+      </span>
+    </mat-slide-toggle>
   </mat-list-item>
 
   <mat-divider></mat-divider>

@@ -10,8 +10,8 @@ import {
 } from '@angular/core';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {EventColorService} from '../../../../services/color/app.event.color.service';
-import {ActivitySelectionService} from '../../../../services/activity-selection-service/activity-selection.service';
+import {AppEventColorService} from '../../../../services/color/app.event.color.service';
+import {AppActivitySelectionService} from '../../../../services/activity-selection-service/app-activity-selection.service';
 import {Subscription} from 'rxjs';
 import {MatSlideToggleChange} from '@angular/material/slide-toggle';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
@@ -36,7 +36,7 @@ export class ActivityToggleComponent implements OnChanges, OnInit, OnDestroy {
   private selectedActivitiesSubscription: Subscription;
   private selectedActivities: ActivityInterface[];
 
-  constructor(public eventColorService: EventColorService, public activitySelectionService: ActivitySelectionService) {
+  constructor(public eventColorService: AppEventColorService, public activitySelectionService: AppActivitySelectionService) {
   }
 
   ngOnInit() {

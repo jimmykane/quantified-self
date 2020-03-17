@@ -7,8 +7,6 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {ActionButtonService} from './services/action-buttons/app.action-button.service';
-import {ActionButton} from './services/action-buttons/app.action-button';
 import {MatIconRegistry} from '@angular/material/icon';
 import {MatSidenav} from '@angular/material/sidenav';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -23,16 +21,16 @@ import {
 } from '@angular/router';
 import {filter, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
-import {SideNavService} from './services/side-nav/side-nav.service';
+import {AppSideNavService} from './services/side-nav/app-side-nav.service';
 import {DomSanitizer, Title} from '@angular/platform-browser';
-import {ThemeService} from './services/app.theme.service';
+import {AppThemeService} from './services/app.theme.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppInfoService} from './services/app.info.service';
 import {environment} from '../environments/environment';
 import {slideInAnimation} from './animations/animations';
 
 import * as firebase from 'firebase/app'
-import {WindowService} from './services/app.window.service';
+import {AppWindowService} from './services/app.window.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 declare function require(moduleName: string): any;
@@ -50,7 +48,6 @@ const {version: appVersion} = require('../../package.json');
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
   @ViewChild('sidenav', {static: true}) sideNav: MatSidenav;
-  public actionButtons: ActionButton[] = [];
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
@@ -63,14 +60,12 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public authService: AppAuthService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
-    private actionButtonService: ActionButtonService,
-    private sideNavService: SideNavService,
+    private sideNavService: AppSideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    public themeService: ThemeService,
     public appInfoService: AppInfoService,
     private titleService: Title,
-    private windowService: WindowService,
+    private windowService: AppWindowService,
     private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar) {
 
@@ -98,22 +93,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         }
       }
     });
-    this.actionButtonService.addActionButton('openSideNav', new ActionButton('list', () => {
-      this.sideNav.toggle();
-    }, 'material'));
-    this.actionButtonsSubscription = this.actionButtonService.getActionButtons().subscribe((actionButtons: Map<string, ActionButton>) => {
-      this.actionButtons = Array.from(actionButtons.values());
-      this.changeDetectorRef.detectChanges()
-    });
-    this.authService.user.subscribe((user) => {
-      this.user = user;
-      if (!user) {
-        return;
-      }
-      this.themeService.setAppTheme(user.settings.appSettings.theme);
-      this.themeService.setChartTheme(user.settings.chartSettings.theme);
-      this.themeService.setMapTheme(user.settings.mapSettings.theme);
-    });
 
     this.appVersionSubscription = this.appInfoService.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
       if (!versions) {
@@ -137,11 +116,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
     });
 
-  }
-
-  async toggleTheme() {
-    this.afa.logEvent('change_theme');
-    await this.themeService.toggleTheme(this.user);
   }
 
   private addIconsToRegistry() {

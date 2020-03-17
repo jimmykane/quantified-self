@@ -1,5 +1,5 @@
 import {ChangeDetectorRef} from '@angular/core';
-import { LoadingAbstract } from '../loading/loading.abstract';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { LatLngBoundsLiteral } from '@agm/core';
 import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
@@ -7,7 +7,7 @@ import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/setti
 declare function require(moduleName: string): any;
 const mapStyles = require('./map-styles.json');
 
-export abstract class MapAbstract extends LoadingAbstract {
+export abstract class MapAbstract extends LoadingAbstractDirective {
 
   constructor(changeDetector: ChangeDetectorRef) {
     super(changeDetector)

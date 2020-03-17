@@ -28,6 +28,7 @@ import {MatSelectModule} from '@angular/material/select';
 import {MatStepperModule} from '@angular/material/stepper';
 import {MatBottomSheetModule} from '@angular/material/bottom-sheet';
 import {MatExpansionModule} from '@angular/material/expansion';
+import { MatBadgeModule } from '@angular/material/badge';
 
 @NgModule({
   imports: [],
@@ -63,7 +64,8 @@ import {MatExpansionModule} from '@angular/material/expansion';
     MatStepperModule,
     MatBottomSheetModule,
     MatExpansionModule,
-    MatRippleModule
+    MatRippleModule,
+    MatBadgeModule,
   ],
   declarations: [],
   providers: [

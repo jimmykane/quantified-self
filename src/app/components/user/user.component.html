@@ -1,21 +1,20 @@
-<mat-card class="container" *ngIf="targetUser.displayName"> <!-- todo check a valid if -->
+<mat-card class="container" *ngIf="user"> <!-- todo check a valid if -->
   <mat-card-header>
-    <app-user-actions *ngIf="isOwner()" [user]="targetUser" align="end"></app-user-actions>
-    <div *ngIf="targetUser.photoURL"
-         mat-card-avatar class="avatar"
-         [style.backgroundImage]="'url('+ targetUser.photoURL +')'">
+    <app-user-actions [user]="user" align="end"></app-user-actions>
+    <div mat-card-avatar class="avatar"
+         [style.backgroundImage]="'url('+ (user.photoURL ? user.photoURL :  'https://ui-avatars.com/api/?name=' + (this.user.displayName || 'Guest') ) +')'">
     </div>
     <mat-card-title>
-      <app-privacy-icon [privacy]="targetUser.privacy" align="end"></app-privacy-icon>
-      {{ targetUser.displayName }}
+      <app-privacy-icon [privacy]="user.privacy" align="end"></app-privacy-icon>
+      {{ user.displayName || 'Guest' }}
     </mat-card-title>
-    <mat-card-subtitle *ngIf="targetUser.description">{{ targetUser.description }}</mat-card-subtitle>
-    <mat-card-subtitle *ngIf="isOwner() && !targetUser.description">
+    <mat-card-subtitle *ngIf="user.description">{{ user.description }}</mat-card-subtitle>
+    <mat-card-subtitle *ngIf="!user.description">
       <button mat-button color="basic" (click)="edit()">add a description</button>
     </mat-card-subtitle>
     <mat-card-subtitle></mat-card-subtitle>
   </mat-card-header>
-  <mat-card-content *ngIf="isOwner()">
-      <app-user-settings [user]="currentUser"></app-user-settings>
+  <mat-card-content>
+      <app-user-settings [user]="user"></app-user-settings>
   </mat-card-content>
 </mat-card>

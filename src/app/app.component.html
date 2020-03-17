@@ -5,48 +5,39 @@
   </mat-sidenav>
 
   <nav mat-tab-nav-bar>
-<!--    <a matTabLink (click)="sidenav.toggle()">-->
-<!--      <mat-icon class="larger_icon">menu</mat-icon>-->
-<!--    </a>-->
-    <a matTabLink *ngIf="title !== 'Dashboard'" [routerLink]="authService.authenticated() ? ['dashboard'] : title === 'Login' ? ['/'] : ['login']">
-      <mat-icon class="app-icon">{{authService.authenticated()? 'dashboard' : 'filter_hdr' }}</mat-icon>
-    </a>
-    <a matTabLink *ngIf="title === 'Dashboard'" (click)="sidenav.toggle()">
+    <a matTabLink (click)="sidenav.toggle()">
       <mat-icon class="larger_icon">menu</mat-icon>
     </a>
 
     <span class="fill-space"></span>
 
-    <button matTabLink class="no-border theme" (click)="toggleTheme();" mat-stroked-button >
-      <mat-icon class="smaller icon-theme  mat-icon material-icons mat-icon-no-color theme">format_color_fill</mat-icon>
+    <button mat-flat-button class="right" color="accent"
+            *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
+            disabled>
+      Loading
     </button>
-    <button matTabLink mat-stroked-button class="right " *ngIf="!authService.authenticated() && title !== 'Login'" [routerLink]="['login']"  color="accent">Login</button>
-
+    <button mat-flat-button class="right" color="primary"
+            *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
+            (click)="router.navigate(['/dashboard']);">
+      Go to your dashboard
+    </button>
+    <button mat-flat-button class="right" color="accent"
+            *ngIf="authService.authenticated() === false && title && title !== 'Login'"
+            (click)="router.navigate(['/login']);">
+      Login or Register
+    </button>
   </nav>
 
   <!--<mat-card>-->
-    <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
+  <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
   <!--</mat-card>-->
+  <!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
+  <!--      && routerOutlet.activatedRouteData['animation']">-->
 
-  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData
-      && routerOutlet.activatedRouteData['animation']">
-    <mat-progress-bar
-      *ngIf="loading" color="primary" mode="indeterminate">
-    </mat-progress-bar>
-    <router-outlet #routerOutlet="outlet"></router-outlet>
-  </div>
+  <mat-progress-bar
+    *ngIf="loading" color="primary" mode="indeterminate">
+  </mat-progress-bar>
+
+  <router-outlet #routerOutlet="outlet"></router-outlet>
 
 </mat-sidenav-container>
-<div class="fabButtonsVertical">
-  <div class="fabButtonsVertical-container">
-    <ng-container *ngFor="let actionButton of actionButtons; let i = index;">
-      <button *ngIf="i < 1" type="button" mat-fab color="primary" (click)="actionButton.action()">
-        <mat-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</mat-icon>
-      </button>
-      <button *ngIf="i > 0" type="button" mat-mini-fab (click)="actionButton.action()">
-        <mat-icon *ngIf="actionButton.iconType === 'material'">{{ actionButton.icon }}</mat-icon>
-      </button>
-    </ng-container>
-  </div>
-
-</div>
