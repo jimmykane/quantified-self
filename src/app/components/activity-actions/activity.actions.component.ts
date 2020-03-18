@@ -49,10 +49,6 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
         user: this.user
       },
     });
-
-    // dialogRef.afterClosed().subscribe(result => {
-    //
-    // });
   }
 
   async reGenerateStatistics() {

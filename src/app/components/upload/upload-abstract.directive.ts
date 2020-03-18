@@ -10,23 +10,19 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { UploadInfoComponent } from './upload-info/upload-info.component';
 import { AppFilesStatusService } from '../../services/upload/app-files-status.service';
-import { Overlay, RepositionScrollStrategy } from '@angular/cdk/overlay';
+import { Overlay } from '@angular/cdk/overlay';
 
 
 @Directive()
 export abstract class UploadAbstractDirective implements OnInit {
   @Input() user: User;
   protected logger: Logger<any>;
-  private uploadStatusBottomSheet: MatBottomSheetRef
 
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected bottomSheet: MatBottomSheet,
     protected filesStatusService: AppFilesStatusService,
-    private overlay: Overlay,
     logger) {
-    debugger;
     this.logger = logger;
   }
 
@@ -47,15 +43,6 @@ export abstract class UploadAbstractDirective implements OnInit {
     event.stopPropagation();
     event.preventDefault();
 
-    if (!this.uploadStatusBottomSheet) {
-      this.uploadStatusBottomSheet = this.bottomSheet.open(UploadInfoComponent, {
-        disableClose: true,
-        hasBackdrop: false,
-        closeOnNavigation: false,
-        scrollStrategy: this.overlay.scrollStrategies.reposition(),
-      });
-    }
-
     // Add as local to show totals
     const files = [];
     [...(event.target.files || event.dataTransfer.files)].forEach(file => {
@@ -68,7 +55,6 @@ export abstract class UploadAbstractDirective implements OnInit {
       }));
     })
 
-    debugger
     // @todo no need to update the status on process file
 
     // please refactor
@@ -111,7 +97,6 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
     // Clear the target
     event.target.value = '';
-    this.uploadStatusBottomSheet.dismiss();
   }
 }
 
