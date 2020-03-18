@@ -14,13 +14,11 @@
             Suunto is a trusted companion for athletes and adventurers.<br/>
             The durable and precise sports watches are tested in the toughest conditions and built to last in adventures
             from the deepest oceans to the highest mountains.
-            <!--            <mat-divider [inset]="true"></mat-divider>-->
           </mat-card-subtitle>
         </mat-card-header>
         <mat-tab-group [selectedIndex]="(!user || isGuest) ? 0 : 1"
                        [dynamicHeight]="true">
           <mat-tab label="Download">
-            <!--            <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>-->
             <ng-template matTabLabel>
               <mat-icon matTooltip="Download">cloud_download</mat-icon>
             </ng-template>
@@ -57,7 +55,6 @@
                 Connect to Suunto app by Suunto and get almost realtime updates on your dashboard<br/>
                 This needs to be revised
               </p>
-              <!--            <p *ngIf="serviceTokens && serviceTokens.length">Up to 2 Suunto app accounts</p>-->
               <mat-list *ngIf="serviceTokens && serviceTokens.length">
 
                 <div mat-subheader>Accounts</div>
@@ -87,13 +84,22 @@
           </mat-tab>
 
           <mat-tab label="History import" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
-            <!--            <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>-->
             <ng-template matTabLabel>
               <mat-icon matTooltip="History import">history</mat-icon>
             </ng-template>
 
             <section class="tab-content" *ngIf="user && !isGuest">
               <app-history-import-form [user]="user"></app-history-import-form>
+            </section>
+          </mat-tab>
+
+          <mat-tab label="GPX Upload" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
+            <ng-template matTabLabel>
+              <mat-icon matTooltip="GPX Upload">cloud_upload</mat-icon>
+            </ng-template>
+
+            <section class="tab-content" *ngIf="user && !isGuest">
+              <app-upload-route [user]="user"></app-upload-route>
             </section>
           </mat-tab>
         </mat-tab-group>

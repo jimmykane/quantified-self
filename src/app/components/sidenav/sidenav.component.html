@@ -103,7 +103,7 @@
     </mat-slide-toggle>
   </mat-list-item>
 
-  <mat-divider></mat-divider>
+  <mat-divider *ngIf="authService.authenticated()"></mat-divider>
 
   <mat-list-item (click)="logout()"
                  *ngIf="authService.authenticated()">
