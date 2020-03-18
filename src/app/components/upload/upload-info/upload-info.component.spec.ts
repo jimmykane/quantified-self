@@ -50,7 +50,7 @@ describe('UploadInfoComponent', () => {
   // });
 
   it('should get the correct amount of processed activities', () => {
-    component.filesMetaData = [
+    component.files = [
       {
         name: 'test',
         status: UPLOAD_STATUS.PROCESSING
@@ -80,7 +80,7 @@ describe('UploadInfoComponent', () => {
   });
 
   it('should get the correct percent of overall progress', () => {
-    component.filesMetaData = [
+    component.files = [
       {
         name: 'test',
         status: UPLOAD_STATUS.PROCESSING

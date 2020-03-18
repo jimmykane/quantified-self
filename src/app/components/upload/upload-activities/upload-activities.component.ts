@@ -14,6 +14,9 @@ import { Log } from 'ng2-logger/browser';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
+import { Overlay } from '@angular/cdk/overlay';
 
 @Component({
   selector: 'app-upload',
@@ -26,40 +29,43 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
+    protected bottomSheet: MatBottomSheet,
+    protected filesStatusService: AppFilesStatusService,
+    protected overlay: Overlay,
     private eventService: AppEventService,
     private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, Log.create('UploadActivitiesComponent'));
+    super(snackBar, dialog, bottomSheet, filesStatusService, overlay, Log.create('UploadActivitiesComponent'))
   }
 
-  processAndUploadFile(metaData): Promise<EventInterface> {
+  processAndUploadFile(file): Promise<EventInterface> {
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
         let newEvent;
         const fileReaderResult = fileReader.result;
         try {
-          if ((typeof fileReaderResult === 'string') && metaData.extension === 'json') {
+          if ((typeof fileReaderResult === 'string') && file.extension === 'json') {
             try {
               newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
             } catch (e) {
               this.logger.info(`Could not read via JSON trying via SML JSON`);
               newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
             }
-          } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'sml') {
+          } else if ((typeof fileReaderResult === 'string') && file.extension === 'sml') {
             newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult, 'application/xml');
-          } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'tcx') {
+          } else if ((typeof fileReaderResult === 'string') && file.extension === 'tcx') {
             newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
-          } else if ((typeof fileReaderResult === 'string') && metaData.extension === 'gpx') {
+          } else if ((typeof fileReaderResult === 'string') && file.extension === 'gpx') {
             newEvent = await EventImporterGPX.getFromString(fileReaderResult);
-          } else if ((fileReaderResult instanceof ArrayBuffer) && metaData.extension === 'fit') {
+          } else if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
           } else {
             resolve();
             return;
           }
-          newEvent.name = metaData.filename;
+          newEvent.name = file.filename;
         } catch (e) {
-          metaData.status = UPLOAD_STATUS.ERROR;
+          file.status = UPLOAD_STATUS.ERROR;
           Sentry.captureException(e);
           this.logger.error(`Could not load event from file`, e);
           reject(); // no-op here!
@@ -67,25 +73,25 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
         }
         try {
           await this.eventService.writeAllEventData(this.user, newEvent);
-          this.afa.logEvent('upload_file', {method: metaData.extension});
-          metaData.status = UPLOAD_STATUS.PROCESSED;
+          this.afa.logEvent('upload_file', {method: file.extension});
+          file.status = UPLOAD_STATUS.PROCESSED;
         } catch (e) {
           // debugger;
           console.error(e);
           Sentry.captureException(e);
-          metaData.status = UPLOAD_STATUS.ERROR;
+          file.status = UPLOAD_STATUS.ERROR;
           reject();
           return;
         }
         resolve(newEvent);
       };
       // Read it depending on the extension
-      if (metaData.extension === 'fit') {
+      if (file.extension === 'fit') {
         // Fit files should be read as array buffers
-        fileReader.readAsArrayBuffer(metaData.file);
+        fileReader.readAsArrayBuffer(file.file);
       } else {
         // All other as text
-        fileReader.readAsText(metaData.file);
+        fileReader.readAsText(file.file);
       }
     });
   }

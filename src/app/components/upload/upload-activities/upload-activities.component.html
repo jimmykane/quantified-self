@@ -10,7 +10,6 @@
   </button>
   <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx, .sml" multiple [style.display]="'none'"
          (change)="getFiles($event)"/>
-  <app-upload-info *ngIf="isUploadActive" [filesMetaData]="filesMetaData"></app-upload-info>
 </mat-card>
 
 

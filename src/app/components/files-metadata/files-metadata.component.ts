@@ -8,7 +8,7 @@ import {UPLOAD_STATUS} from '../upload/upload-status/upload.status';
 })
 
 export class FilesMetadataComponent {
-  @Input() filesMetaData = [];
+  @Input() files = [];
 
   /**
    * return the activity process icon

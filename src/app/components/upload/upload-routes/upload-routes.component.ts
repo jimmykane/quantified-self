@@ -1,18 +1,16 @@
-import { Component, Input, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import { UploadErrorComponent } from '../upload-error/upload-error.component';
 import { Log } from 'ng2-logger/browser';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
-import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { environment } from '../../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AngularFireAuth } from '@angular/fire/auth';
-import { AppEventService } from '../../../services/app.event.service';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 
 @Component({
   selector: 'app-upload-route',
@@ -25,10 +23,12 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
+    protected bottomSheet: MatBottomSheet,
+    protected filesStatusService: AppFilesStatusService,
     private http: HttpClient,
     private afAuth: AngularFireAuth,
     private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, Log.create('UploadRouteComponent'));
+    super(snackBar, dialog, bottomSheet, filesStatusService, Log.create('UploadRouteComponent'));
   }
 
   /**
@@ -68,64 +68,5 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
         reject('Unknown file type');
       }
     })
-  }
-
-  async getFiles(event) {
-    event.stopPropagation();
-    event.preventDefault();
-
-    this.isUploadActive = true;
-    const files = event.target.files || event.dataTransfer.files;
-
-    // First create the metadata on a single loop so subcomponents can get updated
-    for (let index = 0; index < files.length; index++) {
-      this.filesMetaData.push({
-        file: files[index],
-        name: files[index].name,
-        status: UPLOAD_STATUS.PROCESSING,
-        extension: files[index].name.split('.').pop().toLowerCase(),
-        filename: files[index].name.split('.').shift(),
-      });
-    }
-
-    // Then actually start processing them
-    for (let index = 0; index < this.filesMetaData.length; index++) {
-      try {
-        await this.processAndUploadFile(this.filesMetaData[index]);
-      } catch (e) {
-        this.logger.error(e);
-        Sentry.captureException(e);
-      }
-    }
-
-    this.isUploadActive = false;
-    this.snackBar.open('Processed ' + this.filesMetaData.length + ' files', null, {
-      duration: 2000,
-    });
-
-    // If there is an error show a modal
-    if (this.filesMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
-      const dialogRef = this.dialog.open(UploadErrorComponent, {
-        width: '75vw',
-        disableClose: false,
-        data: {activitiesMetaData: this.filesMetaData},
-      });
-      // dialogRef.afterClosed().subscribe(result => {
-      //   console.log('The dialog was closed');
-      // });
-    }
-
-    // Remove all;
-    this.filesMetaData = [];
-    // Pass event to removeDragData for cleanup
-    if (event.dataTransfer && event.dataTransfer.items) {
-      // Use DataTransferItemList interface to remove the drag data
-      event.dataTransfer.items.clear();
-    } else if (event.dataTransfer) {
-      // Use DataTransfer interface to remove the drag data
-      event.dataTransfer.clearData();
-    }
-    // Clear the target
-    event.target.value = '';
   }
 }
