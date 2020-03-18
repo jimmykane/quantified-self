@@ -5,7 +5,7 @@ import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import {HistoryImportFormComponent} from '../components/history-import-form/history-import.form.component';
-import { UploadRouteComponent } from '../components/upload-route/upload-route.component';
+import { UploadRoutesComponent } from '../components/upload/upload-routes/upload-routes.component';
 
 
 @NgModule({
@@ -16,7 +16,7 @@ import { UploadRouteComponent } from '../components/upload-route/upload-route.co
     ServicesRoutingModule,
   ],
   exports: [],
-  declarations: [ServicesComponent, HistoryImportFormComponent],
+  declarations: [ServicesComponent, HistoryImportFormComponent, UploadRoutesComponent],
   entryComponents: [],
   providers: []
 })

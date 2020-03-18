@@ -4,13 +4,13 @@ import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import {DashboardRoutingModule} from '../dashboard-routing.module';
 import {DashboardComponent} from '../components/dashboard/dashboard.component';
-import {UploadInfoComponent} from '../components/upload-info/upload-info.component';
+import {UploadInfoComponent} from '../components/upload/upload-info/upload-info.component';
 import {SummariesComponent} from '../components/summaries/summaries.component';
 import {EventSearchComponent} from '../components/event-search/event-search.component';
 import {EventsExportFormComponent} from '../components/events-export-form/events-export.form.component';
-import {UploadErrorComponent} from '../components/upload-error/upload-error.component';
+import {UploadErrorComponent} from '../components/upload/upload-error/upload-error.component';
 import {ActivityMetadataComponent} from '../components/activity-metadata/activity-metadata.component';
-import {UploadComponent} from '../components/upload/upload.component';
+import {UploadActivitiesComponent} from '../components/upload/upload-activities/upload-activities.component';
 import {EventTableComponent, MatPaginatorIntlFireStore} from '../components/event-table/event.table.component';
 import {MatPaginatorIntl} from '@angular/material/paginator';
 import { EventsMapComponent } from '../components/events-map/events-map.component';
@@ -36,7 +36,7 @@ import { MondayDateAdapter } from "../adapters/date.adapter";
   ],
   declarations: [
     DashboardComponent,
-    UploadComponent,
+    UploadActivitiesComponent,
     UploadInfoComponent,
     // ChartsPieComponent,
     // ChartsXYComponent,

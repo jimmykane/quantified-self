@@ -1,5 +1,5 @@
 import {Component, Input} from '@angular/core';
-import {UPLOAD_STATUS} from '../upload-status/upload.status';
+import {UPLOAD_STATUS} from '../upload/upload-status/upload.status';
 
 @Component({
   selector: 'app-activity-metadata',

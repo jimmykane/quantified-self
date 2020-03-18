@@ -7,7 +7,7 @@ import { MatIcon } from '@angular/material/icon';
 import { MatList, MatListItem } from '@angular/material/list';
 import { MatProgressBar } from '@angular/material/progress-bar';
 
-import {ActivityMetadataComponent} from '../activity-metadata/activity-metadata.component';
+import {ActivityMetadataComponent} from '../../activity-metadata/activity-metadata.component';
 import {UPLOAD_STATUS} from "../upload-status/upload.status";
 
 describe('UploadInfoComponent', () => {
