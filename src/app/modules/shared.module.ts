@@ -12,6 +12,9 @@ import {EventFormComponent} from '../components/event-form/event.form.component'
 import {ActivityFormComponent} from '../components/activity-form/activity.form.component';
 import {DeleteConfirmationComponent} from '../components/delete-confirmation/delete-confirmation.component';
 import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon.component';
+import { UploadErrorComponent } from '../components/upload/upload-error/upload-error.component';
+import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
+import { FilesMetadataComponent } from '../components/files-metadata/files-metadata.component';
 
 
 @NgModule({
@@ -33,12 +36,16 @@ import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon
     ActivityFormComponent,
     DeleteConfirmationComponent,
     DataTypeIconComponent,
+    UploadInfoComponent,
+    UploadErrorComponent,
+    FilesMetadataComponent,
   ],
   providers: [],
   entryComponents: [
     EventFormComponent,
     ActivityFormComponent,
     DeleteConfirmationComponent,
+    UploadErrorComponent,
   ],
   exports: [
     ShadeComponent,
@@ -52,8 +59,12 @@ import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon
     DeleteConfirmationComponent,
     DataTypeIconComponent,
     ReactiveFormsModule,
-    FormsModule
+    FormsModule,
+    UploadInfoComponent,
+    UploadErrorComponent,
+    FilesMetadataComponent,
   ]
 })
+
 export class SharedModule {
 }

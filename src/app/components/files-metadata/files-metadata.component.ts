@@ -3,12 +3,12 @@ import {UPLOAD_STATUS} from '../upload/upload-status/upload.status';
 
 @Component({
   selector: 'app-activity-metadata',
-  templateUrl: './activity-metadata.component.html',
-  styleUrls: ['./activity-metadata.component.css'],
+  templateUrl: './files-metadata.component.html',
+  styleUrls: ['./files-metadata.component.css'],
 })
 
-export class ActivityMetadataComponent {
-  @Input() activitiesMetaData = [];
+export class FilesMetadataComponent {
+  @Input() filesMetaData = [];
 
   /**
    * return the activity process icon

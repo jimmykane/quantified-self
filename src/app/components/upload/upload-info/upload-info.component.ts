@@ -2,7 +2,7 @@ import {Component, OnInit, Input} from '@angular/core';
 import {UPLOAD_STATUS} from '../upload-status/upload.status';
 
 /**
- * Component responsible for displaying a progree bar
+ * Component responsible for displaying a progresbar
  * until the activity has finished being processed
  */
 @Component({
@@ -11,24 +11,24 @@ import {UPLOAD_STATUS} from '../upload-status/upload.status';
   styleUrls: ['./upload-info.component.css']
 })
 export class UploadInfoComponent implements OnInit {
-  @Input() activitiesMetaData = [];
+  @Input() filesMetaData = [];
 
   constructor() {
   }
 
   getOverallProgress() {
-    return this.getProcessedActivities().length ? 100 * this.getProcessedActivities().length / this.activitiesMetaData.length : 0;
+    return this.getProcessedFiles().length ? 100 * this.getProcessedFiles().length / this.filesMetaData.length : 0;
   }
 
-  getProcessedActivities() {
-    return this.activitiesMetaData.filter((activity) => {
-      return activity.status !== UPLOAD_STATUS.PROCESSING;
+  getProcessedFiles() {
+    return this.filesMetaData.filter((file) => {
+      return file.status !== UPLOAD_STATUS.PROCESSING;
     })
   }
 
   getFailedActivities() {
-    return this.activitiesMetaData.filter((activity) => {
-      return activity.status === UPLOAD_STATUS.ERROR;
+    return this.filesMetaData.filter((file) => {
+      return file.status === UPLOAD_STATUS.ERROR;
     })
   }
 

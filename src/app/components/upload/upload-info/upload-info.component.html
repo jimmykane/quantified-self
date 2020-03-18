@@ -1,4 +1,4 @@
 <mat-card>
-  Processed {{ getProcessedActivities().length }} of {{ activitiesMetaData.length }} files with {{ getFailedActivities().length }} errors so far
+  Processed {{ getProcessedFiles().length }} of {{ filesMetaData.length }} files with {{ getFailedActivities().length }} errors so far
   <mat-progress-bar mode="determinate" [value]="getOverallProgress()"></mat-progress-bar>
 </mat-card>

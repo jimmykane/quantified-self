@@ -40,7 +40,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
-        if (!(typeof fileReader.result === 'string') || metaData.extension !== 'gpx') {
+        if (!(typeof fileReader.result === 'string')) {
           reject(`Not a GPX file`)
         }
         try {
@@ -65,7 +65,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
       if (metaData.extension === 'gpx') {
         fileReader.readAsText(metaData.file);
       } else {
-        reject();
+        reject('Unknown file type');
       }
     })
   }
@@ -79,7 +79,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
 
     // First create the metadata on a single loop so subcomponents can get updated
     for (let index = 0; index < files.length; index++) {
-      this.fileMetaData.push({
+      this.filesMetaData.push({
         file: files[index],
         name: files[index].name,
         status: UPLOAD_STATUS.PROCESSING,
@@ -89,9 +89,9 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
     }
 
     // Then actually start processing them
-    for (let index = 0; index < this.fileMetaData.length; index++) {
+    for (let index = 0; index < this.filesMetaData.length; index++) {
       try {
-        await this.processAndUploadFile(this.fileMetaData[index]);
+        await this.processAndUploadFile(this.filesMetaData[index]);
       } catch (e) {
         this.logger.error(e);
         Sentry.captureException(e);
@@ -99,16 +99,16 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
     }
 
     this.isUploadActive = false;
-    this.snackBar.open('Processed ' + this.fileMetaData.length + ' files', null, {
+    this.snackBar.open('Processed ' + this.filesMetaData.length + ' files', null, {
       duration: 2000,
     });
 
     // If there is an error show a modal
-    if (this.fileMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
+    if (this.filesMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
       const dialogRef = this.dialog.open(UploadErrorComponent, {
         width: '75vw',
         disableClose: false,
-        data: {activitiesMetaData: this.fileMetaData},
+        data: {activitiesMetaData: this.filesMetaData},
       });
       // dialogRef.afterClosed().subscribe(result => {
       //   console.log('The dialog was closed');
@@ -116,7 +116,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
     }
 
     // Remove all;
-    this.fileMetaData = [];
+    this.filesMetaData = [];
     // Pass event to removeDragData for cleanup
     if (event.dataTransfer && event.dataTransfer.items) {
       // Use DataTransferItemList interface to remove the drag data

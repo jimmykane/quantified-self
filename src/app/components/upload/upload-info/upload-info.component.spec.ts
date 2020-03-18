@@ -7,7 +7,7 @@ import { MatIcon } from '@angular/material/icon';
 import { MatList, MatListItem } from '@angular/material/list';
 import { MatProgressBar } from '@angular/material/progress-bar';
 
-import {ActivityMetadataComponent} from '../../activity-metadata/activity-metadata.component';
+import {FilesMetadataComponent} from '../../files-metadata/files-metadata.component';
 import {UPLOAD_STATUS} from "../upload-status/upload.status";
 
 describe('UploadInfoComponent', () => {
@@ -16,7 +16,7 @@ describe('UploadInfoComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard, ActivityMetadataComponent
+      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard, FilesMetadataComponent
       ]
     })
       .compileComponents();
@@ -50,7 +50,7 @@ describe('UploadInfoComponent', () => {
   // });
 
   it('should get the correct amount of processed activities', () => {
-    component.activitiesMetaData = [
+    component.filesMetaData = [
       {
         name: 'test',
         status: UPLOAD_STATUS.PROCESSING
@@ -76,11 +76,11 @@ describe('UploadInfoComponent', () => {
         status: UPLOAD_STATUS.ERROR
       }
     ];
-    expect(component.getProcessedActivities().length).toBe(4);
+    expect(component.getProcessedFiles().length).toBe(4);
   });
 
   it('should get the correct percent of overall progress', () => {
-    component.activitiesMetaData = [
+    component.filesMetaData = [
       {
         name: 'test',
         status: UPLOAD_STATUS.PROCESSING

@@ -14,7 +14,7 @@ export abstract class UploadAbstractDirective implements OnInit {
   @Input() user: User;
 
   public isUploadActive = false;
-  public fileMetaData: FileInterface[] = [];
+  public filesMetaData: FileInterface[] = [];
   protected logger: Logger<any>
 
   constructor(
@@ -42,7 +42,7 @@ export abstract class UploadAbstractDirective implements OnInit {
 
     // First create the metadata on a single loop so subcomponents can get updated
     for (let index = 0; index < files.length; index++) {
-      this.fileMetaData.push({
+      this.filesMetaData.push({
         file: files[index],
         name: files[index].name,
         status: UPLOAD_STATUS.PROCESSING,
@@ -52,9 +52,9 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
 
     // Then actually start processing them
-    for (let index = 0; index < this.fileMetaData.length; index++) {
+    for (let index = 0; index < this.filesMetaData.length; index++) {
       try {
-        await this.processAndUploadFile(this.fileMetaData[index]);
+        await this.processAndUploadFile(this.filesMetaData[index]);
       } catch (e) {
         this.logger.error(e);
         Sentry.captureException(e);
@@ -62,16 +62,16 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
 
     this.isUploadActive = false;
-    this.snackBar.open('Processed ' + this.fileMetaData.length + ' files', null, {
+    this.snackBar.open('Processed ' + this.filesMetaData.length + ' files', null, {
       duration: 2000,
     });
 
     // If there is an error show a modal
-    if (this.fileMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
+    if (this.filesMetaData.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
       const dialogRef = this.dialog.open(UploadErrorComponent, {
         width: '75vw',
         disableClose: false,
-        data: {activitiesMetaData: this.fileMetaData},
+        data: {activitiesMetaData: this.filesMetaData},
       });
       // dialogRef.afterClosed().subscribe(result => {
       //   console.log('The dialog was closed');
@@ -79,7 +79,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
 
     // Remove all;
-    this.fileMetaData = [];
+    this.filesMetaData = [];
     // Pass event to removeDragData for cleanup
     if (event.dataTransfer && event.dataTransfer.items) {
       // Use DataTransferItemList interface to remove the drag data
