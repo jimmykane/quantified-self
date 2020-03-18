@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy,
+  ChangeDetectionStrategy, ChangeDetectorRef,
   Component,
   EventEmitter,
   Input,
@@ -36,13 +36,18 @@ export class ActivityToggleComponent implements OnChanges, OnInit, OnDestroy {
   private selectedActivitiesSubscription: Subscription;
   private selectedActivities: ActivityInterface[];
 
-  constructor(public eventColorService: AppEventColorService, public activitySelectionService: AppActivitySelectionService) {
+  constructor(
+    public eventColorService: AppEventColorService,
+    public activitySelectionService: AppActivitySelectionService,
+    private changeDetectorRef: ChangeDetectorRef,
+  ) {
   }
 
   ngOnInit() {
     this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed.asObservable()
       .subscribe((selectedActivities) => {
         this.selectedActivities = selectedActivities.source.selected;
+        this.changeDetectorRef.detectChanges();
       })
   }
 

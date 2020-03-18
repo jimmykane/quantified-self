@@ -1,7 +1,5 @@
 form {
   /*width: 100%;*/
-  padding: 2%;
-  position: relative;
 }
 
 mat-form-field {
@@ -59,15 +57,6 @@ mat-icon.suunto{
 }
 
 
-/deep/.mat-dialog-container {
-  padding: 0;
-}
-
-/deep/.mat-dialog-content{
-  height: 100%;
-  max-height: 100%;
-}
-
 .no-margin{
   margin: 0;
 }
@@ -82,4 +71,8 @@ p{
 
 mat-hint{
   font-size: 0.9em;
+}
+
+:host ::ng-deep .mat-horizontal-content-container {
+  padding:0 !important;
 }

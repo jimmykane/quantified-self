@@ -8,11 +8,9 @@ import {EventActionsComponent} from '../components/event-actions/event.actions.c
 import {ChartsTimelineComponent} from '../components/charts/timeline/charts.timeline.component';
 import {ChartsPieComponent} from '../components/charts/pie/charts.pie.component';
 import {ChartsXYComponent} from '../components/charts/xy/charts.xy.component';
-import {EventCardChartComponent} from '../components/cards/event/chart/event.card.chart.component';
 import {EventFormComponent} from '../components/event-form/event.form.component';
 import {ActivityFormComponent} from '../components/activity-form/activity.form.component';
 import {DeleteConfirmationComponent} from '../components/delete-confirmation/delete-confirmation.component';
-import {EditInputComponent} from '../components/edit-input/edit-input.component';
 import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon.component';
 
 
@@ -34,7 +32,6 @@ import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon
     EventFormComponent,
     ActivityFormComponent,
     DeleteConfirmationComponent,
-    EditInputComponent,
     DataTypeIconComponent,
   ],
   providers: [],
@@ -53,7 +50,6 @@ import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon
     EventFormComponent,
     ActivityFormComponent,
     DeleteConfirmationComponent,
-    EditInputComponent,
     DataTypeIconComponent,
     ReactiveFormsModule,
     FormsModule

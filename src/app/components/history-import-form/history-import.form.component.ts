@@ -1,4 +1,4 @@
-import {Component, Inject, OnDestroy, OnInit} from '@angular/core';
+import { Component, Inject, Input, OnDestroy, OnInit } from '@angular/core';
 import {
   AbstractControl,
   FormArray,
@@ -15,22 +15,19 @@ import {AppUserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
 import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 
 @Component({
-  selector: 'app-activity-form',
+  selector: 'app-history-import-form',
   templateUrl: './history-import.form.component.html',
   styleUrls: ['./history-import.form.component.css'],
   providers: [],
 })
 
-
 export class HistoryImportFormComponent implements OnInit, OnDestroy {
+  @Input() user: User;
   protected logger = Log.create('ActivityFormComponent');
-
-  public user: User;
 
   public formGroup: FormGroup;
 
@@ -44,13 +41,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
   public isLoading: boolean;
 
   constructor(
-    public dialogRef: MatDialogRef<HistoryImportFormComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: any,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
     private afa: AngularFireAnalytics,
   ) {
-    this.user = data.user;
   }
 
   async ngOnInit() {
@@ -80,12 +74,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       ])
     });
 
+    this.formGroup.disable();
 
     this.userMetaForServiceSubscription = await this.userService
       .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
       .subscribe((userMetaForService) => {
         if (!userMetaForService) {
           this.isAllowedToDoHistoryImport = true;
+          this.formGroup.enable();
           return;
         }
         this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivities / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
@@ -95,6 +91,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivities === 0;
+        this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
       });
 
     // Set this to done loading
@@ -133,7 +130,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
         duration: 2000,
       });
       this.afa.logEvent('imported_history', {method: ServiceNames.SuuntoApp});
-      this.dialogRef.close();
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
@@ -161,15 +157,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     if (this.userMetaForServiceSubscription) {
       this.userMetaForServiceSubscription.unsubscribe();
     }
-  }
-
-  close(event) {
-    if (this.userMetaForServiceSubscription) {
-      this.userMetaForServiceSubscription.unsubscribe();
-    }
-    event.stopPropagation();
-    event.preventDefault();
-    this.dialogRef.close();
   }
 }
 

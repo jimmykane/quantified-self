@@ -16,8 +16,8 @@ import { UploadRouteComponent } from '../components/upload-route/upload-route.co
     ServicesRoutingModule,
   ],
   exports: [],
-  declarations: [ServicesComponent, HistoryImportFormComponent, UploadRouteComponent],
-  entryComponents: [HistoryImportFormComponent],
+  declarations: [ServicesComponent, HistoryImportFormComponent],
+  entryComponents: [],
   providers: []
 })
 
