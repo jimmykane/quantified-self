@@ -34,7 +34,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected overlay: Overlay,
     private eventService: AppEventService,
     private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, bottomSheet, filesStatusService, overlay, Log.create('UploadActivitiesComponent'))
+    super(snackBar, dialog, filesStatusService, Log.create('UploadActivitiesComponent'))
   }
 
   processAndUploadFile(file): Promise<EventInterface> {
@@ -65,22 +65,14 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           }
           newEvent.name = file.filename;
         } catch (e) {
-          file.status = UPLOAD_STATUS.ERROR;
-          Sentry.captureException(e);
-          this.logger.error(`Could not load event from file`, e);
-          reject(); // no-op here!
+          reject(e); // no-op here!
           return;
         }
         try {
           await this.eventService.writeAllEventData(this.user, newEvent);
           this.afa.logEvent('upload_file', {method: file.extension});
-          file.status = UPLOAD_STATUS.PROCESSED;
         } catch (e) {
-          // debugger;
-          console.error(e);
-          Sentry.captureException(e);
-          file.status = UPLOAD_STATUS.ERROR;
-          reject();
+          reject(e);
           return;
         }
         resolve(newEvent);

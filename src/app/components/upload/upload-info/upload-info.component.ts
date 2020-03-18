@@ -21,7 +21,7 @@ export class UploadInfoComponent implements OnInit, OnDestroy {
 
   constructor(private fileStatusService: AppFilesStatusService, private changeDetectorRef: ChangeDetectorRef) {
     this.fileStatusSubsription = this.fileStatusService.getFiles().subscribe(files => {
-      this.files = files||[];
+      this.files = files || [];
       this.changeDetectorRef.markForCheck();
     })
   }

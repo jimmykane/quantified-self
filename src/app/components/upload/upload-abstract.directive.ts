@@ -63,7 +63,9 @@ export abstract class UploadAbstractDirective implements OnInit {
     for (let index = 0; index < files.length; index++) {
       try {
         await this.processAndUploadFile(files[index]);
+        files[index].status = UPLOAD_STATUS.PROCESSED;
       } catch (e) {
+        files[index].status = UPLOAD_STATUS.ERROR;
         this.logger.error(e);
         Sentry.captureException(e);
       } finally {
@@ -76,17 +78,6 @@ export abstract class UploadAbstractDirective implements OnInit {
       duration: 2000,
     });
 
-    // // If there is an error show a modal
-    // if (this.files.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR).length) {
-    //   this.dialog.open(UploadErrorComponent, {
-    //     width: '75vw',
-    //     disableClose: false,
-    //     data: {activitiesMetaData: this.files},
-    //   });
-    // }
-
-    // Remove all;
-    // this.files = [];
     // Pass event to removeDragData for cleanup
     if (event.dataTransfer && event.dataTransfer.items) {
       // Use DataTransferItemList interface to remove the drag data

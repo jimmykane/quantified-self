@@ -28,7 +28,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
     private http: HttpClient,
     private afAuth: AngularFireAuth,
     private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, bottomSheet, filesStatusService, Log.create('UploadRouteComponent'));
+    super(snackBar, dialog, filesStatusService, Log.create('UploadRouteComponent'));
   }
 
   /**
