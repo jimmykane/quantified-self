@@ -62,6 +62,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.userSubscription = this.authService.user.pipe(switchMap((user) => {
       if (!user) {
+        this.snackBar.open('You must login to connect and use the service features', 'OK', {
+          duration: null,
+        });
         return of(null);
       }
       this.user = user;
