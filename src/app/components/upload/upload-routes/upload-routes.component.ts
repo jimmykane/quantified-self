@@ -23,7 +23,6 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected bottomSheet: MatBottomSheet,
     protected filesStatusService: AppFilesStatusService,
     private http: HttpClient,
     private afAuth: AngularFireAuth,
@@ -55,7 +54,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
         } catch (e) {
           Sentry.captureException(e);
           this.snackBar.open(`Could not upload ${metaData.filename}, reason: ${e.message}`);
-          reject(`Could not upload ${metaData.filename}, reason: ${e.message}`);
+          reject(e);
           return;
         }
         resolve();

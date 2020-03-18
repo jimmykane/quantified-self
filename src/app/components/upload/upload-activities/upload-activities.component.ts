@@ -65,6 +65,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           }
           newEvent.name = file.filename;
         } catch (e) {
+          this.snackBar.open(`Could not decode file ${file.filename}, reason: ${e.message}`);
           reject(e); // no-op here!
           return;
         }
@@ -72,6 +73,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           await this.eventService.writeAllEventData(this.user, newEvent);
           this.afa.logEvent('upload_file', {method: file.extension});
         } catch (e) {
+          this.snackBar.open(`Could not upload ${file.filename}, reason: ${e.message}`);
           reject(e);
           return;
         }

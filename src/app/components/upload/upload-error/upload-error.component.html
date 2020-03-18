@@ -1,8 +1,17 @@
 <mat-dialog-content>
-  <h1 class="mat-h1">Some files could not be processed</h1>
-  <app-activity-metadata [files]="files"></app-activity-metadata>
-  <span class="mat-subheader">
-    <b>TIP: </b> You can email us those files and we will take a look to what went wrong
-  </span>
-  <button mat-button (click)="close()">Ok</button>
+  <mat-card class="mat-elevation-z0">
+    <mat-card-header>
+      <div mat-card-avatar>
+        <mat-icon>sentiment_dissatisfied</mat-icon>
+      </div>
+      <mat-card-title>
+        <h1 class="mat-h1">Some files could not be processed</h1>
+      </mat-card-title>
+      <mat-card-subtitle>
+        <b>TIP: </b> You can email us those files and we will take a look to what went wrong
+      </mat-card-subtitle>
+    </mat-card-header>
+      <app-activity-metadata [files]="files"></app-activity-metadata>
+      <button mat-stroked-button (click)="close()">OK</button>
+  </mat-card>
 </mat-dialog-content>

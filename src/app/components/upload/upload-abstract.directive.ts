@@ -55,10 +55,6 @@ export abstract class UploadAbstractDirective implements OnInit {
       }));
     })
 
-    // @todo no need to update the status on process file
-
-    // please refactor
-
     // Then actually start processing them
     for (let index = 0; index < files.length; index++) {
       try {
