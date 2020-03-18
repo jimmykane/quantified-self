@@ -1,5 +1,5 @@
-<mat-list *ngIf="!isAllowedToDoHistoryImport">
-  <div mat-subheader>History import status</div>
+<mat-list *ngIf="userMetaForService && !isAllowedToDoHistoryImport">
+  <div mat-subheader>Status</div>
 
   <mat-list-item style="text-align: left">
     <mat-icon mat-list-icon>date_range</mat-icon>
@@ -14,10 +14,14 @@
   </mat-list-item>
 
   <mat-list-item style="text-align: left">
-    <mat-icon mat-list-icon>navigate_next</mat-icon>
+    <mat-icon mat-list-icon>replay</mat-icon>
     <div mat-line>You can run the next history import at</div>
     <div mat-line>{{ nextImportAvailableDate | date: 'medium'}}</div>
   </mat-list-item>
+
+  <span>Please support this project via donating</span>
+
+  <button mat-stroked-button onclick="window.open('https://paypal.me/DKanellopoulos')">Donate</button>
 
 </mat-list>
 
@@ -54,9 +58,9 @@
         </mat-error>
       </mat-form-field>
 
-      <span><b>Note</b>: Please consider</span>
+      <span>Please support this project via donating</span>
 
-      <button mat-stroked-button onclick="window.open('https://paypal.me/DKanellopoulos')">Donating</button>
+      <button mat-stroked-button onclick="window.open('https://paypal.me/DKanellopoulos')">Donate</button>
 
       <button mat-flat-button color="primary" matStepperNext>Next</button>
     </mat-step>

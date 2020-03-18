@@ -22,51 +22,62 @@
             <ng-template matTabLabel>
               <mat-icon matTooltip="Download">cloud_download</mat-icon>
             </ng-template>
-            <section>
-              <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
-                <mat-form-field>
-                  <label>
-                    <input matInput placeholder="Link" formControlName="input">
-                  </label>
-                  <mat-hint>Paste a Suunto app link that is public</mat-hint>
-                  <mat-error *ngIf="hasError('input')">
-                    This cannot be empty
-                  </mat-error>
-                </mat-form-field>
-                <section>
-                  <button class="big" mat-flat-button color="primary" (click)="onSubmit()">
-                    Download
-                  </button>
-                  <button *ngIf="user" class="big"  mat-flat-button color="accent" (click)="onImportAndOpen()" >
-                    Import and open
-                  </button>
-                </section>
-              </form>
-            </section>
+            <ng-template matTabContent>
+              <mat-card class="mat-elevation-z0">
+                <mat-card-header>
+                  <mat-card-subtitle>
+                    Download or import a FIT file from a Suunto app link
+                  </mat-card-subtitle>
+                </mat-card-header>
+                <mat-divider></mat-divider>
+                <form [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
+                  <mat-form-field>
+                    <label>
+                      <input matInput placeholder="Link" formControlName="input">
+                    </label>
+                    <mat-hint>Paste a Suunto app link that is public</mat-hint>
+                    <mat-error *ngIf="hasError('input')">
+                      This cannot be empty
+                    </mat-error>
+                  </mat-form-field>
+                  <section>
+                    <button class="big" mat-flat-button color="primary" (click)="onSubmit()">
+                      Download
+                    </button>
+                    <button *ngIf="user" class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
+                      Import and open
+                    </button>
+                  </section>
+                </form>
+              </mat-card>
+            </ng-template>
           </mat-tab>
 
           <mat-tab label="Sync" [disabled]="!user || isGuest">
             <ng-template matTabLabel>
               <mat-icon matTooltip="Sync settings">sync</mat-icon>
             </ng-template>
-            <section class="tab-content" *ngIf="user && !isGuest">
+            <ng-template matTabContent>
+              <mat-card class="mat-elevation-z0">
+                <mat-card-header>
+                  <mat-card-subtitle>
+                    Connect to Suunto app by Suunto and get almost realtime updates on your dashboard<br/>
+                    This needs to be revised
+                  </mat-card-subtitle>
+                </mat-card-header>
+                <mat-divider></mat-divider>
 
-              <p *ngIf="!serviceTokens || !serviceTokens.length">
-                Connect to Suunto app by Suunto and get almost realtime updates on your dashboard<br/>
-                This needs to be revised
-              </p>
-              <mat-list *ngIf="serviceTokens && serviceTokens.length">
+                <mat-list *ngIf="serviceTokens && serviceTokens.length">
 
-                <div mat-subheader>Accounts</div>
+                  <div mat-subheader>Accounts</div>
 
-                <mat-list-item style="text-align: left" *ngFor="let serviceToken of serviceTokens; let i = index;">
-                  <mat-icon mat-list-icon>account_circle</mat-icon>
-                  <div mat-line>{{ serviceToken.userName }} </div>
-                  <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
-                </mat-list-item>
-              </mat-list>
+                  <mat-list-item style="text-align: left" *ngFor="let serviceToken of serviceTokens; let i = index;">
+                    <mat-icon mat-list-icon>account_circle</mat-icon>
+                    <div mat-line>{{ serviceToken.userName }} </div>
+                    <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
+                  </mat-list-item>
+                </mat-list>
 
-              <section>
                 <button class="big"
                         mat-flat-button color="warn"
                         *ngIf="serviceTokens && serviceTokens.length"
@@ -74,13 +85,13 @@
                 </button>
 
                 <button mat-stroked-button
-                         class="big"
-                  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                  *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
-                  (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
+                        class="big"
+                        mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+                        *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
+                        (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
                 </button>
-              </section>
-            </section>
+              </mat-card>
+            </ng-template>
           </mat-tab>
 
           <mat-tab label="History import" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
@@ -88,9 +99,17 @@
               <mat-icon matTooltip="History import">history</mat-icon>
             </ng-template>
 
-            <section class="tab-content" *ngIf="user && !isGuest">
-              <app-history-import-form [user]="user"></app-history-import-form>
-            </section>
+            <ng-template matTabContent>
+              <mat-card class="mat-elevation-z0">
+                <mat-card-header>
+                  <mat-card-subtitle>
+                    Import your activity history
+                  </mat-card-subtitle>
+                </mat-card-header>
+                <mat-divider></mat-divider>
+                <app-history-import-form [user]="user"></app-history-import-form>
+              </mat-card>
+            </ng-template>
           </mat-tab>
 
           <mat-tab label="GPX Upload" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
@@ -98,9 +117,18 @@
               <mat-icon matTooltip="GPX Upload">cloud_upload</mat-icon>
             </ng-template>
 
-            <section class="tab-content" *ngIf="user && !isGuest">
-              <app-upload-route [user]="user"></app-upload-route>
-            </section>
+            <ng-template matTabContent>
+              <mat-card class="mat-elevation-z0">
+                <mat-card-header>
+                  <mat-card-subtitle>
+                    Upload a GPX route file to your Suunto app
+                  </mat-card-subtitle>
+                </mat-card-header>
+                <mat-divider></mat-divider>
+                sdf
+                <app-upload-route [user]="user"></app-upload-route>
+              </mat-card>
+            </ng-template>
           </mat-tab>
         </mat-tab-group>
       </mat-card>
