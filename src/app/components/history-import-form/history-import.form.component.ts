@@ -25,7 +25,6 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
   providers: [],
 })
 
-
 export class HistoryImportFormComponent implements OnInit, OnDestroy {
   @Input() user: User;
   protected logger = Log.create('ActivityFormComponent');
@@ -75,12 +74,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       ])
     });
 
+    this.formGroup.disable();
 
     this.userMetaForServiceSubscription = await this.userService
       .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
       .subscribe((userMetaForService) => {
         if (!userMetaForService) {
           this.isAllowedToDoHistoryImport = true;
+          this.formGroup.enable();
           return;
         }
         this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivities / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
@@ -90,6 +91,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivities === 0;
+        this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
       });
 
     // Set this to done loading
