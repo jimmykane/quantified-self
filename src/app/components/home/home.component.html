@@ -1,11 +1,12 @@
 <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" [rowHeight]="'fit'">
   <mat-grid-tile>
     <span>
-      <span class="mat-h1">
-        <mat-icon
-          (click)="authService.authenticated() ? router.navigate(['/dashboard']) : router.navigate(['/login']) ">filter_hdr</mat-icon>
-        Quantified Self is...
-      </span>
+      <mat-icon
+        svgIcon="logo-font"
+        (click)="authService.authenticated() ?
+           router.navigate(['/dashboard'])
+           : router.navigate(['/login']) ">
+      </mat-icon>
       <br/>
       A free <b>premium</b><b> analytical tool</b> for any <b>fitness device data</b>
       <br/>
@@ -18,14 +19,14 @@
   <!--    </app-home-live-chart>-->
   <!--  </mat-grid-tile>-->
   <mat-grid-tile>
-        <mat-list>
-          <mat-list-item>
-            Deep analysis
-          </mat-list-item>
-        </mat-list>
+    <mat-list>
+      <mat-list-item>
+        Deep analysis
+      </mat-list-item>
+    </mat-list>
   </mat-grid-tile>
   <mat-grid-tile>
-    <span  style="text-align: center">
+    <span style="text-align: center">
       Works with <br/>
       <mat-divider></mat-divider>
       <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>

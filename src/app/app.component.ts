@@ -118,6 +118,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   private addIconsToRegistry() {
     this.matIconRegistry.addSvgIcon(
+      'logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/logo/logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'logo-font',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/logo/logo-font.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
       'suunto',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto-logo.svg')
     );
