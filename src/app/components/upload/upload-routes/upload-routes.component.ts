@@ -14,7 +14,7 @@ import { AppFilesStatusService } from '../../../services/upload/app-files-status
 @Component({
   selector: 'app-upload-route',
   templateUrl: './upload-routes.component.html',
-  styleUrls: ['./upload-routes.component.css'],
+  styleUrls: ['../upload-abstract.css', './upload-routes.component.css'],
 })
 
 export class UploadRoutesComponent extends UploadAbstractDirective {

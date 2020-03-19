@@ -1,11 +1,11 @@
-<mat-card class="mat-elevation-z0"
+<section class="mat-elevation-z0"
           (drop)="getFiles($event);"
           ondragenter="event.stopPropagation(); event.preventDefault();"
-          ondragover="event.stopPropagation(); event.preventDefault();"
-          ondragleave="event.stopPropagation(); event.preventDefault();">
-  <button mat-stroked-button  color="primary" (click)="inputFile.click()">
-    <span>Upload routes to your Suunto app<span class="mat-small"></span></span><br/>
+          ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
+          ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
+  <button mat-flat-button  color="primary" (click)="inputFile.click()">
+    Open or drag and drop file
   </button>
   <input #inputFile type="file" accept=".gpx" multiple  style="display: none;"
          (change)="getFiles($event)"/>
-</mat-card>
+</section>

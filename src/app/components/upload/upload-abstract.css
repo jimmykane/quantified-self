@@ -3,12 +3,6 @@ mat-card {
   text-align: center;
 }
 
-button {
-  /*min-width: 100%;*/
-  /*vertical-align: middle;*/
-}
-
-
 mat-icon{
   line-height: 22px;
 }
@@ -22,7 +16,11 @@ a:last-child{
   margin-left: 2%;
 }
 
+.drag-enabled{
+
+}
 .drag{
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   /*background-color: black;*/
   opacity: 0.5;
 }
