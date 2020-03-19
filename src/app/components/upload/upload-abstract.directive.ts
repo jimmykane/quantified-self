@@ -3,14 +3,10 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { FileInterface } from './file.interface';
 import { UPLOAD_STATUS } from './upload-status/upload.status';
 import * as Sentry from '@sentry/browser';
-import { UploadErrorComponent } from './upload-error/upload-error.component';
 import { Logger } from 'ng2-logger';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
-import { UploadInfoComponent } from './upload-info/upload-info.component';
 import { AppFilesStatusService } from '../../services/upload/app-files-status.service';
-import { Overlay } from '@angular/cdk/overlay';
 
 
 @Directive()

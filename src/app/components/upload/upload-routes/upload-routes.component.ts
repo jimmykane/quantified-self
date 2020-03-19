@@ -9,7 +9,6 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 
 @Component({
@@ -33,9 +32,9 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
   /**
    * Process each uploaded GPX
    * @returns {Promise}
-   * @param metaData
+   * @param file
    */
-  async processAndUploadFile(metaData: FileInterface) {
+  async processAndUploadFile(file: FileInterface) {
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
@@ -53,7 +52,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
             }).toPromise();
         } catch (e) {
           Sentry.captureException(e);
-          this.snackBar.open(`Could not upload ${metaData.filename}, reason: ${e.message}`);
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', {duration: 2000});
           reject(e);
           return;
         }
@@ -61,8 +60,8 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
       }
 
       // Read it depending on the extension
-      if (metaData.extension === 'gpx') {
-        fileReader.readAsText(metaData.file);
+      if (file.extension === 'gpx') {
+        fileReader.readAsText(file.file);
       } else {
         reject('Unknown file type');
       }

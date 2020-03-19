@@ -65,7 +65,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           }
           newEvent.name = file.filename;
         } catch (e) {
-          this.snackBar.open(`Could not decode file ${file.filename}, reason: ${e.message}`);
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', {duration: 2000});
           reject(e); // no-op here!
           return;
         }
