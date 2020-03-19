@@ -1343,7 +1343,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       case XAxisTypes.Time:
         xAxis = chart.xAxes.push(new am4charts.DateAxis());
         if (!this.disableGrouping) {
-          const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
+          // this is true pixels
+          // const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
+          // This is with no retina etc
+          // We use no retina for performance for now
+          const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]);
           this.logger.info(`Grouping data on ${screenPixes}`);
           xAxis.groupData = true;
           // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
