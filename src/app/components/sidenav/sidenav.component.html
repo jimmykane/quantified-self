@@ -74,8 +74,6 @@
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
-  <mat-divider></mat-divider>
-
   <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
     <mat-icon>bug_report</mat-icon>
     <span>File a bug</span><span class="fill-space"></span>
@@ -91,6 +89,14 @@
 
   <mat-divider></mat-divider>
 
+  <mat-list-item (click)="logout()"
+                 *ngIf="authService.authenticated()">
+    <mat-icon>power_settings_new</mat-icon>
+    <span>Logout</span>
+  </mat-list-item>
+
+  <mat-divider *ngIf="authService.authenticated()"></mat-divider>
+
   <mat-list-item>
     <mat-slide-toggle
       [disabled]="!appTheme"
@@ -102,15 +108,6 @@
       </span>
     </mat-slide-toggle>
   </mat-list-item>
-
-  <mat-divider *ngIf="authService.authenticated()"></mat-divider>
-
-  <mat-list-item (click)="logout()"
-                 *ngIf="authService.authenticated()">
-    <mat-icon>power_settings_new</mat-icon>
-    <span>Logout</span>
-  </mat-list-item>
-
 
 </mat-nav-list>
 
