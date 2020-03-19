@@ -6,6 +6,6 @@
   <button mat-stroked-button  color="primary" (click)="inputFile.click()">
     <span>Upload routes to your Suunto app<span class="mat-small"></span></span><br/>
   </button>
-  <input #inputFile type="file" accept=".gpx" multiple [style.display]="'none'"
+  <input #inputFile type="file" accept=".gpx" multiple  style="display: none;"
          (change)="getFiles($event)"/>
 </mat-card>

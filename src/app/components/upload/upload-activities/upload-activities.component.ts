@@ -8,8 +8,6 @@ import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib/lib/events/
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
-import { UploadErrorComponent } from '../upload-error/upload-error.component';
-import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { Log } from 'ng2-logger/browser';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
@@ -19,11 +17,10 @@ import { AppFilesStatusService } from '../../../services/upload/app-files-status
 import { Overlay } from '@angular/cdk/overlay';
 
 @Component({
-  selector: 'app-upload',
+  selector: 'app-upload-activities',
   templateUrl: './upload-activities.component.html',
-  styleUrls: ['./upload-activities.component.css'],
+  styleUrls: ['../upload-abstract.css', './upload-activities.component.css'],
 })
-
 export class UploadActivitiesComponent extends UploadAbstractDirective {
 
   constructor(

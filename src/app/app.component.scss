@@ -19,9 +19,9 @@ mat-sidenav{
   //padding: 1vw;
   border-right: 1px solid rgba(0,0,0,.12);
 }
+
 mat-icon{
   vertical-align: middle;
-
 }
 
 .icon-theme{
@@ -57,30 +57,15 @@ button{
 .mat-tab-link{
 }
 
-.fabButtonsVertical {
-  position: fixed;
-  bottom: 2vh;
-  right: 2vh;
-  //height: 50vh;
-  z-index: 1;
-}
 
 nav button{
   margin-bottom: 6px;
   margin-top: 6px;
 }
 
-.fabButtonsVertical-container {
-  height: 100%;
-  display: flex;
-  flex-direction: column-reverse;
-}
-
-.fabButtonsVertical-container button {
-  margin-left: auto;
-  margin-right: auto;
-  margin-bottom: 2vh;
-  align-content: center;
+nav app-upload-activities{
+  margin-bottom: 6px;
+  margin-top: 6px;
 }
 
 

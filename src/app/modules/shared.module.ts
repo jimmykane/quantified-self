@@ -15,6 +15,7 @@ import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon
 import { UploadErrorComponent } from '../components/upload/upload-error/upload-error.component';
 import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
 import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
+import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 
 
 @NgModule({
@@ -24,7 +25,6 @@ import { FilesStatusListComponent } from '../components/files-status-list/files-
     ReactiveFormsModule,
     FormsModule
   ],
-
   declarations: [
     ShadeComponent,
     PrivacyIconComponent,

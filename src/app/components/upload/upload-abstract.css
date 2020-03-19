@@ -1,0 +1,28 @@
+mat-card {
+  /*margin-bottom: 1vh;*/
+  text-align: center;
+}
+
+button {
+  /*min-width: 100%;*/
+  /*vertical-align: middle;*/
+}
+
+
+mat-icon{
+  line-height: 22px;
+}
+
+a {
+  min-width: 49%;
+  margin-top: 1%;
+}
+
+a:last-child{
+  margin-left: 2%;
+}
+
+.drag{
+  /*background-color: black;*/
+  opacity: 0.5;
+}

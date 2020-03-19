@@ -1,6 +1,5 @@
 <mat-card>
   <app-shade [isActive]="!isInitialized"></app-shade>
-  <app-upload *ngIf="(user && showUpload) || (user && user.settings.dashboardSettings.pinUploadSection)" [user]="user"></app-upload>
   <app-event-search *ngIf="user"
                     [isLoading]="isLoading"
                     [selectedDateRange]="user.settings.dashboardSettings.dateRange"

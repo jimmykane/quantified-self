@@ -1,6 +1,5 @@
 import { Component, OnInit, Input, Inject, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import {UPLOAD_STATUS} from '../upload-status/upload.status';
-import { MAT_BOTTOM_SHEET_DATA } from '@angular/material/bottom-sheet';
 import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { Subscription } from 'rxjs';

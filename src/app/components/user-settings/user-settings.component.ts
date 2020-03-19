@@ -225,11 +225,6 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
-      pinUploadSection: new FormControl(this.user.settings.dashboardSettings.pinUploadSection, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
       mapTheme: new FormControl(this.user.settings.mapSettings.theme, [
         // Validators.required,
         // Validators.minLength(1),
@@ -333,7 +328,6 @@ export class UserSettingsComponent implements OnChanges {
           dashboardSettings: <UserDashboardSettingsInterface>{
             tiles: this.user.settings.dashboardSettings.tiles,
             showSummaries: this.userSettingsFormGroup.get('showSummaries').value,
-            pinUploadSection: this.userSettingsFormGroup.get('pinUploadSection').value,
             startDate: this.user.settings.dashboardSettings.startDate,
             endDate: this.user.settings.dashboardSettings.endDate,
             dateRange: this.user.settings.dashboardSettings.dateRange,

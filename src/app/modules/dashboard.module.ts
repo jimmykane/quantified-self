@@ -32,7 +32,6 @@ import { MondayDateAdapter } from '../adapters/date.adapter';
   ],
   declarations: [
     DashboardComponent,
-    UploadActivitiesComponent,
     SummariesComponent,
     TileChartActionsComponent,
     TileMapActionsComponent,

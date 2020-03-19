@@ -11,6 +11,7 @@ import { AppFilesStatusService } from '../../services/upload/app-files-status.se
 
 @Directive()
 export abstract class UploadAbstractDirective implements OnInit {
+
   @Input() user: User;
   protected logger: Logger<any>;
 
@@ -42,7 +43,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     // Add as local to show totals
     const files = [];
     [...(event.target.files || event.dataTransfer.files)].forEach(file => {
-      files.push(this.filesStatusService.addFile({
+      files.push(this.filesStatusService.addOrUpdate({
         file: file,
         name: file.name,
         status: UPLOAD_STATUS.PROCESSING,
@@ -61,7 +62,7 @@ export abstract class UploadAbstractDirective implements OnInit {
         this.logger.error(e);
         Sentry.captureException(e);
       } finally {
-        this.filesStatusService.updateFile(files[index]);
+        this.filesStatusService.addOrUpdate(files[index]);
       }
     }
 

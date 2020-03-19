@@ -26,6 +26,12 @@
             (click)="router.navigate(['/login']);">
       Login or Register
     </button>
+
+    <app-upload-activities class="right"
+      *ngIf="title && title === 'Dashboard' && authService.user | async as user"
+      [user]="user">
+    </app-upload-activities>
+
   </nav>
 
   <!--<mat-card>-->

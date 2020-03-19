@@ -52,8 +52,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
   private appVersionSubscription: Subscription;
-  private userSubscription: Subscription;
-  public user: User;
   public loading: boolean;
 
   constructor(
@@ -206,6 +204,5 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   ngOnDestroy(): void {
     this.routerEventSubscription.unsubscribe();
     this.actionButtonsSubscription.unsubscribe();
-    this.userSubscription.unsubscribe();
   }
 }

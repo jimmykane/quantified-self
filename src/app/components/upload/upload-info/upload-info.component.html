@@ -10,7 +10,6 @@
         Processed <b>{{ getProcessedFiles().length }}</b> of <b>{{ files.length }}</b> files with <b>{{ getFailedActivities().length }}</b>
         errors
         so far
-      <mat-divider [inset]="true"></mat-divider>
       </mat-card-title>
       <mat-card-subtitle>
         <mat-progress-bar mode="buffer" [value]="getOverallProgress()"></mat-progress-bar>

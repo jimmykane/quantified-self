@@ -81,18 +81,6 @@
               this off
             </mat-hint>
           </section>
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="pinUploadSection">
-          <span matTooltip="Should the upload section always show?">
-             Pin upload button
-          </span>
-            </mat-slide-toggle>
-            <mat-hint class="smaller"><b>Tip:</b> if you upload regularly and manually you might want to turn this on to
-              pin the upload button
-            </mat-hint>
-          </section>
           <mat-form-field>
             <mat-select placeholder="Events per page" formControlName="eventsPerPage">
               <mat-option *ngFor="let eventsPerPageOption of eventsPerPage " [value]="eventsPerPageOption">

@@ -457,7 +457,6 @@ export class AppUserService implements OnDestroy {
     settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
     settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserService.getDefaultUserDashboardTiles();
     // Patch missing defaults
-    settings.dashboardSettings.pinUploadSection = settings.dashboardSettings.pinUploadSection === true;
     settings.dashboardSettings.showSummaries = settings.dashboardSettings.showSummaries !== false;
     settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserService.getDefaultTableSettings();
     // Summaries
