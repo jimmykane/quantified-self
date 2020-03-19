@@ -35,6 +35,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
   }
 
   processAndUploadFile(file): Promise<EventInterface> {
+    this.afa.logEvent('upload_file', {method: file.extension});
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
@@ -68,7 +69,6 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
         }
         try {
           await this.eventService.writeAllEventData(this.user, newEvent);
-          this.afa.logEvent('upload_file', {method: file.extension});
         } catch (e) {
           this.snackBar.open(`Could not upload ${file.filename}, reason: ${e.message}`);
           reject(e);

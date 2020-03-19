@@ -10,6 +10,7 @@ import { AngularFireAuth } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 
 @Component({
   selector: 'app-upload-route',
@@ -35,6 +36,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
    * @param file
    */
   async processAndUploadFile(file: FileInterface) {
+    this.afa.logEvent('upload_route_to_service', {service: ServiceNames.SuuntoApp});
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
