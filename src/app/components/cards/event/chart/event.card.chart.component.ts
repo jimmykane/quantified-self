@@ -232,12 +232,12 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.chart.xAxes.values.forEach(xAxis => {
           switch (this.xAxisType) {
             case XAxisTypes.Time:
-              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'soft');
+              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'none');
               break;
             case XAxisTypes.Duration:
               const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
               if (cursorActivity) {
-                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'soft');
+                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'none');
               }
               break;
           }
