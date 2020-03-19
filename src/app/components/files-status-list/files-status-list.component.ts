@@ -1,19 +1,20 @@
 import {Component, Input} from '@angular/core';
 import {UPLOAD_STATUS} from '../upload/upload-status/upload.status';
+import { FileInterface } from '../upload/file.interface';
 
 @Component({
-  selector: 'app-activity-metadata',
-  templateUrl: './files-metadata.component.html',
-  styleUrls: ['./files-metadata.component.css'],
+  selector: 'app-files-status-list',
+  templateUrl: './files-status-list.component.html',
+  styleUrls: ['./files-status-list.component.css'],
 })
 
-export class FilesMetadataComponent {
-  @Input() files = [];
+export class FilesStatusListComponent {
+  @Input() files: FileInterface[] = [];
 
   /**
    * return the activity process icon
    */
-  activityMetaDataStatusIcon(activityMetadata): string {
+  fileStatusIcon(activityMetadata): string {
     switch (activityMetadata.status) {
       case UPLOAD_STATUS.PROCESSED:
         return 'done';

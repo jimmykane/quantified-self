@@ -7,7 +7,7 @@ import { MatIcon } from '@angular/material/icon';
 import { MatList, MatListItem } from '@angular/material/list';
 import { MatProgressBar } from '@angular/material/progress-bar';
 
-import {FilesMetadataComponent} from '../../files-metadata/files-metadata.component';
+import {FilesStatusListComponent} from '../../files-status-list/files-status-list.component';
 import {UPLOAD_STATUS} from "../upload-status/upload.status";
 
 describe('UploadInfoComponent', () => {
@@ -16,7 +16,7 @@ describe('UploadInfoComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard, FilesMetadataComponent
+      declarations: [UploadInfoComponent, MatProgressBar, MatList, MatListItem, MatRipple, MatIcon, MatCard, FilesStatusListComponent
       ]
     })
       .compileComponents();

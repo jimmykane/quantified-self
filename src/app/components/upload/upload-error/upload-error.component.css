@@ -5,3 +5,7 @@ mat-card{
 mat-icon{
   vertical-align: middle;
 }
+
+button{
+  width: 100%;
+}

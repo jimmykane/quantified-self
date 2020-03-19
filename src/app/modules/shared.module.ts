@@ -14,7 +14,7 @@ import {DeleteConfirmationComponent} from '../components/delete-confirmation/del
 import {DataTypeIconComponent} from '../components/data-type-icon/data-type-icon.component';
 import { UploadErrorComponent } from '../components/upload/upload-error/upload-error.component';
 import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
-import { FilesMetadataComponent } from '../components/files-metadata/files-metadata.component';
+import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
 
 
 @NgModule({
@@ -38,7 +38,7 @@ import { FilesMetadataComponent } from '../components/files-metadata/files-metad
     DataTypeIconComponent,
     UploadInfoComponent,
     UploadErrorComponent,
-    FilesMetadataComponent,
+    FilesStatusListComponent,
   ],
   providers: [],
   entryComponents: [
@@ -62,7 +62,7 @@ import { FilesMetadataComponent } from '../components/files-metadata/files-metad
     FormsModule,
     UploadInfoComponent,
     UploadErrorComponent,
-    FilesMetadataComponent,
+    FilesStatusListComponent,
   ]
 })
 
