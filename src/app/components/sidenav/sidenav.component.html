@@ -97,10 +97,9 @@
 
   <mat-divider *ngIf="authService.authenticated()"></mat-divider>
 
-  <mat-list-item>
+  <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
     <mat-slide-toggle
       [disabled]="!appTheme"
-      (change)="themeService.toggleTheme()"
       [color]="'accent'"
       [checked]="appTheme === appThemes.Dark">
       <span matTooltip="Use dark theme">
