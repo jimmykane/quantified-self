@@ -22,5 +22,5 @@ a:last-child{
 .drag{
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   /*background-color: black;*/
-  opacity: 0.5;
+  opacity: 0.3;
 }
