@@ -3,24 +3,10 @@ mat-card {
   text-align: center;
 }
 
-mat-icon{
-  line-height: 22px;
-}
 
-a {
-  min-width: 49%;
-  margin-top: 1%;
-}
 
-a:last-child{
-  margin-left: 2%;
-}
-
-.drag-enabled{
-
-}
 .drag{
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   /*background-color: black;*/
-  opacity: 0.3;
+  opacity: 0.8;
 }

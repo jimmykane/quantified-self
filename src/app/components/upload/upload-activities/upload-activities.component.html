@@ -1,10 +1,9 @@
-<button mat-flat-button color="primary"
+<button mat-icon-button color="accent"
         (drop)="getFiles($event);"
         (click)="inputFile.click()"
         ondragenter="event.stopPropagation(); event.preventDefault();"
         ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
         ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-  Upload
   <mat-icon>add_circle_outline</mat-icon>
 </button>
 <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx, .sml" multiple style="display: none;"

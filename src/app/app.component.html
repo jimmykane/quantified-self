@@ -11,17 +11,17 @@
 
     <span class="fill-space"></span>
 
-    <button mat-flat-button class="right" color="accent"
+    <button mat-stroked-button class="right" color="accent"
             *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
             disabled>
       Loading
     </button>
-    <button mat-flat-button class="right" color="primary"
+    <button mat-stroked-button class="right" color="accent"
             *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
             (click)="router.navigate(['/dashboard']);">
       Go to your dashboard
     </button>
-    <button mat-flat-button class="right" color="accent"
+    <button mat-stroked-button class="right" color="accent"
             *ngIf="authService.authenticated() === false && title && title !== 'Login'"
             (click)="router.navigate(['/login']);">
       Login or Register
