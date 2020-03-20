@@ -14,3 +14,7 @@ mat-card-title{
   text-align: center;
   font-size: 1.2em !important;
 }
+
+::ng-deep .mat-card-header-text{
+  width: 100%;
+}
