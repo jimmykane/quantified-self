@@ -2,3 +2,7 @@ button{
   height: 36px;
   width: 36px;
 }
+
+mat-icon{
+  line-height: 18px!important;
+}

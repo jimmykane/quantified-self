@@ -255,7 +255,7 @@ export class AppUserService implements OnDestroy {
   }
 
   static getDefaultChartStrokeWidth(): number {
-    return 1;
+    return 1.15;
   }
 
   static getDefaultChartStrokeOpacity(): number {
