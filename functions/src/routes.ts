@@ -5,6 +5,7 @@ import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import { getTokenData } from "./service-tokens";
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from "./auth";
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 
 /**
  * Uploads a route to the Suunto app
@@ -97,6 +98,19 @@ export const importRoute = functions.region('europe-west2').https.onRequest(asyn
       res.status(500);
       res.send();
       return;
+    }
+    try {
+      const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get();
+      const data = userServiceMetaDocumentSnapshot.data();
+      let uploadedRoutesCount = 0
+      if (data){
+        uploadedRoutesCount = data.uploadedRoutes || uploadedRoutesCount;
+      }
+      await userServiceMetaDocumentSnapshot.ref.update({
+        uploadedRoutes: uploadedRoutesCount + 1
+      })
+    }catch (e) {
+      console.error(`Could not update uploadedRoutes count`);
     }
 
     res.status(200)
