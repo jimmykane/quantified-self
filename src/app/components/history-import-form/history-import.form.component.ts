@@ -84,13 +84,13 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
           this.formGroup.enable();
           return;
         }
-        this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivities / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
+        this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivitiesFromLastHistoryImport / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.userMetaForService = userMetaForService;
 
         // He is only allowed if he did it about 7 days ago
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
-          || this.userMetaForService.processedActivities === 0;
+          || this.userMetaForService.processedActivitiesFromLastHistoryImport === 0;
         this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
       });
 
