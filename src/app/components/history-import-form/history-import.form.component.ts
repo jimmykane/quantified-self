@@ -79,14 +79,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     this.userMetaForServiceSubscription = await this.userService
       .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
       .subscribe((userMetaForService) => {
-        if (!userMetaForService) {
+        if (!userMetaForService || !userMetaForService.processedActivitiesFromLastHistoryImport) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
           return;
         }
         this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivitiesFromLastHistoryImport / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.userMetaForService = userMetaForService;
-
+        
         // He is only allowed if he did it about 7 days ago
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
