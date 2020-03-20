@@ -1,24 +1,29 @@
 mat-card{
-  padding: 0;
-  min-height: calc(100vh - 48px);
+  /*padding: 0;*/
+  /*min-height: calc(100vh - 48px);*/
+  /*width: 100%;*/
+  /*min-height: 80%;*/
 }
 
-mat-grid-list{
-  min-height: calc(100vh - 48px);
-  margin: 2em;
+
+mat-icon.logo{
+  /*vertical-align: middle;*/
+  /*font-size: 50px;*/
+  /*height:50px;*/
+  /*width: 50px;*/
 }
 
-mat-icon{
-  vertical-align: middle;
-  font-size: 50px;
-  height:50px;
-  width: 50px;
-}
 
+mat-icon.mat-card-avatar {
+  width: 80px;
+  height: 80px;
+  font-size: 80px;
+}
 
 .mat-h1{
   margin: 0;
 }
+
 mat-grid-tile.app-icon{
   text-align: center;
   /*padding: 2em;*/

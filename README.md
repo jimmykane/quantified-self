@@ -40,3 +40,9 @@ How to run this project (incomplete)
   
 
 
+
+Attributions
+
+- Heatmap Icon: "Heat Map by Denny Hurkmans from the Noun Project"
+- Spiral Icon: "spiral by Lucid Formation from the Noun Project"
+- Icons: "Alessandro"

@@ -1,52 +1,109 @@
-<mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" [rowHeight]="'fit'">
-  <mat-grid-tile>
-    <span>
-      <mat-icon
-        svgIcon="logo-font"
-        (click)="authService.authenticated() ?
+<mat-card>
+  <mat-card-header>
+    <mat-icon
+      mat-card-avatar
+      svgIcon="logo"
+      (click)="authService.authenticated() ?
            router.navigate(['/dashboard'])
            : router.navigate(['/login']) ">
-      </mat-icon>
-      <br/>
-      A free <b>premium</b><b> analytical tool</b> for any <b>fitness device data</b>
-      <br/>
-      <br/>
-      Upload your <b>FIT</b>, <b>TCX</b>, <b>GPX</b> files or connect to <b>Suunto app</b>
-     </span>
-  </mat-grid-tile>
-  <!--  <mat-grid-tile>-->
-  <!--    <app-home-live-chart>-->
-  <!--    </app-home-live-chart>-->
-  <!--  </mat-grid-tile>-->
-  <mat-grid-tile>
-    <mat-list>
-      <mat-list-item>
-        Deep analysis
-      </mat-list-item>
-    </mat-list>
-  </mat-grid-tile>
-  <mat-grid-tile>
-    <span style="text-align: center">
-      Works with <br/>
-      <mat-divider></mat-divider>
-      <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
-    </span>
-  </mat-grid-tile>
-  <mat-grid-tile>
-    <span style="text-align: center">
-      <span>Runs on<a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a></span>
-      <br/>
-      <span>Made with<a
-        mat-button onclick="window.open('//angular.io')"><b>Angular</b></a></span>
-      <br/>
-      <span class="mat-body-2"><b>Version</b>: {{appVersion}}</span>
-       <br/>
-      <span class="mat-body-2"><b>Source code:</b></span>
-      <button mat-button onclick="window.open('https://github.com/jimmykane/quantified-self')">GitHub</button>
-      <br/>
-      Charts powered by <a mat-button
-                           onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>
-    </span>
-  </mat-grid-tile>
+    </mat-icon>
+    <mat-card-title>
+      Quantified Self
+    </mat-card-title>
+    <mat-card-subtitle>
+      A free premium analytical tool for your activity data
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <p>text1</p>
+    <p>text2</p>
+    <p>text3</p>
+  </mat-card-content>
+</mat-card>
+<mat-card>
+  <mat-card-header>
+    <mat-icon mat-card-avatar svgIcon="dashboard">
+    </mat-icon>
+    <mat-card-title>
+      Personalized dashboard
+    </mat-card-title>
+    <mat-card-subtitle>
+      Your dashboard, the way you like it, across all your devices
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-list>
+    <div mat-subheader>Available charts</div>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon>bar_chart</mat-icon>
+      <div mat-line>Bar chart</div>
+    </mat-list-item>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon>pie_chart</mat-icon>
+      <div mat-line>Pie chart</div>
+    </mat-list-item>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon>show_chart</mat-icon>
+      <div mat-line>Line chart</div>
+    </mat-list-item>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon svgIcon="spiral"></mat-icon>
+      <div mat-line>Spiral chart</div>
+    </mat-list-item>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon svgIcon="heat-map"></mat-icon>
+      <div mat-line>Heatmaps and clusters</div>
+    </mat-list-item>
 
-</mat-grid-list>
+  </mat-list>
+</mat-card>
+<mat-card>
+  <mat-card-header>
+    <mat-icon mat-card-avatar svgIcon="chart">
+    </mat-icon>
+    <mat-card-title>
+      Detailed chart analysis
+    </mat-card-title>
+    <mat-card-subtitle>
+      Zoom down to the second, select your view style and more
+    </mat-card-subtitle>
+  </mat-card-header>
+  <mat-list>
+    <div mat-subheader>Features</div>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon svgIcon="stacked-chart"></mat-icon>
+      <div mat-line>Multiple charts stacked or not</div>
+    </mat-list-item>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon svgIcon="area-graph"></mat-icon>
+      <div mat-line>Selectable charts and laps</div>
+    </mat-list-item>
+    <mat-list-item style="text-align: left">
+      <mat-icon mat-list-icon svgIcon="compare-chart"></mat-icon>
+      <div mat-line>Compare your activities</div>
+    </mat-list-item>
+  </mat-list>
+</mat-card>
+<mat-card>
+  <mat-card-header>
+    <mat-icon mat-card-avatar>
+      multiline_chart
+    </mat-icon>
+    <mat-card-title>
+      Deep analysis
+    </mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a>
+
+    <a mat-button onclick="window.open('//angular.io')"><b>Angular</b></a>
+
+    <a mat-button
+       onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>
+
+  </mat-card-content>
+</mat-card>
+<mat-card>
+  Works with <br/>
+  <mat-divider [inset]="true"></mat-divider>
+  <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
+</mat-card>

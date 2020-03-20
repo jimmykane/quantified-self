@@ -189,6 +189,34 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'gap',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/gap.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'heat-map',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heat-map.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'spiral',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/spiral.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'chart',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/chart.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'dashboard',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/dashboard.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'stacked-chart',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/stacked-chart.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'area-graph',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/area-graph.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'compare-chart',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/compare-chart.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {
