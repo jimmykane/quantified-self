@@ -31,7 +31,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public serviceTokens: ServiceTokenInterface[];
   private userSubscription: Subscription;
 
-
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
     await this.userService.setServiceAuthToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse);
@@ -69,6 +68,11 @@ export class ServicesComponent implements OnInit, OnDestroy {
       }
       this.user = user;
       this.isGuest = this.authService.isGuest();
+      if (this.isGuest) {
+        this.snackBar.open('You must login with a non-guest account to connect and use the service features', 'OK', {
+          duration: null,
+        });
+      }
       return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
     })).subscribe((tokens) => {
       this.serviceTokens = tokens;
