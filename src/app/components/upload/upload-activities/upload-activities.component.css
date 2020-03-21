@@ -1,8 +1,14 @@
 button{
   height: 36px;
   width: 36px;
+  border-radius: 50%;
+  -webkit-transition: -webkit-transform .8s ease-in-out;
+  transition:         transform .8s ease-in-out;
 }
-
+button:hover {
+  -webkit-transform: rotate(180deg);
+  transform: rotate(180deg);
+}
 mat-icon{
   line-height: 18px!important;
 }
