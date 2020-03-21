@@ -1,109 +1,132 @@
-<mat-card>
-  <mat-card-header>
-    <mat-icon
-      mat-card-avatar
-      svgIcon="logo"
-      (click)="authService.authenticated() ?
+<section>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-icon
+          mat-card-avatar
+          svgIcon="logo"
+          (click)="authService.authenticated() ?
            router.navigate(['/dashboard'])
            : router.navigate(['/login']) ">
-    </mat-icon>
-    <mat-card-title>
-      Quantified Self
-    </mat-card-title>
-    <mat-card-subtitle>
-      A free premium analytical tool for your activity data
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
-    <p>text1</p>
-    <p>text2</p>
-    <p>text3</p>
-  </mat-card-content>
-</mat-card>
-<mat-card>
-  <mat-card-header>
-    <mat-icon mat-card-avatar svgIcon="dashboard">
-    </mat-icon>
-    <mat-card-title>
-      Personalized dashboard
-    </mat-card-title>
-    <mat-card-subtitle>
-      Your dashboard, the way you like it, across all your devices
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-list>
-    <div mat-subheader>Available charts</div>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon>bar_chart</mat-icon>
-      <div mat-line>Bar chart</div>
-    </mat-list-item>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon>pie_chart</mat-icon>
-      <div mat-line>Pie chart</div>
-    </mat-list-item>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon>show_chart</mat-icon>
-      <div mat-line>Line chart</div>
-    </mat-list-item>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon svgIcon="spiral"></mat-icon>
-      <div mat-line>Spiral chart</div>
-    </mat-list-item>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon svgIcon="heat-map"></mat-icon>
-      <div mat-line>Heatmaps and clusters</div>
-    </mat-list-item>
+        </mat-icon>
+        <mat-card-title>
+          Quantified Self
+        </mat-card-title>
+        <mat-card-subtitle>
+          A free premium analytical tool for your activity data
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-list>
+        <div mat-subheader>Features</div>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>cloud_done</mat-icon>
+          <div mat-line>Automatic sync</div>
+          <div mat-line>Realtime and reliable sync</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>history</mat-icon>
+          <div mat-line>History import</div>
+          <div mat-line>Import all your data</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>cloud_upload</mat-icon>
+          <div mat-line>Manual upload</div>
+          <div mat-line>Supports FIT, TCX and GPX files</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>cloud_upload</mat-icon>
+          <div mat-line>Manual upload</div>
+          <div mat-line>Supports FIT, TCX and GPX files</div>
+        </mat-list-item>
+      </mat-list>
+    </mat-card>
+    <mat-card>
+      <mat-card-header>
+        <mat-icon mat-card-avatar svgIcon="dashboard">
+        </mat-icon>
+        <mat-card-title>
+          Personalized dashboard
+        </mat-card-title>
+        <mat-card-subtitle>
+          Your dashboard, the way you like it, across all your devices
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-list>
+        <div mat-subheader>Available tiles</div>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>bar_chart</mat-icon>
+          <div mat-line>Bar chart</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>pie_chart</mat-icon>
+          <div mat-line>Pie chart</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon>show_chart</mat-icon>
+          <div mat-line>Line chart</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon svgIcon="spiral"></mat-icon>
+          <div mat-line>Spiral chart</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon svgIcon="heat-map"></mat-icon>
+          <div mat-line>Heatmaps and clusters</div>
+        </mat-list-item>
 
-  </mat-list>
-</mat-card>
-<mat-card>
-  <mat-card-header>
-    <mat-icon mat-card-avatar svgIcon="chart">
-    </mat-icon>
-    <mat-card-title>
-      Detailed chart analysis
-    </mat-card-title>
-    <mat-card-subtitle>
-      Zoom down to the second, select your view style and more
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-list>
-    <div mat-subheader>Features</div>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon svgIcon="stacked-chart"></mat-icon>
-      <div mat-line>Multiple charts stacked or not</div>
-    </mat-list-item>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon svgIcon="area-graph"></mat-icon>
-      <div mat-line>Selectable charts and laps</div>
-    </mat-list-item>
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon svgIcon="compare-chart"></mat-icon>
-      <div mat-line>Compare your activities</div>
-    </mat-list-item>
-  </mat-list>
-</mat-card>
-<mat-card>
-  <mat-card-header>
-    <mat-icon mat-card-avatar>
-      multiline_chart
-    </mat-icon>
-    <mat-card-title>
-      Deep analysis
-    </mat-card-title>
-  </mat-card-header>
-  <mat-card-content>
-    <a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a>
+      </mat-list>
+    </mat-card>
 
-    <a mat-button onclick="window.open('//angular.io')"><b>Angular</b></a>
+    <mat-card>
+      <mat-card-header>
+        <mat-icon mat-card-avatar svgIcon="chart">
+        </mat-icon>
+        <mat-card-title>
+          Detailed chart analysis for your activities
+        </mat-card-title>
+        <mat-card-subtitle>
+          Zoom down to the second, select your view style and more
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-list>
+        <div mat-subheader>Features</div>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon svgIcon="stacked-chart"></mat-icon>
+          <div mat-line>Multiple charts stacked or not</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon svgIcon="area-graph"></mat-icon>
+          <div mat-line>Selectable charts and laps</div>
+        </mat-list-item>
+        <mat-list-item style="text-align: left">
+          <mat-icon mat-list-icon svgIcon="compare-chart"></mat-icon>
+          <div mat-line>Compare your activities</div>
+        </mat-list-item>
+      </mat-list>
+    </mat-card>
 
-    <a mat-button
-       onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>
+  <!--    <mat-card>-->
+<!--      <mat-card-header>-->
+<!--        <mat-icon mat-card-avatar>-->
+<!--          multiline_chart-->
+<!--        </mat-icon>-->
+<!--        <mat-card-title>-->
+<!--          Deep analysis-->
+<!--        </mat-card-title>-->
+<!--      </mat-card-header>-->
+<!--      <mat-card-content>-->
+<!--        <a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a>-->
 
-  </mat-card-content>
-</mat-card>
-<mat-card>
-  Works with <br/>
-  <mat-divider [inset]="true"></mat-divider>
-  <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
-</mat-card>
+<!--        <a mat-button onclick="window.open('//angular.io')"><b>Angular</b></a>-->
+
+<!--        <a mat-button-->
+<!--           onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>-->
+
+<!--      </mat-card-content>-->
+<!--    </mat-card>-->
+    <mat-card>
+      Works with <br/>
+      <mat-divider [inset]="true"></mat-divider>
+      <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
+    </mat-card>
+</section>

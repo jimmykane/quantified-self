@@ -3,6 +3,8 @@ mat-card{
   /*min-height: calc(100vh - 48px);*/
   /*width: 100%;*/
   /*min-height: 80%;*/
+  flex-basis: 40%;
+  flex-grow: 1;
 }
 
 
@@ -13,6 +15,19 @@ mat-icon.logo{
   /*width: 50px;*/
 }
 
+mat-grid-list{
+  /*min-height: calc(100vh - 48px);*/
+  /*margin: 2em;*/
+}
+
+section{
+  min-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-flow: row wrap;
+  justify-content: space-evenly;
+}
 
 mat-icon.mat-card-avatar {
   width: 80px;
