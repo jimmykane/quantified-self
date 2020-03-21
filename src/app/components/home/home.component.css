@@ -22,6 +22,8 @@ mat-grid-list{
 }
 
 section{
+  padding: 0;
+  margin: 0;
   min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
