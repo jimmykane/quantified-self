@@ -5,6 +5,7 @@ mat-card{
   /*min-height: 80%;*/
   flex-basis: 40%;
   flex-grow: 1;
+  margin: 1em;
 }
 
 
@@ -24,15 +25,23 @@ section{
   min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   flex-flow: row wrap;
   justify-content: space-evenly;
 }
 
-mat-icon.mat-card-avatar {
-  width: 80px;
-  height: 80px;
-  font-size: 80px;
+
+
+mat-icon[svgIcon].mat-card-avatar {
+  width: 80px!important;
+  height: 80px!important;
+  font-size: 85px!important;
+}
+
+mat-list-item mat-icon[svgIcon]{
+  width: 32px !important;
+  padding: 0!important;
+  height: 32px!important;
 }
 
 .mat-h1{
@@ -52,4 +61,8 @@ a{
 app-home-live-chart{
   width: 100%;
   height: 100%;
+}
+
+mat-card.footer{
+  text-align: center;
 }

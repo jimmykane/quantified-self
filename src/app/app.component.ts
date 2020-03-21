@@ -217,6 +217,18 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'compare-chart',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/compare-chart.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'route',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/route.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'watch-sync',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/watch-sync.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'chart-types',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/chart-types.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {
