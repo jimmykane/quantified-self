@@ -210,10 +210,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/stacked-chart.svg')
     );
     this.matIconRegistry.addSvgIcon(
-      'area-graph',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/area-graph.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
       'compare-chart',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/compare-chart.svg')
     );
