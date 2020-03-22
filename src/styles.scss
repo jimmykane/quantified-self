@@ -191,8 +191,12 @@ mat-icon.suunto{
   background: #424242;
 }
 
+.white-theme section.component-container {
+}
+
 section.component-container {
   position: relative;
+  background: white;
 }
 
 mat-card.component-container{
