@@ -185,3 +185,14 @@ mat-icon.suunto{
   height: 32px!important;
   font-size: 1em!important;
 }
+
+
+.dark-theme section.component-container {
+  background: #424242;
+  padding: 1em;
+  position: relative;
+}
+mat-card.component-container{
+  border-radius: 0;
+}
+

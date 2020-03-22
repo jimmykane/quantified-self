@@ -6,7 +6,7 @@ mat-card{
 }
 
 mat-card.service-card{
-  width: 100%;
+  /*width: 100%;*/
   min-height: calc(100vh - 32px - 48px);
 }
 
