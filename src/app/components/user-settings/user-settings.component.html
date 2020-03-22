@@ -69,18 +69,6 @@
             <mat-hint><b>Tip:</b> on this day the dashboard adjusts to</mat-hint>
           </mat-form-field>
 
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showSummaries">
-          <span matTooltip="If you want to see summaries or no">
-             Show summaries
-          </span>
-            </mat-slide-toggle>
-            <mat-hint class="smaller"><b>Tip:</b> if you don't care about summaries and analysis you might want to turn
-              this off
-            </mat-hint>
-          </section>
           <mat-form-field>
             <mat-select placeholder="Events per page" formControlName="eventsPerPage">
               <mat-option *ngFor="let eventsPerPageOption of eventsPerPage " [value]="eventsPerPageOption">

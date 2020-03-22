@@ -12,7 +12,7 @@
 
   <!--  <app-events-map *ngIf="user" [isLoading]="isLoading" [events]="events" [theme]="user.settings.mapSettings.theme"></app-events-map>-->
 
-  <app-summaries *ngIf="user && user.settings.dashboardSettings.showSummaries"
+  <app-summaries *ngIf="user"
                  [isLoading]="isLoading"
                  [user]="user"
                  [events]="events">

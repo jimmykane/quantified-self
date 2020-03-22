@@ -215,11 +215,6 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
-      showSummaries: new FormControl(this.user.settings.dashboardSettings.showSummaries, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
       removeAscentForActivitiesSummaries: new FormControl(this.user.settings.summariesSettings.removeAscentForEventTypes, [
         // Validators.required,
         // Validators.minLength(1),
@@ -327,7 +322,6 @@ export class UserSettingsComponent implements OnChanges {
           },
           dashboardSettings: <UserDashboardSettingsInterface>{
             tiles: this.user.settings.dashboardSettings.tiles,
-            showSummaries: this.userSettingsFormGroup.get('showSummaries').value,
             startDate: this.user.settings.dashboardSettings.startDate,
             endDate: this.user.settings.dashboardSettings.endDate,
             dateRange: this.user.settings.dashboardSettings.dateRange,
