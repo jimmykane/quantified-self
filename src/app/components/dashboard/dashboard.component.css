@@ -1,5 +1,6 @@
 section {
   /*padding: ;*/
   min-height: calc(100vh - 48px);
+  padding: 1em;
 }
 

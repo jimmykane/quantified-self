@@ -189,9 +189,12 @@ mat-icon.suunto{
 
 .dark-theme section.component-container {
   background: #424242;
-  padding: 1em;
+}
+
+section.component-container {
   position: relative;
 }
+
 mat-card.component-container{
   border-radius: 0;
 }
