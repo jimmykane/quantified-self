@@ -3,9 +3,13 @@ mat-card{
   /*min-height: calc(100vh - 48px);*/
   /*width: 100%;*/
   /*min-height: 80%;*/
-  flex-basis: 40%;
+  /*flex-basis: 40%;*/
+  /*flex-grow: 1;*/
+  /*margin: 1em;*/
+  /*background: none!important;*/
+  flex-basis: 36%;
   flex-grow: 1;
-  margin: 1em;
+  margin: 5%;
   background: none!important;
 }
 
