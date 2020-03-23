@@ -1,6 +1,7 @@
-<mat-toolbar>
+<mat-toolbar class="mat-nav-list">
   <mat-toolbar-row
-    class="mat-elevation-z0"
+    routerLinkActive=""
+    class="mat-elevation-z0 mat-list-item"
     routerLink="/"
     (click)="sideNav.close();">
       <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
@@ -14,7 +15,7 @@
 <mat-nav-list>
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="mat-elevation-z0 active"
+    routerLinkActive="active"
     routerLink="/"
     (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
@@ -23,7 +24,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z0 active"
+    routerLinkActive="active"
     routerLink="/dashboard"
     (click)="sideNav.close();">
     <mat-icon>dashboard</mat-icon>
@@ -32,14 +33,14 @@
 
   <mat-list-item
     *ngIf="!authService.authenticated()"
-    routerLinkActive="mat-elevation-z0 active"
+    routerLinkActive="active"
     routerLink="/login" (click)="sideNav.close();">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>
   </mat-list-item>
 
   <mat-list-item
-    routerLinkActive="mat-elevation-z0 active"
+    routerLinkActive="active"
     routerLink="/services" (click)="sideNav.close();">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
@@ -47,7 +48,7 @@
 
   <mat-list-item
     *ngIf="authService.authenticated()"
-    routerLinkActive="mat-elevation-z0 active"
+    routerLinkActive=" active"
     [routerLink]="'/settings'"
     (click)="sideNav.close();">
     <mat-icon>settings_applications</mat-icon>

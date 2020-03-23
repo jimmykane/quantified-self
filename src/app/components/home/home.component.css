@@ -17,7 +17,7 @@ mat-card{
 mat-icon.amcharts{
   margin-top: 1em;
   width: 100px;
-  height: 36px;
+  height: 42px;
 }
 
 section{
@@ -65,5 +65,6 @@ app-home-live-chart{
 }
 
 mat-card.footer{
+  margin: 0;
   text-align: center;
 }

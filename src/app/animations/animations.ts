@@ -5,8 +5,8 @@ export const rowsAnimation =
     transition('void => *', [
       style({height: '*', opacity: '0', transform: 'translateY(-100%)', 'box-shadow': 'none'}),
       sequence([
-        animate('.20s ease', style({height: '*', opacity: '.2', transform: 'translateY(0)', 'box-shadow': 'none'})),
-        animate('.20s ease', style({height: '*', opacity: 1, transform: 'translateY(0)'}))
+        animate('.50s ease', style({height: '*', opacity: '.4', transform: 'translateY(0)', 'box-shadow': 'none'})),
+        animate('.50s ease', style({height: '*', opacity: 1, transform: 'translateY(0)'}))
       ])
     ])
   ]);
