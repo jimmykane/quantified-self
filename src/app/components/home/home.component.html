@@ -19,12 +19,12 @@
       <div mat-subheader>Features</div>
       <mat-list-item style="text-align: left">
         <mat-icon mat-list-icon>dashboard</mat-icon>
-        <div mat-line>Your dashboard</div>
+        <div mat-line>Dashboard</div>
         <div mat-line>Build it the way you like it</div>
       </mat-list-item>
       <mat-list-item style="text-align: left">
         <mat-icon mat-list-icon>multiline_chart</mat-icon>
-        <div mat-line>Detailed activity analysis</div>
+        <div mat-line>Activity analysis</div>
         <div mat-line>Zoom, select and overlays</div>
       </mat-list-item>
       <mat-list-item style="text-align: left">
@@ -145,7 +145,9 @@
     </mat-list>
   </mat-card>
   <mat-card class="mat-elevation-z0 compoent-container footer">
-    <span class="mat-h3">Works with</span>
-    <mat-divider [inset]="true"></mat-divider>
     <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
+    <mat-divider [inset]="true"></mat-divider>
+    <mat-icon class="suunto" svgIcon="amcharts"
+              onclick="window.open('https://amcharts.com?ref=quantified-self.io')"></mat-icon>
   </mat-card>
+</section>

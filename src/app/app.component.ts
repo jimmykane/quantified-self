@@ -119,15 +119,19 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private addIconsToRegistry() {
     this.matIconRegistry.addSvgIcon(
       'logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/logo/logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/app/logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'logo-font',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/logo/logo-font.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/app/logo-font.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'suunto',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/suunto-logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/suunto.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'amcharts',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/amcharts.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'heart_rate',
