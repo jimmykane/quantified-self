@@ -49,6 +49,7 @@ import {
   DataGradeAdjustedSpeedAvgMetersPerMinute,
   DataGradeAdjustedSpeedAvgMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
+import { DataMovingTime } from '@sports-alliance/sports-lib/lib/data/data.moving-time';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -143,6 +144,8 @@ export class DataTypeIconComponent {
         return 'swimmer';
       case DataTotalTrainingEffect.type:
         return 'tte';
+      case DataMovingTime.type:
+        return 'moving-time';
       case DataPeakEPOC.type:
         return 'epoc';
       case DataGradeAdjustedPaceAvg.type:

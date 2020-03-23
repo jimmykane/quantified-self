@@ -27,6 +27,7 @@ import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc'
 import {DataTotalTrainingEffect} from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
 import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
 import { DataGradeAdjustedSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
+import { DataMovingTime } from '@sports-alliance/sports-lib/lib/data/data.moving-time';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -63,8 +64,10 @@ export class EventCardStatsGridComponent implements OnChanges {
 
     const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
 
+    // the order here is important
     this.statsToShow = [
       DataDuration.type,
+      DataMovingTime.type,
       DataDistance.type,
       DataEnergy.type,
       DataHeartRateAvg.type,

@@ -14,16 +14,9 @@ mat-card{
 }
 
 
-mat-icon.logo{
-  /*vertical-align: middle;*/
-  /*font-size: 50px;*/
-  /*height:50px;*/
-  /*width: 50px;*/
-}
-
-mat-grid-list{
-  /*min-height: calc(100vh - 48px);*/
-  /*margin: 2em;*/
+mat-icon.amcharts{
+  width: 100px;
+  height: 36px;
 }
 
 section{

@@ -229,6 +229,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'chart-types',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/chart-types.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'moving-time',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/moving-time.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {
