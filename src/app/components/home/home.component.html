@@ -96,25 +96,6 @@
     </mat-list>
   </mat-card>
 
-  <!--    <mat-card class="mat-elevation-z0 compoent-container">-->
-  <!--      <mat-card-header>-->
-  <!--        <mat-icon mat-card-avatar>-->
-  <!--          multiline_chart-->
-  <!--        </mat-icon>-->
-  <!--        <mat-card-title>-->
-  <!--          Deep analysis-->
-  <!--        </mat-card-title>-->
-  <!--      </mat-card-header>-->
-  <!--      <mat-card-content>-->
-  <!--        <a mat-button onclick="window.open('https://firebase.google.com/')"><b>Firebase</b></a>-->
-
-  <!--        <a mat-button onclick="window.open('//angular.io')"><b>Angular</b></a>-->
-
-  <!--        <a mat-button-->
-  <!--           onclick="window.open('https://amcharts.com?ref=quantified-self.io')"><b>amCharts</b></a>-->
-
-  <!--      </mat-card-content>-->
-  <!--    </mat-card>-->
   <mat-card class="mat-elevation-z0 compoent-container">
     <mat-card-header>
       <mat-icon mat-card-avatar svgIcon="watch-sync">
@@ -149,6 +130,9 @@
     <mat-icon class="suunto" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
     <mat-divider [inset]="true"></mat-divider>
     <mat-icon class="amcharts" svgIcon="amcharts"
-              onclick="window.open('https://amcharts.com?ref=quantified-self.io')"></mat-icon>
+              onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
+    <mat-divider [inset]="true"></mat-divider>
+    <mat-icon class="amcharts" svgIcon="firebase"
+              onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
   </mat-card>
 </section>

@@ -15,6 +15,7 @@ mat-card{
 
 
 mat-icon.amcharts{
+  margin-top: 1em;
   width: 100px;
   height: 36px;
 }

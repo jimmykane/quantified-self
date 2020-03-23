@@ -134,6 +134,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/amcharts.svg')
     );
     this.matIconRegistry.addSvgIcon(
+      'firebase',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/firebase.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
       'heart_rate',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
     );
