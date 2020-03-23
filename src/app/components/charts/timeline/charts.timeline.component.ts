@@ -45,7 +45,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     chart.yAxisInnerRadius = am4core.percent(15);
     chart.yAxisRadius = am4core.percent(120);
     chart.innerRadius = am4core.percent(60);
-    chart.paddingTop = 5;
+    chart.paddingTop = 0;
     chart.paddingBottom = 0;
     chart.fontSize = '0.8em';
 
