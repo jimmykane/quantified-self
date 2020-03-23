@@ -28,8 +28,8 @@
     </button>
 
     <app-upload-activities class="right"
-      *ngIf="title && title === 'Dashboard' && authService.user | async as user"
-      [user]="user">
+                           *ngIf="title && title === 'Dashboard' && authService.user | async as user"
+                           [user]="user">
     </app-upload-activities>
 
   </nav>
@@ -37,13 +37,12 @@
   <!--<mat-card>-->
   <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
   <!--</mat-card>-->
-  <!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
-  <!--      && routerOutlet.activatedRouteData['animation']">-->
-
   <mat-progress-bar
     *ngIf="loading" color="primary" mode="query">
   </mat-progress-bar>
-
-  <router-outlet #routerOutlet="outlet"></router-outlet>
+  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData
+        && routerOutlet.activatedRouteData['animation']">
+    <router-outlet #routerOutlet="outlet"></router-outlet>
+  </div>
 
 </mat-sidenav-container>
