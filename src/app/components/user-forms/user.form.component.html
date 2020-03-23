@@ -24,22 +24,22 @@
       </mat-error>
     </mat-form-field>
 
-    <div class="radio-container">
-      <mat-radio-group formControlName="privacy">
-        <mat-radio-button [value]="privacy.Public">
-          Public Profile
-        </mat-radio-button>
-        <mat-radio-button [value]="privacy.Private">
-          Private Profile
-        </mat-radio-button>
-      </mat-radio-group>
-      <mat-hint></mat-hint>
-    </div>
+<!--    <div class="radio-container">-->
+<!--      <mat-radio-group formControlName="privacy">-->
+<!--        <mat-radio-button [value]="privacy.Public">-->
+<!--          Public Profile-->
+<!--        </mat-radio-button>-->
+<!--        <mat-radio-button [value]="privacy.Private">-->
+<!--          Private Profile-->
+<!--        </mat-radio-button>-->
+<!--      </mat-radio-group>-->
+<!--      <mat-hint></mat-hint>-->
+<!--    </div>-->
 
     <mat-form-field>
       <input matInput placeholder="A brand text that will appear in places that 'quantified-Self.io' appears at the moment"
              formControlName="brandText">
-      <mat-hint>If you have a branded account you can customize what will be shown instead of the "quantified-self.io" brand text. You can contact us to get a branded account</mat-hint>
+      <mat-hint>Contact us for a branded account</mat-hint>
       <mat-error *ngIf="hasError('brandText')">
         Brand text error
       </mat-error>

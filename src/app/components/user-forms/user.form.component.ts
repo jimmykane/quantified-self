@@ -1,5 +1,5 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import {Component, Inject, Input, OnInit} from '@angular/core';
+import {FormControl, FormGroup, Validators} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
@@ -8,8 +8,6 @@ import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppUserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
-import * as firebase from 'firebase/app';
-import {AngularFirestore} from '@angular/fire/firestore';
 import {AppWindowService} from '../../services/app.window.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 

@@ -1,4 +1,5 @@
 <div class="loading-shade"
+     [@rowsAnimation]=""
      *ngIf="isActive || hasError">
   <mat-progress-bar *ngIf="isActive" [mode]="mode"></mat-progress-bar>
   <div class="error" *ngIf="hasError && !isActive">
