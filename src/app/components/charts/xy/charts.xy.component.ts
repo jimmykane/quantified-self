@@ -186,7 +186,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       regressionSeries.strokeOpacity = 1;
       regressionSeries.strokeDasharray = '10,5';
       const regressionPlugin = new am4plugins_regression.Regression();
-      regressionPlugin.simplify = true;
+      regressionPlugin.simplify = false;
       regressionSeries.plugins.push(regressionPlugin);
       regressionSeries.filters.push(ChartHelper.getShadowFilter());
     }
