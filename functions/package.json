@@ -14,10 +14,10 @@
     "@types/request-promise-native": "^1.0.17",
     "@types/simple-oauth2": "^2.5.2",
     "bs58": "^4.0.1",
-    "cookie-parser": "^1.4.3",
+    "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
-    "firebase-admin": "^8.9.2",
-    "firebase-functions": "^3.3.0",
+    "firebase-admin": "^8.10.0",
+    "firebase-functions": "^3.5.0",
     "node-fetch": "^2.5.0",
     "pako": "^1.0.11",
     "request": "^2.88.2",
@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "firebase-functions-test": "^0.2.0",
-    "tslint": "^6.0.0",
+    "tslint": "^6.1.0",
     "typescript": "^3.8.3"
   }
 }
