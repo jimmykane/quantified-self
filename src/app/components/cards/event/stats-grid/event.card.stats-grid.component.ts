@@ -69,6 +69,7 @@ export class EventCardStatsGridComponent implements OnChanges {
       DataDuration.type,
       DataMovingTime.type,
       DataDistance.type,
+      DataSpeedAvg.type,
       DataEnergy.type,
       DataHeartRateAvg.type,
       DataCadenceAvg.type,
@@ -82,7 +83,6 @@ export class EventCardStatsGridComponent implements OnChanges {
       DataTotalTrainingEffect.type,
       DataVO2Max.type,
       DataTemperatureAvg.type,
-      DataSpeedAvg.type,
     ].reduce((statsAccu, statType) => {
       if (statType === DataSpeedAvg.type) {
         return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu, activityType) => {
