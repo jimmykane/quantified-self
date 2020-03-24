@@ -58,11 +58,10 @@
                   (selectionChange)="saveEventFeeling(feeling, event)"
                   [(ngModel)]='feeling'
                   [placeholder]="'Feeling'">
-        <ng-container>
-          <mat-option [disabled]="!isOwner" *ngFor="let selectOption of feelings | keyvalue : returnZero" [value]="selectOption.value">
-            {{selectOption.key}}
-          </mat-option>
-        </ng-container>
+        <mat-option [disabled]="!isOwner" *ngFor="let selectOption of feelings | keyvalue : returnZero"
+                    [value]="selectOption.value">
+          {{selectOption.key}}
+        </mat-option>
       </mat-select>
     </mat-form-field>
     <mat-form-field *ngIf="rpe || isOwner" style="width: 50%; display: inline-block;">
@@ -70,11 +69,10 @@
                   (selectionChange)="saveEventRPE(rpe, event)"
                   [(ngModel)]='rpe'
                   [placeholder]="'Rating of Perceived Exertion'">
-        <ng-container>
-          <mat-option [disabled]="!isOwner" *ngFor="let selectOption of rpeBorgCR10SCale | keyvalue : returnZero" [value]="selectOption.value">
-            {{selectOption.key}}
-          </mat-option>
-        </ng-container>
+        <mat-option [disabled]="!isOwner" *ngFor="let selectOption of rpeBorgCR10SCale | keyvalue : returnZero"
+                    [value]="selectOption.value">
+          {{selectOption.key}}
+        </mat-option>
       </mat-select>
     </mat-form-field>
   </mat-card-subtitle>

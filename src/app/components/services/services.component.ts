@@ -70,7 +70,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.isGuest = this.authService.isGuest();
       if (this.isGuest) {
         this.snackBar.open('You must login with a non-guest account to connect and use the service features', 'OK', {
-          duration: null,
+          duration: 10000,
         });
       }
       return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
