@@ -104,10 +104,10 @@ export const importRoute = functions.region('europe-west2').https.onRequest(asyn
       const data = userServiceMetaDocumentSnapshot.data();
       let uploadedRoutesCount = 0
       if (data){
-        uploadedRoutesCount = data.uploadedRoutes || uploadedRoutesCount;
+        uploadedRoutesCount = data.uploadedRoutesCount || uploadedRoutesCount;
       }
       await userServiceMetaDocumentSnapshot.ref.update({
-        uploadedRoutes: uploadedRoutesCount + 1
+        uploadedRoutesCount: uploadedRoutesCount + 1
       })
     }catch (e) {
       console.error(`Could not update uploadedRoutes count`);

@@ -1,21 +1,22 @@
-import {Component, HostListener, OnDestroy, OnInit} from '@angular/core';
-import {FormControl, FormGroup, Validators} from '@angular/forms';
-import {MatSnackBar} from '@angular/material/snack-bar';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {HttpClient} from '@angular/common/http';
-import {AppFileService} from '../../services/app.file.service';
-import {of, Subscription} from 'rxjs';
-import {AppEventService} from '../../services/app.event.service';
-import {EventImporterFIT} from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {Router} from '@angular/router';
-import {AppUserService} from '../../services/app.user.service';
-import {switchMap} from 'rxjs/operators';
-import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
-import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import {environment} from '../../../environments/environment';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { HttpClient } from '@angular/common/http';
+import { AppFileService } from '../../services/app.file.service';
+import { of, Subscription } from 'rxjs';
+import { AppEventService } from '../../services/app.event.service';
+import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { Router } from '@angular/router';
+import { AppUserService } from '../../services/app.user.service';
+import { switchMap } from 'rxjs/operators';
+import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
+import { environment } from '../../../environments/environment';
+import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 
 
 @Component({
@@ -29,6 +30,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public user: User;
   public isGuest: boolean;
   public serviceTokens: ServiceTokenInterface[];
+  public metaForService: UserServiceMetaInterface
   private userSubscription: Subscription;
 
   @HostListener('window:tokensReceived', ['$event'])
@@ -60,13 +62,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.userSubscription = this.authService.user.pipe(switchMap((user) => {
-      if (!user) {
+      this.user = user;
+
+      if (!this.user) {
         this.snackBar.open('You must login to connect and use the service features', 'OK', {
           duration: null,
         });
         return of(null);
       }
-      this.user = user;
       this.isGuest = this.authService.isGuest();
       if (this.isGuest) {
         this.snackBar.open('You must login with a non-guest account to connect and use the service features', 'OK', {
@@ -74,8 +77,18 @@ export class ServicesComponent implements OnInit, OnDestroy {
         });
       }
       return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
-    })).subscribe((tokens) => {
+    })).pipe(switchMap((tokens) => {
       this.serviceTokens = tokens;
+      if (!this.user || !this.serviceTokens) {
+        return of(null);
+      }
+      return this.userService
+        .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
+    })).subscribe((metaForService) => {
+      this.metaForService = metaForService;
+      if (!this.metaForService){
+        return
+      }
     });
     this.suuntoAppLinkFormGroup = new FormGroup({
       input: new FormControl('', [

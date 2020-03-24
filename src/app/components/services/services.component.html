@@ -122,10 +122,12 @@
             <mat-card-header>
               <mat-card-subtitle>
                 You can upload a GPX file to your Suunto app
-                <mat-icon
-                  matTooltip="NOTE: Route sync needs Suunto app Android 4.20 and higher. For iOS there is no Suunto app version that supports this">
+                <mat-icon matTooltip="NOTE: Route sync needs Suunto app Android 4.20 and higher. For iOS there is no Suunto app version that supports this">
                   info
                 </mat-icon>
+              </mat-card-subtitle>
+              <mat-card-subtitle *ngIf="metaForService.uploadedRoutesCount && metaForService.uploadedRoutesCount > 3">
+                {{metaForService.uploadedRoutesCount}} routes uploaded. Please do consider donating :-) 
               </mat-card-subtitle>
             </mat-card-header>
             <mat-divider></mat-divider>
