@@ -237,6 +237,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'moving-time',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/moving-time.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'file-csv',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/file-csv.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {

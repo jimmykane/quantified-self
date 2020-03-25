@@ -19,7 +19,7 @@
         mat-icon-button
         matTooltip="Download as csv {{selection.selected.length}} events"
         (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="accent">description</mat-icon>
+        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="accent" svgIcon="file-csv"></mat-icon>
       </button>
       <button
         mat-icon-button
