@@ -1,33 +1,31 @@
-import {Component, Inject} from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {FormControl, FormGroup, Validators} from '@angular/forms';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {FormsAbstract} from '../forms/forms.abstract';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../services/app.user.service';
-import {AppFileService} from '../../services/app.file.service';
-import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
-import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
-import {DataEnergy} from '@sports-alliance/sports-lib/lib/data/data.energy';
-import {DataFeeling} from '@sports-alliance/sports-lib/lib/data/data.feeling';
-import {DataSpeedAvg} from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import {DataPaceAvg} from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
-import {DataSwimPaceAvg} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
-import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
-import {DataPowerMax} from '@sports-alliance/sports-lib/lib/data/data.power-max';
-import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
-import {AppSharingService} from '../../services/app.sharing.service';
-import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
-import {DataSwimPace} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import * as firebase from 'firebase/app';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { Component, Inject } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { FormsAbstract } from '../forms/forms.abstract';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppUserService } from '../../services/app.user.service';
+import { AppFileService } from '../../services/app.file.service';
+import { DataRPE } from '@sports-alliance/sports-lib/lib/data/data.rpe';
+import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
+import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
+import { DataFeeling } from '@sports-alliance/sports-lib/lib/data/data.feeling';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import { DataPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
+import { DataSwimPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
+import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import { AppSharingService } from '../../services/app.sharing.service';
+import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DataSwimPace } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
+import { AngularFireAnalytics } from '@angular/fire/analytics';
 
 
 @Component({
@@ -204,7 +202,6 @@ export class EventsExportFormComponent extends FormsAbstract {
       const isRunning = activityTypes && [<string>ActivityTypes.running, <string>ActivityTypes.trail_running, <string>ActivityTypes.treadmill].indexOf(activityTypes.getValue()[0]) !== -1;
       const isSwimming = activityTypes && [<string>ActivityTypes.swimming, <string>ActivityTypes['open water swimming']].indexOf(activityTypes.getValue()[0]) !== -1;
 
-
       const row = [];
       if (this.user.settings.exportToCSVSettings.startDate) {
         row.push(`"${event.startDate.toLocaleDateString()}"`);
@@ -267,10 +264,7 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       if (this.user.settings.exportToCSVSettings.averagePace) {
         const speedAvg = event.getStat(DataSpeedAvg.type);
-        if (!speedAvg) {
-          return `""`;
-        }
-        const stat = event.getStat(DataPaceAvg.type) || new DataPaceAvg(<number>speedAvg.getValue(DataPace.type));
+        const stat = event.getStat(DataPaceAvg.type) || (speedAvg && new DataPaceAvg(<number>speedAvg.getValue(DataPace.type)));
         if (!stat || !isRunning) {
           row.push('""');
         } else {
@@ -284,10 +278,7 @@ export class EventsExportFormComponent extends FormsAbstract {
 
       if (this.user.settings.exportToCSVSettings.averageSwimPace) {
         const speedAvg = event.getStat(DataSpeedAvg.type);
-        if (!speedAvg) {
-          return `""`;
-        }
-        const stat = event.getStat(DataSwimPaceAvg.type) || new DataSwimPaceAvg(<number>speedAvg.getValue(DataSwimPace.type));
+        const stat = event.getStat(DataSwimPaceAvg.type) || (speedAvg && new DataSwimPaceAvg(<number>speedAvg.getValue(DataSwimPace.type)));
         if (!stat || !isSwimming) {
           row.push('""');
         } else {
