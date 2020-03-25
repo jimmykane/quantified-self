@@ -76,6 +76,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
       // chart.colors.step = 2;
       // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
+      chart.exporting.useRetina = true;
       return chart;
     });
   }
@@ -87,7 +88,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     exportingMenu.items = [{
       label: '...️',
       menu: [
-        {'type': 'png', 'label': 'PNG', options: {useRetina: true}},
+        {'type': 'png', 'label': 'PNG'}, // @todo add retina here
         {'type': 'json', 'label': 'JSON'},
         {'type': 'csv', 'label': 'CSV'},
         // {'type': 'xlsx', 'label': 'XLSX'},
