@@ -1,6 +1,7 @@
 mat-icon{
   vertical-align: middle;
-  margin-right: 32px;
+  margin-right: 24px;
+  margin-left: 8px;
 }
 .active{
   font-weight: bold;
@@ -31,4 +32,9 @@ mat-icon.app-icon{
   height: 40px;
   width: 40px;
   margin-right: 12px;
+  margin-left: 0;
+}
+
+mat-slide-toggle{
+  margin-left: 4px;
 }
