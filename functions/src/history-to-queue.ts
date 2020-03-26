@@ -165,7 +165,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
           <UserServiceMetaInterface>{
             didLastHistoryImport: (new Date()).getTime(),
             processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount,
-          });
+          }, {merge: true});
 
         await batch.commit();
         console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
