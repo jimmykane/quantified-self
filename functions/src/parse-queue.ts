@@ -18,7 +18,7 @@ const RETRY_COUNT = 20;
 const LIMIT = 200;
 const MEMORY = "2GB";
 
-export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 12 minutes').onRun(async (context) => {
+export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
@@ -102,12 +102,12 @@ export async function processQueueItem(queueItem: any) {
     try {
       const event = await EventImporterFIT.getFromArrayBuffer(result);
       event.name = event.startDate.toJSON(); // @todo improve
-      console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName}`);
+      console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName} test`);
       // Id for the event should be serviceName + workoutID
       const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
       // @todo move metadata to its own document for firestore read/write rules
       await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event, metaData);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName} test`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();

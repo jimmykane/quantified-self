@@ -86,9 +86,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
         .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
     })).subscribe((metaForService) => {
       this.metaForService = metaForService;
-      if (!this.metaForService){
-        return
-      }
     });
     this.suuntoAppLinkFormGroup = new FormGroup({
       input: new FormControl('', [

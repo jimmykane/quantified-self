@@ -1,7 +1,7 @@
 section {
   margin-top: 1em;
   text-align: center;
-  width: 100%;
+  width: calc(100% - 12px);
   height: 30vh;
   border: #DEDEDE 6px dashed;
   border-radius: 4px;
@@ -22,3 +22,6 @@ button {
   vertical-align: middle;
 }
 
+.full{
+  width: 100%;
+}

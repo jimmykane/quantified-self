@@ -14,9 +14,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
 import {DataPaceAvg, DataPaceAvgMinutesPerMile} from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
 import {DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
-import {DataSwimPaceMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
 import {DataTemperatureAvg} from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
-import {DataRecoveryTime} from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
 import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
@@ -35,8 +33,6 @@ import {
 } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-avg';
 import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
-import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
 import {
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedPaceAvgMinutesPerMile
@@ -50,6 +46,7 @@ import {
   DataGradeAdjustedSpeedAvgMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
 import { DataMovingTime } from '@sports-alliance/sports-lib/lib/data/data.moving-time';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 
 @Component({
   selector: 'app-data-type-icon',

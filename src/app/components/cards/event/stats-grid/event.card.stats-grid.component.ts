@@ -17,7 +17,6 @@ import {DataCadenceAvg} from '@sports-alliance/sports-lib/lib/data/data.cadence-
 import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
 import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
 import {DataAltitudeMin} from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
-import {DataRecoveryTime} from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
 import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import {DataTemperatureAvg} from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
 import {DataSpeedAvg} from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
@@ -28,6 +27,7 @@ import {DataTotalTrainingEffect} from '@sports-alliance/sports-lib/lib/data/data
 import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
 import { DataGradeAdjustedSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
 import { DataMovingTime } from '@sports-alliance/sports-lib/lib/data/data.moving-time';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 
 @Component({
   selector: 'app-event-card-stats-grid',

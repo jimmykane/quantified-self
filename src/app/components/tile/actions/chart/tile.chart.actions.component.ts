@@ -33,8 +33,9 @@ import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc'
 import {DataFeeling} from '@sports-alliance/sports-lib/lib/data/data.feeling';
 import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import {DataRecoveryTime} from '@sports-alliance/sports-lib/lib/data/dataRecoveryTime';
 import { TileActionsAbstract } from '../tile.actions.abstract';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+
 
 @Component({
   selector: 'app-tile-chart-actions',
