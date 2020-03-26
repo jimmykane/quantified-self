@@ -12,6 +12,7 @@ mat-toolbar-row{
   outline: none;
   /*font-size: 0.95em;*/
   font-weight: 400;
+  height: 64px;
 }
 .mat-toolbar{
   background: inherit;
