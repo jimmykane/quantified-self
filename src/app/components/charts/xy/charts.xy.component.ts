@@ -132,7 +132,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
 
 
-      series.columns.template.filters.push(ChartHelper.getShadowFilter());
+      // series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
       if (this.type === 'columns') {
         this.vertical ? series.columns.template.column.cornerRadiusTopLeft = 2 : series.columns.template.column.cornerRadiusTopRight = 2;
@@ -141,7 +141,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     } else {
       series = chart.series.push(new am4charts.LineSeries());
-      series.filters.push(ChartHelper.getShadowFilter());
+      // series.filters.push(ChartHelper.getShadowFilter());
 
       series.stroke = chart.colors.getIndex(9); // Init stroke
       series.tension = 0.5;
@@ -174,7 +174,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
       });
-      bullet.filters.push(ChartHelper.getShadowFilter());
+      // bullet.filters.push(ChartHelper.getShadowFilter());
     }
 
     if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
@@ -188,7 +188,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       const regressionPlugin = new am4plugins_regression.Regression();
       regressionPlugin.simplify = false;
       regressionSeries.plugins.push(regressionPlugin);
-      regressionSeries.filters.push(ChartHelper.getShadowFilter());
+      // regressionSeries.filters.push(ChartHelper.getShadowFilter());
     }
 
     // @todo refactor this

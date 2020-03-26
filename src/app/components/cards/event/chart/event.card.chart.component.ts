@@ -1127,7 +1127,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                   range.label.valign = 'bottom';
                   range.label.textAlign = 'middle';
                   range.label.dy = 6;
-                  // range.grid.filters.push(ChartHelper.getShadowFilter())
                 }
               )
           });

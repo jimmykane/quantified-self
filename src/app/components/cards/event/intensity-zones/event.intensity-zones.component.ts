@@ -234,7 +234,6 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       });
       // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
-      // series.filters.push(ChartHelper.getShadowFilter());
 
       switch (intensityZone.type) {
         case DataHeartRate.type:
