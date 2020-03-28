@@ -18,7 +18,7 @@ import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
-import {ChartHelper} from '../../cards/event/chart/chart-helper';
+import {ChartHelper} from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 

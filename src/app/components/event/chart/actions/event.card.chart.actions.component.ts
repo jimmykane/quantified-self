@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output} from '@angular/core';
 import {XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../../../../services/app.user.service';
+import {AppUserService} from '../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 

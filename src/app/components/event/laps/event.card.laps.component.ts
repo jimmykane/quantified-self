@@ -6,11 +6,11 @@ import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import {LoadingAbstractDirective} from '../../../loading/loading-abstract.directive';
-import {DataTableAbstractDirective} from '../../../data-table/data-table-abstract.directive';
-import {ScreenBreakPoints} from '../../../screen-size/sreen-size.abstract';
+import {LoadingAbstractDirective} from '../../loading/loading-abstract.directive';
+import {DataTableAbstractDirective} from '../../data-table/data-table-abstract.directive';
+import {ScreenBreakPoints} from '../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {AppEventColorService} from '../../../../services/color/app.event.color.service';
+import {AppEventColorService} from '../../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-event-card-laps',

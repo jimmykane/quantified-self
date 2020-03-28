@@ -1,24 +1,24 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {Subscription} from 'rxjs';
 import {ActivatedRoute, Router} from '@angular/router';
-import {AppEventService} from '../../../services/app.event.service';
+import {AppEventService} from '../../services/app.event.service';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {Log} from 'ng2-logger/browser';
-import {AppAuthService} from '../../../authentication/app.auth.service';
+import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   XAxisTypes
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {AppThemeService} from '../../../services/app.theme.service';
+import {AppThemeService} from '../../services/app.theme.service';
 import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import {AppUserService} from '../../../services/app.user.service';
-import {AppActivitySelectionService} from '../../../services/activity-selection-service/app-activity-selection.service';
+import {AppUserService} from '../../services/app.user.service';
+import {AppActivitySelectionService} from '../../services/activity-selection-service/app-activity-selection.service';
 
 
 @Component({

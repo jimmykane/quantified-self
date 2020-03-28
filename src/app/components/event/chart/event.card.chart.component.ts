@@ -11,14 +11,14 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import {Log} from 'ng2-logger/browser'
-import {AppEventColorService} from '../../../../services/color/app.event.color.service';
+import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {XYSeries} from '@amcharts/amcharts4/charts';
 import {combineLatest, Subscription} from 'rxjs';
-import {AppEventService} from '../../../../services/app.event.service';
+import {AppEventService} from '../../../services/app.event.service';
 import {DataAltitude} from '@sports-alliance/sports-lib/lib/data/data.altitude';
 import {debounceTime, map, take} from 'rxjs/operators';
 import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
@@ -27,7 +27,7 @@ import {DataPace, DataPaceMinutesPerMile} from '@sports-alliance/sports-lib/lib/
 import {ChartCursorBehaviours, XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
-import {ChartAbstractDirective} from '../../../charts/chart-abstract.directive';
+import {ChartAbstractDirective} from '../../charts/chart-abstract.directive';
 import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -45,8 +45,8 @@ import {
   DataSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.speed';
 import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import {AppDataColors} from '../../../../services/color/app.data.colors';
-import {AppWindowService} from '../../../../services/app.window.service';
+import {AppDataColors} from '../../../services/color/app.data.colors';
+import {AppWindowService} from '../../../services/app.window.service';
 import {DataStrydSpeed} from '@sports-alliance/sports-lib/lib/data/data.stryd-speed';
 import {
   DataVerticalSpeed,
@@ -72,13 +72,13 @@ import {DataAbsolutePressure} from '@sports-alliance/sports-lib/lib/data/data.ab
 import {ChartHelper, LabelData} from './chart-helper';
 import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
 import {DataAirPower} from '@sports-alliance/sports-lib/lib/data/data.air-power';
-import {AppUserService} from '../../../../services/app.user.service';
-import {AppChartSettingsLocalStorageService} from '../../../../services/storage/app.chart.settings.local.storage.service';
+import {AppUserService} from '../../../services/app.user.service';
+import {AppChartSettingsLocalStorageService} from '../../../services/storage/app.chart.settings.local.storage.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ActivityCursorInterface,
   AppActivityCursorService
-} from '../../../../services/activity-cursor/app-activity-cursor.service';
+} from '../../../services/activity-cursor/app-activity-cursor.service';
 import {
   DataGradeAdjustedPace,
   DataGradeAdjustedPaceMinutesPerMile

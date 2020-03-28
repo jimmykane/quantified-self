@@ -6,7 +6,7 @@ import {
   Output,
 } from '@angular/core';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../../../../services/app.user.service';
+import {AppUserService} from '../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 
 @Component({

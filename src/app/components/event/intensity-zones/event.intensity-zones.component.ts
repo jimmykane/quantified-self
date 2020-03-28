@@ -13,14 +13,14 @@ import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {ChartAbstractDirective} from '../../../charts/chart-abstract.directive';
+import {ChartAbstractDirective} from '../../charts/chart-abstract.directive';
 import {IntensityZonesInterface} from '@sports-alliance/sports-lib/lib/intensity-zones/intensity-zones.interface';
 import {IntensityZones} from '@sports-alliance/sports-lib/lib/intensity-zones/intensity-zones';
 import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
 import {DataPower} from '@sports-alliance/sports-lib/lib/data/data.power';
 import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
 import {ChartHelper} from '../chart/chart-helper';
-import {AppColors} from '../../../../services/color/app.colors';
+import {AppColors} from '../../../services/color/app.colors';
 import {MatIconRegistry} from '@angular/material/icon';
 
 

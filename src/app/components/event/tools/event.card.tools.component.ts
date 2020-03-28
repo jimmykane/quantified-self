@@ -2,7 +2,7 @@ import {
   ChangeDetectionStrategy, Component, Input, OnChanges, OnDestroy, OnInit,
 } from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {AppEventService} from '../../../../services/app.event.service';
+import {AppEventService} from '../../../services/app.event.service';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
