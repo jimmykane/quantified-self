@@ -7,6 +7,7 @@ mat-grid-tile{
 
 section{
   margin-bottom: 1em;
+  margin-top: 1em;
 }
 
 app-tile-map{
