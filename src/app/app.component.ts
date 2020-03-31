@@ -241,6 +241,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'file-csv',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/file-csv.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'dark-mode',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/dark-mode.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {

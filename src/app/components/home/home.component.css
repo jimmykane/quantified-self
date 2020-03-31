@@ -1,6 +1,6 @@
 mat-card{
   /*padding: 0;*/
-  /*min-height: calc(100vh - 48px);*/
+  /*min-height: calc(100vh - 59px);*/
   /*width: 100%;*/
   /*min-height: 80%;*/
   /*flex-basis: 40%;*/
@@ -23,7 +23,7 @@ mat-icon.amcharts{
 section{
   padding: 0;
   margin: 0;
-  min-height: calc(100vh - 48px);
+  min-height: calc(100vh - 59px);
   display: flex;
   flex-direction: column;
   align-items: stretch;

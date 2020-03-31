@@ -18,7 +18,11 @@ mat-toolbar-row{
   background: inherit;
 }
 
-
+mat-slide-toggle{
+  vertical-align: middle;
+  margin-left: 8px;
+  margin-right: 24px;
+}
 
 .fill-space {
   flex: 1 1 auto;

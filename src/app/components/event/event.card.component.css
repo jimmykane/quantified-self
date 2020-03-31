@@ -7,7 +7,7 @@ mat-card.outer{
   padding-bottom: 0.8em;
   padding-left: 4px;
   padding-right: 4px;
-  min-height: calc(100vh - 48px);
+  min-height: calc(100vh - 59px);
 }
 
 mat-card {

@@ -2,7 +2,7 @@ mat-card.outer{
   padding: 0;
   padding-bottom: 1em;
   margin: 0;
-  min-height: calc(100vh - 48px);
+  min-height: calc(100vh - 59px);
   display: flex;
   flex-direction: column;
 }
