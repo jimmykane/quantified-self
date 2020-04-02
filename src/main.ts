@@ -19,8 +19,6 @@ if (localStorage.getItem('appTheme')) {
 }
 
 import('./app/app.module')
-  .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule).then(r => {
-    navigator.serviceWorker.register('/ngsw-worker.js');
-  }))
+  .then(x => platformBrowserDynamic().bootstrapModule(x.AppModule))
   .catch(err => console.error(err));
 // platformBrowserDynamic().bootstrapModule(AppModule);
