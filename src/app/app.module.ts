@@ -35,6 +35,7 @@ import { ClipboardModule } from '@angular/cdk/clipboard';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
+import { AppUpdateService } from './services/app.update.service';
 
 declare function require(moduleName: string): any;
 
@@ -83,7 +84,7 @@ export class SentryErrorHandler implements ErrorHandler {
       apiVersion: 'weekly',
       libraries: ['visualization']
     }),
-    ServiceWorkerModule.register('ngsw-worker.js', {enabled: environment.production})
+    ServiceWorkerModule.register('ngsw-worker.js', {enabled: true})
   ],
   declarations: [
     AppComponent,
@@ -117,6 +118,7 @@ export class AppModule {
   // Services are not used, just to make sure they're instantiated
   constructor(
     private appFilesInfoSheetService: AppFilesInfoSheetService,
+    private updateService: AppUpdateService
   ) {
   }
 }

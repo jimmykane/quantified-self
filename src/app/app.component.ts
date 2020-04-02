@@ -19,14 +19,9 @@ import {
   Router, RouterEvent,
   RoutesRecognized
 } from '@angular/router';
-import {filter, map} from 'rxjs/operators';
 import {AppAuthService} from './authentication/app.auth.service';
 import {AppSideNavService} from './services/side-nav/app-side-nav.service';
 import {DomSanitizer, Title} from '@angular/platform-browser';
-import {AppThemeService} from './services/app.theme.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppInfoService} from './services/app.info.service';
-import {environment} from '../environments/environment';
 import {slideInAnimation} from './animations/animations';
 
 import * as firebase from 'firebase/app'
@@ -34,8 +29,6 @@ import {AppWindowService} from './services/app.window.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 
 declare function require(moduleName: string): any;
-
-const {version: appVersion} = require('../../package.json');
 
 
 @Component({
@@ -51,7 +44,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
-  private appVersionSubscription: Subscription;
   public loading: boolean;
 
   constructor(
@@ -61,7 +53,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private sideNavService: AppSideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    public appInfoService: AppInfoService,
     private titleService: Title,
     private windowService: AppWindowService,
     private afa: AngularFireAnalytics,
@@ -91,29 +82,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         }
       }
     });
-
-    this.appVersionSubscription = this.appInfoService.getAppVersions().subscribe((versions: { beta: string, production: string, localhost: string }) => {
-      if (!versions) {
-        return
-      }
-
-      if (environment.localhost && (versions.localhost !== appVersion)) {
-        this.showUpdateAppVersionSnackMessage(versions.localhost);
-        return;
-      }
-
-      if (environment.production && (versions.production !== appVersion)) {
-        this.showUpdateAppVersionSnackMessage(versions.production);
-        return;
-      }
-
-      if (environment.beta && (versions.beta !== appVersion)) {
-        this.showUpdateAppVersionSnackMessage(versions.beta);
-        return;
-      }
-
-    });
-
   }
 
   private addIconsToRegistry() {
