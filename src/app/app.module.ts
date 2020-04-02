@@ -84,7 +84,7 @@ export class SentryErrorHandler implements ErrorHandler {
       apiVersion: 'weekly',
       libraries: ['visualization']
     }),
-    ServiceWorkerModule.register('ngsw-worker.js', {enabled: true})
+    ServiceWorkerModule.register('ngsw-worker.js', {enabled: (environment.production || environment.beta)})
   ],
   declarations: [
     AppComponent,
