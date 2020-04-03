@@ -3,4 +3,4 @@ Disallow: /user
 Disallow: /user/
 Disallow: /settings
 
-Sitemap: /sitemap.xml
+Sitemap: https://quantified-self.io/sitemap.xml
