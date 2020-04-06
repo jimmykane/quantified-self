@@ -12,7 +12,6 @@ import { FormControl, FormGroup, ValidationErrors, ValidatorFn } from '@angular/
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { MatSelectChange } from '@angular/material/select';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
