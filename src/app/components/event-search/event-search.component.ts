@@ -60,10 +60,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ]),
-      activityTypes: new FormControl(this.selectedActivityTypes, [
-        // Validators.required,
-        // Validators.minLength(4),
-      ]),
     });
   }
 
@@ -84,7 +80,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       searchTerm: this.searchFormGroup.get('search').value,
       startDate: this.searchFormGroup.get('startDate').value,
       endDate: this.searchFormGroup.get('endDate').value,
-      activityTypes: this.searchFormGroup.get('activityTypes').value,
+      activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
     });
   }
@@ -115,10 +111,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
   }
 
-  onActivityTypesChange(event: MatSelectChange) {
-    if (event.value.indexOf(undefined) !== -1) {
-      this.searchFormGroup.get('activityTypes').setValue([]);
-    }
+  onActivityTypesChange(activityTypes) {
+   this.selectedActivityTypes = activityTypes;
    this.search()
   }
 
@@ -148,6 +142,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
 
   const fistDayOfTheWeekDate = new Date(new Date().setDate(firstDayOfTheWeek - daysBack));
   fistDayOfTheWeekDate.setHours(0, 0, 0);
+
 
   // Last day if this week
   const lastDayOfTheWeekDate = new Date(new Date().setDate(lastDayOfTheWeek - daysBack));

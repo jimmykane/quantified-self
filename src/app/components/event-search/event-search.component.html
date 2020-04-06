@@ -38,14 +38,17 @@
       </mat-error>
     </mat-form-field>
 
-    <mat-form-field class="big">
-      <mat-select placeholder="Filter by activities" formControlName="activityTypes" multiple (selectionChange)="onActivityTypesChange($event)">
-        <mat-option>None</mat-option>
-        <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">
-          {{activityType}}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
+<!--    <mat-form-field class="big">-->
+<!--      <mat-select placeholder="Filter by activities" formControlName="activityTypes" multiple (selectionChange)="onActivityTypesChange($event)">-->
+<!--        <mat-option>None</mat-option>-->
+<!--        <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">-->
+<!--          {{activityType}}-->
+<!--        </mat-option>-->
+<!--      </mat-select>-->
+<!--    </mat-form-field>-->
+
+    <app-activity-types-multi-select class="big" [selectedActivityTypes]="selectedActivityTypes"
+                                     (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
 
     <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">
       There is something wrong with the date range

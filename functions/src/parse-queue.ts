@@ -89,12 +89,12 @@ export async function processQueueItem(queueItem: any) {
       // if (e.statusCode === 403){
       //   // await queueItem.ref.delete();
       // }
-      // if (e.statusCode === 500){
-      //   // await queueItem.ref.delete();
-      // }
+      if (e.statusCode === 500){
+        console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}`))
+        await increaseRetryCountForQueueItem(queueItem, e);
+      }
       // @todo -> Update to max retry if 403 not found that happens quite often.
-      console.error(e);
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.error.toString('utf8')}`));
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e);
       continue;
     }

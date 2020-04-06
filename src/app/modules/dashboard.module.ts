@@ -18,6 +18,7 @@ import { TileChartActionsComponent } from '../components/tile/actions/chart/tile
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
 import { DateAdapter } from '@angular/material/core';
 import { MondayDateAdapter } from '../adapters/date.adapter';
+import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 
 @NgModule({
   imports: [
@@ -41,6 +42,7 @@ import { MondayDateAdapter } from '../adapters/date.adapter';
     EventsMapComponent,
     TileChartComponent,
     TileMapComponent,
+    ActivityTypesMultiSelectComponent,
   ],
   entryComponents: [
     EventsExportFormComponent,
