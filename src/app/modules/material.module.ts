@@ -29,6 +29,7 @@ import {MatStepperModule} from '@angular/material/stepper';
 import {MatBottomSheetModule} from '@angular/material/bottom-sheet';
 import {MatExpansionModule} from '@angular/material/expansion';
 import { MatBadgeModule } from '@angular/material/badge';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 
 @NgModule({
   imports: [],
@@ -66,6 +67,7 @@ import { MatBadgeModule } from '@angular/material/badge';
     MatExpansionModule,
     MatRippleModule,
     MatBadgeModule,
+    MatAutocompleteModule,
   ],
   declarations: [],
   providers: [
