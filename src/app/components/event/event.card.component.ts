@@ -19,6 +19,8 @@ import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app
 import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import {AppUserService} from '../../services/app.user.service';
 import {AppActivitySelectionService} from '../../services/activity-selection-service/app-activity-selection.service';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 
 
 @Component({
@@ -145,7 +147,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     }));
 
     // Subscribe to the actual subject our event
-    this.subscriptions.push(this.eventService.getEventAndActivities(new User(this.targetUserID), eventID).subscribe((event) => {
+    this.subscriptions.push(this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID, [
+      DataLatitudeDegrees.type,
+      DataLongitudeDegrees.type,
+    ]).subscribe((event) => {
       if (!event) {
         this.router.navigate(['/dashboard']).then(() => {
           this.snackBar.open('Not found', null, {
@@ -158,6 +163,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...event.getActivities());
       this.changeDetectorRef.detectChanges();
+      this.hasDevices()
     }));
 
     // Subscribe to selected activities
@@ -190,5 +196,9 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   hasDevices(event: EventInterface): boolean {
     return !!this.event.getActivities().reduce((devicesArray, activity) => devicesArray.concat(activity.creator.devices), []).length
+  }
+
+  hasPositions(event: EventInterface): boolean {
+    return !!this.event.getActivities().filter(a => a.hasPositionData()).length
   }
 }

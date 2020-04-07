@@ -33,7 +33,7 @@
   </app-event-stats-table>
 
   <app-event-card-map
-    *ngIf="event && targetUserID"
+    *ngIf="event && targetUserID && hasPositions(event)"
     [selectedActivities]="selectedActivities"
     [targetUserID]="targetUserID"
     [user]="currentUser"
