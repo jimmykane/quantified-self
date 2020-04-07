@@ -250,15 +250,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Subscribe to the data
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
       const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
-        [...new Set(this.getNonUnitBasedDataTypes().concat([DataSpeed.type, DataDistance.type]))], // if the stream speed is missing or distance please add it
+        [...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).concat([DataSpeed.type, DataDistance.type]))], // if the stream speed is missing or distance please add it
       );
       return allOrSomeSubscription.pipe(map((streams) => {
         if (!streams.length) {
           return [];
         }
-        const shouldRemoveSpeed = this.getNonUnitBasedDataTypes().indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
-        const shouldRemoveGradeAdjustedSpeed = this.getNonUnitBasedDataTypes().indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
-        const shouldRemoveDistance = this.getNonUnitBasedDataTypes().indexOf(DataDistance.type) === -1;
+        const shouldRemoveSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
+        const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
+        const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
         return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
           .concat(streams)
           .filter((stream) => {
@@ -949,22 +949,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.zone.runOutsideAngular(() => {
       series.data = data;
     });
-  }
-
-  /**
-   * This get's the basic data types for the charts depending or not on the user datatype settings
-   * There are no unit specific datatypes here so if the user has selected pace it implies metric
-   */
-  private getNonUnitBasedDataTypes(): string[] {
-    // let dataTypes = DynamicDataLoader.basicDataTypes;
-    // Set the datatypes to show if all is selected
-    if (this.showAllData) {
-      return [...DynamicDataLoader.basicDataTypes, ...DynamicDataLoader.advancedDataTypes];
-    }
-    if (!this.dataTypesToUse) {
-      return DynamicDataLoader.basicDataTypes;
-    }
-    return this.dataTypesToUse;
   }
 
   protected disposeRangeLabelsContainer(chart: am4charts.XYChart) {
