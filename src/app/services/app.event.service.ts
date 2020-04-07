@@ -277,7 +277,7 @@ export class AppEventService implements OnDestroy {
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(
         event.getActivities().map((activity) => {
-          return (streamTypes ? this.getAllStreams(user, event.getID(), activity.getID()) : this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes))
+          return (streamTypes ? this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes) : this.getAllStreams(user, event.getID(), activity.getID()))
             .pipe(map((streams) => {
             streams = streams || [];
             // debugger;
@@ -391,6 +391,8 @@ export class AppEventService implements OnDestroy {
   }
 
   private processStreamDocumentSnapshot(streamSnapshot: DocumentData): StreamInterface {
+    this.logger.info(<string>streamSnapshot.data().type)
+
     return EventImporterJSON.getStreamFromJSON({
       type: <string>streamSnapshot.data().type,
       data: this.getStreamDataFromBlob(streamSnapshot.data().data),
@@ -398,6 +400,7 @@ export class AppEventService implements OnDestroy {
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
+    this.logger.info(<string>queryDocumentSnapshot.data().type)
     return EventImporterJSON.getStreamFromJSON({
       type: <string>queryDocumentSnapshot.data().type,
       data: this.getStreamDataFromBlob(queryDocumentSnapshot.data().data),
