@@ -36,7 +36,6 @@ export class AppEventService implements OnDestroy {
   public getEventAndActivities(user: User, eventID: string): Observable<EventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
-    this.logger.info(`Getting ${user.uid} and ${eventID}`);
     return combineLatest(
       this.afs
         .collection('users')
@@ -68,42 +67,37 @@ export class AppEventService implements OnDestroy {
     }))
   }
 
-  public getEventsForUserBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
-      return this.getEventsForUserStartingAfterOrEndingBefore(user, false, where, orderBy, asc, limit, startAfter, endBefore);
+      return this.getEventsStartingAfterOrEndingBefore(user, false, where, orderBy, asc, limit, startAfter, endBefore);
     }
-    return this.getEventsForUserInternal(user, where, orderBy, asc, limit);
+    return this._getEvents(user, where, orderBy, asc, limit);
   }
 
-  public getEventsAndActivitiesForUserBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsAndActivitiesBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
-      return this.getEventsForUserStartingAfterOrEndingBefore(user, true, where, orderBy, asc, limit, startAfter, endBefore);
+      return this.getEventsStartingAfterOrEndingBefore(user, true, where, orderBy, asc, limit, startAfter, endBefore);
     }
-    return this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit);
+    return this._getEventsAndActivities(user, where, orderBy, asc, limit);
   }
 
-  getEventActivitiesAndStreams(user: User, eventID) {
-    return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
-      if (!event) {
-        return of(null);
-      }
-      // Get all the streams for all activities and subscribe to them with latest emition for all streams
-      return combineLatest(
-        event.getActivities().map((activity) => {
-          return this.getAllStreams(user, event.getID(), activity.getID()).pipe(map((streams) => {
-            streams = streams || [];
-            // debugger;
-            // This time we dont want to just get the streams but we want to attach them to the parent obj
-            activity.clearStreams();
-            activity.addStreams(streams);
-            // Return what we actually want to return not the streams
-            return event;
-          }));
-        }));
-    })).pipe(map(([event]) => {
-      // debugger;
-      return event;
-    }))
+  /**
+   * Gets the event, activities and some streams depending on the types provided
+   * @param user
+   * @param eventID
+   * @param streamTypes
+   */
+  public getEventActivitiesAndSomeStreams(user: User, eventID, streamTypes: string[]) {
+    return this._getEventActivitiesAndAllOrSomeStreams(user, eventID, streamTypes);
+  }
+
+  /**
+   * Get's the event, activities and all available streams
+   * @param user
+   * @param eventID
+   */
+  public getEventActivitiesAndAllStreams(user: User, eventID) {
+    return this._getEventActivitiesAndAllOrSomeStreams(user, eventID);
   }
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
@@ -264,7 +258,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
-    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndStreams(user, eventID).pipe(take(1)).toPromise());
+    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
     return (new Blob(
       [jsonString],
       {type: EventExporterJSON.fileType},
@@ -275,10 +269,32 @@ export class AppEventService implements OnDestroy {
     return this.updateEventProperties(user, eventID, {privacy: privacy});
   }
 
-  ngOnDestroy() {
+  private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
+    return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
+      if (!event) {
+        return of(null);
+      }
+      // Get all the streams for all activities and subscribe to them with latest emition for all streams
+      return combineLatest(
+        event.getActivities().map((activity) => {
+          return (streamTypes ? this.getAllStreams(user, event.getID(), activity.getID()) : this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes))
+            .pipe(map((streams) => {
+            streams = streams || [];
+            // debugger;
+            // This time we dont want to just get the streams but we want to attach them to the parent obj
+            activity.clearStreams();
+            activity.addStreams(streams);
+            // Return what we actually want to return not the streams
+            return event;
+          }));
+        }));
+    })).pipe(map(([event]) => {
+      // debugger;
+      return event;
+    }))
   }
 
-  private getEventsForUserStartingAfterOrEndingBefore(user: User, getActivities: boolean, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  private getEventsStartingAfterOrEndingBefore(user: User, getActivities: boolean, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     const observables: Observable<firestore.DocumentSnapshot>[] = [];
     if (startAfter) {
       observables.push(this.afs
@@ -298,18 +314,18 @@ export class AppEventService implements OnDestroy {
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
       if (startAfter && endBefore) {
-        return getActivities ? this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit, resultA, resultB) : this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA, resultB);
+        return getActivities ? this._getEventsAndActivities(user, where, orderBy, asc, limit, resultA, resultB) : this._getEvents(user, where, orderBy, asc, limit, resultA, resultB);
       }
       // If only start after
       if (startAfter) {
-        return getActivities ? this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit, resultA) : this.getEventsForUserInternal(user, where, orderBy, asc, limit, resultA);
+        return getActivities ? this._getEventsAndActivities(user, where, orderBy, asc, limit, resultA) : this._getEvents(user, where, orderBy, asc, limit, resultA);
       }
       // If only endAt
-      return getActivities ? this.getEventsAndActivitiesForUserInternal(user, where, orderBy, asc, limit, null, resultA) : this.getEventsForUserInternal(user, where, orderBy, asc, limit, null, resultA);
+      return getActivities ? this._getEventsAndActivities(user, where, orderBy, asc, limit, null, resultA) : this._getEvents(user, where, orderBy, asc, limit, null, resultA);
     }));
   }
 
-  private getEventsForUserInternal(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
+  private _getEvents(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
       .snapshotChanges().pipe(map((eventSnapshots) => {
         return eventSnapshots.map((eventSnapshot) => {
@@ -318,7 +334,7 @@ export class AppEventService implements OnDestroy {
       }))
   }
 
-  private getEventsAndActivitiesForUserInternal(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
+  private _getEventsAndActivities(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
       .snapshotChanges().pipe(map((eventSnapshots) => {
         return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
@@ -426,5 +442,7 @@ export class AppEventService implements OnDestroy {
     return JSON.parse(gzip_decode(blob.toBase64()));
   }
 
+  public ngOnDestroy() {
+  }
 }
 

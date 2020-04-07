@@ -153,7 +153,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // First fetch them complete
     const promises: Promise<EventInterface>[] = [];
     this.selection.selected.forEach((selected) => {
-      promises.push(this.eventService.getEventActivitiesAndStreams(this.user, selected.Event.getID()).pipe(take(1)).toPromise());
+      promises.push(this.eventService.getEventActivitiesAndAllStreams(this.user, selected.Event.getID()).pipe(take(1)).toPromise());
     });
     // Now we can clear the selection
     this.selection.clear();
