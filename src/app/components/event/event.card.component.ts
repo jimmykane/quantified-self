@@ -1,26 +1,30 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
-import {Subscription} from 'rxjs';
-import {ActivatedRoute, Router} from '@angular/router';
-import {AppEventService} from '../../services/app.event.service';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {Log} from 'ng2-logger/browser';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit } from '@angular/core';
+import { combineLatest, of, Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
+import { AppEventService } from '../../services/app.event.service';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { Log } from 'ng2-logger/browser';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   XAxisTypes
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {AppThemeService} from '../../services/app.theme.service';
-import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import {AppUserService} from '../../services/app.user.service';
-import {AppActivitySelectionService} from '../../services/activity-selection-service/app-activity-selection.service';
+import { AppThemeService } from '../../services/app.theme.service';
+import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { AppUserService } from '../../services/app.user.service';
+import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { switchMap } from 'rxjs/operators';
 
 
 @Component({
@@ -91,13 +95,12 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Set a "user from params"
     this.targetUserID = userID;
 
-    // Subscribe to authService and set the current user if possible
-    this.subscriptions .push(this.authService.user.subscribe((user) => {
+    this.subscriptions.push(this.authService.user.pipe(switchMap((user) => {
       this.currentUser = user;
       if (!this.currentUser) {
         return;
       }
-      this.userUnitSettings =  user.settings.unitSettings;
+      this.userUnitSettings = user.settings.unitSettings;
       this.chartXAxisType = user.settings.chartSettings.xAxisType;
       this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
       this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
@@ -125,6 +128,34 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
         }
         return dataTypesToUse;
       }, []);
+
+      /**
+       * Return another obsrbl
+       */
+      return this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID,
+        [
+          ...[
+            DataLatitudeDegrees.type,
+            DataLongitudeDegrees.type,
+            DataSpeed.type,
+            DataDistance.type
+          ],
+          ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.chartDataTypesToUse))
+        ])
+    })).subscribe((event) => {
+      if (!event) {
+        this.router.navigate(['/dashboard']).then(() => {
+          this.snackBar.open('Not found', null, {
+            duration: 2000,
+          });
+        });
+        return
+      }
+      this.event = event;
+      this.logger.info(event);
+      this.activitySelectionService.selectedActivities.clear();
+      this.activitySelectionService.selectedActivities.select(...event.getActivities());
+      this.changeDetectorRef.detectChanges();
       this.changeDetectorRef.detectChanges();
     }));
 
@@ -143,25 +174,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     // Subscribe to the appTheme changes
     this.subscriptions.push(this.themeService.getMapTheme().subscribe((mapTheme) => {
       this.mapTheme = mapTheme;
-      this.changeDetectorRef.detectChanges();
-    }));
-
-    // Subscribe to the actual subject our event
-    this.subscriptions.push(this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID, [
-      DataLatitudeDegrees.type,
-      DataLongitudeDegrees.type,
-    ]).subscribe((event) => {
-      if (!event) {
-        this.router.navigate(['/dashboard']).then(() => {
-          this.snackBar.open('Not found', null, {
-            duration: 2000,
-          });
-        });
-        return
-      }
-      this.event = event;
-      this.activitySelectionService.selectedActivities.clear();
-      this.activitySelectionService.selectedActivities.select(...event.getActivities());
       this.changeDetectorRef.detectChanges();
     }));
 

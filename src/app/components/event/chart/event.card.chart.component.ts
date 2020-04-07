@@ -10,32 +10,35 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import {Log} from 'ng2-logger/browser'
-import {AppEventColorService} from '../../../services/color/app.event.color.service';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { Log } from 'ng2-logger/browser'
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {XYSeries} from '@amcharts/amcharts4/charts';
-import {combineLatest, Subscription} from 'rxjs';
-import {AppEventService} from '../../../services/app.event.service';
-import {DataAltitude} from '@sports-alliance/sports-lib/lib/data/data.altitude';
-import {debounceTime, map, take} from 'rxjs/operators';
-import {StreamInterface} from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {DataPace, DataPaceMinutesPerMile} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {ChartCursorBehaviours, XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
-import {ChartAbstractDirective} from '../../charts/chart-abstract.directive';
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {DataSwimPace, DataSwimPaceMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import {DataSwimPaceMaxMinutesPer100Yard} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
-import {DataGPSAltitude} from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
-import {DataAccumulatedPower} from '@sports-alliance/sports-lib/lib/data/data.accumulated-power';
-import {DataTemperature} from '@sports-alliance/sports-lib/lib/data/data.temperature';
+import { XYSeries } from '@amcharts/amcharts4/charts';
+import { combineLatest, Subscription } from 'rxjs';
+import { AppEventService } from '../../../services/app.event.service';
+import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
+import { debounceTime, map, take } from 'rxjs/operators';
+import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib/lib/data/data.pace';
+import {
+  ChartCursorBehaviours,
+  XAxisTypes
+} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DataSwimPace, DataSwimPaceMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
+import { DataSwimPaceMaxMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
+import { DataGPSAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
+import { DataAccumulatedPower } from '@sports-alliance/sports-lib/lib/data/data.accumulated-power';
+import { DataTemperature } from '@sports-alliance/sports-lib/lib/data/data.temperature';
 import {
   DataSpeed,
   DataSpeedFeetPerMinute,
@@ -44,10 +47,10 @@ import {
   DataSpeedMetersPerMinute,
   DataSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.speed';
-import {LapTypes} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import {AppDataColors} from '../../../services/color/app.data.colors';
-import {AppWindowService} from '../../../services/app.window.service';
-import {DataStrydSpeed} from '@sports-alliance/sports-lib/lib/data/data.stryd-speed';
+import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import { AppDataColors } from '../../../services/color/app.data.colors';
+import { AppWindowService } from '../../../services/app.window.service';
+import { DataStrydSpeed } from '@sports-alliance/sports-lib/lib/data/data.stryd-speed';
 import {
   DataVerticalSpeed,
   DataVerticalSpeedFeetPerHour,
@@ -58,23 +61,23 @@ import {
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
-import {DataPower} from '@sports-alliance/sports-lib/lib/data/data.power';
-import {DataPowerRight} from '@sports-alliance/sports-lib/lib/data/data.power-right';
-import {DataPowerLeft} from '@sports-alliance/sports-lib/lib/data/data.power-left';
-import {DataLeftBalance} from '@sports-alliance/sports-lib/lib/data/data.left-balance';
-import {DataRightBalance} from '@sports-alliance/sports-lib/lib/data/data.right-balance';
-import {DataStrydDistance} from '@sports-alliance/sports-lib/lib/data/data.stryd-distance';
-import {DataEHPE} from '@sports-alliance/sports-lib/lib/data/data.ehpe';
-import {DataSeaLevelPressure} from '@sports-alliance/sports-lib/lib/data/data.sea-level-pressure';
-import {DataStrydAltitude} from '@sports-alliance/sports-lib/lib/data/data.stryd-altitude';
-import {DataEVPE} from '@sports-alliance/sports-lib/lib/data/data.evpe';
-import {DataAbsolutePressure} from '@sports-alliance/sports-lib/lib/data/data.absolute-pressure';
-import {ChartHelper, LabelData} from './chart-helper';
+import { DataPower } from '@sports-alliance/sports-lib/lib/data/data.power';
+import { DataPowerRight } from '@sports-alliance/sports-lib/lib/data/data.power-right';
+import { DataPowerLeft } from '@sports-alliance/sports-lib/lib/data/data.power-left';
+import { DataLeftBalance } from '@sports-alliance/sports-lib/lib/data/data.left-balance';
+import { DataRightBalance } from '@sports-alliance/sports-lib/lib/data/data.right-balance';
+import { DataStrydDistance } from '@sports-alliance/sports-lib/lib/data/data.stryd-distance';
+import { DataEHPE } from '@sports-alliance/sports-lib/lib/data/data.ehpe';
+import { DataSeaLevelPressure } from '@sports-alliance/sports-lib/lib/data/data.sea-level-pressure';
+import { DataStrydAltitude } from '@sports-alliance/sports-lib/lib/data/data.stryd-altitude';
+import { DataEVPE } from '@sports-alliance/sports-lib/lib/data/data.evpe';
+import { DataAbsolutePressure } from '@sports-alliance/sports-lib/lib/data/data.absolute-pressure';
+import { ChartHelper, LabelData } from './chart-helper';
 import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
-import {DataAirPower} from '@sports-alliance/sports-lib/lib/data/data.air-power';
-import {AppUserService} from '../../../services/app.user.service';
-import {AppChartSettingsLocalStorageService} from '../../../services/storage/app.chart.settings.local.storage.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import { DataAirPower } from '@sports-alliance/sports-lib/lib/data/data.air-power';
+import { AppUserService } from '../../../services/app.user.service';
+import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import {
   ActivityCursorInterface,
   AppActivityCursorService
@@ -86,7 +89,8 @@ import {
 import {
   DataGradeAdjustedSpeed,
   DataGradeAdjustedSpeedFeetPerMinute,
-  DataGradeAdjustedSpeedFeetPerSecond, DataGradeAdjustedSpeedKilometersPerHour,
+  DataGradeAdjustedSpeedFeetPerSecond,
+  DataGradeAdjustedSpeedKilometersPerHour,
   DataGradeAdjustedSpeedMetersPerMinute,
   DataGradeAdjustedSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
@@ -130,12 +134,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
   public isLoading: boolean;
-
+  protected chart: am4charts.XYChart;
+  protected logger = Log.create('EventCardChartComponent');
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
   private activitiesCursors: ActivityCursorInterface[] = [];
-  protected chart: am4charts.XYChart;
-  protected logger = Log.create('EventCardChartComponent');
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
@@ -196,113 +199,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
   }
 
-  private async processChanges() {
-    this.loading();
-    // Important for performance / or not?
-    // This is / will be needed when more performance needs to be achieved
-    // Leaving this here for the future. For now the groups of data do suffice and do it better
-    if (this.xAxisType === XAxisTypes.Distance) {
-      for (const selectedActivity of this.selectedActivities) {
-        this.distanceAxesForActivitiesMap.set(
-          selectedActivity.getID(),
-          (await this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), selectedActivity.getID(), [DataDistance.type]).pipe(take(1)).toPromise())[0]
-        );
-      }
-    }
+  ngOnDestroy() {
+    this.unSubscribeFromAll();
+    super.ngOnDestroy();
+  }
 
-    // Listen to cursor changes
-    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(500)
-    ).subscribe((cursors) => {
-      this.logger.info(`Cursors on subscribe`);
-      if (!cursors || !cursors.length || !this.chart) {
-        this.activitiesCursors = [];
-        return;
-      }
-
-      // @todo fix scrollbar for cursor
-      cursors.forEach((cursor) => {
-        const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
-
-        // Do not trigger update
-        if (activityCursor && (activityCursor.time === cursor.time)) {
-          return;
-        }
-
-        this.chart.xAxes.values.forEach(xAxis => {
-          switch (this.xAxisType) {
-            case XAxisTypes.Time:
-              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'none');
-              break;
-            case XAxisTypes.Duration:
-              const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
-              if (cursorActivity) {
-                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'none');
-              }
-              break;
-          }
-        })
-      });
-      this.activitiesCursors = cursors;
-    });
-
-
-    // Subscribe to the data
-    this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
-        [...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).concat([DataSpeed.type, DataDistance.type]))], // if the stream speed is missing or distance please add it
-      );
-      return allOrSomeSubscription.pipe(map((streams) => {
-        if (!streams.length) {
-          return [];
-        }
-        const shouldRemoveSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
-        const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
-        const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
-        return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
-          .concat(streams)
-          .filter((stream) => {
-            switch (stream.type) {
-              case  DataDistance.type:
-                return !shouldRemoveDistance;
-              case DataSpeed.type:
-                return !shouldRemoveSpeed;
-              case DataGradeAdjustedSpeed.type:
-                return !shouldRemoveGradeAdjustedSpeed;
-              default:
-                return true
-            }
-          }).map((stream) => {
-            return this.createOrUpdateChartSeries(activity, stream);
-          });
-      }))
-    })).pipe(map((seriesArrayOfArrays) => {
-      // Format flatten the arrays as they come in [[], []]
-      return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
-    })).subscribe((series: am4charts.LineSeries[]) => {
-      // debugger
-      // this.logger.info(`Rendering chart data per series`);
-      // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
-      this.logger.info(`Data Injected`);
-      if (this.showGrid) {
-        this.addGrid();
-      } else {
-        this.removeGrid();
-      }
-      if (this.showLaps) {
-        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
-      }
-      // Show if needed
-      series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
-      // Store at local storage the visible / non visible series
-      series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
-
-      // Snap to series if distance axis
-      if (this.xAxisType === XAxisTypes.Distance){
-        this.chart.cursor.snapToSeries = series;
-      }
-      this.loaded();
-    });
+  getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
+    return chart.colors.getIndex(index * 2);
   }
 
   protected setupChart(chart: am4charts.XYChart) {
@@ -311,11 +214,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   protected createChart(): am4charts.XYChart {
     // @hack to 'fix' multisport
-    if (this.event.isMultiSport()){
+    if (this.event.isMultiSport()) {
       this.xAxisType = XAxisTypes.Time;
     }
-    am4core.options.onlyShowOnViewport = false ;
-    am4core.options.queue = false ;
+    am4core.options.onlyShowOnViewport = false;
+    am4core.options.queue = false;
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
     chart.fontSize = '1em';
     chart.padding(0, 10, 0, 0);
@@ -583,6 +486,341 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
 
     return chart;
+  }
+
+  protected disposeRangeLabelsContainer(chart: am4charts.XYChart) {
+    const rangeLabelsContainer = chart.map.getKey('rangeLabelsContainer');
+    if (rangeLabelsContainer) {
+      rangeLabelsContainer.dispose();
+    }
+  }
+
+  protected disposeClearSelectionButton(chart: am4charts.XYChart) {
+    const clearSelectionButton = chart.map.getKey('clearSelectionButton');
+    if (clearSelectionButton) {
+      clearSelectionButton.dispose();
+    }
+  }
+
+  protected disposeCursorSelection(chart: am4charts.XYChart) {
+    const cursor = chart.cursor;
+    if (cursor && cursor.selection) {
+      // const a = cursor;
+      // debugger;
+      // @todo clear selection
+      cursor.xRange = null;
+      cursor.yRange = null;
+      cursor.invalidate();
+    }
+  }
+
+  protected clearChart() {
+    if (this.chart) {
+      // this.chart.series.values.forEach(s => s.dispose());
+      this.chart.series.clear();
+      this.chart.colors.reset();
+      if (this.chart.yAxes.length) {
+        this.chart.yAxes.clear();
+      }
+      this.disposeRangeLabelsContainer(this.chart);
+      this.disposeCursorSelection(this.chart);
+      this.disposeClearSelectionButton(this.chart);
+      this.chart.xAxes.each(axis => axis.axisRanges.clear());
+      // this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
+      // this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
+    }
+  }
+
+  // @todo move to data class
+  protected doesDataTypeSupportGainOrLoss(dataType: string): boolean {
+    switch (dataType) {
+      case DataAltitude.type:
+      case DataGPSAltitude.type:
+      case DataAccumulatedPower.type:
+      case DataTemperature.type:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // @todo move to data class
+  protected doesDataTypeSupportSlope(dataType: string): boolean {
+    switch (dataType) {
+      case DataAltitude.type:
+      case DataGPSAltitude.type:
+      case DataAccumulatedPower.type:
+      case DataTemperature.type:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  protected getSubscriptions(): Subscription[] {
+    const subscriptions = [];
+    if (this.streamsSubscription) {
+      subscriptions.push(this.streamsSubscription)
+    }
+    if (this.activitiesCursorSubscription) {
+      subscriptions.push(this.activitiesCursorSubscription);
+
+    }
+    return subscriptions;
+  }
+
+  protected attachSeriesEventListeners(series: am4charts.XYSeries) {
+    // Shown
+    // series.events.on('visibilitychanged', () => {
+    //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
+    // });
+    series.events.on('shown', () => {
+      this.logger.info(`On series shown`);
+      series.hidden = false;
+      this.showSeriesYAxis(series);
+      // console.log(series.name + ' shown stat: ' + series.hidden )
+      if (this.getSeriesRangeLabelContainer(series)) {
+        this.getSeriesRangeLabelContainer(series).disabled = false;
+        this.getSeriesRangeLabelContainer(series).deepInvalidate();
+      }
+
+      series.yAxis.height = am4core.percent(100);
+      series.yAxis.invalidate();
+      this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
+    });
+    // Hidden
+    series.events.on('hidden', () => {
+      this.logger.info(`On series hidden`);
+      series.hidden = true;
+      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
+        this.hideSeriesYAxis(series)
+      }
+      // console.log(series.name + ' hidden state: ' + series.visible)
+      if (this.getSeriesRangeLabelContainer(series)) {
+        this.getSeriesRangeLabelContainer(series).disabled = true;
+      }
+      // @todo should check for same visibel might need -1
+      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
+        series.yAxis.height = 0;
+      }
+      // series.yAxis.disabled = true;
+      series.yAxis.invalidate();
+      this.chartSettingsLocalStorageService.hideSeriesID(this.event, series.id);
+    });
+  }
+
+  protected createYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
+    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
+    if ([DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
+      yAxis = new am4charts.DurationAxis();
+    } else {
+      yAxis = new am4charts.ValueAxis();
+    }
+    return yAxis;
+  }
+
+  protected hideSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = true;
+  }
+
+  protected showSeriesYAxis(series: am4charts.XYSeries) {
+    series.yAxis.disabled = false;
+  }
+
+  protected getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
+    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
+  }
+
+  protected getSameNameSeries(series: am4charts.XYSeries): am4charts.XYSeries[] {
+    return series.chart.series.values.filter(serie => serie.name === series.name);
+  }
+
+  protected getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
+    return chart.series.values
+      .filter(series => !series.hidden);
+  }
+
+  // This helps to goup series vy providing the same name (type) for things that should have the same axis
+  protected getSeriesName(name: string) {
+    if ([DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type].indexOf(name) !== -1) {
+      return DataAltitude.type;
+    }
+    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
+      return 'Positional Error'
+    }
+    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
+      return 'Pressure'
+    }
+    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
+      return 'Pace'
+    }
+    if ([DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(name) !== -1) {
+      return 'Pace'
+    }
+    if ([
+      DataSpeed.type,
+      DataStrydSpeed.type,
+      DataSpeedMetersPerMinute.type,
+      DataSpeedFeetPerMinute.type,
+      DataSpeedFeetPerSecond.type,
+      DataSpeedMilesPerHour.type,
+      DataSpeedKilometersPerHour.type,
+      DataGradeAdjustedSpeed.type,
+      DataGradeAdjustedSpeedMetersPerMinute.type,
+      DataGradeAdjustedSpeedFeetPerMinute.type,
+      DataGradeAdjustedSpeedFeetPerSecond.type,
+      DataGradeAdjustedSpeedMilesPerHour.type,
+      DataGradeAdjustedSpeedKilometersPerHour.type,
+    ].indexOf(name) !== -1) {
+      return 'Speed'
+    }
+    if ([DataVerticalSpeed.type,
+      DataVerticalSpeedFeetPerSecond.type,
+      DataVerticalSpeedMetersPerMinute.type,
+      DataVerticalSpeedFeetPerMinute.type,
+      DataVerticalSpeedMetersPerHour.type,
+      DataVerticalSpeedFeetPerHour.type,
+      DataVerticalSpeedKilometerPerHour.type,
+      DataVerticalSpeedMilesPerHour.type].indexOf(name) !== -1) {
+      return 'Vertical Speed'
+    }
+    if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
+      return 'Swim Pace'
+    }
+    if ([DataPower.type,
+      DataAirPower.type,
+      DataPowerRight.type,
+      DataPowerLeft.type].indexOf(name) !== -1) {
+      return 'Power'
+    }
+    if ([DataLeftBalance.type,
+      DataRightBalance.type].indexOf(name) !== -1) {
+      return 'Left/Right Balance'
+    }
+    if ([DataDistance.type,
+      DataStrydDistance.type].indexOf(name) !== -1) {
+      return 'Distance'
+    }
+    return name;
+  }
+
+  protected unsubscribeAndClearChart() {
+    this.unSubscribeFromAll();
+    this.clearChart();
+  }
+
+  protected destroyChart() {
+    this.destroyLegendParent();
+    super.destroyChart();
+  }
+
+  private async processChanges() {
+    this.loading();
+    // Important for performance / or not?
+    // This is / will be needed when more performance needs to be achieved
+    // Leaving this here for the future. For now the groups of data do suffice and do it better
+    if (this.xAxisType === XAxisTypes.Distance) {
+      for (const selectedActivity of this.selectedActivities) {
+        this.distanceAxesForActivitiesMap.set(
+          selectedActivity.getID(),
+          (await this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), selectedActivity.getID(), [DataDistance.type]).pipe(take(1)).toPromise())[0]
+        );
+      }
+    }
+
+    // Listen to cursor changes
+    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
+      debounceTime(500)
+    ).subscribe((cursors) => {
+      this.logger.info(`Cursors on subscribe`);
+      if (!cursors || !cursors.length || !this.chart) {
+        this.activitiesCursors = [];
+        return;
+      }
+
+      // @todo fix scrollbar for cursor
+      cursors.forEach((cursor) => {
+        const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
+
+        // Do not trigger update
+        if (activityCursor && (activityCursor.time === cursor.time)) {
+          return;
+        }
+
+        this.chart.xAxes.values.forEach(xAxis => {
+          switch (this.xAxisType) {
+            case XAxisTypes.Time:
+              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'none');
+              break;
+            case XAxisTypes.Duration:
+              const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
+              if (cursorActivity) {
+                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'none');
+              }
+              break;
+          }
+        })
+      });
+      this.activitiesCursors = cursors;
+    });
+
+
+    // Subscribe to the data
+    this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
+      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
+        [...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).concat([DataSpeed.type, DataDistance.type]))], // if the stream speed is missing or distance please add it
+      );
+      return allOrSomeSubscription.pipe(map((streams) => {
+        if (!streams.length) {
+          return [];
+        }
+        const shouldRemoveSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
+        const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
+        const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
+        return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
+          .concat(streams)
+          .filter((stream) => {
+            switch (stream.type) {
+              case  DataDistance.type:
+                return !shouldRemoveDistance;
+              case DataSpeed.type:
+                return !shouldRemoveSpeed;
+              case DataGradeAdjustedSpeed.type:
+                return !shouldRemoveGradeAdjustedSpeed;
+              default:
+                return true
+            }
+          }).map((stream) => {
+            return this.createOrUpdateChartSeries(activity, stream);
+          });
+      }))
+    })).pipe(map((seriesArrayOfArrays) => {
+      // Format flatten the arrays as they come in [[], []]
+      return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
+    })).subscribe((series: am4charts.LineSeries[]) => {
+      // debugger
+      // this.logger.info(`Rendering chart data per series`);
+      // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
+      this.logger.info(`Data Injected`);
+      if (this.showGrid) {
+        this.addGrid();
+      } else {
+        this.removeGrid();
+      }
+      if (this.showLaps) {
+        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+      }
+      // Show if needed
+      series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
+      // Store at local storage the visible / non visible series
+      series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
+
+      // Snap to series if distance axis
+      if (this.xAxisType === XAxisTypes.Distance) {
+        this.chart.cursor.snapToSeries = series;
+      }
+      this.loaded();
+    });
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
@@ -879,7 +1117,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return button;
   }
 
-
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     this.logger.info(`Stream data for ${stream.type} ${stream.getData().length}`);
@@ -951,87 +1188,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
   }
 
-  protected disposeRangeLabelsContainer(chart: am4charts.XYChart) {
-    const rangeLabelsContainer = chart.map.getKey('rangeLabelsContainer');
-    if (rangeLabelsContainer) {
-      rangeLabelsContainer.dispose();
-    }
-  }
-
-  protected disposeClearSelectionButton(chart: am4charts.XYChart) {
-    const clearSelectionButton = chart.map.getKey('clearSelectionButton');
-    if (clearSelectionButton) {
-      clearSelectionButton.dispose();
-    }
-  }
-
-  protected disposeCursorSelection(chart: am4charts.XYChart) {
-    const cursor = chart.cursor;
-    if (cursor && cursor.selection) {
-      // const a = cursor;
-      // debugger;
-      // @todo clear selection
-      cursor.xRange = null;
-      cursor.yRange = null;
-      cursor.invalidate();
-    }
-  }
-
-  protected clearChart() {
-    if (this.chart) {
-      // this.chart.series.values.forEach(s => s.dispose());
-      this.chart.series.clear();
-      this.chart.colors.reset();
-      if (this.chart.yAxes.length) {
-        this.chart.yAxes.clear();
-      }
-      this.disposeRangeLabelsContainer(this.chart);
-      this.disposeCursorSelection(this.chart);
-      this.disposeClearSelectionButton(this.chart);
-      this.chart.xAxes.each(axis => axis.axisRanges.clear());
-      // this.chart.xAxes.each(axis => axis.renderer.grid.template.disabled = true);
-      // this.chart.yAxes.each(axis => axis.renderer.grid.template.disabled = true);
-    }
-  }
-
-  // @todo move to data class
-  protected doesDataTypeSupportGainOrLoss(dataType: string): boolean {
-    switch (dataType) {
-      case DataAltitude.type:
-      case DataGPSAltitude.type:
-      case DataAccumulatedPower.type:
-      case DataTemperature.type:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  // @todo move to data class
-  protected doesDataTypeSupportSlope(dataType: string): boolean {
-    switch (dataType) {
-      case DataAltitude.type:
-      case DataGPSAltitude.type:
-      case DataAccumulatedPower.type:
-      case DataTemperature.type:
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  protected getSubscriptions(): Subscription[] {
-    const subscriptions = [];
-    if (this.streamsSubscription) {
-      subscriptions.push(this.streamsSubscription)
-    }
-    if (this.activitiesCursorSubscription) {
-      subscriptions.push(this.activitiesCursorSubscription);
-
-    }
-    return subscriptions;
-  }
-
   private getSeriesRangeLabelContainer(series): am4core.Container | null {
     return <am4core.Container>series.chart.map.getKey(this.getSeriesRangeLabelContainerID(series));
   }
@@ -1043,7 +1199,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private getSeriesRangeLabelContainerID(series): string {
     return `rangeLabelContainer${series.id}`;
   }
-
 
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
@@ -1141,158 +1296,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return AppDataColors[`${series.name}_${this.getSameNameSeries(series).indexOf(series)}`] || this.getFillColor(series.chart, series.chart.series.indexOf(series));
   }
 
-
-  protected attachSeriesEventListeners(series: am4charts.XYSeries) {
-    // Shown
-    // series.events.on('visibilitychanged', () => {
-    //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
-    // });
-    series.events.on('shown', () => {
-      this.logger.info(`On series shown`);
-      series.hidden = false;
-      this.showSeriesYAxis(series);
-      // console.log(series.name + ' shown stat: ' + series.hidden )
-      if (this.getSeriesRangeLabelContainer(series)) {
-        this.getSeriesRangeLabelContainer(series).disabled = false;
-        this.getSeriesRangeLabelContainer(series).deepInvalidate();
-      }
-
-      series.yAxis.height = am4core.percent(100);
-      series.yAxis.invalidate();
-      this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
-    });
-    // Hidden
-    series.events.on('hidden', () => {
-      this.logger.info(`On series hidden`);
-      series.hidden = true;
-      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
-        this.hideSeriesYAxis(series)
-      }
-      // console.log(series.name + ' hidden state: ' + series.visible)
-      if (this.getSeriesRangeLabelContainer(series)) {
-        this.getSeriesRangeLabelContainer(series).disabled = true;
-      }
-      // @todo should check for same visibel might need -1
-      if (!this.getVisibleSeriesWithSameYAxis(series).length) {
-        series.yAxis.height = 0;
-      }
-      // series.yAxis.disabled = true;
-      series.yAxis.invalidate();
-      this.chartSettingsLocalStorageService.hideSeriesID(this.event, series.id);
-    });
-  }
-
-  protected createYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
-    let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if ([DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
-      yAxis = new am4charts.DurationAxis();
-    } else {
-      yAxis = new am4charts.ValueAxis();
-    }
-    return yAxis;
-  }
-
-  protected hideSeriesYAxis(series: am4charts.XYSeries) {
-    series.yAxis.disabled = true;
-  }
-
-  protected showSeriesYAxis(series: am4charts.XYSeries) {
-    series.yAxis.disabled = false;
-  }
-
-  protected getVisibleSeriesWithSameYAxis(series: am4charts.XYSeries): am4charts.XYSeries[] {
-    return this.getVisibleSeries(series.chart).filter(serie => serie.id !== series.id).filter(serie => serie.name === series.name);
-  }
-
-  protected getSameNameSeries(series: am4charts.XYSeries): am4charts.XYSeries[] {
-    return series.chart.series.values.filter(serie => serie.name === series.name);
-  }
-
-  protected getVisibleSeries(chart: am4charts.XYChart): am4charts.XYSeries[] {
-    return chart.series.values
-      .filter(series => !series.hidden);
-  }
-
-
-  // This helps to goup series vy providing the same name (type) for things that should have the same axis
-  protected getSeriesName(name: string) {
-    if ([DataAltitude.type, DataGPSAltitude.type, DataStrydAltitude.type].indexOf(name) !== -1) {
-      return DataAltitude.type;
-    }
-    if ([DataEHPE.type, DataEVPE.type].indexOf(name) !== -1) {
-      return 'Positional Error'
-    }
-    if ([DataAbsolutePressure.type, DataSeaLevelPressure.type].indexOf(name) !== -1) {
-      return 'Pressure'
-    }
-    if ([DataPace.type, DataPaceMinutesPerMile.type].indexOf(name) !== -1) {
-      return 'Pace'
-    }
-    if ([DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(name) !== -1) {
-      return 'Pace'
-    }
-    if ([
-      DataSpeed.type,
-      DataStrydSpeed.type,
-      DataSpeedMetersPerMinute.type,
-      DataSpeedFeetPerMinute.type,
-      DataSpeedFeetPerSecond.type,
-      DataSpeedMilesPerHour.type,
-      DataSpeedKilometersPerHour.type,
-      DataGradeAdjustedSpeed.type,
-      DataGradeAdjustedSpeedMetersPerMinute.type,
-      DataGradeAdjustedSpeedFeetPerMinute.type,
-      DataGradeAdjustedSpeedFeetPerSecond.type,
-      DataGradeAdjustedSpeedMilesPerHour.type,
-      DataGradeAdjustedSpeedKilometersPerHour.type,
-    ].indexOf(name) !== -1) {
-      return 'Speed'
-    }
-    if ([DataVerticalSpeed.type,
-      DataVerticalSpeedFeetPerSecond.type,
-      DataVerticalSpeedMetersPerMinute.type,
-      DataVerticalSpeedFeetPerMinute.type,
-      DataVerticalSpeedMetersPerHour.type,
-      DataVerticalSpeedFeetPerHour.type,
-      DataVerticalSpeedKilometerPerHour.type,
-      DataVerticalSpeedMilesPerHour.type].indexOf(name) !== -1) {
-      return 'Vertical Speed'
-    }
-    if ([DataSwimPaceMaxMinutesPer100Yard.type, DataSwimPace.type].indexOf(name) !== -1) {
-      return 'Swim Pace'
-    }
-    if ([DataPower.type,
-      DataAirPower.type,
-      DataPowerRight.type,
-      DataPowerLeft.type].indexOf(name) !== -1) {
-      return 'Power'
-    }
-    if ([DataLeftBalance.type,
-      DataRightBalance.type].indexOf(name) !== -1) {
-      return 'Left/Right Balance'
-    }
-    if ([DataDistance.type,
-      DataStrydDistance.type].indexOf(name) !== -1) {
-      return 'Distance'
-    }
-    return name;
-  }
-
-
-  protected unsubscribeAndClearChart() {
-    this.unSubscribeFromAll();
-    this.clearChart();
-  }
-
-
   private unSubscribeFromAll() {
     this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
     this.logger.info(`Unsubscribed from ${this.getSubscriptions().length} subscriptions`);
-  }
-
-  ngOnDestroy() {
-    this.unSubscribeFromAll();
-    super.ngOnDestroy();
   }
 
   private addXAxis(chart: am4charts.XYChart, xAxisType: XAxisTypes): am4charts.ValueAxis | am4charts.DateAxis {
@@ -1390,14 +1396,5 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.chart.legend.parent.dispose();
       }
     });
-  }
-
-  protected destroyChart() {
-    this.destroyLegendParent();
-    super.destroyChart();
-  }
-
-  getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
-    return chart.colors.getIndex(index * 2);
   }
 }
