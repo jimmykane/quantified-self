@@ -17,10 +17,10 @@ import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.int
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import { XYSeries } from '@amcharts/amcharts4/charts';
-import { combineLatest, Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
-import { debounceTime, map, take } from 'rxjs/operators';
+import { debounceTime } from 'rxjs/operators';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib/lib/data/data.pace';
@@ -766,62 +766,51 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
     }
 
-    // Subscribe to the data
-    this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
-      const allOrSomeSubscription = this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), activity.getID(),
-        [...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).concat([DataSpeed.type, DataDistance.type]))], // if the stream speed is missing or distance please add it
-      );
-      return allOrSomeSubscription.pipe(map((streams) => {
-        if (!streams.length) {
-          return [];
-        }
-        const shouldRemoveSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
-        const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
-        const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
-        return EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
-          .concat(streams)
-          .filter((stream) => {
-            switch (stream.type) {
-              case  DataDistance.type:
-                return !shouldRemoveDistance;
-              case DataSpeed.type:
-                return !shouldRemoveSpeed;
-              case DataGradeAdjustedSpeed.type:
-                return !shouldRemoveGradeAdjustedSpeed;
-              default:
-                return true
-            }
-          }).map((stream) => {
-            return this.createOrUpdateChartSeries(activity, stream);
-          });
-      }))
-    })).pipe(map((seriesArrayOfArrays) => {
-      // Format flatten the arrays as they come in [[], []]
-      return seriesArrayOfArrays.reduce((accu: [], item: []): am4charts.XYSeries[] => accu.concat(item), [])
-    })).subscribe((series: am4charts.LineSeries[]) => {
-      // debugger
-      // this.logger.info(`Rendering chart data per series`);
-      // series.forEach((currentSeries) => this.addDataToSeries(currentSeries, currentSeries.dummyData));
-      this.logger.info(`Data Injected`);
-      if (this.showGrid) {
-        this.addGrid();
-      } else {
-        this.removeGrid();
+    const series = this.selectedActivities.reduce((seriesArray, activity) => {
+      const streams = activity.getAllStreams();
+      if (!streams.length) {
+        return [];
       }
-      if (this.showLaps) {
-        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
-      }
-      // Show if needed
-      series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
-      // Store at local storage the visible / non visible series
-      series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
+      const shouldRemoveSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
+      const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
+      const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
+      EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings))
+        .concat(streams)
+        .filter((stream) => {
+          switch (stream.type) {
+            case  DataDistance.type:
+              return !shouldRemoveDistance;
+            case DataSpeed.type:
+              return !shouldRemoveSpeed;
+            case DataGradeAdjustedSpeed.type:
+              return !shouldRemoveGradeAdjustedSpeed;
+            default:
+              return true
+          }
+        }).forEach((stream) => {
+          seriesArray.push(this.createOrUpdateChartSeries(activity, stream));
+        });
+      return seriesArray;
+    }, [])
 
-      // Snap to series if distance axis
-      if (this.xAxisType === XAxisTypes.Distance) {
-        this.chart.cursor.snapToSeries = series;
-      }
-      this.loaded();
-    });
+    this.logger.info(`Rendering chart data per series`);
+    if (this.showGrid) {
+      this.addGrid();
+    } else {
+      this.removeGrid();
+    }
+    if (this.showLaps) {
+      this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+    }
+    // Show if needed
+    series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
+    // Store at local storage the visible / non visible series
+    series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
+    // Snap to series if distance axis
+    if (this.xAxisType === XAxisTypes.Distance) {
+      this.chart.cursor.snapToSeries = series;
+    }
+    this.loaded();
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
