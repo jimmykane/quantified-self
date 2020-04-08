@@ -392,7 +392,6 @@ export class AppEventService implements OnDestroy {
 
   private processStreamDocumentSnapshot(streamSnapshot: DocumentData): StreamInterface {
     this.logger.info(<string>streamSnapshot.data().type)
-
     return EventImporterJSON.getStreamFromJSON({
       type: <string>streamSnapshot.data().type,
       data: this.getStreamDataFromBlob(streamSnapshot.data().data),
