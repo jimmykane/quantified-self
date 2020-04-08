@@ -716,17 +716,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private async processChanges() {
     this.loading();
-    // Important for performance / or not?
-    // This is / will be needed when more performance needs to be achieved
-    // Leaving this here for the future. For now the groups of data do suffice and do it better
-    if (this.xAxisType === XAxisTypes.Distance) {
-      for (const selectedActivity of this.selectedActivities) {
-        this.distanceAxesForActivitiesMap.set(
-          selectedActivity.getID(),
-          (await this.eventService.getStreamsByTypes(this.targetUserID, this.event.getID(), selectedActivity.getID(), [DataDistance.type]).pipe(take(1)).toPromise())[0]
-        );
-      }
-    }
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
@@ -764,6 +753,18 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       this.activitiesCursors = cursors;
     });
 
+
+    // Important for performance / or not?
+    // This is / will be needed when more performance needs to be achieved
+    // Leaving this here for the future. For now the groups of data do suffice and do it better
+    if (this.xAxisType === XAxisTypes.Distance) {
+      for (const selectedActivity of this.selectedActivities) {
+        this.distanceAxesForActivitiesMap.set(
+          selectedActivity.getID(),
+          selectedActivity.getStream(DataDistance.type)
+        );
+      }
+    }
 
     // Subscribe to the data
     this.streamsSubscription = combineLatest(this.selectedActivities.map((activity) => {
