@@ -2,7 +2,7 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { EventImporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/json/importer.json';
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
-import { AngularFirestore, AngularFirestoreCollection, DocumentChangeAction, } from '@angular/fire/firestore';
+import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
 import { firestore } from 'firebase/app';
 import * as Pako from 'pako';
@@ -130,26 +130,34 @@ export class AppEventService implements OnDestroy {
   }
 
   public getStreamsByTypes(userID: string, eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
-    return this.afs
-      .collection('users')
-      .doc(userID)
-      .collection('events')
-      .doc(eventID)
-      .collection('activities')
-      .doc(activityID)
-      .collection('streams', ((ref) => {
-        if (types.length > 10){
-          return ref;
-        }
-        return ref.where('type', 'in', types);
-      }))
-      .get()
-      .pipe(map((documentSnapshots) => {
-        return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
-          streamArray.push(this.processStreamDocumentSnapshot(documentSnapshot));
-          return streamArray;
-        }, []);
-      }))
+    types = [...new Set(types)]
+    // if >10 to be split into x batches of work and use merge due to firestore not taking only up to 10 in in operator
+    const batchSize = 10 // Firstore limitation
+    const x = types.reduce((all, one, i) => {
+      const ch = Math.floor(i / batchSize);
+      all[ch] = [].concat((all[ch] || []), one);
+      return all
+    }, []).map((typesBatch) => {
+      return this.afs
+        .collection('users')
+        .doc(userID)
+        .collection('events')
+        .doc(eventID)
+        .collection('activities')
+        .doc(activityID)
+        .collection('streams', ((ref) => {
+          return ref.where('type', 'in', typesBatch);
+        }))
+        .get()
+        .pipe(map((documentSnapshots) => {
+          return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
+            streamArray.push(this.processStreamDocumentSnapshot(documentSnapshot));
+            return streamArray;
+          }, []);
+        }))
+    })
+
+    return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
   public async writeAllEventData(user: User, event: EventInterface) {
@@ -269,6 +277,9 @@ export class AppEventService implements OnDestroy {
     return this.updateEventProperties(user, eventID, {privacy: privacy});
   }
 
+  public ngOnDestroy() {
+  }
+
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       if (!event) {
@@ -279,14 +290,14 @@ export class AppEventService implements OnDestroy {
         event.getActivities().map((activity) => {
           return (streamTypes ? this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes) : this.getAllStreams(user, event.getID(), activity.getID()))
             .pipe(map((streams) => {
-            streams = streams || [];
-            // debugger;
-            // This time we dont want to just get the streams but we want to attach them to the parent obj
-            activity.clearStreams();
-            activity.addStreams(streams);
-            // Return what we actually want to return not the streams
-            return event;
-          }));
+              streams = streams || [];
+              // debugger;
+              // This time we dont want to just get the streams but we want to attach them to the parent obj
+              activity.clearStreams();
+              activity.addStreams(streams);
+              // Return what we actually want to return not the streams
+              return event;
+            }));
         }));
     })).pipe(map(([event]) => {
       // debugger;
@@ -442,9 +453,6 @@ export class AppEventService implements OnDestroy {
     // const t1 = performance.now();
     // console.log(`Pako ${t1 - t0}`);
     return JSON.parse(gzip_decode(blob.toBase64()));
-  }
-
-  public ngOnDestroy() {
   }
 }
 

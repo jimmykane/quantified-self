@@ -94,6 +94,8 @@ import {
   DataGradeAdjustedSpeedMetersPerMinute,
   DataGradeAdjustedSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -769,7 +771,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     const series = this.selectedActivities.reduce((seriesArray, activity) => {
       const streams = activity.getAllStreams();
       if (!streams.length) {
-        return [];
+        return seriesArray;
       }
       const shouldRemoveSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataSpeed.type) === -1);
       const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
@@ -784,8 +786,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
               return !shouldRemoveSpeed;
             case DataGradeAdjustedSpeed.type:
               return !shouldRemoveGradeAdjustedSpeed;
+            case DataLatitudeDegrees.type:
+            case DataLongitudeDegrees.type:
+              return false;
             default:
-              return true
+              return true;
           }
         }).forEach((stream) => {
           seriesArray.push(this.createOrUpdateChartSeries(activity, stream));

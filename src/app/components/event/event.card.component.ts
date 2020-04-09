@@ -25,6 +25,9 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.sto
 import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { switchMap } from 'rxjs/operators';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
+import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 
 @Component({
@@ -34,11 +37,10 @@ import { switchMap } from 'rxjs/operators';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
+export class EventCardComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
   public event: EventInterface;
   public targetUserID: string;
   public currentUser: User;
-  public positionStreams: StreamInterface[] = [];
   public selectedActivities: ActivityInterface[] = [];
 
   public userUnitSettings = AppUserService.getDefaultUserUnitSettings();
@@ -82,12 +84,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private activitySelectionService: AppActivitySelectionService,
     private snackBar: MatSnackBar,
     private themeService: AppThemeService) {
+    super(changeDetectorRef)
   }
 
   ngOnChanges() {
   }
 
   async ngOnInit() {
+    this.loading();
     // Get the path params
     const userID = this.route.snapshot.paramMap.get('userID');
     const eventID = this.route.snapshot.paramMap.get('eventID');
@@ -130,7 +134,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       }, []);
 
       /**
-       * Return another obsrbl
+       * Return 2 observables, one for the basic kinda types and the other for the user defined ones
        */
       return this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID,
         [
@@ -138,6 +142,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
             DataLatitudeDegrees.type,
             DataLongitudeDegrees.type,
             DataSpeed.type,
+            DataGradeAdjustedSpeed.type,
             DataDistance.type
           ],
           ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.chartDataTypesToUse))
@@ -155,8 +160,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.logger.info(event);
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...event.getActivities());
-      this.changeDetectorRef.detectChanges();
-      this.changeDetectorRef.detectChanges();
+      this.loaded(); // will also do detect changes
     }));
 
     // Subscribe to the chartTheme changes
