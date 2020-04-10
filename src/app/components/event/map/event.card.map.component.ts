@@ -305,6 +305,9 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     });
 
     this.selectedActivities.forEach((activity) => {
+      if (!activity.hasPositionData()){
+        return
+      }
       // 1. We need the lat, long stream to get also the times for using the time for cursor reference
       const positionData = activity.getSquashedPositionData();
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
