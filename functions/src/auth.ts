@@ -75,7 +75,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
 
       console.log('Received auth code:', req.query.code);
       const results = await oauth2.authorizationCode.getToken({
-        code: req.query.code,
+        code: String(req.query.code),
         redirect_uri: determineRedirectURI(req), // @todo fix,
       });
 
@@ -250,7 +250,7 @@ async function createFirebaseAccount(serviceUserID: string, accessToken: string)
 }
 
 function determineRedirectURI(req: Request): string {
-  return req.query.redirect_uri; // @todo should check for authorized redirects as well
+  return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
 }
 
 export function setAccessControlHeadersOnResponse(req: Request, res: functions.Response) {
