@@ -213,6 +213,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'dark-mode',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/dark-mode.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'lap-type-manual',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/manual.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'lap-type-interval',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/interval.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {

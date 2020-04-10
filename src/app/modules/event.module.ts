@@ -20,6 +20,7 @@ import {EventCardStatsGridComponent} from '../components/event/stats-grid/event.
 import {EventCardChartComponent} from '../components/event/chart/event.card.chart.component';
 import {ActivityToggleComponent} from '../components/event/activity-toggle/activity-toggle.component';
 import {EventIntensityZonesComponent} from '../components/event/intensity-zones/event.intensity-zones.component';
+import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
 
 
 @NgModule({
@@ -50,6 +51,7 @@ import {EventIntensityZonesComponent} from '../components/event/intensity-zones/
     ActivityToggleComponent,
     MapActionsComponent,
     EventIntensityZonesComponent,
+    LapTypeIconComponent,
   ],
   entryComponents: [],
 })

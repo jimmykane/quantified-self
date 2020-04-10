@@ -800,7 +800,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         }
         return 0;
       }).forEach((stream) => {
-          seriesArray.push(this.createOrUpdateChartSeries(activity, stream));
+        seriesArray.push(this.createOrUpdateChartSeries(activity, stream));
         });
       return seriesArray;
     }, [])

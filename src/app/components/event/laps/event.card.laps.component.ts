@@ -11,6 +11,7 @@ import {DataTableAbstractDirective} from '../../data-table/data-table-abstract.d
 import {ScreenBreakPoints} from '../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
+import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -25,15 +26,18 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   @Input() selectedActivities: ActivityInterface[];
   @Input() unitSettings: UserUnitSettingsInterface;
 
+  public availableLapTypes: LapTypes[] = []
+
   constructor(public eventColorService: AppEventColorService, protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
   }
 
   ngOnChanges() {
+    this.selectedActivities.forEach(activity => this.availableLapTypes = [...new Set(this.availableLapTypes.concat(activity.getLaps().map(lap => lap.type)))])
   }
 
-  getData(activity: ActivityInterface) {
-    return new MatTableDataSource(activity.getLaps().reduce((lapDataArray, lap, index) => {
+  getData(activity: ActivityInterface, lapType: LapTypes) {
+    return new MatTableDataSource(activity.getLaps().filter(lap => lap.type === lapType).reduce((lapDataArray, lap, index) => {
       const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
       statRowElement['#'] = index + 1;
       statRowElement['Type'] = lap.type;
@@ -47,7 +51,6 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     // push all the rest
     let columns = [
       '#',
-      'Type',
       'Duration',
       'Distance',
       'Ascent',
@@ -83,7 +86,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Descent', 'Ascent', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Descent', 'Ascent'].indexOf(column) === -1)
     }
 
     return columns
