@@ -791,7 +791,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
             default:
               return true;
           }
-        }).forEach((stream) => {
+        }).sort((left, right) => {
+        if (left.type < right.type) {
+          return -1;
+        }
+        if (left.type > right.type) {
+          return 1;
+        }
+        return 0;
+      }).forEach((stream) => {
           seriesArray.push(this.createOrUpdateChartSeries(activity, stream));
         });
       return seriesArray;
@@ -814,6 +822,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (this.xAxisType === XAxisTypes.Distance) {
       this.chart.cursor.snapToSeries = series;
     }
+
     this.loaded();
   }
 
@@ -841,16 +850,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     };
 
     this.attachSeriesEventListeners(series);
-
-    this.chart.series.sort((left, right) => {
-      if (left.name < right.name) {
-        return -1;
-      }
-      if (left.name > right.name) {
-        return 1;
-      }
-      return 0;
-    });
 
     series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
       `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`
