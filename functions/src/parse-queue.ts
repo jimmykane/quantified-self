@@ -86,12 +86,15 @@ export async function processQueueItem(queueItem: any) {
       console.timeEnd('DownloadFit');
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
-      // if (e.statusCode === 403){
-      //   // await queueItem.ref.delete();
-      // }
+      if (e.statusCode === 403){
+        console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName} due to 403, increasing retry by 20`))
+        await increaseRetryCountForQueueItem(queueItem, e, 20);
+        continue;
+      }
       if (e.statusCode === 500){
-        console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}`))
-        await increaseRetryCountForQueueItem(queueItem, e);
+        console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName} due to 500 increasing retry by 20`))
+        await increaseRetryCountForQueueItem(queueItem, e, 20);
+        continue;
       }
       // @todo -> Update to max retry if 403 not found that happens quite often.
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.message}`));
@@ -130,10 +133,10 @@ export async function processQueueItem(queueItem: any) {
 
 }
 
-async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
+async function increaseRetryCountForQueueItem(queueItem: any, error: Error, incrementBy = 1) {
   const data: QueueItemInterface = queueItem.data();
-  data.retryCount++;
-  data.totalRetryCount = (data.totalRetryCount + 1) || 1;
+  data.retryCount += incrementBy;
+  data.totalRetryCount = (data.totalRetryCount + incrementBy) || incrementBy;
   data.errors = data.errors || [];
   data.errors.push({
     error: error.message,
@@ -143,7 +146,7 @@ async function increaseRetryCountForQueueItem(queueItem: any, error: Error ) {
 
   try {
     await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
-    console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + 1}`);
+    console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + incrementBy}`);
   } catch (e) {
     console.error(new Error(`Could not update retry count on ${queueItem.id}`))
   }
