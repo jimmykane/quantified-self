@@ -1,38 +1,38 @@
+<nav mat-tab-nav-bar class="mat-elevation-z3">
+  <a matTabLink (click)="sidenav.toggle()">
+    <mat-icon class="larger_icon">menu</mat-icon>
+  </a>
+
+  <span class="fill-space"></span>
+
+  <button mat-stroked-button class="right" color="accent"
+          *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
+          disabled>
+    Loading
+  </button>
+  <button mat-stroked-button class="right" color="accent"
+          *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
+          (click)="router.navigate(['/dashboard']);">
+    My dashboard
+  </button>
+  <button mat-stroked-button class="right" color="accent"
+          *ngIf="authService.authenticated() === false && title && title !== 'Login'"
+          (click)="router.navigate(['/login']);">
+    Login or Register
+  </button>
+
+  <app-upload-activities class="right"
+                         *ngIf="title && title === 'Dashboard' && authService.user | async as user"
+                         [user]="user">
+  </app-upload-activities>
+
+</nav>
 <mat-sidenav-container class="mat-typography">
 
-  <mat-sidenav #sidenav mode="slide" [autoFocus]="false">
+  <mat-sidenav [fixedInViewport]="true" #sidenav mode="slide" [autoFocus]="false">
     <app-sidenav></app-sidenav>
   </mat-sidenav>
 
-  <nav mat-tab-nav-bar>
-    <a matTabLink (click)="sidenav.toggle()">
-      <mat-icon class="larger_icon">menu</mat-icon>
-    </a>
-
-    <span class="fill-space"></span>
-
-    <button mat-stroked-button class="right" color="accent"
-            *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
-            disabled>
-      Loading
-    </button>
-    <button mat-stroked-button class="right" color="accent"
-            *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
-            (click)="router.navigate(['/dashboard']);">
-      My dashboard
-    </button>
-    <button mat-stroked-button class="right" color="accent"
-            *ngIf="authService.authenticated() === false && title && title !== 'Login'"
-            (click)="router.navigate(['/login']);">
-      Login or Register
-    </button>
-
-    <app-upload-activities class="right"
-                           *ngIf="title && title === 'Dashboard' && authService.user | async as user"
-                           [user]="user">
-    </app-upload-activities>
-
-  </nav>
 
   <!--<mat-card>-->
   <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
