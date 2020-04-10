@@ -134,7 +134,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
       }, []);
 
       /**
-       * Return 2 observables, one for the basic kinda types and the other for the user defined ones
+       * Get all now
        */
       return this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID,
         [
