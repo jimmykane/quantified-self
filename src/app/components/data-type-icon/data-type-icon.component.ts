@@ -9,7 +9,7 @@ import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg'
 import {DataCadenceAvg} from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
 import {
   DataSpeedAvg, DataSpeedAvgFeetPerMinute, DataSpeedAvgFeetPerSecond,
-  DataSpeedAvgKilometersPerHour, DataSpeedAvgMetersPerMinute,
+  DataSpeedAvgKilometersPerHour, DataSpeedAvgKnots, DataSpeedAvgMetersPerMinute,
   DataSpeedAvgMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
 import {DataPaceAvg, DataPaceAvgMinutesPerMile} from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
@@ -41,7 +41,7 @@ import {
   DataGradeAdjustedSpeedAvg,
   DataGradeAdjustedSpeedAvgFeetPerMinute,
   DataGradeAdjustedSpeedAvgFeetPerSecond,
-  DataGradeAdjustedSpeedAvgKilometersPerHour,
+  DataGradeAdjustedSpeedAvgKilometersPerHour, DataGradeAdjustedSpeedAvgKnots,
   DataGradeAdjustedSpeedAvgMetersPerMinute,
   DataGradeAdjustedSpeedAvgMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
@@ -97,6 +97,7 @@ export class DataTypeIconComponent {
       case DataSpeedAvgFeetPerSecond.type:
       case DataSpeedAvgMetersPerMinute.type:
       case DataSpeedAvgFeetPerMinute.type:
+      case DataSpeedAvgKnots.type:
         return 'speed';
       case DataPaceAvg.type:
       case DataPaceAvgMinutesPerMile.type:
@@ -154,6 +155,7 @@ export class DataTypeIconComponent {
       case DataGradeAdjustedSpeedAvgKilometersPerHour.type:
       case DataGradeAdjustedSpeedAvgMetersPerMinute.type:
       case DataGradeAdjustedSpeedAvgMilesPerHour.type:
+      case DataGradeAdjustedSpeedAvgKnots.type:
         return 'gas';
       default:
         return null;
