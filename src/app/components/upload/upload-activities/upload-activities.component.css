@@ -1,17 +1,17 @@
 button{
   height: 36px;
-  width: 36px;
+  /*width: 36px;*/
   -webkit-transition: -webkit-transform .8s ease-in-out;
   transition:         transform .8s ease-in-out;
 }
-button:hover {
-  -webkit-transform: rotate(180deg);
-  transform: rotate(180deg);
-}
-mat-icon{
-  line-height: 22px !important;
-  /*line-height: 18px!important;*/
-  width: 28px;
-  height: 28px;
-  font-size: 28px;
-}
+/*button:hover {*/
+/*  -webkit-transform: rotate(180deg);*/
+/*  transform: rotate(180deg);*/
+/*}*/
+/*mat-icon{*/
+/*  line-height: 22px !important;*/
+/*  !*line-height: 18px!important;*!*/
+/*  width: 28px;*/
+/*  height: 28px;*/
+/*  font-size: 28px;*/
+/*}*/
