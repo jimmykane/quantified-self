@@ -1,5 +1,5 @@
 mat-card.container{
-  min-height: calc(100vh - 59px);
+  min-height: 100vh;
 }
 
 .avatar{

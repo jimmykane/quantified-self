@@ -23,7 +23,7 @@ mat-icon.amcharts{
 section{
   padding: 0;
   margin: 0;
-  min-height: calc(100vh - 59px);
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: stretch;

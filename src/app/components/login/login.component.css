@@ -1,9 +1,9 @@
 mat-card{
   padding: 0;
-  min-height: calc(100vh - 59px);
+  min-height: 100vh;
 }
 mat-grid-list{
-  min-height: calc(100vh - 59px);
+  min-height: 100vh;
 }
 
 button{

@@ -1,5 +1,5 @@
 mat-grid-list{
-  min-height: calc(100vh - 59px);
+  min-height: 100vh;
 }
 
 mat-card{
@@ -7,7 +7,7 @@ mat-card{
 
 mat-card.service-card{
   /*width: 100%;*/
-  min-height: calc(100vh - 32px - 48px);
+  min-height: calc(100vh - 32px);
 }
 
 mat-form-field {
