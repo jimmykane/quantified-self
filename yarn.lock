@@ -1404,10 +1404,10 @@
     "@sentry/types" "5.15.4"
     tslib "^1.9.3"
 
-"@sports-alliance/sports-lib@^4.1.1":
-  version "4.1.1"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.1.1.tgz#1b4dbc035d7ccd815c09c6e9a3e95f40d33c8b0d"
-  integrity sha512-cC7nXCjCADteVE/j8a/v63Ms1xdhgzVQsPKyOC2Ivt9zOKO54h/3uIuLznZC5GNDHk5rZ71lmnJcjA0bPbpezA==
+"@sports-alliance/sports-lib@^4.2.1":
+  version "4.2.1"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.2.1.tgz#b210721f001645909f0cb5b644105ad8f5227d61"
+  integrity sha512-eCndbOULrAU8mMa4XLaB+2UB/SVGCrN4rMktxgVjFE5br6hvDTl9mTB4u5d6ptcEHFb6phKPkF5KsvoLp3OhWQ==
   dependencies:
     "@types/node" "^13.9.0"
     fast-xml-parser "^3.16.0"
@@ -3782,9 +3782,9 @@ ee-first@1.1.1:
   integrity sha1-WQxhFWsK4vTwJVcyoViyZrxWsh0=
 
 electron-to-chromium@^1.3.390:
-  version "1.3.402"
-  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.402.tgz#9ad93c0c8ea2e571431739e0d76bd6bc9788a846"
-  integrity sha512-gaCDfX7IUH0s3JmBiHCDPrvVcdnTTP1r4WLJc2dHkYYbLmXZ2XHiJCcGQ9Balf91aKTvuCKCyu2JjJYRykoI1w==
+  version "1.3.403"
+  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.403.tgz#c8bab4e2e72bf78bc28bad1cc355c061f9cc1918"
+  integrity sha512-JaoxV4RzdBAZOnsF4dAlZ2ijJW72MbqO5lNfOBHUWiBQl3Rwe+mk2RCUMrRI3rSClLJ8HSNQNqcry12H+0ZjFw==
 
 elliptic@^6.0.0:
   version "6.5.2"
@@ -4901,9 +4901,9 @@ html-comment-regex@^1.1.0:
   integrity sha512-P+M65QY2JQ5Y0G9KKdlDpo0zK+/OHptU5AaBwUfAIDJZk1MYf32Frm84EcOytfJE0t5JvkAnKlmjsXDnWzCJmQ==
 
 html-entities@^1.2.1:
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/html-entities/-/html-entities-1.2.1.tgz#0df29351f0721163515dfb9e5543e5f6eed5162f"
-  integrity sha1-DfKTUfByEWNRXfueVUPl9u7VFi8=
+  version "1.3.1"
+  resolved "https://registry.yarnpkg.com/html-entities/-/html-entities-1.3.1.tgz#fb9a1a4b5b14c5daba82d3e34c6ae4fe701a0e44"
+  integrity sha512-rhE/4Z3hIhzHAUKbW8jVcCyuT5oJCXXqhN/6mXXVCpzTmvJnoH2HL/bt3EZ6p55jbFJBeAe1ZNpL5BugLujxNA==
 
 html-escaper@^2.0.0:
   version "2.0.2"

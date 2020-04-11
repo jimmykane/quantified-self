@@ -89,9 +89,9 @@
     teeny-request "^6.0.0"
 
 "@google-cloud/firestore@^3.0.0":
-  version "3.7.3"
-  resolved "https://registry.yarnpkg.com/@google-cloud/firestore/-/firestore-3.7.3.tgz#b8b69b39912e94ff0034218fdc961dd472ad735a"
-  integrity sha512-6ro45y5FjSbJCRHUQ8PfIu2EbnGNNVoQmKtBnI1YlhlVHaC7oMu+m0cuI0Cr3lLs1mT5iZ0QGyjHTeUYR8pygw==
+  version "3.7.4"
+  resolved "https://registry.yarnpkg.com/@google-cloud/firestore/-/firestore-3.7.4.tgz#8a9f3ace01d3bf29a8a1bad3c617035eb14b6cc6"
+  integrity sha512-RBMG4uZFHeQPFMHTRFMyQ7LDQTLa0f+U0hLAa/7XWjpZHgxKuOWBonsv+C3geymAwShIZSoV/NpNh9tBK7YF5g==
   dependencies:
     deep-equal "^2.0.0"
     functional-red-black-tree "^1.0.1"
@@ -146,9 +146,9 @@
     xdg-basedir "^4.0.0"
 
 "@grpc/grpc-js@^0.7.4":
-  version "0.7.8"
-  resolved "https://registry.yarnpkg.com/@grpc/grpc-js/-/grpc-js-0.7.8.tgz#c76514c99f36c361fc3cc019c892d1979f2103b9"
-  integrity sha512-zaxGrIHQ5+whDaI+tuWOY5UIb5flROk6qkTM4f8uRXtc1JhyJPqUqkO+tHZaWX1TjtDG+lTK8H8ATyCE2NwVNA==
+  version "0.7.9"
+  resolved "https://registry.yarnpkg.com/@grpc/grpc-js/-/grpc-js-0.7.9.tgz#a0fae94fecfd4a44fbde496f689c2b4179407bf5"
+  integrity sha512-ihn9xWOqubMPBlU77wcYpy7FFamGo5xtsK27EAILL/eoOvGEAq29UOrqRvqYPwWfl2+3laFmGKNR7uCdJhKu4Q==
   dependencies:
     semver "^6.2.0"
 
@@ -272,10 +272,10 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@sports-alliance/sports-lib@^4.1.1":
-  version "4.1.1"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.1.1.tgz#1b4dbc035d7ccd815c09c6e9a3e95f40d33c8b0d"
-  integrity sha512-cC7nXCjCADteVE/j8a/v63Ms1xdhgzVQsPKyOC2Ivt9zOKO54h/3uIuLznZC5GNDHk5rZ71lmnJcjA0bPbpezA==
+"@sports-alliance/sports-lib@^4.2.1":
+  version "4.2.1"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.2.1.tgz#b210721f001645909f0cb5b644105ad8f5227d61"
+  integrity sha512-eCndbOULrAU8mMa4XLaB+2UB/SVGCrN4rMktxgVjFE5br6hvDTl9mTB4u5d6ptcEHFb6phKPkF5KsvoLp3OhWQ==
   dependencies:
     "@types/node" "^13.9.0"
     fast-xml-parser "^3.16.0"
@@ -371,10 +371,10 @@
   resolved "https://registry.yarnpkg.com/@types/mime/-/mime-2.0.1.tgz#dc488842312a7f075149312905b5e3c0b054c79d"
   integrity sha512-FwI9gX75FgVBJ7ywgnq/P7tw+/o1GUbtP0KzbtusLigAOgIgNISRK0ZPl4qertvXSIE8YbsVJueQ90cDt9YYyw==
 
-"@types/node-fetch@^2.5.5":
-  version "2.5.5"
-  resolved "https://registry.yarnpkg.com/@types/node-fetch/-/node-fetch-2.5.5.tgz#cd264e20a81f4600a6c52864d38e7fef72485e92"
-  integrity sha512-IWwjsyYjGw+em3xTvWVQi5MgYKbRs0du57klfTaZkv/B24AEQ/p/IopNeqIYNy3EsfHOpg8ieQSDomPcsYMHpA==
+"@types/node-fetch@^2.5.6":
+  version "2.5.6"
+  resolved "https://registry.yarnpkg.com/@types/node-fetch/-/node-fetch-2.5.6.tgz#df8377a66e64ddf75b65b072e37b3c5c5425a96f"
+  integrity sha512-2w0NTwMWF1d3NJMK0Uiq2UNN8htVCyOWOD0jIPjPgC5Ph/YP4dVhs9YxxcMcuLuwAslz0dVEcZQUaqkLs3IzOQ==
   dependencies:
     "@types/node" "*"
     form-data "^3.0.0"
