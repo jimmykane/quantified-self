@@ -214,6 +214,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/dark-mode.svg')
     );
     this.matIconRegistry.addSvgIcon(
+      'paypal',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/paypal.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
       'lap-type-manual',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/manual.svg')
     );
