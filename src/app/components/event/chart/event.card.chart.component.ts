@@ -43,7 +43,7 @@ import {
   DataSpeed,
   DataSpeedFeetPerMinute,
   DataSpeedFeetPerSecond,
-  DataSpeedKilometersPerHour,
+  DataSpeedKilometersPerHour, DataSpeedKnots,
   DataSpeedMetersPerMinute,
   DataSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.speed';
@@ -90,7 +90,7 @@ import {
   DataGradeAdjustedSpeed,
   DataGradeAdjustedSpeedFeetPerMinute,
   DataGradeAdjustedSpeedFeetPerSecond,
-  DataGradeAdjustedSpeedKilometersPerHour,
+  DataGradeAdjustedSpeedKilometersPerHour, DataGradeAdjustedSpeedKnots,
   DataGradeAdjustedSpeedMetersPerMinute,
   DataGradeAdjustedSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
@@ -667,12 +667,14 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       DataSpeedFeetPerSecond.type,
       DataSpeedMilesPerHour.type,
       DataSpeedKilometersPerHour.type,
+      DataSpeedKnots.type,
       DataGradeAdjustedSpeed.type,
       DataGradeAdjustedSpeedMetersPerMinute.type,
       DataGradeAdjustedSpeedFeetPerMinute.type,
       DataGradeAdjustedSpeedFeetPerSecond.type,
       DataGradeAdjustedSpeedMilesPerHour.type,
       DataGradeAdjustedSpeedKilometersPerHour.type,
+      DataGradeAdjustedSpeedKnots.type,
     ].indexOf(name) !== -1) {
       return 'Speed'
     }
