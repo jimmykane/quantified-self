@@ -96,6 +96,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -148,6 +149,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
               private eventService: AppEventService,
               private chartSettingsLocalStorageService: AppChartSettingsLocalStorageService,
               private activityCursorService: AppActivityCursorService,
+              private snackBar: MatSnackBar,
               private eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
@@ -764,6 +766,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
         if (!selectedActivity.hasStreamData(DataDistance.type)){
+          this.snackBar.open(
+            `No distance data found for activity with type ${selectedActivity.type}. You might want to change axis type`,
+            'Got it',
+            {duration: 5000});
           continue;
         }
         this.distanceAxesForActivitiesMap.set(
