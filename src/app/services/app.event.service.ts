@@ -283,7 +283,7 @@ export class AppEventService implements OnDestroy {
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       if (!event) {
-        return of(null);
+        return of([]);
       }
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(

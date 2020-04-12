@@ -763,6 +763,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Leaving this here for the future. For now the groups of data do suffice and do it better
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
+        if (!selectedActivity.hasStreamData(DataDistance.type)){
+          continue;
+        }
         this.distanceAxesForActivitiesMap.set(
           selectedActivity.getID(),
           selectedActivity.getStream(DataDistance.type)
