@@ -11,7 +11,7 @@ import {
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { AgmMap } from '@agm/core';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import { DataPositionInterface } from '../../../../../sports-lib/src/data/data.position.interface';
+import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { MapAbstract } from '../map/map.abstract';
 import MarkerClusterer from '@google/markerclustererplus'
