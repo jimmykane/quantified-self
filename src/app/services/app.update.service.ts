@@ -10,6 +10,9 @@ import { first } from 'rxjs/operators';
 })
 export class AppUpdateService {
   constructor(appRef: ApplicationRef, updates: SwUpdate, private snackbar: MatSnackBar) {
+    if (!updates.isEnabled) {
+      return;
+    }
     // Allow the app to stabilize first, before starting polling for updates with `interval()`.
     const appIsStable = appRef.isStable.pipe(first(isStable => isStable === true));
     const everySixMinutes = interval(6 * 60 * 1000);
