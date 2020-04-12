@@ -313,7 +313,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .getData(true)
         .reduce((positionWithTimeArray: PositionWithTime[], time, index): PositionWithTime[] => {
-          positionWithTimeArray.push(Object.assign({time: time}, positionData[index]))
+          positionWithTimeArray.push(Object.assign({time: activity.startDate.getTime()  + time * 1000}, positionData[index]))
             return positionWithTimeArray
           }, []);
       this.activitiesMapData.push({
