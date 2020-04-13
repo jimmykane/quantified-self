@@ -101,38 +101,36 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
 
     this.subscriptions.push(this.authService.user.pipe(switchMap((user) => {
       this.currentUser = user;
-      if (!this.currentUser) {
-        return;
+      if (this.currentUser) {
+        this.userUnitSettings = user.settings.unitSettings;
+        this.chartXAxisType = user.settings.chartSettings.xAxisType;
+        this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
+        this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
+        this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
+        this.showAllData = user.settings.chartSettings.showAllData;
+        this.useChartAnimations = user.settings.chartSettings.useAnimations;
+        this.chartDisableGrouping = user.settings.chartSettings.disableGrouping;
+        this.showMapLaps = user.settings.mapSettings.showLaps;
+        this.showChartLaps = user.settings.chartSettings.showLaps;
+        this.showChartGrid = user.settings.chartSettings.showGrid;
+        this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
+        this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
+        this.showMapArrows = user.settings.mapSettings.showArrows;
+        this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
+        this.mapLapTypes = user.settings.mapSettings.lapTypes;
+        this.chartLapTypes = user.settings.chartSettings.lapTypes;
+        this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
+        this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
+        this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
+        this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
+        this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
+        this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+          if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
+            dataTypesToUse.push(dataTypeSettingsKey);
+          }
+          return dataTypesToUse;
+        }, []);
       }
-      this.userUnitSettings = user.settings.unitSettings;
-      this.chartXAxisType = user.settings.chartSettings.xAxisType;
-      this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
-      this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
-      this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
-      this.showAllData = user.settings.chartSettings.showAllData;
-      this.useChartAnimations = user.settings.chartSettings.useAnimations;
-      this.chartDisableGrouping = user.settings.chartSettings.disableGrouping;
-      this.showMapLaps = user.settings.mapSettings.showLaps;
-      this.showChartLaps = user.settings.chartSettings.showLaps;
-      this.showChartGrid = user.settings.chartSettings.showGrid;
-      this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
-      this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
-      this.showMapArrows = user.settings.mapSettings.showArrows;
-      this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
-      this.mapLapTypes = user.settings.mapSettings.lapTypes;
-      this.chartLapTypes = user.settings.chartSettings.lapTypes;
-      this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
-      this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
-      this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
-      this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
-      this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
-      this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
-        if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-          dataTypesToUse.push(dataTypeSettingsKey);
-        }
-        return dataTypesToUse;
-      }, []);
-
       /**
        * Get all now
        */
