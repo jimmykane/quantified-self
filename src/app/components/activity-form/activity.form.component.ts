@@ -64,13 +64,6 @@ export class ActivityFormComponent implements OnInit {
     if (!this.user || !this.event) {
       throw new Error('Component needs event and user')
     }
-
-    // Set this to loading
-    this.isLoading = true;
-
-    // To use this component we need the full hydrated object and we might not have it
-    this.activity.clearStreams();
-    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
     // Now build the controls
     this.activityFormGroup = new FormGroup({
         activity: new FormControl(this.activity),
@@ -113,21 +106,6 @@ export class ActivityFormComponent implements OnInit {
       Validators.required,
     ]));
 
-    // Find the starting distance for this activity
-    if (this.hasDistance()) {
-      this.activityFormGroup.addControl('startDistance', new FormControl(0, [
-        Validators.required,
-        Validators.min(0),
-        Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
-      ]));
-      this.activityFormGroup.addControl('endDistance', new FormControl(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1], [
-        Validators.required,
-        Validators.min(0),
-        Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
-      ]));
-
-      this.activityFormGroup.setValidators([activityDistanceValidator]);
-    }
     // Set this to done loading
     this.isLoading = false;
   }
@@ -143,10 +121,6 @@ export class ActivityFormComponent implements OnInit {
     const endDate = new Date(starDate.getTime() + this.activity.getDuration().getValue() * 1000 + this.activity.getPause().getValue() * 1000);
     this.activityFormGroup.get('endDate').setValue(endDate);
     this.activityFormGroup.get('endTime').setValue(this.getTimeFromDateAsString(endDate))
-  }
-
-  hasDistance() {
-    return this.activity.hasStreamData(DataDistance.type) && this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1] !== 0;
   }
 
   hasError(field?: string) {
@@ -209,6 +183,7 @@ export class ActivityFormComponent implements OnInit {
 
       if (this.activityFormGroup.get('distance').dirty) {
         this.activity.addStat(new DataDistance(this.activityFormGroup.get('distance').value));
+        // This regenerates the event distance and its ugly as it doesnt save it
         this.event.addStat(new DataDistance(this.event.getActivities().reduce((distance, activity) => {
           const activityDistance = activity.getStat(DataDistance.type);
           if (activityDistance) {
@@ -223,16 +198,8 @@ export class ActivityFormComponent implements OnInit {
         this.event.addStat(new DataActivityTypes(this.event.getActivities().map(activity => activity.type)));
       }
 
-      if (this.activity.hasStreamData(DataDistance.type) && this.activityFormGroup.get('startDistance') && this.activityFormGroup.get('endDistance') && (this.activityFormGroup.get('startDistance').dirty || this.activityFormGroup.get('endDistance').dirty)) {
-        EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
-        this.activity.clearStats();
-        EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
-        EventUtilities.reGenerateStatsForEvent(this.event);
-        await this.eventService.writeAllEventData(this.user, this.event);
-      } else {
-        await this.eventService.setActivity(this.user, this.event, this.activity);
-        await this.eventService.setEvent(this.user, this.event);
-      }
+      await this.eventService.setActivity(this.user, this.event, this.activity);
+      await this.eventService.setEvent(this.user, this.event);
 
       this.snackBar.open('Activity saved', null, {
         duration: 2000,
@@ -274,15 +241,6 @@ export class ActivityFormComponent implements OnInit {
 }
 
 
-export const activityDistanceValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
-  const startDistance = control.get('startDistance');
-  const endDistance = control.get('endDistance');
-
-  if (endDistance.value <= startDistance.value) {
-    return {'endDistanceSmallerThanStartDistance': true};
-  }
-  return null;
-};
 
 export const autocompleteSelectionValidator: ValidatorFn = (control: FormControl): ValidationErrors | null => {
   const selection: any = control.value;

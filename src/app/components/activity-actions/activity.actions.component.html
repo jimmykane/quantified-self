@@ -6,6 +6,10 @@
     <mat-icon>edit</mat-icon>
     <span>Edit</span>
   </button>
+  <button *ngIf="hasDistance()" mat-menu-item (click)="cropActivity() ">
+    <mat-icon>crop</mat-icon>
+    <span>Crop</span>
+  </button>
   <button mat-menu-item (click)="reGenerateStatistics()">
   <mat-icon>autorenew</mat-icon>
   <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>

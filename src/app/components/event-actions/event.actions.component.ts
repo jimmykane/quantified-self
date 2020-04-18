@@ -17,6 +17,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
+import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 
 @Component({
   selector: 'app-event-actions',
@@ -74,6 +76,24 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     });
     // dialogRef.afterClosed().subscribe(result => {
     // });
+  }
+
+  cropEventActivity() {
+    const dialogRef = this.dialog.open(ActivityCropFormComponent, {
+      width: '75vw',
+      disableClose: false,
+      data: {
+        event: this.event,
+        activity: this.event.getFirstActivity(),
+        user: this.user
+      },
+    });
+    // dialogRef.afterClosed().subscribe(result => {
+    // });
+  }
+
+  hasDistance() {
+    return this.event.getFirstActivity().hasStreamData(DataDistance.type);
   }
 
   editEvent() {

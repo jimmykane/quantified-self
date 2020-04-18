@@ -11,6 +11,8 @@ import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/e
 import {take} from 'rxjs/operators';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
 import { MatBottomSheet } from "@angular/material/bottom-sheet";
+import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 
 @Component({
   selector: 'app-activity-actions',
@@ -42,6 +44,21 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
 
   editActivity() {
     const dialogRef = this.dialog.open(ActivityFormComponent, {
+      width: '75vw',
+      data: {
+        event: this.event,
+        activity: this.activity,
+        user: this.user
+      },
+    });
+  }
+
+  hasDistance() {
+    return this.activity.hasStreamData(DataDistance.type);
+  }
+
+  cropActivity() {
+    const dialogRef = this.dialog.open(ActivityCropFormComponent, {
       width: '75vw',
       data: {
         event: this.event,

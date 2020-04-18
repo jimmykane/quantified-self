@@ -16,6 +16,9 @@ import { UploadErrorComponent } from '../components/upload/upload-error/upload-e
 import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
 import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
+import { ActivityCropFormComponent } from '../components/activity-crop-form/activity.crop.form.component';
+
+//@todo this has too many shared
 
 
 @NgModule({
@@ -34,6 +37,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
     ChartsXYComponent,
     EventFormComponent,
     ActivityFormComponent,
+    ActivityCropFormComponent,
     DeleteConfirmationComponent,
     DataTypeIconComponent,
     UploadInfoComponent,
@@ -44,6 +48,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
   entryComponents: [
     EventFormComponent,
     ActivityFormComponent,
+    ActivityCropFormComponent,
     DeleteConfirmationComponent,
     UploadErrorComponent,
   ],
@@ -56,6 +61,7 @@ import { UploadActivitiesComponent } from '../components/upload/upload-activitie
     ChartsXYComponent,
     EventFormComponent,
     ActivityFormComponent,
+    ActivityCropFormComponent,
     DeleteConfirmationComponent,
     DataTypeIconComponent,
     ReactiveFormsModule,

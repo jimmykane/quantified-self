@@ -14,6 +14,11 @@
     <mat-icon>edit</mat-icon>
     <span>Edit activity</span>
   </button>
+
+  <button *ngIf="event.getActivities().length === 1 && hasDistance()" mat-menu-item (click)="cropEventActivity()">
+    <mat-icon>crop</mat-icon>
+    <span>Crop activity</span>
+  </button>
   <!--<button mat-menu-item (click)="downloadEventAsTCX(event)">-->
     <!--<mat-icon>file_download</mat-icon>-->
     <!--<span>Download as TCX</span>-->
