@@ -51,6 +51,16 @@ body {
   font-family: '"QSFont", Roboto, sans-serif;', sans-serif;
 }
 
+/* Hide scrollbar for Chrome, Safari and Opera */
+body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE and Edge */
+body {
+  -ms-overflow-style: none;
+}
+
 @keyframes FadeIn {
   0% {
     opacity: 0;
@@ -202,4 +212,6 @@ section.component-container {
 mat-card.component-container{
   border-radius: 0;
 }
+
+
 
