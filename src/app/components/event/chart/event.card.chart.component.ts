@@ -43,7 +43,8 @@ import {
   DataSpeed,
   DataSpeedFeetPerMinute,
   DataSpeedFeetPerSecond,
-  DataSpeedKilometersPerHour, DataSpeedKnots,
+  DataSpeedKilometersPerHour,
+  DataSpeedKnots,
   DataSpeedMetersPerMinute,
   DataSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.speed';
@@ -90,7 +91,8 @@ import {
   DataGradeAdjustedSpeed,
   DataGradeAdjustedSpeedFeetPerMinute,
   DataGradeAdjustedSpeedFeetPerSecond,
-  DataGradeAdjustedSpeedKilometersPerHour, DataGradeAdjustedSpeedKnots,
+  DataGradeAdjustedSpeedKilometersPerHour,
+  DataGradeAdjustedSpeedKnots,
   DataGradeAdjustedSpeedMetersPerMinute,
   DataGradeAdjustedSpeedMilesPerHour
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
@@ -765,7 +767,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Leaving this here for the future. For now the groups of data do suffice and do it better
     if (this.xAxisType === XAxisTypes.Distance) {
       for (const selectedActivity of this.selectedActivities) {
-        if (!selectedActivity.hasStreamData(DataDistance.type)){
+        if (!selectedActivity.hasStreamData(DataDistance.type)) {
           this.snackBar.open(
             `No distance data found for activity with type ${selectedActivity.type}. You might want to change axis type`,
             'Got it',
@@ -812,7 +814,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return 0;
       }).forEach((stream) => {
         seriesArray.push(this.createOrUpdateChartSeries(activity, stream));
-        });
+      });
       return seriesArray;
     }, [])
 
@@ -825,6 +827,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (this.showLaps) {
       this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
     }
+
+    this.addStartPauseGuides(this.chart, this.xAxisType, series);
     // Show if needed
     series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
     // Store at local storage the visible / non visible series
@@ -1274,6 +1278,36 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
               )
           });
       })
+  }
+
+  private addStartPauseGuides(chart: am4charts.XYChart, xAxisType: XAxisTypes, series: am4charts.XYSeries[]) {
+    // const xAxis = <am4charts.ValueAxis>chart.yAxes.getIndex(0);
+    // xAxis.axisRanges.template.grid.disabled = false;
+
+    series
+      .forEach((serie, seriesIndex) => {
+        if (seriesIndex > 2) {
+          return;
+        }
+        const activity = serie.dummyData.activity;
+        const stopEvents = activity.getStopEvents();
+        const stopAllEvents = activity.getStopAllEvents();
+        activity.getStartEvents().forEach((startEvent, startEventIndex) => {
+          if (startEventIndex === 0) {
+            return;
+          }
+          let range;
+          let stopEvent;
+          console.log(serie.name);
+          range = serie.xAxis.createSeriesRange(serie);
+          stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
+          range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
+          range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
+          range.contents.stroke = am4core.color("#000000");
+          range.contents.fill = am4core.color("#DEDEDE");
+          range.contents.fillOpacity = 0.5;
+        })
+      });
   }
 
   private removeLapGuides(chart: am4charts.XYChart) {
