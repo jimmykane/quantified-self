@@ -23,7 +23,7 @@
   "private": true,
   "dependencies": {
     "@agm/core": "^1.1.0",
-    "@amcharts/amcharts4": "4.9.16",
+    "@amcharts/amcharts4": "4.9.17",
     "@angular/animations": "9.1.2",
     "@angular/cdk": "^9.2.1",
     "@angular/common": "9.1.2",
@@ -58,7 +58,7 @@
     "@angular/compiler-cli": "9.1.2",
     "@types/googlemaps": "^3.39.3",
     "@types/jasmine": "3.5.10",
-    "@types/node": "^13.13.0",
+    "@types/node": "^13.13.1",
     "codelyzer": "^5.2.2",
     "first-input-delay": "^0.1.3",
     "jasmine-core": "^3.5.0",
