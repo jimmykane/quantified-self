@@ -104,7 +104,8 @@ export class AppEventService implements OnDestroy {
     return this.afs
       .collection('users')
       .doc(user.uid)
-      .collection('events').doc(eventID).collection('activities').snapshotChanges().pipe(
+      .collection('events').doc(eventID).collection('activities')
+      .snapshotChanges().pipe(
         map(activitySnapshots => {
           return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
@@ -122,7 +123,7 @@ export class AppEventService implements OnDestroy {
       .doc(eventID)
       .collection('activities')
       .doc(activityID)
-      .collection('streams')
+      .collection('country data cases active ')
       .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))

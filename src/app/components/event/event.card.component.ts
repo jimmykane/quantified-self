@@ -157,6 +157,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
       this.event = event;
       this.logger.info(event);
       this.activitySelectionService.selectedActivities.clear();
+
       this.activitySelectionService.selectedActivities.select(...event.getActivities());
       this.loaded(); // will also do detect changes
     }));
