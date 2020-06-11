@@ -930,16 +930,22 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       if (this.stackYAxes) {
 
-        // const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-        // categoryLabel.label.text = '123';
-        yAxis.align = 'right';
-        yAxis.marginTop = 10;
-        yAxis.marginBottom = 10;
-        yAxis.title.marginRight = 5;
-        yAxis.title.fontSize = '1.2em';
-        yAxis.title.fontWeight = '600';
-        // yAxis.paddingLeft = -5;
+        yAxis.paddingLeft = 5;
         yAxis.renderer.inside = true;
+        yAxis.layout = 'absolute';
+        yAxis.renderer.line.align = 'right';
+        yAxis.align = 'right';
+        yAxis.marginTop = 30;
+        yAxis.title.valign = 'top';
+        yAxis.title.align = 'left';
+        yAxis.title.dx = 0;
+        yAxis.title.dy = -20;
+        yAxis.title.isMeasured = false;
+        yAxis.title.parent = yAxis.renderer;
+        yAxis.title.fontSize = '1.1em';
+        yAxis.title.fontWeight = '400';
+        yAxis.title.adapter.add('rotation', () => 0);
+
       } else {
         yAxis.renderer.labels.template.marginLeft = 10;
         yAxis.paddingLeft = 5;
@@ -949,6 +955,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         yAxis.renderer.line.align = 'right';
         yAxis.title.valign = 'middle';
         yAxis.title.align = 'left';
+        yAxis.title.fontSize = '1.05em';
+        yAxis.title.fontWeight = '600';
 
 
         // yAxis.layout = 'absolute';
@@ -961,8 +969,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       yAxis.renderer.minLabelPosition = 0.05;
       yAxis.renderer.maxLabelPosition = 0.95;
-      yAxis.title.fontSize = '1.05em';
-      yAxis.title.fontWeight = '600';
+
 
       yAxis.renderer.ticks.template.disabled = false;
       yAxis.renderer.ticks.template.strokeOpacity = 1;
@@ -1007,6 +1014,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
 
     }
+
     return yAxis;
   }
 
