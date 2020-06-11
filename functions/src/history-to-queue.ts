@@ -126,14 +126,17 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       return;
     }
 
-    if (result.metadata.workoutcount === 0) {
+    // Filter on dates
+    result.payload = result.payload.filter((activity: any) => (new Date(activity.startTime)) >= startDate &&  (new Date(activity.startTime)) <= endDate)
+
+    if (result.payload.length === 0) {
       console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
       continue;
     }
 
-    console.log(`Found ${result.metadata.workoutcount} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Found ${result.payload.length} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
 
-    const batchCount = Math.ceil(result.metadata.workoutcount / BATCH_SIZE);
+    const batchCount = Math.ceil(result.payload.length / BATCH_SIZE);
     const batchesToProcess: any[] = [];
     (Array(batchCount)).fill(null).forEach((justNull, index) => {
       const start = index * BATCH_SIZE;
