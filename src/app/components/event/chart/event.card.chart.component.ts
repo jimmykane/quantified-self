@@ -1296,14 +1296,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
           let range;
           let stopEvent;
-          console.log(serie.name);
+          // See https://github.com/amcharts/amcharts4/issues/2574#issuecomment-642635857
+          if (!(<am4charts.ValueAxis>serie.yAxis).adapter.isEnabled('baseValue')) {
+            (<am4charts.ValueAxis>serie.yAxis).adapter.add('baseValue', function(baseValue, target) {
+              return target.minZoomed;
+            })
+          }
           range = serie.xAxis.createSeriesRange(serie);
           stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
-          range.contents.stroke = am4core.color("#000000");
-          range.contents.fill = am4core.color("#DEDEDE");
-          range.contents.fillOpacity = 0.5;
+          range.contents.stroke = am4core.color('#DEDEDE');
+          // range.contents.fill = am4core.color('#DEDEDE');
+          range.contents.fillOpacity = 0.0;
         })
       });
   }
