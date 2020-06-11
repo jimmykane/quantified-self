@@ -12,6 +12,7 @@ import {ScreenBreakPoints} from '../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -41,6 +42,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
       statRowElement['#'] = index + 1;
       statRowElement['Type'] = lap.type;
+      const maxHR =  lap.getStat(DataHeartRateMax.type);
+      statRowElement['Maximum Heart Rate'] = maxHR ?  `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '';
       lapDataArray.push(statRowElement);
       return lapDataArray;
     }, []));
@@ -57,6 +60,7 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       'Descent',
       'Energy',
       'Average Heart Rate',
+      'Maximum Heart Rate',
       'Average Speed',
       'Average Power',
     ];
@@ -74,19 +78,19 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Maximum Heart Rate'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Maximum Heart Rate'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Ascent', 'Maximum Heart Rate'].indexOf(column) === -1)
     }
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Descent', 'Ascent'].indexOf(column) === -1)
+      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Descent', 'Ascent', 'Maximum Heart Rate'].indexOf(column) === -1)
     }
 
     return columns

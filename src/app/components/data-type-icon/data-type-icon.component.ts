@@ -47,6 +47,8 @@ import {
 } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
 import { DataMovingTime } from '@sports-alliance/sports-lib/lib/data/data.moving-time';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { DataHeartRateMin } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-min';
+import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -134,6 +136,8 @@ export class DataTypeIconComponent {
       case DataDescent.type:
         return 'arrow_down_right';
       case DataHeartRateAvg.type:
+      case DataHeartRateMax.type:
+      case DataHeartRateMin.type:
         return 'heart_pulse';
       case DataEnergy.type:
         return 'energy';
