@@ -934,6 +934,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         // categoryLabel.label.text = '123';
         yAxis.align = 'right';
         yAxis.marginTop = 10;
+        yAxis.marginBottom = 10;
         yAxis.title.marginRight = 5;
         yAxis.title.fontSize = '1.2em';
         yAxis.title.fontWeight = '600';
@@ -1286,9 +1287,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     series
       .forEach((serie, seriesIndex) => {
-        if (seriesIndex > 2) {
-          return;
-        }
         const activity = serie.dummyData.activity;
         const stopEvents = activity.getStopEvents();
         const stopAllEvents = activity.getStopAllEvents();
