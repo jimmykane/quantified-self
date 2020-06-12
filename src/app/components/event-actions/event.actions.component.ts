@@ -19,6 +19,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { MetaDataInterface, ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 
 @Component({
   selector: 'app-event-actions',
@@ -31,7 +32,9 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
 export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
   @Input() user: User;
+  @Input() showDownloadOriginal = false;
 
+  serviceMetaData: MetaDataInterface
   private deleteConfirmationSubscription;
 
   constructor(
@@ -47,9 +50,14 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private dialog: MatDialog) {
   }
 
-  ngOnInit(): void {
+  async ngOnInit() {
     if (!this.user) {
       throw new Error('User is required')
+    }
+    if (this.showDownloadOriginal) {
+      this.serviceMetaData = await this.eventService
+        .getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
+        .pipe(take(1)).toPromise();
     }
   }
 
@@ -143,6 +151,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.event.name,
       EventExporterJSON.fileExtension,
     );
+    this.snackBar.open('File served', null, {
+      duration: 2000,
+    });
+  }
+
+  async downloadOriginal() {
+
     this.snackBar.open('File served', null, {
       duration: 2000,
     });

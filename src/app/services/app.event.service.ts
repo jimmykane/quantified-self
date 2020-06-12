@@ -19,6 +19,7 @@ import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.i
 import { AppWindowService } from './app.window.service';
 import { gzip_decode } from 'wasm-flate';
 import DocumentData = firebase.firestore.DocumentData;
+import { MetaDataInterface, ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 
 
 @Injectable({
@@ -111,6 +112,21 @@ export class AppEventService implements OnDestroy {
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
             return activitiesArray;
           }, []);
+        }),
+      )
+  }
+
+  public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<MetaDataInterface> {
+    return this.afs
+      .collection('users')
+      .doc(user.uid)
+      .collection('events')
+      .doc(eventID)
+      .collection('metaData')
+      .doc(serviceName)
+      .snapshotChanges().pipe(
+        map(metaDataSnapshot => {
+          return <MetaDataInterface>metaDataSnapshot.payload.data();
         }),
       )
   }

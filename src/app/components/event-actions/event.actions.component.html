@@ -32,6 +32,10 @@
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>
   </button>
+  <button *ngIf="serviceMetaData" mat-menu-item (click)="downloadOriginal()">
+    <mat-icon>file_download</mat-icon>
+    <span>Download original</span>
+  </button>
   <button mat-menu-item (click)="delete()">
     <mat-icon>delete</mat-icon>
     <span>Delete</span>
