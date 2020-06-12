@@ -21,11 +21,11 @@ service cloud.firestore {
               allow read, write: if request.auth.uid == userID;
             }
           }
-          match /meta/{document=**} {
+          match /metaData/{document=**} {
             allow read: if request.auth.uid == userID;
           }
         }
-        match /meta/{document=**} {
+        match /metaData/{document=**} {
           allow read: if request.auth.uid == userID;
         }
     }
