@@ -25,7 +25,7 @@ service cloud.firestore {
             allow read: if request.auth.uid == userID;
           }
         }
-        match /metaData/{document=**} {
+        match /meta/{document=**} {
           allow read: if request.auth.uid == userID;
         }
     }
