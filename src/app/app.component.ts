@@ -225,6 +225,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'lap-type-interval',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/interval.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'patreon',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/patreon.svg')
+    );
   }
 
   private showUpdateAppVersionSnackMessage(version) {
