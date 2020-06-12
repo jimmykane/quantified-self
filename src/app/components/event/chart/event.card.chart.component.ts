@@ -929,13 +929,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       yAxis.renderer.line.strokeOpacity = 1;
 
       if (this.stackYAxes) {
-
         yAxis.paddingLeft = 5;
         yAxis.renderer.inside = true;
         yAxis.layout = 'absolute';
         yAxis.renderer.line.align = 'right';
         yAxis.align = 'right';
-        yAxis.marginTop = 30;
+        yAxis.marginTop = 15;
+        yAxis.marginBottom = 15;
         yAxis.title.valign = 'top';
         yAxis.title.align = 'left';
         yAxis.title.dx = 0;
@@ -957,14 +957,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         yAxis.title.align = 'left';
         yAxis.title.fontSize = '1.05em';
         yAxis.title.fontWeight = '600';
-
-
-        // yAxis.layout = 'absolute';
-        // yAxis.title.rotation = 0;
-        // yAxis.title.align = 'center';
-        // yAxis.title.valign = 'top';
-        // yAxis.title.padding(10,10,10,10)
-        // yAxis.title.dy = -40;
       }
 
       yAxis.renderer.minLabelPosition = 0.05;
@@ -1314,7 +1306,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
-          range.contents.stroke = am4core.color('#DEDEDE');
+          range.contents.stroke = am4core.color('#969393');
+          range.contents.strokeWidth = 2;
           // range.contents.fill = am4core.color('#DEDEDE');
           range.contents.fillOpacity = 0.0;
         })
