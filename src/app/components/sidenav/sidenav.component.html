@@ -2,9 +2,9 @@
   <mat-toolbar-row
     class="mat-elevation-z0 mat-list-item mat-app-background"
     (click)="sideNav.close();">
-      <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
-      Quantified Self &nbsp;
-      <span style="font-size: 0.6em;">{{appVersion}}</span>
+    <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
+    Quantified Self &nbsp;
+    <span style="font-size: 0.6em;">{{appVersion}}</span>
   </mat-toolbar-row>
 </mat-toolbar>
 
@@ -54,6 +54,14 @@
 
   <mat-divider></mat-divider>
 
+  <mat-list-item (click)="becomeAPatron()">
+    <mat-icon svgIcon="patreon"></mat-icon>
+    <span>Support this on Patreon </span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
+
+  <mat-divider></mat-divider>
+
   <mat-list-item onclick="window.open('https://www.facebook.com/groups/361026511083969/')">
     <mat-icon>forum</mat-icon>
     <span>Community </span><span class="fill-space"></span>
@@ -63,12 +71,6 @@
   <mat-list-item onclick="window.open('mailto:support@quantified-self.io')">
     <mat-icon>email</mat-icon>
     <span>Contact</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <mat-list-item (click)="becomeAPatron()">
-    <mat-icon svgIcon="patreon"></mat-icon>
-    <span>Become a Patron </span><span class="fill-space"></span>
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
@@ -103,7 +105,7 @@
 
   <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
     <mat-icon svgIcon="dark-mode"></mat-icon>
-   <span matTooltip="Use dark theme">
+    <span matTooltip="Use dark theme">
          Dark theme
     </span>
     <span class="fill-space"></span>
