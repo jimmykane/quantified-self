@@ -1311,7 +1311,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
           range.contents.stroke = am4core.color('#969393');
-          range.contents.strokeWidth = 2;
+          range.contents.strokeWidth = this.strokeWidth;
+          range.contents.strokeOpacity = this.strokeOpacity;
+          // range.contents.fill = am4core.color('#DEDEDE');
           // range.contents.fill = am4core.color('#DEDEDE');
           range.contents.fillOpacity = 0.0;
         })
