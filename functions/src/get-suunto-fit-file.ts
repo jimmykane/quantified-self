@@ -5,7 +5,6 @@ import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import { getTokenData } from "./service-tokens";
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from "./auth";
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 
 /**
  * Downloads the original file
@@ -34,8 +33,8 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
     return
   }
 
-  if (!req.body.workoutID) {
-    console.error(`No workoutID provided`);
+  if (!req.body.workoutID || !req.body.userName) {
+    console.error(`No 'workoutID' or 'userName' provided`);
     res.status(500);
     res.send();
     return
@@ -62,6 +61,7 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
+  let serviceTokenToUse;
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
     try {
@@ -72,48 +72,46 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
       res.send();
       return;
     }
-    let result: any;
-    try {
-      result = await requestPromise.post({
-        headers: {
-          'Authorization': serviceToken.accessToken,
-          'Content-Type': 'application/gpx+xml',
-          'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
-          // json: true,
-        },
-        body: req.body,
-        url: `https://cloudapi.suunto.com/v2/route/import`,
-      });
-      result = JSON.parse(result);
-      // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
-    } catch (e) {
-      console.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`, e);
-      res.status(500);
-      res.send();
-      return;
+    // Only download for the specific user
+    if (serviceToken.userName === req.body.userName) {
+      serviceTokenToUse = serviceToken;
     }
-
-    if (result.error) {
-      console.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid} due to service error`, result.error);
-      res.status(500);
-      res.send();
-      return;
-    }
-    try {
-      const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get();
-      const data = userServiceMetaDocumentSnapshot.data();
-      let uploadedRoutesCount = 0
-      if (data){
-        uploadedRoutesCount = data.uploadedRoutesCount || uploadedRoutesCount;
-      }
-      await userServiceMetaDocumentSnapshot.ref.update({
-        uploadedRoutesCount: uploadedRoutesCount + 1
-      })
-    }catch (e) {
-      console.error(`Could not update uploadedRoutes count`);
-    }
-
-    res.status(200)
-    res.send();
   }
+
+  if (!serviceTokenToUse){
+    console.info(`No service token for this userName and workoutID found`);
+    res.status(404);
+    res.send();
+    return;
+  }
+
+  let result;
+  try {
+    console.time('GetFIT');
+    result = await requestPromise.get({
+      headers: {
+        'Authorization': serviceTokenToUse.accessToken,
+        'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
+      },
+      encoding: null,
+      url: `https://cloudapi.suunto.com/v2/workout/exportFit/${req.body.workoutID}`,
+    });
+    console.timeEnd('GetFIT');
+    console.log(`Downloaded FIT file for ${req.body.workoutID} and token user ${serviceTokenToUse.userName}`)
+  } catch (e) {
+    if (e.statusCode === 403) {
+      console.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName} due to 403`))
+    }
+    if (e.statusCode === 500) {
+      console.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName} due to 403`))
+    }
+    console.error(new Error(`Could not get workout for ${req.body.workoutID} and token user ${serviceTokenToUse.userName}.`));
+    res.status(e.statusCode)
+    res.send();
+    return;
+  }
+
+  console.log(`Sending response`)
+  res.status(200)
+  res.send(result);
 });
