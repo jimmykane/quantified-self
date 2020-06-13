@@ -112,8 +112,7 @@ export const importRoute = functions.region('europe-west2').https.onRequest(asyn
     }catch (e) {
       console.error(`Could not update uploadedRoutes count`);
     }
-
-    res.status(200)
-    res.send();
   }
+  res.status(200)
+  res.send();
 });
