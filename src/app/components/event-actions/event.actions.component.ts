@@ -20,6 +20,10 @@ import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { MetaDataInterface, ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
+import { environment } from '../../../environments/environment';
+import * as Sentry from '@sentry/browser';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { AngularFireAuth } from '@angular/fire/auth';
 
 @Component({
   selector: 'app-event-actions',
@@ -47,6 +51,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private fileService: AppFileService,
     private deleteConfirmationBottomSheet: MatBottomSheet,
     private afa: AngularFireAnalytics,
+    private http: HttpClient,
+    private afAuth: AngularFireAuth,
     private dialog: MatDialog) {
   }
 
@@ -55,9 +61,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       throw new Error('User is required')
     }
     if (this.showDownloadOriginal) {
-      this.serviceMetaData = await this.eventService
-        .getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
+      this.serviceMetaData = await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
         .pipe(take(1)).toPromise();
+      this.changeDetectorRef.detectChanges();
     }
   }
 
@@ -82,8 +88,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         user: this.user
       },
     });
-    // dialogRef.afterClosed().subscribe(result => {
-    // });
   }
 
   cropEventActivity() {
@@ -96,8 +100,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         user: this.user
       },
     });
-    // dialogRef.afterClosed().subscribe(result => {
-    // });
   }
 
   hasDistance() {
@@ -156,11 +158,33 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  async downloadOriginal() {
-
-    this.snackBar.open('File served', null, {
-      duration: 2000,
-    });
+  async downloadSuuntoFIT() {
+    try {
+      const result = await this.http.post(
+        environment.functions.getSuuntoFITFile,
+        {
+          firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true),
+          workoutID: this.serviceMetaData.serviceWorkoutID,
+          userName: this.serviceMetaData.serviceUserName,
+        },
+        {
+          headers:
+            new HttpHeaders({
+              'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+            }),
+          responseType: 'arraybuffer',
+        }).toPromise();
+        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), this.serviceMetaData.serviceWorkoutID, 'fit');
+        this.snackBar.open('Download started', null, {
+          duration: 2000,
+        });
+        this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
+    } catch (e) {
+      this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
+        duration: 5000,
+      });
+      Sentry.captureException(e);
+    }
   }
 
   async delete() {
