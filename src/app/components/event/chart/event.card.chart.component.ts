@@ -975,6 +975,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         yAxis.baseValue = Infinity;
         yAxis.extraMin = 0.0;
         // yAxis.max = 1800;
+        // @todo this creates the issue
         yAxis.extraMax = this.extraMaxForPace;
         // yAxis.min = 0
         // yAxis.minY = 0;
@@ -1299,6 +1300,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // See https://github.com/amcharts/amcharts4/issues/2574#issuecomment-642635857
           if (!(<am4charts.ValueAxis>serie.yAxis).adapter.isEnabled('baseValue')) {
             (<am4charts.ValueAxis>serie.yAxis).adapter.add('baseValue', function(baseValue, target) {
+              if (baseValue === Infinity) {
+                return target.maxZoomed;
+              }
               return target.minZoomed;
             })
           }
