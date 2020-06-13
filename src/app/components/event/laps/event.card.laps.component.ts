@@ -43,6 +43,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       statRowElement['#'] = index + 1;
       statRowElement['Type'] = lap.type;
       const maxHR =  lap.getStat(DataHeartRateMax.type);
+      statRowElement['Duration'] = lap.getDuration().getDisplayValue(false, true, true);
+
       statRowElement['Maximum Heart Rate'] = maxHR ?  `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '';
       lapDataArray.push(statRowElement);
       return lapDataArray;
