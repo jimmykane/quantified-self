@@ -56,7 +56,13 @@
 
   <mat-list-item (click)="becomeAPatron()">
     <mat-icon svgIcon="patreon"></mat-icon>
-    <span>Support this on Patreon </span><span class="fill-space"></span>
+    <span>Support this project</span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
+
+  <mat-list-item (click)="donate()">
+    <mat-icon svgIcon="paypal"></mat-icon>
+    <span>Donate via PayPal </span><span class="fill-space"></span>
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
@@ -74,17 +80,12 @@
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
-  <mat-list-item (click)="donate()">
-    <mat-icon svgIcon="paypal"></mat-icon>
-    <span>Donate via PayPal </span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
   <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
     <mat-icon>bug_report</mat-icon>
     <span>File a bug</span><span class="fill-space"></span>
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
+
 
   <mat-divider></mat-divider>
 
