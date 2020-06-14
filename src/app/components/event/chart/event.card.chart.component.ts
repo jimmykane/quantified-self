@@ -937,16 +937,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         yAxis.layout = 'absolute';
         yAxis.renderer.line.align = 'right';
         yAxis.align = 'right';
-        yAxis.marginTop = 15;
-        yAxis.marginBottom = 15;
+        yAxis.marginTop = 30;
+        // yAxis.marginBottom = 20;
         yAxis.title.valign = 'top';
         yAxis.title.align = 'left';
         yAxis.title.dx = 0;
         yAxis.title.dy = -20;
         yAxis.title.isMeasured = false;
         yAxis.title.parent = yAxis.renderer;
-        yAxis.title.fontSize = '1.1em';
-        yAxis.title.fontWeight = '400';
+        yAxis.title.fontSize = '1.15em';
+        yAxis.title.fontWeight = '600';
         yAxis.title.adapter.add('rotation', () => 0);
 
       } else {

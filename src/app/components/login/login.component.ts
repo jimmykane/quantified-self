@@ -146,7 +146,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: ServiceTokenInterface) {
     const dialogRef = this.dialog.open(UserAgreementFormComponent, {
-      // width: '50vw',
+      minWidth: '80vw',
       disableClose: true,
       data: {
         user: user,
