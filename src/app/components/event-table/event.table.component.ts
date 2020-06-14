@@ -104,7 +104,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       throw new Error(`Component needs user`)
     }
     this.searchSubject.pipe(
-      debounceTime(500)
+      debounceTime(1000)
     ).subscribe(searchTextValue => {
       this.search(searchTextValue);
     });

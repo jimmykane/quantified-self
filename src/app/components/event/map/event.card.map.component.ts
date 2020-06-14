@@ -286,7 +286,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
     // Set the cursor
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(500)
+      debounceTime(1000)
     ).subscribe((cursors) => {
       this.logger.info(`Cursor on subscription`);
       cursors.forEach(cursor => {

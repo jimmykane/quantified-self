@@ -727,7 +727,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(500)
+      debounceTime(1000)
     ).subscribe((cursors) => {
       this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
@@ -828,7 +828,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
     }
 
-    this.addStartPauseGuides(this.chart, this.xAxisType, series);
     // Show if needed
     series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
     // Store at local storage the visible / non visible series
@@ -836,6 +835,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Snap to series if distance axis
     if (this.xAxisType === XAxisTypes.Distance) {
       this.chart.cursor.snapToSeries = series;
+    }
+
+    if (this.xAxisType === XAxisTypes.Time) {
+      // this.addStartPauseGuides(this.chart, this.xAxisType, series);
     }
 
     this.loaded();
@@ -1300,10 +1303,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // See https://github.com/amcharts/amcharts4/issues/2574#issuecomment-642635857
           if (!(<am4charts.ValueAxis>serie.yAxis).adapter.isEnabled('baseValue')) {
             (<am4charts.ValueAxis>serie.yAxis).adapter.add('baseValue', function(baseValue, target) {
-              if (baseValue === Infinity) {
-                return target.maxZoomed;
-              }
-              return target.minZoomed;
+              return baseValue === Infinity ?  target.maxZoomed : target.minZoomed;
             })
           }
           range = serie.xAxis.createSeriesRange(serie);
@@ -1384,7 +1384,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
           // This is with no retina etc
           // We use no retina for performance for now
-          const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]);
+          const screenPixes =  Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]);
           this.logger.info(`Grouping data on ${screenPixes}`);
           xAxis.groupData = true;
           // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;

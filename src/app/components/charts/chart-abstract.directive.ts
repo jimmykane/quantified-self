@@ -61,7 +61,8 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     super(changeDetector);
     // am4core.options.onlyShowOnViewport = true;
     am4core.options.commercialLicense = true;
-    am4core.options.autoDispose = true;
+    // @todo test perf
+    // am4core.options.autoDispose = true;
     if (am4ChartsTimeLineLicence) {
       am4core.addLicense(am4ChartsTimeLineLicence);
     }
