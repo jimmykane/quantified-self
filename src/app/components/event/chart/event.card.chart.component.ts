@@ -526,6 +526,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       this.chart.series.clear();
       this.chart.colors.reset();
       if (this.chart.yAxes.length) {
+        this.chart.xAxes.each(axis => axis.axisRanges.clear());
         this.chart.yAxes.clear();
       }
       this.disposeRangeLabelsContainer(this.chart);
@@ -1313,6 +1314,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           range.contents.stroke = am4core.color('#969393');
           range.contents.strokeWidth = this.strokeWidth;
           range.contents.strokeOpacity = this.strokeOpacity;
+          range.grid.above = true;
           // range.contents.fill = am4core.color('#DEDEDE');
           // range.contents.fill = am4core.color('#DEDEDE');
           range.contents.fillOpacity = 0.0;
