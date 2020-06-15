@@ -32,6 +32,11 @@ const routes: Routes = [
     canLoad: [AppAuthGuard],
   },
   {
+    path: 'user/:userID/dashboard',
+    loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule),
+    data: {title: `User's Dashboard`, animation: 'Dashboard'}
+  },
+  {
     path: 'user/:userID/event/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: {title: 'Event Details', animation: 'Event'}
