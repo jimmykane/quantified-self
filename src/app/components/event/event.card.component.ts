@@ -101,7 +101,33 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
 
     this.subscriptions.push(this.authService.user.pipe(switchMap((user) => {
       this.currentUser = user;
+
+      /**
+       * Get all now
+       */
+      return this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID,
+        [
+          ...[
+            DataLatitudeDegrees.type,
+            DataLongitudeDegrees.type,
+            DataSpeed.type,
+            DataGradeAdjustedSpeed.type,
+            DataDistance.type
+          ],
+          ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.chartDataTypesToUse))
+        ])
+    })).subscribe((event) => {
+      if (!event) {
+        this.router.navigate(['/dashboard']).then(() => {
+          this.snackBar.open('Not found', null, {
+            duration: 2000,
+          });
+        });
+        return
+      }
+      // Set the data
       if (this.currentUser) {
+        const user = this.currentUser
         this.userUnitSettings = user.settings.unitSettings;
         this.chartXAxisType = user.settings.chartSettings.xAxisType;
         this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
@@ -131,31 +157,9 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
           return dataTypesToUse;
         }, []);
       }
-      /**
-       * Get all now
-       */
-      return this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID,
-        [
-          ...[
-            DataLatitudeDegrees.type,
-            DataLongitudeDegrees.type,
-            DataSpeed.type,
-            DataGradeAdjustedSpeed.type,
-            DataDistance.type
-          ],
-          ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.chartDataTypesToUse))
-        ])
-    })).subscribe((event) => {
-      if (!event) {
-        this.router.navigate(['/dashboard']).then(() => {
-          this.snackBar.open('Not found', null, {
-            duration: 2000,
-          });
-        });
-        return
-      }
       this.event = event;
-      this.logger.info(event);
+      // this.logger.info(event);
+      // @todo perhaps if the event is the same do not update
       this.activitySelectionService.selectedActivities.clear();
 
       this.activitySelectionService.selectedActivities.select(...event.getActivities());
