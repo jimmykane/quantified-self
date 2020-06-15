@@ -139,7 +139,7 @@ export class AppEventService implements OnDestroy {
       .doc(eventID)
       .collection('activities')
       .doc(activityID)
-      .collection('country data cases active ')
+      .collection('streams')
       .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
