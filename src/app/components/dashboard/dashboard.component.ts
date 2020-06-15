@@ -2,7 +2,7 @@ import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angul
 import {AppEventService} from '../../services/app.event.service';
 import {of, Subscription} from 'rxjs';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {Router} from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
@@ -10,7 +10,7 @@ import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboa
 import {getDatesForDateRange, Search} from '../event-search/event-search.component';
 import {AppUserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {map, switchMap} from 'rxjs/operators';
+import { map, switchMap, take } from 'rxjs/operators';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {Log} from 'ng2-logger/browser';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -44,13 +44,19 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
               private eventService: AppEventService,
               private userService: AppUserService,
               private changeDetector: ChangeDetectorRef,
+              private route: ActivatedRoute,
               private afa: AngularFireAnalytics,
               private snackBar: MatSnackBar) {
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     this.logger.info(`On Init`);
     this.shouldSearch = true;
+    let targetUser: User;
+    const userID = this.route.snapshot.paramMap.get('userID');
+    if (userID) {
+      targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
+    }
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.logger.info(`User subscription`);
       this.isLoading = true;
@@ -115,9 +121,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       // Get what is needed
       const returnObservable = this.shouldSearch ?
         this.eventService
-          .getEventsBy(user, where, 'startDate', false, limit)
+          .getEventsBy(targetUser ? targetUser : user, where, 'startDate', false, limit)
         : this.events.length ? of(this.events) : this.eventService
-          .getEventsBy(user, where, 'startDate', false, limit);
+          .getEventsBy(targetUser ? targetUser : user, where, 'startDate', false, limit);
       return returnObservable
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
