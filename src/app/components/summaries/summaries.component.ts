@@ -45,6 +45,7 @@ import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
+  @Input() showActions: boolean;
   @Input() isLoading: boolean;
 
   public rowHeight;

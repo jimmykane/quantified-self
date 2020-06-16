@@ -17,6 +17,7 @@
   <app-summaries *ngIf="user"
                  [isLoading]="isLoading"
                  [user]="user"
+                 [showActions]="!targetUser || targetUser.uid === user.uid"
                  [events]="events">
   </app-summaries>
 

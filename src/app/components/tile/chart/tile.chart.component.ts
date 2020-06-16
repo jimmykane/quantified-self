@@ -25,6 +25,7 @@ export class TileChartComponent extends TileAbstract {
   @Input() dataCategoryType: ChartDataCategoryTypes;
   @Input() chartTheme: ChartThemes;
   @Input() filterLowValues: boolean;
+  @Input() showActions: boolean;
   @Input() dataDateRange: SummariesChartDataDateRages;
   @Input() data: any;
 

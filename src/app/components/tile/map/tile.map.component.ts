@@ -15,6 +15,7 @@ import { TileAbstract } from '../tile.abstract';
 export class TileMapComponent extends TileAbstract {
   @Input() mapType: MapTypes;
   @Input() mapTheme: MapThemes;
+  @Input() showActions: boolean;
   @Input() showHeatMap: boolean;
   @Input() clusterMarkers: boolean;
   @Input() events: EventInterface[] = [];
