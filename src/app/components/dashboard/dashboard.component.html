@@ -20,5 +20,5 @@
                  [events]="events">
   </app-summaries>
 
-  <app-event-table *ngIf="user" [isLoading]="isLoading" [user]="user" [events]="events"></app-event-table>
+  <app-event-table *ngIf="user" [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
 </section>

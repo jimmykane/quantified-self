@@ -24,6 +24,7 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public user: User;
+  public targetUser: User;
   public events: EventInterface[];
   public dataSubscription: Subscription;
   public searchTerm: string;
@@ -52,10 +53,16 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   async ngOnInit() {
     this.logger.info(`On Init`);
     this.shouldSearch = true;
-    let targetUser: User;
+    // @todo make this an obsrvbl
     const userID = this.route.snapshot.paramMap.get('userID');
     if (userID) {
-      targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
+      try {
+        this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
+      } catch (e){
+        return this.router.navigate(['dashboard']).then(() => {
+          this.snackBar.open('Page not found');
+        });
+      }
     }
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
       this.logger.info(`User subscription`);
@@ -121,9 +128,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       // Get what is needed
       const returnObservable = this.shouldSearch ?
         this.eventService
-          .getEventsBy(targetUser ? targetUser : user, where, 'startDate', false, limit)
+          .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         : this.events.length ? of(this.events) : this.eventService
-          .getEventsBy(targetUser ? targetUser : user, where, 'startDate', false, limit);
+          .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
