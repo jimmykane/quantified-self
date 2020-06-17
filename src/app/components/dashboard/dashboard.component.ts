@@ -186,10 +186,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     // Show the modal
     const dialogRef = this.dialog.open(PromoDialogComponent, {
       // width: '75vw',
+      disableClose: true,
       data: {
         user: user
       },
-    });
+    })
   }
 
   ngOnDestroy(): void {

@@ -31,7 +31,7 @@ export class PromoDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // this.userService.setLastSeenPromoToNow(this.user);
+    this.userService.setLastSeenPromoToNow(this.user);
     this.afa.logEvent('promo_popup_shown');
   }
 
