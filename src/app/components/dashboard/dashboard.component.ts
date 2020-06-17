@@ -81,8 +81,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
       // this.showUpload = this.authService.isGuest();
 
-      this.showPromoForUserOrDoNothing(user);
-
       if (this.user && (
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange
         || this.user.settings.dashboardSettings.startDate !== user.settings.dashboardSettings.startDate
@@ -160,6 +158,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
+      this.showPromoForUserOrDoNothing(this.user);
     });
   }
 
@@ -180,7 +179,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.logger.info(`On Changes`);
   }
 
-  showPromoForUserOrDoNothing(user: User) {
+  async showPromoForUserOrDoNothing(user: User) {
     if (!this.userService.shouldShowPromoForPatreon(user)) {
       return
     }

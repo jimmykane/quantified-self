@@ -1,7 +1,33 @@
-<h2 mat-dialog-title>We need you</h2>
+<h2 mat-dialog-title>
+  <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
+  Quantified Self needs your support
+</h2>
+<mat-divider></mat-divider>
 <mat-dialog-content>
-  ... well actually Quantified Self needs you
+
+  <p>
+    Quantified Self is an <b>opensource</b> project but it doesn't run on <b>thin air</b>.
+    It still needs a <b>cloud</b> and a guy that develops and <b>makes sure</b> it all runs fine.
+  </p>
+
+  <p>
+    So you are most welcome to <b>contribute</b> and <b>support</b> Quantified Self on Patreon.
+    You can contribute as little like <b>1e</b> per month just to support the cloud <b>costs</b>.
+  </p>
+
+  <p>
+    Thanks for reading this.
+  </p>
+
+  <p>
+    Kr,<br/>
+    Dimitrios Kanellopoulos
+  </p>
 </mat-dialog-content>
 <mat-dialog-actions>
-  <button mat-button >Patreon</button>
+  <button mat-flat-button color="accent" class="full"
+          (click)="becomeAPatron()">
+    Support this project on Patreon
+  </button>
+  <button mat-button mat-dialog-close>Close</button>
 </mat-dialog-actions>

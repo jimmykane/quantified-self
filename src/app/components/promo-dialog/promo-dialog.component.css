@@ -1,22 +1,7 @@
-form {
-  width: 100%;
-  padding: 1%;
+.app-icon{
+  vertical-align: middle;
 }
-
-mat-form-field {
-  width: 100%;
-}
-
-.radio-container {
-  margin-bottom: 1em;
-}
-
-.mat-radio-button{
-  margin-top: 1em;
-  margin-right: 1em;
-}
-
-button{
+button {
   width: 100%;
   margin-top: 1em;
 }
