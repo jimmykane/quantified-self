@@ -350,10 +350,14 @@ export class AppUserService implements OnDestroy {
 
   public shouldShowPromoForPatreon(user: User) {
     // Intentionally just check if only set for now
-    if (user.lastSeenPromoForPatreon) {
+    if (user.lastSeenPromo) {
       return false;
     }
     return (+user.lastSignInDate - +user.creationDate) > 60 * 60 * 24 * 30 * 1000; // Bigger than 1 months
+  }
+
+  public setLastSeenPromoToNow(user: User) {
+    this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
   }
 
   public async importSuuntoAppHistory(startDate: Date, endDate: Date) {

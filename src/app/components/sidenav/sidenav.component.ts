@@ -11,6 +11,7 @@ import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
+import { ActivityFormComponent } from '../activity-form/activity.form.component';
 
 declare function require(moduleName: string): any;
 
@@ -51,10 +52,10 @@ export class SideNavComponent implements OnInit, OnDestroy {
       this.appTheme = theme
     })
     this.userSubscription = this.authService.user.subscribe((user) => {
-      if (!user) {
-        return
-      }
       this.user = user;
+      // if (!user) {
+      //   return
+      // }
     })
   }
 
@@ -88,6 +89,5 @@ export class SideNavComponent implements OnInit, OnDestroy {
       this.userSubscription.unsubscribe();
     }
   }
-
 
 }

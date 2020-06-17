@@ -15,6 +15,9 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {Log} from 'ng2-logger/browser';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { MatDialog } from '@angular/material/dialog';
+import { ActivityFormComponent } from '../activity-form/activity.form.component';
+import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 
 @Component({
   selector: 'app-dashboard',
@@ -40,12 +43,13 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   private logger = Log.create('DashboardComponent');
 
 
-  constructor(private router: Router,
-              public authService: AppAuthService,
+  constructor(public authService: AppAuthService,
+              private router: Router,
               private eventService: AppEventService,
               private userService: AppUserService,
               private changeDetector: ChangeDetectorRef,
               private route: ActivatedRoute,
+              private dialog: MatDialog,
               private afa: AngularFireAnalytics,
               private snackBar: MatSnackBar) {
   }
@@ -75,7 +79,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return of({user: null, events: null});
       }
 
-      this.showUpload = this.authService.isGuest();
+      // this.showUpload = this.authService.isGuest();
+
+      this.showPromoForUserOrDoNothing(user);
 
       if (this.user && (
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange
@@ -172,6 +178,19 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnChanges() {
     this.logger.info(`On Changes`);
+  }
+
+  showPromoForUserOrDoNothing(user: User) {
+    if (!this.userService.shouldShowPromoForPatreon(user)) {
+      return
+    }
+    // Show the modal
+    const dialogRef = this.dialog.open(PromoDialogComponent, {
+      // width: '75vw',
+      data: {
+        user: user
+      },
+    });
   }
 
   ngOnDestroy(): void {

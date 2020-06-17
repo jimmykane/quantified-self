@@ -17,6 +17,7 @@ import { UploadInfoComponent } from '../components/upload/upload-info/upload-inf
 import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
 import { UploadActivitiesComponent } from '../components/upload/upload-activities/upload-activities.component';
 import { ActivityCropFormComponent } from '../components/activity-crop-form/activity.crop.form.component';
+import { PromoDialogComponent } from '../components/promo-dialog/promo-dialog.component';
 
 //@todo this has too many shared
 
@@ -36,6 +37,7 @@ import { ActivityCropFormComponent } from '../components/activity-crop-form/acti
     ChartsPieComponent,
     ChartsXYComponent,
     EventFormComponent,
+    PromoDialogComponent,
     ActivityFormComponent,
     ActivityCropFormComponent,
     DeleteConfirmationComponent,
@@ -51,6 +53,7 @@ import { ActivityCropFormComponent } from '../components/activity-crop-form/acti
     ActivityCropFormComponent,
     DeleteConfirmationComponent,
     UploadErrorComponent,
+    PromoDialogComponent,
   ],
   exports: [
     ShadeComponent,
@@ -69,6 +72,7 @@ import { ActivityCropFormComponent } from '../components/activity-crop-form/acti
     UploadInfoComponent,
     UploadErrorComponent,
     FilesStatusListComponent,
+    PromoDialogComponent
   ]
 })
 
