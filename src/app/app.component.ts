@@ -231,13 +231,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     );
   }
 
-  private showUpdateAppVersionSnackMessage(version) {
-    const snackBarRef = this.snackBar.open(`New version found!`, 'Reload', {duration: 15000});
-    snackBarRef.onAction().subscribe(() => {
-      this.windowService.windowRef.location.reload(true);
-    });
-  }
-
   ngAfterViewInit() {
 
   }
