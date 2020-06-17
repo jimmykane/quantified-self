@@ -37,7 +37,7 @@ export class AppAuthService implements OnDestroy {
             this.authState = !!dbUser;
             if (dbUser) {
               dbUser.creationDate = new Date(user.metadata.creationTime);
-              dbUser.lastSigninDate = new Date(user.metadata.lastSignInTime);
+              dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
             }
             // if (dbUser) {
             //   this.afa.setAnalyticsCollectionEnabled(true);
