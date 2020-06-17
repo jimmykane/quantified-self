@@ -31,19 +31,20 @@ export class PromoDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.userService.setLastSeenPromoToNow(this.user);
     this.afa.logEvent('promo_popup_shown');
   }
 
   async becomeAPatron() {
     this.afa.logEvent('become_a_patron_click');
     window.open('https://www.patreon.com/dimitrioskanellopoulos');
+    return this.userService.setLastSeenPromoToNow(this.user);
   }
 
-  close(event) {
+  async close(event) {
     event.stopPropagation();
     event.preventDefault();
     this.dialogRef.close();
+    return this.userService.setLastSeenPromoToNow(this.user);
   }
 
 }

@@ -356,8 +356,8 @@ export class AppUserService implements OnDestroy {
     return (+user.lastSignInDate - +user.creationDate) > 60 * 60 * 24 * 30 * 1000; // Bigger than 1 months
   }
 
-  public setLastSeenPromoToNow(user: User) {
-    this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
+  public async setLastSeenPromoToNow(user: User) {
+    return this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
   }
 
   public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
