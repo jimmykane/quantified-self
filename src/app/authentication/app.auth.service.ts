@@ -35,6 +35,10 @@ export class AppAuthService implements OnDestroy {
           this.guest = user.isAnonymous;
           return this.userService.getUserByID(user.uid).pipe(map((dbUser: User) => {
             this.authState = !!dbUser;
+            if (dbUser) {
+              dbUser.creationDate = new Date(user.metadata.creationTime);
+              dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
+            }
             // if (dbUser) {
             //   this.afa.setAnalyticsCollectionEnabled(true);
             // }
