@@ -1,16 +1,16 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
-import {Router} from '@angular/router';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {AppEventService} from '../../services/app.event.service';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { AppEventService } from '../../services/app.event.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {ActivityFormComponent} from '../activity-form/activity.form.component';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
-import {take} from 'rxjs/operators';
-import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
-import { MatBottomSheet } from "@angular/material/bottom-sheet";
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { ActivityFormComponent } from '../activity-form/activity.form.component';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import { take } from 'rxjs/operators';
+import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 
@@ -18,6 +18,7 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
   selector: 'app-activity-actions',
   templateUrl: './activity.actions.component.html',
   styleUrls: ['./activity.actions.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [],
 })
 export class ActivityActionsComponent implements OnInit, OnDestroy {
@@ -101,7 +102,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.deleteConfirmationSubscription){
+    if (this.deleteConfirmationSubscription) {
       this.deleteConfirmationSubscription.unsubscribe()
     }
   }

@@ -10,6 +10,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserService } from '../../services/app.user.service';
 
 declare function require(moduleName: string): any;
 
@@ -31,10 +32,12 @@ export class SideNavComponent implements OnInit, OnDestroy {
   public appTheme: AppThemes
   public appThemes = AppThemes;
 
+  private userSubscription: Subscription
   private themeSubscription: Subscription
 
   constructor(
     public authService: AppAuthService,
+    public userService: AppUserService,
     public sideNav: AppSideNavService,
     public themeService: AppThemeService,
     private windowService: AppWindowService,
@@ -46,6 +49,12 @@ export class SideNavComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.themeSubscription = this.themeService.getAppTheme().subscribe(theme => {
       this.appTheme = theme
+    })
+    this.userSubscription = this.authService.user.subscribe((user) => {
+      if (!user) {
+        return
+      }
+      this.user = user;
     })
   }
 
