@@ -229,6 +229,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       'patreon',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/patreon.svg')
     );
+    this.matIconRegistry.addSvgIcon(
+      'patreon-word',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/patreon-word.svg')
+    );
   }
 
   ngAfterViewInit() {
