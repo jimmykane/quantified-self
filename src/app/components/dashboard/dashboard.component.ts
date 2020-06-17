@@ -15,7 +15,7 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {Log} from 'ng2-logger/browser';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { ActivityFormComponent } from '../activity-form/activity.form.component';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 
@@ -39,6 +39,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public isInitialized = false;
 
   private shouldSearch: boolean;
+  private promoDialogRef: MatDialogRef<PromoDialogComponent>
 
   private logger = Log.create('DashboardComponent');
 
@@ -184,7 +185,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return
     }
     // Show the modal
-    const dialogRef = this.dialog.open(PromoDialogComponent, {
+    if (this.promoDialogRef){
+      return;
+    }
+    this.promoDialogRef = this.dialog.open(PromoDialogComponent, {
       // width: '75vw',
       disableClose: true,
       data: {
