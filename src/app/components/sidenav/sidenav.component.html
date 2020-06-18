@@ -37,10 +37,11 @@
   </mat-list-item>
 
   <mat-list-item
+    *ngIf="user && user.isCoach"
     routerLinkActive="active"
-    routerLink="/athletes" (click)="sideNav.close();">
-    <mat-icon>people_outline</mat-icon>
-    <span>Athletes</span>
+    routerLink="/coaching" (click)="sideNav.close();">
+    <mat-icon>sports</mat-icon>
+    <span>Coaching</span>
   </mat-list-item>
 
   <mat-list-item

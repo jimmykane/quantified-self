@@ -26,9 +26,9 @@ const routes: Routes = [
     canLoad: [AppAuthGuard]
   },
   {
-    path: 'athletes',
-    loadChildren: () => import('./modules/athletes.module').then(module => module.AthletesModule),
-    data: {title: 'Athletes', animation: 'Athletes'},
+    path: 'coaching',
+    loadChildren: () => import('./modules/coaching.module').then(module => module.CoachingModule),
+    data: {title: 'Coaching', animation: 'Coaching'},
     canLoad: [AppAuthGuard]
   },
   {
