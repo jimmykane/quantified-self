@@ -56,6 +56,7 @@ import { MatDialog } from '@angular/material/dialog';
 export class EventTableComponent extends DataTableAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @Input() user: User;
   @Input() events: EventInterface[];
+  @Input() targetUser: User;
   @Input() showActions: boolean;
   @Input() isLoading: boolean;
   @ViewChild(MatSort, {static: true}) sort: MatSort;

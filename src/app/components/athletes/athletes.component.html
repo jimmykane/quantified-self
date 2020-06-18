@@ -1,1 +1,30 @@
-test
+<mat-card class="outer">
+  <app-shade [isActive]="isLoading"></app-shade>
+  <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight" [gutterSize]="'1em'">
+    <mat-grid-tile *ngFor="let athlete of athletes">
+      <mat-card>
+        <mat-card-header>
+          <div mat-card-avatar class="avatar"
+               [style.backgroundImage]="'url('+ (athlete.photoURL ? athlete.photoURL :  'https://ui-avatars.com/api/?name=' + (this.athlete.displayName) ) +')'">
+          </div>
+          <mat-card-title>
+            {{ athlete.displayName }}
+          </mat-card-title>
+          <mat-card-subtitle *ngIf="athlete.description">{{ athlete.description }}</mat-card-subtitle>
+          <mat-card-subtitle *ngIf="!athlete.description">
+            No description available
+          </mat-card-subtitle>
+          <mat-card-subtitle></mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          Charts etc
+        </mat-card-content>
+        <mat-card-actions>
+<!--          <button mat-button></button>-->
+          <button mat-button [routerLink]="['/user', athlete.uid, 'dashboard']">View user's dashboard</button>
+
+        </mat-card-actions>
+      </mat-card>
+    </mat-grid-tile>
+  </mat-grid-list>
+</mat-card>

@@ -1,16 +1,11 @@
-.buttons-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
+mat-card.outer{
+  padding: 0;
 }
 
-mat-icon.toolTip{
-  margin-left: 0.5em;
-  font-size: 18px;
-  width: 18px;
-  height: 18px;
+mat-grid-list{
+  min-height: 100vh;
 }
 
-.mat-icon-button{
-  vertical-align: middle;
+.avatar{
+  background-size: cover;
 }

@@ -28,7 +28,7 @@ const routes: Routes = [
   {
     path: 'athletes',
     loadChildren: () => import('./modules/athletes.module').then(module => module.AthletesModule),
-    data: {title: 'Dashboard', animation: 'Athletes'},
+    data: {title: 'Athletes', animation: 'Athletes'},
     canLoad: [AppAuthGuard]
   },
   {
@@ -40,7 +40,7 @@ const routes: Routes = [
   {
     path: 'user/:userID/dashboard',
     loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule),
-    data: {title: `User's Dashboard`, animation: 'Dashboard'}
+    data: {title: `Athlete Dashboard`, animation: 'Dashboard'}
   },
   {
     path: 'user/:userID/event/:eventID',

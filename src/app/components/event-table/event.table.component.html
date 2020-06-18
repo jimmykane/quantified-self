@@ -82,7 +82,7 @@
     <tr mat-header-row
         *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize(); sticky: true;"></tr>
     <tr mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
-        [routerLink]="['/user', user.uid, 'event', row.Event.getID()]"
+        [routerLink]="['/user', targetUser.uid || user.uid, 'event', row.Event.getID()]"
         [class.merged]="row['Merged Event']"
         class="normal-row">
     </tr>
