@@ -1,24 +1,19 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
+import {Component, Inject, Input, OnInit} from '@angular/core';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {AppEventService} from '../../services/app.event.service';
 import {
   FormBuilder,
   FormControl,
   FormGroup,
-  FormGroupDirective,
-  NgForm,
   ValidationErrors,
   ValidatorFn,
   Validators,
 } from '@angular/forms';
-import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {take} from 'rxjs/operators';
 import {Log} from 'ng2-logger/browser';
 import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {DataDeviceNames} from '@sports-alliance/sports-lib/lib/data/data.device-names';
@@ -26,6 +21,7 @@ import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
 import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
+import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
 
 
 @Component({
@@ -106,6 +102,11 @@ export class ActivityFormComponent implements OnInit {
       Validators.required,
     ]));
 
+    const energy = this.activity.getStat(DataEnergy.type);
+    this.activityFormGroup.addControl('energy', new FormControl(energy ? energy.getValue() : 0, [
+      Validators.required,
+    ]));
+
     // Set this to done loading
     this.isLoading = false;
   }
@@ -178,6 +179,17 @@ export class ActivityFormComponent implements OnInit {
             descent += <number>activityDescent.getValue();
           }
           return descent;
+        }, 0)));
+      }
+
+      if (this.activityFormGroup.get('energy').dirty) {
+        this.activity.addStat(new DataEnergy(this.activityFormGroup.get('energy').value));
+        this.event.addStat(new DataEnergy(this.event.getActivities().reduce((energy, activity) => {
+          const activityEnergy = activity.getStat(DataEnergy.type);
+          if (activityEnergy) {
+            energy += <number>activityEnergy.getValue();
+          }
+          return energy;
         }, 0)));
       }
 

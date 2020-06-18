@@ -89,6 +89,15 @@
           invalid descent
         </mat-error>
       </mat-form-field>
+
+      <mat-form-field *ngIf="activityFormGroup.get('energy')">
+        <input matInput placeholder="Energy" type="number" formControlName="energy">
+        <span matSuffix="">KCal &nbsp;</span>
+        <mat-error *ngIf="hasError('energy')">
+          invalid energy
+        </mat-error>
+      </mat-form-field>
+
       <mat-form-field *ngIf="activityFormGroup.get('distance')">
         <input matInput placeholder="Distance" type="number" formControlName="distance">
         <span matSuffix="">m &nbsp;</span>
