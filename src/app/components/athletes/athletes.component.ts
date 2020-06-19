@@ -5,7 +5,10 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppCoachingService } from '../../services/app.coaching.service';
 import { of, Subscription } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
+import { switchMap, take } from 'rxjs/operators';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { AppEventService } from '../../services/app.event.service';
+import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 
 @Component({
   selector: 'app-athletes',
@@ -15,7 +18,7 @@ import { switchMap } from 'rxjs/operators';
 })
 export class AthletesComponent implements OnInit, OnDestroy {
   public user: User;
-  public athletes: User[];
+  public athletesAndEvents: AthletesAndEvents[] = []
   public isLoading: boolean;
 
   public rowHeight: string;
@@ -26,13 +29,14 @@ export class AthletesComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AppAuthService,
     private coachingService: AppCoachingService,
+    private eventService: AppEventService,
     private router: Router,
     private snackBar: MatSnackBar) {
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
   }
 
-  ngOnInit(): void {
+  async ngOnInit() {
     this.authService.user.pipe(switchMap((user) => {
       this.isLoading = true;
       this.user = user;
@@ -43,8 +47,14 @@ export class AthletesComponent implements OnInit, OnDestroy {
         return of(null);
       }
       return this.coachingService.getCoachedAthletesForUser(this.user)
-    })).subscribe((users) => {
-      this.athletes = users;
+    })).subscribe(async (users) => {
+      this.athletesAndEvents = [];
+      for (const user of users){
+        this.athletesAndEvents.push({
+          athlete: user,
+          events: await this.coachingService.getUserEventsForDateRange(user, DateRanges.thisWeek, this.user.settings.unitSettings.startOfTheWeek).pipe(take(1)).toPromise()
+        })
+      }
       this.isLoading = false;
     })
   }
@@ -80,3 +90,9 @@ export class AthletesComponent implements OnInit, OnDestroy {
     }
   }
 }
+
+export interface AthletesAndEvents {
+  athlete: User,
+  events: EventInterface[]
+}
+

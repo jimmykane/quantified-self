@@ -4,6 +4,12 @@ import { AngularFirestore } from '@angular/fire/firestore';
 import { map, switchMap } from 'rxjs/operators';
 import { combineLatest, Observable } from 'rxjs';
 import { AppUserService } from './app.user.service';
+import { AthletesAndEvents } from '../components/athletes/athletes.component';
+import { AppEventService } from './app.event.service';
+import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { getDatesForDateRange } from '../components/event-search/event-search.component';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 
 @Injectable({
@@ -13,7 +19,8 @@ export class AppCoachingService {
 
   constructor(
     private afs: AngularFirestore,
-    private userService: AppUserService
+    private userService: AppUserService,
+    private eventService: AppEventService
   ) {
   }
   public getCoachedAthletesForUser(user: User): Observable<User[]> {
@@ -32,5 +39,21 @@ export class AppCoachingService {
           return this.userService.getUserByID(userID);
         }));
       }))
+  }
+
+  getUserEventsForDateRange(user: User, dateRange: DateRanges, startOfTheWeek: DaysOfTheWeek){
+    const searchStartDate = getDatesForDateRange(dateRange, startOfTheWeek).startDate;
+    const searchEndDate = getDatesForDateRange(dateRange, startOfTheWeek).endDate;
+    const where = [
+    {
+      fieldPath: 'startDate',
+      opStr: <WhereFilterOp>'>=',
+      value: searchStartDate.getTime() // Should remove mins from date
+    },{
+      fieldPath: 'startDate',
+      opStr: <WhereFilterOp>'<=', // Should remove mins from date
+      value: searchEndDate.getTime()
+    }];
+    return this.eventService.getEventsBy(user, where, 'startDate', false, 0);
   }
 }

@@ -1,27 +1,27 @@
 <mat-card class="outer">
   <app-shade [isActive]="isLoading"></app-shade>
   <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight" [gutterSize]="'1em'">
-    <mat-grid-tile *ngFor="let athlete of athletes">
+    <mat-grid-tile *ngFor="let athleteAndEvents of athletesAndEvents">
       <mat-card>
         <mat-card-header>
           <div mat-card-avatar class="avatar"
-               [style.backgroundImage]="'url('+ (athlete.photoURL ? athlete.photoURL :  'https://ui-avatars.com/api/?name=' + (this.athlete.displayName) ) +')'">
+               [style.backgroundImage]="'url('+ (athleteAndEvents.athlete.photoURL ? athleteAndEvents.athlete.photoURL :  'https://ui-avatars.com/api/?name=' + (athleteAndEvents.athlete.displayName) ) +')'">
           </div>
           <mat-card-title>
-            {{ athlete.displayName }}
+            {{ athleteAndEvents.athlete.displayName }}
           </mat-card-title>
-          <mat-card-subtitle *ngIf="athlete.description">{{ athlete.description }}</mat-card-subtitle>
-          <mat-card-subtitle *ngIf="!athlete.description">
+          <mat-card-subtitle *ngIf="athleteAndEvents.athlete.description">{{ athleteAndEvents.athlete.description }}</mat-card-subtitle>
+          <mat-card-subtitle *ngIf="!athleteAndEvents.athlete.description">
             No description available
           </mat-card-subtitle>
           <mat-card-subtitle></mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
-          Charts etc
+          {{ athleteAndEvents.events.length }} events this week
         </mat-card-content>
         <mat-card-actions>
-<!--          <button mat-button></button>-->
-          <button mat-button [routerLink]="['/user', athlete.uid, 'dashboard']">View user's dashboard</button>
+          <button mat-button [routerLink]="['/user', athleteAndEvents.athlete.uid, 'event', athleteAndEvents.events[0].getID()]">Go to latest event</button>
+          <button mat-button [routerLink]="['/user', athleteAndEvents.athlete.uid, 'dashboard']">View user's dashboard</button>
 
         </mat-card-actions>
       </mat-card>

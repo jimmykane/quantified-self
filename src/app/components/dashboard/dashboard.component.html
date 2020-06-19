@@ -1,5 +1,21 @@
 <section class="component-container">
   <app-shade [isActive]="!isInitialized"></app-shade>
+  <ng-container *ngIf="targetUser && isLoading === false">
+    <mat-card-header>
+      <div mat-card-avatar class="avatar"
+           [style.backgroundImage]="'url('+ (targetUser.photoURL ? targetUser.photoURL :  'https://ui-avatars.com/api/?name=' + (targetUser.displayName) ) +')'">
+      </div>
+      <mat-card-title>
+        {{targetUser.displayName}}
+      </mat-card-title>
+      <mat-card-subtitle *ngIf="targetUser.description">{{ targetUser.description }}</mat-card-subtitle>
+      <mat-card-subtitle *ngIf="!targetUser.description">
+        No description available
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-divider style="margin-bottom: 1em"></mat-divider>
+  </ng-container>
+
   <app-event-search *ngIf="user"
                     [isLoading]="isLoading"
                     [selectedDateRange]="user.settings.dashboardSettings.dateRange"
