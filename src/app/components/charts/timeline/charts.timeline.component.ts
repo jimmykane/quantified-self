@@ -133,7 +133,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       return `${'{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
-    series.columns.template.filters.push(ChartHelper.getShadowFilter());
+    // series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
     const label = series.createChild(am4core.Label);
     label.horizontalCenter = 'middle';

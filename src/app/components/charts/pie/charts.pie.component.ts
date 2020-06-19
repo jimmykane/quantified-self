@@ -58,7 +58,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     pieSeries.slices.template.strokeWidth = 0.4;
     pieSeries.slices.template.strokeOpacity = 1;
     pieSeries.slices.template.stroke = am4core.color('#175e84');
-    pieSeries.slices.template.filters.push(ChartHelper.getShadowFilter());
+    // pieSeries.slices.template.filters.push(ChartHelper.getShadowFilter());
 
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.values || ! target.dataItem.dataContext) {
