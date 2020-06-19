@@ -2,6 +2,8 @@ import { ActivityTypeGroups } from '@sports-alliance/sports-lib/lib/activities/a
 
 export const AppActivityTypeGroupColors: {[key in ActivityTypeGroups]: string} = {
   [ActivityTypeGroups.Running]: '#FDD300',
+  [ActivityTypeGroups.TrailRunning]: '#FDD300',
+  // [ActivityTypeGroups.TrailRunning]: '#aeea00',
   [ActivityTypeGroups.Cycling]: '#FF7C3B',
   [ActivityTypeGroups.Performance]: '#AFE443',
   [ActivityTypeGroups.IndoorSports]: '#FF467E',
