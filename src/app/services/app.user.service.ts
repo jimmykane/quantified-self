@@ -426,6 +426,15 @@ export class AppUserService implements OnDestroy {
     }
   }
 
+  public getUserChartDataTypesToUse(user: User): string[] {
+    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+      if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
+        dataTypesToUse.push(dataTypeSettingsKey);
+      }
+      return dataTypesToUse;
+    }, [])
+  }
+
   private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     // App

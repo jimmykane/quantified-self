@@ -81,6 +81,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
     private route: ActivatedRoute,
     private authService: AppAuthService,
     private eventService: AppEventService,
+    private userService: AppUserService,
     private activitySelectionService: AppActivitySelectionService,
     private snackBar: MatSnackBar,
     private themeService: AppThemeService) {
@@ -114,7 +115,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
             DataGradeAdjustedSpeed.type,
             DataDistance.type
           ],
-          ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.chartDataTypesToUse))
+          ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(user.settings.chartSettings.showAllData, this.userService.getUserChartDataTypesToUse(user)))
         ])
     })).subscribe((event) => {
       if (!event) {
@@ -150,12 +151,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
         this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
         this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
         this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
-        this.chartDataTypesToUse = Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
-          if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-            dataTypesToUse.push(dataTypeSettingsKey);
-          }
-          return dataTypesToUse;
-        }, []);
+        this.chartDataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
       }
       this.event = event;
       // this.logger.info(event);
