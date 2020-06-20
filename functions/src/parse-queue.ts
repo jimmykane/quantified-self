@@ -14,7 +14,7 @@ import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/que
 
 
 const TIMEOUT_IN_SECONDS = 540;
-const RETRY_COUNT = 20;
+const RETRY_COUNT = 10;
 const LIMIT = 200;
 const MEMORY = "2GB";
 
