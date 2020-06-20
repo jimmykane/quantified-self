@@ -1,15 +1,15 @@
 <section class="component-container">
   <app-shade [isActive]="!isInitialized"></app-shade>
-  <ng-container *ngIf="targetUser && isLoading === false">
+  <ng-container *ngIf="(targetUser || user) && isInitialized">
     <mat-card-header>
       <div mat-card-avatar class="avatar"
-           [style.backgroundImage]="'url('+ (targetUser.photoURL ? targetUser.photoURL :  'https://ui-avatars.com/api/?name=' + (targetUser.displayName) ) +')'">
+           [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName) ) +')'">
       </div>
       <mat-card-title>
-        {{targetUser.displayName}}
+        {{(targetUser || user).displayName}}
       </mat-card-title>
-      <mat-card-subtitle *ngIf="targetUser.description">{{ targetUser.description }}</mat-card-subtitle>
-      <mat-card-subtitle *ngIf="!targetUser.description">
+      <mat-card-subtitle *ngIf="(targetUser || user).description">{{ (targetUser || user).description }}</mat-card-subtitle>
+      <mat-card-subtitle *ngIf="!(targetUser || user).description">
         No description available
       </mat-card-subtitle>
     </mat-card-header>
