@@ -4,3 +4,6 @@ section {
   padding: 1em;
 }
 
+.avatar{
+  background-size: cover;
+}
