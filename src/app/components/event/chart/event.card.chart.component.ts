@@ -33,7 +33,7 @@ import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataSwimPace, DataSwimPaceMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
 import { DataSwimPaceMaxMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
 import { DataGPSAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
@@ -99,6 +99,7 @@ import {
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppColors } from '../../../services/color/app.colors';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -841,7 +842,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
 
     if (this.xAxisType === XAxisTypes.Time) {
-      // this.addStartPauseGuides(this.chart, this.xAxisType, series);
+      // this.addStartPauseSeriesRanges(this.chart, this.xAxisType, series);
+      this.addStartPauseTimeAxisRanges(<am4charts.DateAxis>this.chart.xAxes.getIndex(0));
     }
 
     this.loaded();
@@ -1288,7 +1290,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       })
   }
 
-  private addStartPauseGuides(chart: am4charts.XYChart, xAxisType: XAxisTypes, series: am4charts.XYSeries[]) {
+  private addStartPauseSeriesRanges(chart: am4charts.XYChart, xAxisType: XAxisTypes, series: am4charts.XYSeries[]) {
     // const xAxis = <am4charts.ValueAxis>chart.yAxes.getIndex(0);
     // xAxis.axisRanges.template.grid.disabled = false;
 
@@ -1320,6 +1322,33 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // range.contents.fill = am4core.color('#DEDEDE');
           // range.contents.fill = am4core.color('#DEDEDE');
           range.contents.fillOpacity = 0.0;
+        })
+      });
+  }
+
+  private addStartPauseTimeAxisRanges(axis: am4charts.DateAxis) {
+    // const xAxis = <am4charts.ValueAxis>chart.yAxes.getIndex(0);
+    // xAxis.axisRanges.template.grid.disabled = false;
+
+    this.selectedActivities
+      .forEach((activity, seriesIndex) => {
+        const stopEvents = activity.getStopEvents();
+        const stopAllEvents = activity.getStopAllEvents();
+        activity.getStartEvents().forEach((startEvent, startEventIndex) => {
+          if (startEventIndex === 0) {
+            return;
+          }
+          let stopEvent;
+          stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
+          const range = axis.axisRanges.create();
+          range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
+          range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
+          range.axisFill.fill = am4core.color(AppColors.MediumGray);
+          range.axisFill.fillOpacity = 0.2;
+          range.grid.strokeOpacity = 0;
+          range.grid.above = true;
+          range.tick.disabled = true;
+
         })
       });
   }
