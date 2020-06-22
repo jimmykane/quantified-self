@@ -10,7 +10,8 @@ admin.initializeApp({
 });
 
 export * from "./st-workout-download-as-fit"
-export * from "./auth"
+export * from "./auth/suunto/suunto-api"
+export * from "./auth/garmin/garmin-health-api"
 export * from "./service-tokens"
 export * from "./insert-to-queue"
 export * from "./parse-queue"

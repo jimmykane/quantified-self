@@ -4,8 +4,8 @@ import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import {getTokenData} from "./service-tokens";
-import {generateIDFromParts} from "./utils";
-import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth";
+import { generateIDFromParts, getUserIDFromFirebaseToken } from "./utils";
+import {isCorsAllowed, setAccessControlHeadersOnResponse} from "./auth/suunto/suunto-api";
 import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
 import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import {UserServiceMetaInterface} from "@sports-alliance/sports-lib/lib/users/user.service.meta.interface";
@@ -33,57 +33,33 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     return;
   }
 
-  if (!req.headers.authorization) {
-    console.error(`No authorization'`);
-    res.status(403);
-    res.send();
-    return
+  const userID = await getUserIDFromFirebaseToken(req);
+  if (!userID){
+    res.status(403).send('Unauthorized');
+    return;
   }
 
-  if (!req.body.startDate || !req.body.endDate) {
-    console.error(`No params provided. 'startDate' or 'endDate' are missing`);
-    res.status(500);
-    res.send();
-    return
-  }
+
 
   const startDate = new Date(req.body.startDate);
   const endDate = new Date(req.body.endDate);
 
-  let decodedIdToken;
-  try {
-    decodedIdToken = await admin.auth().verifyIdToken(req.headers.authorization);
-  } catch (e) {
-    console.error(e);
-    console.error(`Could not verify user token aborting operation`);
-    res.status(500);
-    res.send();
-    return;
-  }
-
-  if (!decodedIdToken) {
-    console.error(`Could not verify and decode token`);
-    res.status(500);
-    res.send();
-    return;
-  }
-
   // First check last history import
-  const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp).get();
+  const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.SuuntoApp).get();
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
     const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000));   // 7 days for  285,7142857143 per day
     if ((nextHistoryImportAvailableDate > new Date()) && data.processedActivitiesFromLastHistoryImportCount !== 0) {
-      console.error(`User ${decodedIdToken.uid} tried todo history import while not allowed`);
+      console.error(`User ${userID} tried todo history import while not allowed`);
       res.status(403);
       res.send(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
       return
     }
   }
 
-  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
+  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
 
-  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
+  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   // Get the history for those tokens
   let totalProcessedWorkoutsCount = 0;
@@ -111,16 +87,16 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
         url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000`,
       });
       result = JSON.parse(result);
-      // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
+      // console.log(`Deauthorized token ${doc.id} for ${userID}`)
     } catch (e) {
-      console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`, e);
+      console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send();
       return;
     }
 
     if (result.error !== null) {
-      console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid} due to service error`, result.error);
+      console.error(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
       res.status(500);
       res.send();
       return;
@@ -130,11 +106,11 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
     result.payload = result.payload.filter((activity: any) => (new Date(activity.startTime)) >= startDate &&  (new Date(activity.startTime)) <= endDate)
 
     if (result.payload.length === 0) {
-      console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+      console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
       continue;
     }
 
-    console.log(`Found ${result.payload.length} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Found ${result.payload.length} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
 
     const batchCount = Math.ceil(result.payload.length / BATCH_SIZE);
     const batchesToProcess: any[] = [];
@@ -144,7 +120,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       batchesToProcess.push(result.payload.slice(start, end))
     });
 
-    console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${decodedIdToken.uid}`);
+    console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
     for (const batchToProcess of batchesToProcess) {
       const batch = admin.firestore().batch();
       let processedWorkoutsCount = 0;
@@ -164,26 +140,26 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
         processedBatchesCount++;
         totalProcessedWorkoutsCount += processedWorkoutsCount;
         batch.set(
-          admin.firestore().collection('users').doc(decodedIdToken.uid).collection('meta').doc(ServiceNames.SuuntoApp),
+          admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.SuuntoApp),
           <UserServiceMetaInterface>{
             didLastHistoryImport: (new Date()).getTime(),
             processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount,
           }, {merge: true});
 
         await batch.commit();
-        console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+        console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
 
       } catch (e) {
-        console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} due to service error aborting`, e);
+        console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
         processedBatchesCount--;
         totalProcessedWorkoutsCount -= processedWorkoutsCount;
         continue; // Unnecessary but clear to the user that it will continue
       }
     }
-    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${decodedIdToken.uid} `);
+    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
   }
 
-  console.log(`${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${decodedIdToken.uid}`);
+  console.log(`${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
   // @todo make sure all went fine else return error
 
   // Respond

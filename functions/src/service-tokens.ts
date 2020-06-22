@@ -3,7 +3,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
-import {suuntoAppAuth} from "./suunto-app-auth";
+import {suuntoApiAuth} from "./auth/suunto/suunto-api-auth";
 import {ServiceTokenInterface} from "@sports-alliance/sports-lib/lib/service-tokens/service-token.interface";
 
 //
@@ -27,7 +27,7 @@ export const refreshTheRefreshTokens = functions.region('europe-west2').runWith(
 export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSave = false): Promise<ServiceTokenInterface> {
 
   const serviceTokenData = <ServiceTokenInterface>doc.data();
-  const oauth2 = suuntoAppAuth();
+  const oauth2 = suuntoApiAuth();
   // doc.data() is never undefined for query doc snapshots
   const token = oauth2.accessToken.create({
     'access_token': serviceTokenData.accessToken,

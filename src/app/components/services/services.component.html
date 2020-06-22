@@ -1,5 +1,14 @@
 <section class="component-container">
   <mat-card class="mat-elevation-z0 service-card">
+    <button mat-stroked-button
+            class="big"
+            mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+            *ngIf="(user && !this.isGuest)"
+            (click)="connectWithGarmin($event)">
+      Connect with Garmin
+    </button>
+  </mat-card>
+  <mat-card class="mat-elevation-z0 service-card">
     <mat-card-header>
       <!--          <div mat-card-avatar>-->
       <!--            <mat-icon class="suunto"  svgIcon="suunto"></mat-icon>-->

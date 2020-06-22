@@ -51,6 +51,13 @@ service cloud.firestore {
        }
     }
 
+    match /garminHealthAPIAccessTokens/{userID} {
+      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+        match /tokens/{document=**} {
+          allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+        }
+    }
+
 
     match /suuntoAppWorkoutQueue/{userID} {
       allow read, write: if false;

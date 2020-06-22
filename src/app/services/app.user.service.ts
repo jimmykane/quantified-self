@@ -361,16 +361,16 @@ export class AppUserService implements OnDestroy {
   }
 
   public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
       environment.functions.historyImportURI, {
-        firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true),
         startDate: startDate,
         endDate: endDate
       },
       {
         headers:
           new HttpHeaders({
-            'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+            'Authorization': `Bearer ${idToken}`
           })
       }).toPromise();
   }
@@ -383,6 +383,19 @@ export class AppUserService implements OnDestroy {
         headers:
           new HttpHeaders({
             'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+          })
+      }).toPromise();
+  }
+
+
+  public async getCurrentUserGarminHealthAPIRedirectURI() {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return this.http.post(
+      environment.functions.getGarminAuthRequestTokenRedirectURI,{},
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
           })
       }).toPromise();
   }

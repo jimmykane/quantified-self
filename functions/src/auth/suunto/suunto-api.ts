@@ -4,16 +4,13 @@ import * as functions from 'firebase-functions'
 import * as cookieParser from "cookie-parser";
 import * as crypto from "crypto";
 import * as admin from "firebase-admin";
-import {generateIDFromParts} from "./utils";
+import {generateIDFromParts} from "../../utils";
 import {Request} from "firebase-functions/lib/providers/https";
 import * as requestPromise from "request-promise-native";
-import {suuntoAppAuth} from "./suunto-app-auth";
-import {ServiceTokenInterface} from "@sports-alliance/sports-lib/lib/service-tokens/service-token.interface";
-import {getTokenData} from "./service-tokens";
-import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
-
-
-// console.log(process.env)
+import {suuntoApiAuth} from "./suunto-api-auth";
+import {getTokenData} from "../../service-tokens";
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
+import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 
 
 // const OAUTH_REDIRECT_PATH = `https://${process.env.GCLOUD_PROJECT}.firebaseapp.com/popup.html`;
@@ -32,7 +29,7 @@ const OAUTH_SCOPES = 'workout';
  * verification.
  */
 export const authRedirect = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  const oauth2 = suuntoAppAuth();
+  const oauth2 = suuntoApiAuth();
   const state = req.cookies ? req.cookies.state : crypto.randomBytes(20).toString('hex');
   const signInWithService = req.query.signInWithService === 'true';
   console.log('Setting state cookie for verification:', state);
@@ -59,7 +56,7 @@ export const authRedirect = functions.region('europe-west2').https.onRequest(asy
  * function with function name defined by the 'callback' query parameter.
  */
 export const authToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  const oauth2 = suuntoAppAuth();
+  const oauth2 = suuntoApiAuth();
   cookieParser()(req, res, async () => {
     try {
       const currentDate = new Date();
@@ -249,7 +246,7 @@ async function createFirebaseAccount(serviceUserID: string, accessToken: string)
   return token;
 }
 
-function determineRedirectURI(req: Request): string {
+export function determineRedirectURI(req: Request): string {
   return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
 }
 

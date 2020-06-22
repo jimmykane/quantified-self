@@ -23,5 +23,6 @@ export const environment = {
     getSuuntoFITFile: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoFITFile',
     historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addHistoryToQueue',
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
+    getGarminAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminAuthRequestTokenRedirectURI/',
   }
 };

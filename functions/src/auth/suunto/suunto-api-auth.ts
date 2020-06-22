@@ -4,7 +4,7 @@ import {create} from "simple-oauth2";
 /**
  * Creates a configured simple-oauth2 client for Suunto app.
  */
-export function suuntoAppAuth() {
+export function suuntoApiAuth() {
   // Suunto app OAuth 2 setup
   const credentials = {
     client: {

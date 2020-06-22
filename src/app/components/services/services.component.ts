@@ -2,7 +2,7 @@ import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AppFileService } from '../../services/app.file.service';
 import { of, Subscription } from 'rxjs';
 import { AppEventService } from '../../services/app.event.service';
@@ -179,6 +179,13 @@ export class ServicesComponent implements OnInit, OnDestroy {
       return
     }
     // wnd.onunload = () => this.isLoading = false;
+  }
+
+  async connectWithGarmin(event) {
+    this.isLoading = true;
+    // Get the redirect url for the unsigned token created with the post
+    const c = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
+    debugger;
   }
 
   async deauthorizeSuuntoApp(event) {
