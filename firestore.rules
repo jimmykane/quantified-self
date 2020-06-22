@@ -5,7 +5,12 @@ service cloud.firestore {
     // available in rules.
     match /users/{userID} {
 
+     function isCoach() {
+       return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
+      }
+
       allow read: if resource.data.privacy == 'public';
+      allow read: if isCoach() == true;
       allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
 
@@ -15,10 +20,6 @@ service cloud.firestore {
           allow read, write: if request.auth.uid == userID;
           function eventData() {
             return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
-          }
-
-          function isCoach() {
-           return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
           }
 
           match /activities/{activityID} {
@@ -51,7 +52,7 @@ service cloud.firestore {
        }
     }
 
-    match /garminHealthAPIAccessTokens/{userID} {
+    match /garminHealthAPITokens/{userID} {
       allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
         match /tokens/{document=**} {
           allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
