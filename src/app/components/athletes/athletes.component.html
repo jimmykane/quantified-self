@@ -20,7 +20,7 @@
           {{ athleteAndEvents.events.length }} events this week
         </mat-card-content>
         <mat-card-actions>
-          <button mat-button [routerLink]="['/user', athleteAndEvents.athlete.uid, 'event', athleteAndEvents.events[0].getID()]">Go to latest event</button>
+          <button mat-button *ngIf="athleteAndEvents.events[0]" [routerLink]="['/user', athleteAndEvents.athlete.uid, 'event', athleteAndEvents.events[0].getID()]">Go to latest event</button>
           <button mat-button [routerLink]="['/user', athleteAndEvents.athlete.uid, 'dashboard']">View user's dashboard</button>
 
         </mat-card-actions>
