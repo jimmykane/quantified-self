@@ -1,5 +1,5 @@
 import * as base58 from 'bs58';
-import { Request } from 'firebase-functions';
+import { Request, Response } from 'firebase-functions';
 import * as admin from "firebase-admin";
 
 
@@ -35,11 +35,26 @@ export async function getUserIDFromFirebaseToken(req: Request ): Promise<string|
 
   try {
     const decodedIdToken = await admin.auth().verifyIdToken(idToken);
-    console.log('ID Token correctly decoded', decodedIdToken);
+    console.log('ID Token correctly decoded');
 
     return decodedIdToken.uid;
   } catch (error) {
     console.error('Error while verifying Firebase ID token:', error);
     return null;
   }
+}
+
+export function determineRedirectURI(req: Request): string {
+    return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
+}
+
+export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
+  res.set('Access-Control-Allow-Origin', `${req.get('origin')}`);
+  res.set('Access-Control-Allow-Methods', 'POST');
+  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept, authorization');
+  return res;
+}
+
+export function isCorsAllowed(req: Request) {
+  return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }

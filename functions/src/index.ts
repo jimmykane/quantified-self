@@ -20,3 +20,6 @@ export * from "./routes"
 export * from "./get-suunto-fit-file"
 // export * from "./migrations"
 
+export { determineRedirectURI } from './utils';
+export { isCorsAllowed } from './utils';
+export { setAccessControlHeadersOnResponse } from './utils';

@@ -1,15 +1,18 @@
 import {Injectable} from '@angular/core';
+import { AppWindowService } from './app.window.service';
 
 
 @Injectable({
   providedIn: 'root',
 })
 export class AppSharingService {
+  constructor(private windowService: AppWindowService) {
+  }
   public getShareURLForEvent(userID: string, eventID: string): string {
-    return `${window.location.protocol}//${window.location.host}/user/${userID}/event/${eventID}`;
+    return `${this.windowService.currentDomain}/user/${userID}/event/${eventID}`;
   }
 
   public getShareURLForUser(userID: string): string {
-    return `${window.location.protocol}//${window.location.host}/user/${userID}`;
+    return `${this.windowService.currentDomain}/user/${userID}`;
   }
 }

@@ -330,6 +330,14 @@ export class AppUserService implements OnDestroy {
       }));
   }
 
+   public async getGarminHealthAPITokens(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
+    return this.afs
+      .collection('garminHealthAPITokens')
+      .doc(user.uid).get().pipe(catchError(error => {
+        return [];
+      })).pipe(take(1)).pipe(map(doc => doc.data())).toPromise();
+  }
+
   private getAllUserMeta(user: User) {
     return this.afs
       .collection('users')
@@ -388,10 +396,25 @@ export class AppUserService implements OnDestroy {
   }
 
 
-  public async getCurrentUserGarminHealthAPIRedirectURI() {
+  public async getCurrentUserGarminHealthAPIRedirectURI(): Promise<{redirect_url: string}> {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return <Promise<{redirect_url: string}>>this.http.post(
+      environment.functions.getGarminAuthRequestTokenRedirectURI, {},
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
-      environment.functions.getGarminAuthRequestTokenRedirectURI,{},
+      environment.functions.requestAndSetGarminHealthAPIAccessToken, {
+        state: state,
+        oauthVerifier: oauthVerifier
+      },
       {
         headers:
           new HttpHeaders({

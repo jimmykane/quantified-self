@@ -4,8 +4,8 @@ import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import { getTokenData } from "./service-tokens";
-import { isCorsAllowed, setAccessControlHeadersOnResponse } from "./auth/suunto/suunto-api";
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
+import { isCorsAllowed, setAccessControlHeadersOnResponse } from './utils';
 
 /**
  * Uploads a route to the Suunto app

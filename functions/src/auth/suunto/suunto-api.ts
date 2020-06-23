@@ -4,11 +4,15 @@ import * as functions from 'firebase-functions'
 import * as cookieParser from "cookie-parser";
 import * as crypto from "crypto";
 import * as admin from "firebase-admin";
-import {generateIDFromParts} from "../../utils";
-import {Request} from "firebase-functions/lib/providers/https";
+import {
+  determineRedirectURI,
+  generateIDFromParts,
+  isCorsAllowed,
+  setAccessControlHeadersOnResponse
+} from "../../utils";
 import * as requestPromise from "request-promise-native";
-import {suuntoApiAuth} from "./suunto-api-auth";
-import {getTokenData} from "../../service-tokens";
+import { suuntoApiAuth } from "./suunto-api-auth";
+import { getTokenData } from "../../service-tokens";
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 
@@ -246,17 +250,3 @@ async function createFirebaseAccount(serviceUserID: string, accessToken: string)
   return token;
 }
 
-export function determineRedirectURI(req: Request): string {
-  return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
-}
-
-export function setAccessControlHeadersOnResponse(req: Request, res: functions.Response) {
-  res.set('Access-Control-Allow-Origin', `${req.get('origin')}`);
-  res.set('Access-Control-Allow-Methods', 'POST');
-  res.set('Access-Control-Allow-Headers', 'origin, content-type, accept, authorization');
-  return res;
-}
-
-export function isCorsAllowed(req: Request) {
-  return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
-}

@@ -10,4 +10,8 @@ export class AppWindowService {
     return window
   }
 
+  get currentDomain() {
+    return `${this.windowRef.location.protocol}//${this.windowRef.location.host}`
+  }
+
 }

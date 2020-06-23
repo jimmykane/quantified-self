@@ -9,7 +9,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AppUserService } from '../../services/app.user.service';
 import { switchMap } from 'rxjs/operators';
 import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
@@ -17,6 +17,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-dat
 import { environment } from '../../../environments/environment';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { AppWindowService } from '../../services/app.window.service';
 
 
 @Component({
@@ -57,13 +58,15 @@ export class ServicesComponent implements OnInit, OnDestroy {
               public authService: AppAuthService,
               private userService: AppUserService,
               private router: Router,
+              private route: ActivatedRoute,
+              private windowService: AppWindowService,
               private snackBar: MatSnackBar) {
   }
 
-  ngOnInit(): void {
+  async ngOnInit() {
+    this.isLoading = true;
     this.userSubscription = this.authService.user.pipe(switchMap((user) => {
       this.user = user;
-
       if (!this.user) {
         this.snackBar.open('You must login to connect and use the service features', 'OK', {
           duration: null,
@@ -84,8 +87,22 @@ export class ServicesComponent implements OnInit, OnDestroy {
       }
       return this.userService
         .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
-    })).subscribe((metaForService) => {
+    })).subscribe(async (metaForService) => {
       this.metaForService = metaForService;
+
+      const state = this.route.snapshot.queryParamMap.get('state');
+      const oauthToken = this.route.snapshot.queryParamMap.get('oauth_token');
+      const oauthVerifier = this.route.snapshot.queryParamMap.get('oauth_verifier');
+      if (state && oauthToken && oauthVerifier){
+        try {
+          const c = await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier)
+        } catch (e) {
+          Sentry.captureException(e);
+        } finally {
+          this.router.navigate(['services'], {preserveQueryParams: false});
+        }
+      }
+      this.isLoading = false;
     });
     this.suuntoAppLinkFormGroup = new FormGroup({
       input: new FormControl('', [
@@ -182,10 +199,18 @@ export class ServicesComponent implements OnInit, OnDestroy {
   }
 
   async connectWithGarmin(event) {
-    this.isLoading = true;
-    // Get the redirect url for the unsigned token created with the post
-    const c = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
-    debugger;
+    try {
+      this.isLoading = true;
+      const redirectURI = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
+      // Get the redirect url for the unsigned token created with the post
+      const tokens = await this.userService.getGarminHealthAPITokens(this.user)
+      // this.windowService.windowRef.location.href = 'https://www.google.com'
+      this.windowService.windowRef.location.href = `${redirectURI.redirect_url}?oauth_token=${tokens.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${tokens.state}`)}`
+    } catch (e){
+      Sentry.captureException(e);
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   async deauthorizeSuuntoApp(event) {

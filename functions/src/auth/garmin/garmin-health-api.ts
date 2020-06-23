@@ -5,6 +5,8 @@ import { GarminHealthAPIAuth } from './garmin-health-api-auth';
 import * as requestPromise from 'request-promise-native';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../..';
 import { getUserIDFromFirebaseToken } from '../../utils';
+import * as admin from 'firebase-admin';
+import * as crypto from "crypto";
 
 
 // const OAUTH_SCOPES = 'workout';
@@ -15,7 +17,6 @@ const ACCESS_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/acce
 /**
  */
 export const getGarminAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
-
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed`);
@@ -38,7 +39,6 @@ export const getGarminAuthRequestTokenRedirectURI = functions.region('europe-wes
     return;
   }
 
-  // Should only allow post
   const oAuth = GarminHealthAPIAuth();
 
   let result
@@ -52,44 +52,83 @@ export const getGarminAuthRequestTokenRedirectURI = functions.region('europe-wes
 
   const urlParams = new URLSearchParams(result);
 
+  await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
+    oauthToken: urlParams.get('oauth_token'),
+    oauthTokenSecret: urlParams.get('oauth_token_secret'),
+    state: crypto.randomBytes(20).toString('hex')
+  })
+
   // Send the response wit hte prepeared stuff to the client and let him handle the state etc
   res.send({
     redirect_url: REQUEST_TOKEN_CONFIRMATION_URI,
-    oauth_token: urlParams.get('oauth_token'),
-    oauth_token_secret: urlParams.get('oauth_token_secret'),
   })
 });
 
 
-export const garminAuthAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // @todo handle error
+export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  // Directly set the CORS header
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
+    console.error(`Not allowed`);
+    res.status(403);
+    res.send('Unauthorized');
+    return
+  }
+
+  setAccessControlHeadersOnResponse(req, res);
+
+  if (req.method === 'OPTIONS') {
+    res.status(200);
+    res.send();
+    return;
+  }
+
+  const userID = await getUserIDFromFirebaseToken(req);
+  if (!userID){
+    res.status(403).send('Unauthorized');
+    return;
+  }
+
+  const state = req.body.state
+  const oauthVerifier = req.body.oauthVerifier;
+
+  if (!state || !oauthVerifier){
+    res.status(500).send('Bad Request');
+    return;
+  }
+
+  const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
+  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.state || !tokensDocumentSnapshotData.oauthToken || !tokensDocumentSnapshotData.oauthTokenSecret ){
+    res.status(500).send('Bad request');
+    return;
+  }
+
+  if (state !== tokensDocumentSnapshotData.state){
+    res.status(403).send('Unauthorized');
+    return;
+  }
 
   const oAuth = GarminHealthAPIAuth();
-  const d = oAuth.toHeader(oAuth.authorize({
-    url: ACCESS_TOKEN_URI,
-    method: 'POST',
-    data: {
-      oauth_verifier: req.query.oauth_verifier,
-      oauth_token_secret: req.query.oauth_token_secret,
-      // oauth_token: {
-      //   oauth_token: req.query.oauth_token, oauth_token_secret: req.query.oauth_token_secret
-      // }
-    }
-  }, {
-    key: req.query.oauth_token,
-    secret: req.query.oauth_token_secret
-  }))
-  console.log(d)
+
   let result
   result = await requestPromise.post({
-    headers: d,
+    headers: oAuth.toHeader(oAuth.authorize({
+      url: ACCESS_TOKEN_URI,
+      method: 'POST',
+      data: {
+        oauth_verifier: oauthVerifier,
+      }
+    }, {
+      key: tokensDocumentSnapshotData.oauthToken,
+      secret: tokensDocumentSnapshotData.oauthTokenSecret
+    })),
     url: ACCESS_TOKEN_URI,
   });
 
-  console.log(result);
-
-  // @todo should save per user
-  debugger;
+  const urlParams = new URLSearchParams(result);
+  await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
+    accessToken: urlParams.get('oauth_token'),
+    accessTokenSecret: urlParams.get('oauth_token_secret'),
+  })
   res.send();
 });
 
