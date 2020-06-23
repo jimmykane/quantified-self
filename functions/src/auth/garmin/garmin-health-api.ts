@@ -128,6 +128,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
     accessToken: urlParams.get('oauth_token'),
     accessTokenSecret: urlParams.get('oauth_token_secret'),
+    dateCreated: (new Date()).getTime()
   })
   res.send();
 });

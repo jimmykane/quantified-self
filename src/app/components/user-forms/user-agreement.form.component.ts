@@ -95,7 +95,7 @@ export class UserAgreementFormComponent implements OnInit {
       const dbUser = await this.userService.createOrUpdateUser(this.user);
       // debugger;
       if (this.serviceName && this.serviceToken) {
-        await this.userService.setServiceAuthToken(dbUser, this.serviceName, this.serviceToken);
+        await this.userService.setSuuntoAppToken(dbUser, this.serviceName, this.serviceToken);
       }
       this.snackBar.open('User updated', null, {
         duration: 2000,

@@ -36,7 +36,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
-    await this.userService.setServiceAuthToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse);
+    await this.userService.setSuuntoAppToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse);
     this.isLoading = false;
     this.snackBar.open(`Connected successfully`, null, {
       duration: 2000,
@@ -79,7 +79,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
           duration: 10000,
         });
       }
-      return this.userService.getServiceAuthToken(user, ServiceNames.SuuntoApp)
+      return this.userService.getSuuntoAppToken(user, ServiceNames.SuuntoApp)
     })).pipe(switchMap((tokens) => {
       this.serviceTokens = tokens;
       if (!this.user || !this.serviceTokens) {

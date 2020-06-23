@@ -311,18 +311,12 @@ export class AppUserService implements OnDestroy {
     return Promise.resolve(user);
   }
 
-  public async setServiceAuthToken(user: User, serviceName: string, serviceToken: ServiceTokenInterface) {
-    if (serviceName !== ServiceNames.SuuntoApp) {
-      throw new Error('Service not supported');
-    }
-    return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(serviceToken.userName)
-      .set(JSON.parse(JSON.stringify(serviceToken)))
+  public async setSuuntoAppToken(user: User, token: ServiceTokenInterface) {
+    return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(token.userName)
+      .set(JSON.parse(JSON.stringify(token)))
   }
 
-  public getServiceAuthToken(user: User, serviceName: string) {
-    if (serviceName !== ServiceNames.SuuntoApp) {
-      throw new Error('Service not supported');
-    }
+  public getSuuntoAppToken(user: User) {
     return this.afs
       .collection('suuntoAppAccessTokens')
       .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges().pipe(catchError(error => {
@@ -445,7 +439,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const serviceToken = await this.getServiceAuthToken(user, ServiceNames.SuuntoApp);
+    const serviceToken = await this.getSuuntoAppToken(user, ServiceNames.SuuntoApp);
     if (serviceToken) {
       try {
         await this.deauthorizeSuuntoAppService();
