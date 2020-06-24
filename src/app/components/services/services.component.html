@@ -66,21 +66,21 @@
         <ng-template matTabContent>
           <mat-card class="mat-elevation-z0">
             <mat-card-header>
-              <mat-card-subtitle *ngIf="!suuntoAppTokens || !serviceTokens.length">
+              <mat-card-subtitle *ngIf="!suuntoAppTokens || !suuntoAppTokens.length">
                 Connect to Suunto app
                 <mat-icon matTooltip="NOTE: Sync happens for activities done after this date">
                   info
                 </mat-icon>
               </mat-card-subtitle>
-              <mat-card-subtitle *ngIf="serviceTokens && serviceTokens.length">Connected</mat-card-subtitle>
+              <mat-card-subtitle *ngIf="suuntoAppTokens && suuntoAppTokens.length">Connected</mat-card-subtitle>
             </mat-card-header>
             <mat-divider></mat-divider>
 
-            <mat-list *ngIf="serviceTokens && serviceTokens.length">
+            <mat-list *ngIf="suuntoAppTokens && suuntoAppTokens.length">
 
               <div mat-subheader>Accounts</div>
 
-              <mat-list-item style="text-align: left" *ngFor="let serviceToken of serviceTokens; let i = index;">
+              <mat-list-item style="text-align: left" *ngFor="let serviceToken of suuntoAppTokens; let i = index;">
                 <mat-icon mat-list-icon>account_circle</mat-icon>
                 <div mat-line>{{ serviceToken.userName }} </div>
                 <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
@@ -89,21 +89,21 @@
 
             <button class="big"
                     mat-flat-button color="warn"
-                    *ngIf="serviceTokens && serviceTokens.length"
-                    (click)="deauthorizeSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
+                    *ngIf="suuntoAppTokens && suuntoAppTokens.length"
+                    (click)="deauthorizeSuuntoApp($event)">{{ suuntoAppTokens && (suuntoAppTokens.length > 1) ? 'Disconnect all' : 'Disconnect' }}
             </button>
 
             <button mat-stroked-button
                     class="big"
                     mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                    *ngIf="(!user || this.isGuest) || (serviceTokens && serviceTokens.length < 2)"
-                    (click)="connectWithSuuntoApp($event)">{{ serviceTokens && (serviceTokens.length === 1) ? 'Connect another' : 'Connect' }}
+                    *ngIf="(!user || this.isGuest) || (suuntoAppTokens && suuntoAppTokens.length < 2)"
+                    (click)="connectWithSuuntoApp($event)">{{ suuntoAppTokens && (suuntoAppTokens.length === 1) ? 'Connect another' : 'Connect' }}
             </button>
           </mat-card>
         </ng-template>
       </mat-tab>
 
-      <mat-tab label="History import" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
+      <mat-tab label="History import" [disabled]="!user || isGuest || !suuntoAppTokens || !suuntoAppTokens.length">
         <ng-template matTabLabel>
           <mat-icon matTooltip="History import">history</mat-icon>
         </ng-template>
@@ -121,7 +121,7 @@
         </ng-template>
       </mat-tab>
 
-      <mat-tab label="GPX Upload" [disabled]="!user || isGuest || !serviceTokens || !serviceTokens.length">
+      <mat-tab label="GPX Upload" [disabled]="!user || isGuest || !suuntoAppTokens || !suuntoAppTokens.length">
         <ng-template matTabLabel>
           <mat-icon matTooltip="GPX Upload" svgIcon="route"></mat-icon>
         </ng-template>

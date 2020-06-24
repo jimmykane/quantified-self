@@ -3,8 +3,8 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
-import {suuntoApiAuth} from "./auth/suunto/suunto-api-auth";
-import { Auth2ServiceTokenInterface } from '../../../sports-lib/src/service-tokens/oauth2-service-token.interface';
+import {suuntoApiAuth} from "./suunto/auth/auth";
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 //
 export const refreshTheRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {

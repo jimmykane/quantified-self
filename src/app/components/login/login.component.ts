@@ -127,7 +127,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
         if (serviceName && serviceToken) {
-          await this.userService.setSuuntoAppToken(databaseUser, serviceName)
+          await this.userService.setSuuntoAppToken(databaseUser, serviceToken)
         }
         this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
         await this.router.navigate(['/dashboard']);

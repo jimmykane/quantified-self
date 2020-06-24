@@ -9,15 +9,15 @@ admin.initializeApp({
   databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
 });
 
-export * from "./st-workout-download-as-fit"
-export * from "./auth/suunto/suunto-api"
-export * from "./auth/garmin/garmin-health-api"
+export * from "./suunto/st-workout-download-as-fit"
+export * from "./suunto/auth/wrapper"
+export * from "./garmin/auth/wrapper"
 export * from "./service-tokens"
-export * from "./insert-to-queue"
-export * from "./parse-queue"
-export * from "./history-to-queue"
+export * from "./suunto/insert-to-queue"
+export * from "./suunto/parse-queue"
+export * from "./suunto/history-to-queue"
 export * from "./routes"
-export * from "./get-suunto-fit-file"
+export * from "./suunto/get-suunto-fit-file"
 // export * from "./migrations"
 
 export { determineRedirectURI } from './utils';

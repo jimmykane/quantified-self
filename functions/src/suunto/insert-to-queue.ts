@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
-import {generateIDFromParts} from "./utils";
+import {generateIDFromParts} from "../utils";
 import {processQueueItem} from "./parse-queue";
 
 const TIMEOUT_IN_SECONDS = 540;

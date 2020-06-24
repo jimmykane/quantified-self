@@ -1,9 +1,9 @@
 'use strict';
 
 import * as functions from 'firebase-functions'
-import { GarminHealthAPIAuth } from './garmin-health-api-auth';
+import { GarminHealthAPIAuth } from './auth';
 import * as requestPromise from 'request-promise-native';
-import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../..';
+import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../index';
 import { getUserIDFromFirebaseToken } from '../../utils';
 import * as admin from 'firebase-admin';
 import * as crypto from "crypto";
@@ -13,6 +13,9 @@ import * as crypto from "crypto";
 const REQUEST_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/request_token'
 const REQUEST_TOKEN_CONFIRMATION_URI = 'https://connect.garmin.com/oauthConfirm'
 const ACCESS_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/access_token'
+
+// Other
+const USER_INFO_URI = 'https://healthapi.garmin.com/wellness-api/userInfo';
 
 /**
  */
@@ -125,6 +128,22 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   });
 
   const urlParams = new URLSearchParams(result);
+
+
+  // result = await requestPromise.get({
+  //   headers: oAuth.toHeader(oAuth.authorize({
+  //       url: USER_INFO_URI + '?uploadStartTimeInSeconds=0&uploadEndTimeInSeconds=' + new Date().getTime().toString(),
+  //       method: 'get',
+  //   },
+  //   {
+  //     key: urlParams.get('oauth_token'),
+  //     secret: urlParams.get('oauth_token_secret')
+  //   })),
+  //   url: USER_INFO_URI + '?uploadStartTimeInSeconds=0&uploadEndTimeInSeconds=' + new Date().getTime().toString(),
+  // });
+  //
+  // console.log(result);
+
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
     accessToken: urlParams.get('oauth_token'),
     accessTokenSecret: urlParams.get('oauth_token_secret'),

@@ -3,14 +3,16 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {EventImporterFIT} from "@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit";
-import {EventInterface} from "@sports-alliance/sports-lib/lib/events/event.interface";
 import * as Pako from "pako";
-import {generateIDFromParts} from "./utils";
-import {MetaData} from "@sports-alliance/sports-lib/lib/meta-data/meta-data";
+import {generateIDFromParts} from "../utils";
 import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
-import {getTokenData} from "./service-tokens";
+import {getTokenData} from "../service-tokens";
 import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
+import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 
 const TIMEOUT_IN_SECONDS = 540;
@@ -168,7 +170,7 @@ async function setEvent(userID: string, eventID:string , event: EventInterface, 
   const writePromises: Promise<any>[] = [];
   event.setID(eventID);
   event.getActivities()
-    .forEach((activity, index) => {
+    .forEach((activity: ActivityInterface, index: number) => {
       activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
       writePromises.push(
         admin.firestore().collection('users')
@@ -179,7 +181,7 @@ async function setEvent(userID: string, eventID:string , event: EventInterface, 
           .doc(<string>activity.getID())
           .set(activity.toJSON()));
 
-      activity.getAllExportableStreams().forEach((stream) => {
+      activity.getAllExportableStreams().forEach((stream: StreamInterface) => {
         // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
         writePromises.push(
           admin.firestore()

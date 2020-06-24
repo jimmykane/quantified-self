@@ -11,10 +11,10 @@ import {
   setAccessControlHeadersOnResponse
 } from "../../utils";
 import * as requestPromise from "request-promise-native";
-import { suuntoApiAuth } from "./suunto-api-auth";
+import { suuntoApiAuth } from "./auth";
 import { getTokenData } from "../../service-tokens";
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import { Auth2ServiceTokenInterface } from '../../../../../sports-lib/src/service-tokens/oauth2-service-token.interface';
 
 
 // const OAUTH_REDIRECT_PATH = `https://${process.env.GCLOUD_PROJECT}.firebaseapp.com/popup.html`;

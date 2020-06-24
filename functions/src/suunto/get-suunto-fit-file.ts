@@ -3,8 +3,8 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import { getTokenData } from "./service-tokens";
-import { isCorsAllowed, setAccessControlHeadersOnResponse } from './utils';
+import { getTokenData } from "../service-tokens";
+import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 
 /**
  * Downloads the original file

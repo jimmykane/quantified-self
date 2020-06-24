@@ -3,16 +3,16 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {getTokenData} from "./service-tokens";
+import {getTokenData} from "../service-tokens";
 import {
     generateIDFromParts,
     getUserIDFromFirebaseToken,
     isCorsAllowed,
     setAccessControlHeadersOnResponse
-} from "./utils";
+} from "../utils";
 import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
 import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
-import {UserServiceMetaInterface} from "@sports-alliance/sports-lib/lib/users/user.service.meta.interface";
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 
 
 const BATCH_SIZE = 450;
