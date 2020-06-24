@@ -4,7 +4,7 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import {suuntoApiAuth} from "./auth/suunto/suunto-api-auth";
-import {ServiceTokenInterface} from "@sports-alliance/sports-lib/lib/service-tokens/service-token.interface";
+import { Auth2ServiceTokenInterface } from '../../../sports-lib/src/service-tokens/oauth2-service-token.interface';
 
 //
 export const refreshTheRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
@@ -24,9 +24,9 @@ export const refreshTheRefreshTokens = functions.region('europe-west2').runWith(
   console.log(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
 });
 
-export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSave = false): Promise<ServiceTokenInterface> {
+export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSave = false): Promise<Auth2ServiceTokenInterface> {
 
-  const serviceTokenData = <ServiceTokenInterface>doc.data();
+  const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
   const oauth2 = suuntoApiAuth();
   // doc.data() is never undefined for query doc snapshots
   const token = oauth2.accessToken.create({
@@ -72,7 +72,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSa
     throw e;
   }
 
-  await doc.ref.update(<ServiceTokenInterface>{
+  await doc.ref.update(<Auth2ServiceTokenInterface>{
       accessToken: responseToken.token.access_token,
       refreshToken: responseToken.token.refresh_token,
       expiresAt: responseToken.token.expires_at.getTime() - 6000,

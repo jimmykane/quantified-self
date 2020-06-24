@@ -27,9 +27,7 @@ import {
 import { AngularFireAuth } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import * as Sentry from '@sentry/browser';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {
   DateRanges,
@@ -57,6 +55,7 @@ import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude
 import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 @Injectable({
@@ -311,7 +310,7 @@ export class AppUserService implements OnDestroy {
     return Promise.resolve(user);
   }
 
-  public async setSuuntoAppToken(user: User, token: ServiceTokenInterface) {
+  public async setSuuntoAppToken(user: User, token: Auth2ServiceTokenInterface) {
     return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(token.userName)
       .set(JSON.parse(JSON.stringify(token)))
   }
@@ -319,7 +318,7 @@ export class AppUserService implements OnDestroy {
   public getSuuntoAppToken(user: User) {
     return this.afs
       .collection('suuntoAppAccessTokens')
-      .doc<ServiceTokenInterface>(user.uid).collection('tokens').valueChanges().pipe(catchError(error => {
+      .doc<Auth2ServiceTokenInterface>(user.uid).collection('tokens').valueChanges().pipe(catchError(error => {
         return [];
       }));
   }
@@ -439,7 +438,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const serviceToken = await this.getSuuntoAppToken(user, ServiceNames.SuuntoApp);
+    const serviceToken = await this.getSuuntoAppToken(user);
     if (serviceToken) {
       try {
         await this.deauthorizeSuuntoAppService();

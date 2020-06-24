@@ -103,6 +103,8 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
     this.subscriptions.push(this.authService.user.pipe(switchMap((user) => {
       this.currentUser = user;
 
+      // @todo check against no current user
+
       /**
        * Get all now
        */
@@ -115,7 +117,9 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
             DataGradeAdjustedSpeed.type,
             DataDistance.type
           ],
-          ...new Set(DynamicDataLoader.getNonUnitBasedDataTypes(user.settings.chartSettings.showAllData, this.userService.getUserChartDataTypesToUse(user)))
+          ...user ?
+            new Set(DynamicDataLoader.getNonUnitBasedDataTypes(user.settings.chartSettings.showAllData, this.userService.getUserChartDataTypesToUse(user)))
+            : []
         ])
     })).subscribe((event) => {
       if (!event) {

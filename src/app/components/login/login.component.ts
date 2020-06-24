@@ -10,10 +10,9 @@ import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.comp
 import * as Sentry from '@sentry/browser';
 import {Log} from 'ng2-logger/browser';
 import {AngularFireAuth} from '@angular/fire/auth';
-import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import { Subscription } from 'rxjs';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 @Component({
@@ -34,7 +33,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   async tokensReceived(event) {
     this.isLoading = true;
     const loggedInUser = await this.afAuth.signInWithCustomToken(event.detail.firebaseAuthToken);
-    this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
+    return this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
   }
 
 
@@ -122,13 +121,13 @@ export class LoginComponent implements OnInit, OnDestroy {
     wnd.onunload = () => this.isLoading = false;
   }
 
-  private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: ServiceTokenInterface) {
+  private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
     this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
         if (serviceName && serviceToken) {
-          await this.userService.setSuuntoAppToken(databaseUser, serviceName, serviceToken)
+          await this.userService.setSuuntoAppToken(databaseUser, serviceName)
         }
         this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
         await this.router.navigate(['/dashboard']);
@@ -144,7 +143,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
   }
 
-  private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: ServiceTokenInterface) {
+  private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
     const dialogRef = this.dialog.open(UserAgreementFormComponent, {
       minWidth: '80vw',
       disableClose: true,

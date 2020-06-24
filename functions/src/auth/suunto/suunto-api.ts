@@ -14,7 +14,7 @@ import * as requestPromise from "request-promise-native";
 import { suuntoApiAuth } from "./suunto-api-auth";
 import { getTokenData } from "../../service-tokens";
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
+import { Auth2ServiceTokenInterface } from '../../../../../sports-lib/src/service-tokens/oauth2-service-token.interface';
 
 
 // const OAUTH_REDIRECT_PATH = `https://${process.env.GCLOUD_PROJECT}.firebaseapp.com/popup.html`;
@@ -93,7 +93,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
       }
       return res.jsonp({
         firebaseAuthToken: firebaseToken,
-        serviceAuthResponse: <ServiceTokenInterface>{
+        serviceAuthResponse: <Auth2ServiceTokenInterface>{
           accessToken: results.access_token,
           refreshToken: results.refresh_token,
           tokenType: results.token_type,

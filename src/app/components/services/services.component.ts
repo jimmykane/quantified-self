@@ -12,12 +12,12 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppUserService } from '../../services/app.user.service';
 import { switchMap } from 'rxjs/operators';
-import { ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import { environment } from '../../../environments/environment';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { AppWindowService } from '../../services/app.window.service';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 @Component({
@@ -30,13 +30,13 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public isLoading = false;
   public user: User;
   public isGuest: boolean;
-  public serviceTokens: ServiceTokenInterface[];
+  public suuntoAppTokens: Auth2ServiceTokenInterface[];
   public metaForService: UserServiceMetaInterface
   private userSubscription: Subscription;
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
-    await this.userService.setSuuntoAppToken(this.user, event.detail.serviceName, event.detail.serviceAuthResponse);
+    await this.userService.setSuuntoAppToken(this.user, event.detail.serviceAuthResponse);
     this.isLoading = false;
     this.snackBar.open(`Connected successfully`, null, {
       duration: 2000,
@@ -79,10 +79,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
           duration: 10000,
         });
       }
-      return this.userService.getSuuntoAppToken(user, ServiceNames.SuuntoApp)
+      return this.userService.getSuuntoAppToken(user)
     })).pipe(switchMap((tokens) => {
-      this.serviceTokens = tokens;
-      if (!this.user || !this.serviceTokens) {
+      this.suuntoAppTokens = tokens;
+      if (!this.user || !this.suuntoAppTokens) {
         return of(null);
       }
       return this.userService

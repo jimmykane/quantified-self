@@ -9,9 +9,8 @@ import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppUserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
-import {ServiceTokenInterface} from '@sports-alliance/sports-lib/lib/service-tokens/service-token.interface';
-import * as firebase from 'firebase/app';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 @Component({
@@ -33,7 +32,7 @@ export class UserAgreementFormComponent implements OnInit {
   public userFormGroup: FormGroup;
   private readonly signInMethod: string;
   private readonly serviceName?: string;
-  private readonly serviceToken?: ServiceTokenInterface;
+  private readonly serviceToken?: Auth2ServiceTokenInterface;
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -95,7 +94,7 @@ export class UserAgreementFormComponent implements OnInit {
       const dbUser = await this.userService.createOrUpdateUser(this.user);
       // debugger;
       if (this.serviceName && this.serviceToken) {
-        await this.userService.setSuuntoAppToken(dbUser, this.serviceName, this.serviceToken);
+        await this.userService.setSuuntoAppToken(dbUser, this.serviceToken);
       }
       this.snackBar.open('User updated', null, {
         duration: 2000,

@@ -60,6 +60,19 @@
     Settings
   </mat-list-item>
 
+  <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
+    <mat-icon svgIcon="dark-mode"></mat-icon>
+    <span matTooltip="Use dark theme">
+         Dark theme
+    </span>
+    <span class="fill-space"></span>
+    <mat-slide-toggle
+      [disabled]="!appTheme"
+      [color]="'accent'"
+      [checked]="appTheme === appThemes.Dark">
+    </mat-slide-toggle>
+  </mat-list-item>
+
   <mat-divider></mat-divider>
 
   <mat-list-item (click)="becomeAPatron()">
@@ -111,19 +124,6 @@
   </mat-list-item>
 
   <mat-divider *ngIf="user"></mat-divider>
-
-  <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
-    <mat-icon svgIcon="dark-mode"></mat-icon>
-    <span matTooltip="Use dark theme">
-         Dark theme
-    </span>
-    <span class="fill-space"></span>
-    <mat-slide-toggle
-      [disabled]="!appTheme"
-      [color]="'accent'"
-      [checked]="appTheme === appThemes.Dark">
-    </mat-slide-toggle>
-  </mat-list-item>
 
 </mat-nav-list>
 
