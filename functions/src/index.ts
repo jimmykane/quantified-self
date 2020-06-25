@@ -18,6 +18,7 @@ export * from "./suunto/parse-queue"
 export * from "./suunto/history-to-queue"
 export * from "./routes"
 export * from "./suunto/get-suunto-fit-file"
+export * from "./garmin/queue"
 // export * from "./migrations"
 
 export { determineRedirectURI } from './utils';
@@ -26,3 +27,5 @@ export { setAccessControlHeadersOnResponse } from './utils';
 export { setEvent } from './utils';
 export { updateToProcessed } from './queue';
 export { increaseRetryCountForQueueItem } from './queue';
+export { MEMORY } from './queue';
+export { TIMEOUT_IN_SECONDS } from './queue';

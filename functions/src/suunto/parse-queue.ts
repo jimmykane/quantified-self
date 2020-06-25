@@ -3,25 +3,25 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {
-  generateIDFromParts,
-  setEvent
-} from "../utils";
+import { generateIDFromParts, setEvent } from "../utils";
 import { ServiceNames } from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import { getTokenData } from "../service-tokens";
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
-import { increaseRetryCountForQueueItem, parseQueueItems, updateToProcessed } from '../queue';
+import {
+  increaseRetryCountForQueueItem,
+  MEMORY,
+  parseQueueItems,
+  TIMEOUT_IN_SECONDS,
+  updateToProcessed
+} from '../queue';
 
-
-const TIMEOUT_IN_SECONDS = 540;
-const MEMORY = "2GB";
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
-export async function processQueueItem(queueItem: any) {
+export async function processSuuntoAppActivityQueueItem(queueItem: any) {
 
   console.log(`Processing queue item ${queueItem.id} and username ${queueItem.data().userName} at retry count ${queueItem.data().retryCount}`);
   // queueItem.data() is never undefined for query queueItem snapshots

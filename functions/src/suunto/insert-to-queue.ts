@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import {generateIDFromParts} from "../utils";
-import {processQueueItem} from "./parse-queue";
+import {processSuuntoAppActivityQueueItem} from "./parse-queue";
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "2GB";
@@ -25,7 +25,7 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
     // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
     // @todo ask about this
     const queueItemDocumentReference = await addToQueue(userName, workoutID);
-    await processQueueItem(await queueItemDocumentReference.get());
+    await processSuuntoAppActivityQueueItem(await queueItemDocumentReference.get());
   }catch (e) {
     console.log(e);
     res.status(500);

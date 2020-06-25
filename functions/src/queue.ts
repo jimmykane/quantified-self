@@ -1,7 +1,10 @@
 import { QueueItemInterface } from '@sports-alliance/sports-lib/lib/queue-item/queue-item.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import * as admin from 'firebase-admin';
-import { processQueueItem } from './suunto/parse-queue';
+import { processSuuntoAppActivityQueueItem } from './suunto/parse-queue';
+import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
+export const TIMEOUT_IN_SECONDS = 540;
+export const MEMORY = "2GB";
 
 export async function increaseRetryCountForQueueItem(queueItem: any, error: Error, incrementBy = 1) {
   const data: QueueItemInterface = queueItem.data();
@@ -44,7 +47,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   let count = 0;
   for (const queueItem of querySnapshot.docs) {
     try {
-      await processQueueItem(queueItem);
+      await (serviceName === ServiceNames.SuuntoApp ? processSuuntoAppActivityQueueItem(queueItem) : processGarminHealthAPIActivityQueueItem(queueItem));
       count++;
       console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
     } catch (e) {
