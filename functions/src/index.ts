@@ -23,3 +23,6 @@ export * from "./suunto/get-suunto-fit-file"
 export { determineRedirectURI } from './utils';
 export { isCorsAllowed } from './utils';
 export { setAccessControlHeadersOnResponse } from './utils';
+export { setEvent } from './utils';
+export { updateToProcessed } from './queue';
+export { increaseRetryCountForQueueItem } from './queue';

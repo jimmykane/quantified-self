@@ -15,7 +15,7 @@ const REQUEST_TOKEN_CONFIRMATION_URI = 'https://connect.garmin.com/oauthConfirm'
 const ACCESS_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/access_token'
 
 // Other
-const USER_INFO_URI = 'https://healthapi.garmin.com/wellness-api/userInfo';
+const USER_ID_URI = 'https://healthapi.garmin.com/wellness-api/rest/user/id';
 
 /**
  */
@@ -113,42 +113,62 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   const oAuth = GarminHealthAPIAuth();
 
   let result
-  result = await requestPromise.post({
-    headers: oAuth.toHeader(oAuth.authorize({
+  try {
+    result = await requestPromise.post({
+      headers: oAuth.toHeader(oAuth.authorize({
+        url: ACCESS_TOKEN_URI,
+        method: 'POST',
+        data: {
+          oauth_verifier: oauthVerifier,
+        }
+      }, {
+        key: tokensDocumentSnapshotData.oauthToken,
+        secret: tokensDocumentSnapshotData.oauthTokenSecret
+      })),
       url: ACCESS_TOKEN_URI,
-      method: 'POST',
-      data: {
-        oauth_verifier: oauthVerifier,
-      }
-    }, {
-      key: tokensDocumentSnapshotData.oauthToken,
-      secret: tokensDocumentSnapshotData.oauthTokenSecret
-    })),
-    url: ACCESS_TOKEN_URI,
-  });
+    });
+  }catch (e) {
+    console.error(e)
+  }
+
+  if (!result){
+    res.status(500).send('Could not get access token for user');
+    return;
+  }
+
 
   const urlParams = new URLSearchParams(result);
+  result = null;
 
+  try {
+    result = await requestPromise.get({
+      headers: oAuth.toHeader(oAuth.authorize({
+          url: USER_ID_URI,
+          method: 'get',
+        },
+        {
+          key: urlParams.get('oauth_token'),
+          secret: urlParams.get('oauth_token_secret')
+        })),
+      url: USER_ID_URI,
+    });
+  }catch (e) {
+    console.error(e)
+  }
 
-  // result = await requestPromise.get({
-  //   headers: oAuth.toHeader(oAuth.authorize({
-  //       url: USER_INFO_URI + '?uploadStartTimeInSeconds=0&uploadEndTimeInSeconds=' + new Date().getTime().toString(),
-  //       method: 'get',
-  //   },
-  //   {
-  //     key: urlParams.get('oauth_token'),
-  //     secret: urlParams.get('oauth_token_secret')
-  //   })),
-  //   url: USER_INFO_URI + '?uploadStartTimeInSeconds=0&uploadEndTimeInSeconds=' + new Date().getTime().toString(),
-  // });
-  //
-  // console.log(result);
+  if (!result){
+    res.status(500).send('Could not get user for access token');
+    return;
+  }
 
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
     accessToken: urlParams.get('oauth_token'),
     accessTokenSecret: urlParams.get('oauth_token_secret'),
-    dateCreated: (new Date()).getTime()
+    dateCreated: (new Date()).getTime(),
+    userID: JSON.parse(result).userId
   })
+
+  console.log(`User ${userID} successfully connected to Garmin API`)
   res.send();
 });
 

@@ -3,39 +3,22 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import * as Pako from "pako";
-import {generateIDFromParts} from "../utils";
-import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
-import {getTokenData} from "../service-tokens";
-import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {
+  generateIDFromParts,
+  setEvent
+} from "../utils";
+import { ServiceNames } from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
+import { getTokenData } from "../service-tokens";
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { increaseRetryCountForQueueItem, parseQueueItems, updateToProcessed } from '../queue';
 
 
 const TIMEOUT_IN_SECONDS = 540;
-const RETRY_COUNT = 10;
-const LIMIT = 200;
 const MEMORY = "2GB";
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore().collection('suuntoAppWorkoutQueue').where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
-  console.log(`Found ${querySnapshot.size} queue items to process`);
-  let count = 0;
-  for (const queueItem of querySnapshot.docs) {
-    try {
-      await processQueueItem(queueItem);
-      count++;
-      console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
-    } catch (e) {
-      console.error(e);
-      console.error(new Error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`))
-    }
-  }
-  console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
+  await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
 export async function processQueueItem(queueItem: any) {
@@ -133,86 +116,4 @@ export async function processQueueItem(queueItem: any) {
   // For each ended so we can set it to processed
   return updateToProcessed(queueItem);
 
-}
-
-async function increaseRetryCountForQueueItem(queueItem: any, error: Error, incrementBy = 1) {
-  const data: QueueItemInterface = queueItem.data();
-  data.retryCount += incrementBy;
-  data.totalRetryCount = (data.totalRetryCount + incrementBy) || incrementBy;
-  data.errors = data.errors || [];
-  data.errors.push({
-    error: error.message,
-    atRetryCount: data.totalRetryCount,
-    date: (new Date()).getTime(),
-  });
-
-  try {
-    await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
-    console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + incrementBy}`);
-  } catch (e) {
-    console.error(new Error(`Could not update retry count on ${queueItem.id}`))
-  }
-}
-
-async function updateToProcessed(queueItem: any) {
-  try {
-    await queueItem.ref.update({
-      'processed': true,
-      'processedAt': (new Date()).getTime(),
-    });
-    console.log(`Updated to processed  ${queueItem.id}`);
-  } catch (e) {
-    console.error(new Error(`Could not update processed state for ${queueItem.id}`));
-  }
-}
-
-async function setEvent(userID: string, eventID:string , event: EventInterface, metaData: MetaData) {
-  const writePromises: Promise<any>[] = [];
-  event.setID(eventID);
-  event.getActivities()
-    .forEach((activity: ActivityInterface, index: number) => {
-      activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
-      writePromises.push(
-        admin.firestore().collection('users')
-          .doc(userID)
-          .collection('events')
-          .doc(<string>event.getID())
-          .collection('activities')
-          .doc(<string>activity.getID())
-          .set(activity.toJSON()));
-
-      activity.getAllExportableStreams().forEach((stream: StreamInterface) => {
-        // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
-        writePromises.push(
-          admin.firestore()
-            .collection('users')
-            .doc(userID)
-            .collection('events')
-            .doc(<string>event.getID())
-            .collection('activities')
-            .doc(<string>activity.getID())
-            .collection('streams')
-            .doc(stream.type)
-            .set({
-              type: stream.type,
-              data: Buffer.from((Pako.gzip(JSON.stringify(stream.getData()), {to: 'string'})), 'binary'),
-            }))
-      });
-    });
-  writePromises.push( admin.firestore()
-    .collection('users')
-    .doc(userID)
-    .collection('events')
-    .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData.toJSON()));
-  try {
-    await Promise.all(writePromises);
-    console.log(`Wrote ${writePromises.length+1} documents for event with id ${eventID}`);
-    return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
-  } catch (e) {
-    console.error(e);
-    debugger;
-    return
-    // Try to delete the parent entity and all subdata
-    // await this.deleteAllEventData(user, event.getID());
-  }
 }
