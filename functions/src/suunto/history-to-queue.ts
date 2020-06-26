@@ -10,9 +10,9 @@ import {
     isCorsAllowed,
     setAccessControlHeadersOnResponse
 } from "../utils";
-import {QueueItemInterface} from "@sports-alliance/sports-lib/lib/queue-item/queue-item.interface";
 import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
 
 const BATCH_SIZE = 450;
@@ -131,7 +131,7 @@ export const addHistoryToQueue = functions.region('europe-west2').https.onReques
       for (const payload of batchToProcess) {
         // Maybe do a get or insert it at another queue
         batch.set(admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([serviceToken.userName, payload.workoutKey])),
-          <QueueItemInterface>{
+          <SuuntoAppWorkoutQueueItemInterface>{
             userName: serviceToken.userName,
             workoutID: payload.workoutKey,
             retryCount: 0, // So it can be re-processed
