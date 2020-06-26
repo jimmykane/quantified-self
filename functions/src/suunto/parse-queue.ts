@@ -15,22 +15,23 @@ import {
   TIMEOUT_IN_SECONDS,
   updateToProcessed
 } from '../queue';
+import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
-export async function processSuuntoAppActivityQueueItem(queueItem: any) {
+export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWorkoutQueueItemInterface) {
 
-  console.log(`Processing queue item ${queueItem.id} and username ${queueItem.data().userName} at retry count ${queueItem.data().retryCount}`);
-  // queueItem.data() is never undefined for query queueItem snapshots
-  const tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.data()['userName']).get();
+  console.log(`Processing queue item ${queueItem.id} and username ${queueItem.userName} at retry count ${queueItem.retryCount}`);
+  // queueItem is never undefined for query queueItem snapshots
+  const tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.userName).get();
 
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokenQuerySnapshots.size) {
-    console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.data().userName} increasing count just in case`);
-    return increaseRetryCountForQueueItem(queueItem, new Error(`No tokens found`));
+    console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.userName} increasing count just in case`);
+    return increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error(`No tokens found`));
   }
 
   let processedCount = 0;
@@ -55,7 +56,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: any) {
     }
     const parentID = parent1.parent!.id;
 
-    console.log(`Found user id ${parentID} for queue item ${queueItem.id} and username ${queueItem.data().userName}`);
+    console.log(`Found user id ${parentID} for queue item ${queueItem.id} and username ${queueItem.userName}`);
 
     let result;
     try {
@@ -66,24 +67,24 @@ export async function processSuuntoAppActivityQueueItem(queueItem: any) {
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
         },
         encoding: null,
-        url: `https://cloudapi.suunto.com/v2/workout/exportFit/${queueItem.data()['workoutID']}`,
+        url: `https://cloudapi.suunto.com/v2/workout/exportFit/${queueItem.workoutID}`,
       });
       console.timeEnd('DownloadFit');
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
       if (e.statusCode === 403){
         console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName} due to 403, increasing retry by 20`))
-        await increaseRetryCountForQueueItem(queueItem, e, 20);
+        await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e, 20);
         continue;
       }
       if (e.statusCode === 500){
         console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName} due to 500 increasing retry by 20`))
-        await increaseRetryCountForQueueItem(queueItem, e, 20);
+        await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e, 20);
         continue;
       }
       // @todo -> Update to max retry if 403 not found that happens quite often.
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.data().retryCount} to ${queueItem.data().retryCount + 1} -> ${e.message}`));
-      await increaseRetryCountForQueueItem(queueItem, e);
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
+      await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e);
       continue;
     }
 
@@ -92,9 +93,9 @@ export async function processSuuntoAppActivityQueueItem(queueItem: any) {
       event.name = event.startDate.toJSON(); // @todo improve
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName} test`);
       // Id for the event should be serviceName + workoutID
-      const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.data()['workoutID'], queueItem.data()['userName'], new Date());
+      const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.workoutID, queueItem.userName, new Date());
       // @todo move metadata to its own document for firestore read/write rules
-      await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.data()['workoutID']]), event, metaData);
+      await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.workoutID]), event, metaData);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName} test`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
@@ -102,8 +103,8 @@ export async function processSuuntoAppActivityQueueItem(queueItem: any) {
     } catch (e) {
       // @todo should delete event  or separate catch
       console.error(e);
-      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.data().retryCount} and token user ${serviceToken.userName} to ${queueItem.data().retryCount + 1}`));
-      await increaseRetryCountForQueueItem(queueItem, e);
+      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userName} to ${queueItem.retryCount + 1}`));
+      await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e);
       continue;
     }
   }
@@ -114,6 +115,6 @@ export async function processSuuntoAppActivityQueueItem(queueItem: any) {
   }
 
   // For each ended so we can set it to processed
-  return updateToProcessed(queueItem);
+  return updateToProcessed(queueItem, ServiceNames.SuuntoApp);
 
 }

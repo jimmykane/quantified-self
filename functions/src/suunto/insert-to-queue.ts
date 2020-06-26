@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import {generateIDFromParts} from "../utils";
 import {processSuuntoAppActivityQueueItem} from "./parse-queue";
+import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "2GB";
@@ -25,7 +26,7 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
     // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
     // @todo ask about this
     const queueItemDocumentReference = await addToQueue(userName, workoutID);
-    await processSuuntoAppActivityQueueItem(await queueItemDocumentReference.get());
+    await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, await queueItemDocumentReference.get()).data());
   }catch (e) {
     console.log(e);
     res.status(500);

@@ -2,35 +2,43 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-dat
 import * as admin from 'firebase-admin';
 import { processSuuntoAppActivityQueueItem } from './suunto/parse-queue';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
-import { GarminHealthAPIActivityQueueItemInterface, QueueItemInterface } from './queue/queue-item.interface';
+import {
+  GarminHealthAPIActivityQueueItemInterface,
+  QueueItemInterface,
+  SuuntoAppWorkoutQueueItemInterface
+} from './queue/queue-item.interface';
 export const TIMEOUT_IN_SECONDS = 540;
 export const MEMORY = "2GB";
 
-export async function increaseRetryCountForQueueItem(queueItem: any, error: Error, incrementBy = 1) {
-  const data: QueueItemInterface = queueItem.data();
-  data.retryCount += incrementBy;
-  data.totalRetryCount = (data.totalRetryCount + incrementBy) || incrementBy;
-  data.errors = data.errors || [];
-  data.errors.push({
+export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, serviceName: ServiceNames, error: Error, incrementBy = 1) {
+  queueItem.retryCount += incrementBy;
+  queueItem.totalRetryCount = (queueItem.totalRetryCount + incrementBy) || incrementBy;
+  queueItem.errors = queueItem.errors || [];
+  queueItem.errors.push({
     error: error.message,
-    atRetryCount: data.totalRetryCount,
+    atRetryCount: queueItem.totalRetryCount,
     date: (new Date()).getTime(),
   });
 
   try {
-    await queueItem.ref.update(JSON.parse(JSON.stringify(data)));
-    console.info(`Updated retry count for ${queueItem.id} to ${data.retryCount + incrementBy}`);
+    await  await admin.firestore()
+      .collection(serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminHealthAPITokens')
+      .doc(queueItem.id).update(JSON.parse(JSON.stringify(queueItem)));
+    console.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount + incrementBy}`);
   } catch (e) {
     console.error(new Error(`Could not update retry count on ${queueItem.id}`))
   }
 }
 
-export async function updateToProcessed(queueItem: any) {
+export async function updateToProcessed(queueItem: QueueItemInterface, serviceName: ServiceNames) {
   try {
-    await queueItem.ref.update({
-      'processed': true,
-      'processedAt': (new Date()).getTime(),
-    });
+    // @todo make switch
+    await admin.firestore()
+      .collection(serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminActivityQueue')
+      .doc(queueItem.id).update({
+        'processed': true,
+        'processedAt': (new Date()).getTime(),
+      })
     console.log(`Updated to processed  ${queueItem.id}`);
   } catch (e) {
     console.error(new Error(`Could not update processed state for ${queueItem.id}`));
@@ -47,7 +55,9 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   let count = 0;
   for (const queueItem of querySnapshot.docs) {
     try {
-      await (serviceName === ServiceNames.SuuntoApp ? processSuuntoAppActivityQueueItem(queueItem) : processGarminHealthAPIActivityQueueItem(Object.assign({id: queueItem.id}, <GarminHealthAPIActivityQueueItemInterface>queueItem.data())));
+      await (serviceName === ServiceNames.SuuntoApp
+        ? processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id:queueItem.id }, queueItem.data()))
+        : processGarminHealthAPIActivityQueueItem(Object.assign({id: queueItem.id}, <GarminHealthAPIActivityQueueItemInterface>queueItem.data())));
       count++;
       console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
     } catch (e) {
