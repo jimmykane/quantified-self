@@ -57,8 +57,12 @@ service cloud.firestore {
     }
 
 
-    match /suuntoAppWorkoutQueue/{userID} {
+    match /garminHealthAPIActivityQueue/{userID} {
       allow read, write: if false;
+    }
+
+    match /suuntoAppWorkoutQueue/{userID} {
+       allow read, write: if false;
     }
 
 

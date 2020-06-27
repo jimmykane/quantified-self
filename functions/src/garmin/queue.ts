@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import {
+  addToQueueForGarmin,
   increaseRetryCountForQueueItem,
   MEMORY,
   parseQueueItems,
@@ -13,34 +14,54 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-dat
 import { generateIDFromParts, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
-import { GarminHealthAPIActivityQueueItemInterface } from '../queue/queue-item.interface';
+import {
+  GarminHealthAPIActivityQueueItemInterface,
+} from '../queue/queue-item.interface';
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
 
 export const insertToQueueForGarmin = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  console.info(req.query)
-  console.info(req.body)
-  const userName = req.query.username || req.body.username;
-  const workoutID = req.query.workoutid || req.body.workoutid;
-
-  // Shoud hash on workout and user id or just plain write perhaps. In the end it doesn't really matter as long as its per user + activity
-
-  console.info(`Inserting to queue or processing ${workoutID} for ${userName}`);
-
-  try {
-    // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
-    // @todo ask about this
-    // const queueItemDocumentReference = await addToQueue(userName, workoutID);
-    // await processQueueItem(await queueItemDocumentReference.get());
-  } catch (e) {
-    console.log(e);
-    res.status(500);
+  const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles
+  const queueItemRefs:admin.firestore.DocumentReference[] = [];
+  for (const activityFile of activityFiles){
+    console.log(activityFile.userId)
+    console.log(activityFile.userAccessToken)
+    console.log(activityFile.callbackURL)
+    console.log((new URLSearchParams(activityFile.callbackURL.split('?')[1])).get('activityFile'));
+    let queueItemDocumentReference
+    try{
+      const activityFileID = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
+      if (!activityFileID){
+        res.status(500).send();
+        return;
+      }
+      queueItemDocumentReference = await addToQueueForGarmin(
+        {
+          userID: activityFile.userId,
+          activityFileID: activityFileID,
+          activityFileType: activityFile.fileType,
+      });
+      queueItemRefs.push(queueItemDocumentReference);
+    }catch (e) {
+      console.log(e);
+      res.status(500).send();
+      return
+    }
   }
+
   res.status(200).send();
+
+  for (const queueItemRef of queueItemRefs){
+    try{
+      await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
+    }catch (e) {
+      console.error(e);
+    }
+  }
 });
 
 
-export const parseGarminActivityQueue = functions.region('europe-west2').runWith({
+export const parsegarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
 }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
@@ -72,7 +93,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     console.time('DownloadFit');
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({
-          url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityID}`,
+          url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
           method: 'get',
         },
         {
@@ -80,7 +101,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           secret: serviceToken.accessTokenSecret
         })),
       encoding: null,
-      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityID}`,
+      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
     });
     console.timeEnd('DownloadFit');
     console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userID}`)
@@ -106,8 +127,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     event.name = event.startDate.toJSON(); // @todo improve
     console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID} test`);
     // Id for the event should be serviceName + activityID
-    const metaData = new MetaData(ServiceNames.GarminHealthAPI, queueItem.activityID, queueItem['userID'], new Date());
-    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([ServiceNames.GarminHealthAPI, queueItem.activityID]), event, metaData);
+    const metaData = new MetaData(ServiceNames.GarminHealthAPI, queueItem.activityFileID, queueItem['userID'], new Date());
+    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([ServiceNames.GarminHealthAPI, queueItem.activityFileID]), event, metaData);
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID} test`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);
@@ -117,4 +138,14 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1}`));
     await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
   }
+}
+
+
+export interface GarminHealthAPIActivityFileInterface {
+  userId: string,
+  userAccessToken: string,
+  fileType: 'FIT' | 'TCX' | 'GPX',
+  callbackURL: string,
+  startTimeInSeconds: number,
+  manual: boolean,
 }

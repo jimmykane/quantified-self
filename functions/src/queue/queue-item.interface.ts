@@ -1,10 +1,11 @@
 export interface QueueItemInterface {
   id: string,
-  retryCount: number,
-  totalRetryCount: number,
+  dateCreated: number,
   processed: false,
-  errors: QueueItemError[],
-  processedAt: number
+  retryCount: number,
+  totalRetryCount?: number,
+  errors?: QueueItemError[],
+  processedAt?: number
 }
 
 export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface{
@@ -14,7 +15,8 @@ export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface{
 
 export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface{
   userID: string
-  activityID: string,
+  activityFileID: string,
+  activityFileType: 'FIT' | 'TCX' | 'GPX'
 }
 
 export interface QueueItemError {

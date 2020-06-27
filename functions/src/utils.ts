@@ -8,7 +8,7 @@ import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.
 import * as Pako from 'pako';
 
 
-// @todo most probably this is not needed
+// @todo move to Sha256 see SO question
 export function generateIDFromParts(parts: string[]): string{
   return base58.encode(Buffer.from(`${parts.join(':')}`));
 }

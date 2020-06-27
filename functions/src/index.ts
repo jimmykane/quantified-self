@@ -21,6 +21,8 @@ export * from "./suunto/get-suunto-fit-file"
 export * from "./garmin/queue"
 // export * from "./migrations"
 
+
+// @todo perhaps this is not a good place to add these
 export { determineRedirectURI } from './utils';
 export { isCorsAllowed } from './utils';
 export { setAccessControlHeadersOnResponse } from './utils';

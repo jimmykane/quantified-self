@@ -1,8 +1,7 @@
 import * as functions from 'firebase-functions'
-import * as admin from "firebase-admin";
-import {generateIDFromParts} from "../utils";
-import {processSuuntoAppActivityQueueItem} from "./parse-queue";
+import { processSuuntoAppActivityQueueItem } from "./parse-queue";
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { addToQueueForSuunto } from '../queue';
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "2GB";
@@ -21,29 +20,29 @@ export const insertToQueue = functions.region('europe-west2').runWith({timeoutSe
   const workoutID = req.query.workoutid ||  req.body.workoutid;
 
   console.log(`Inserting to queue or processing ${workoutID} for ${userName}`);
-
+  let queueItemDocumentReference;
   try {
-    // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
-    // @todo ask about this
-    const queueItemDocumentReference = await addToQueue(userName, workoutID);
+    queueItemDocumentReference = await addToQueueForSuunto({
+      userName: userName,
+      workoutID: workoutID,
+    });
+  }catch (e) {
+    console.error(e);
+  }
+
+  if (!queueItemDocumentReference){
+    res.status(500).send();
+    return
+  }
+
+  // All ok reply and take over internally
+  // !!!No response sending after this!!!
+  res.status(200).send();
+
+  try{
     await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, await queueItemDocumentReference.get()).data());
   }catch (e) {
-    console.log(e);
-    res.status(500);
+    console.error(e)
   }
-  res.send();
 });
 
-async function addToQueue(workoutUserName: string, workoutID:string): Promise<admin.firestore.DocumentReference>{
-  console.log(`Inserting to queue ${workoutUserName} ${workoutID}`);
-  // Important -> keep the key based on username and workoutid to get updates on activity I suppose ....
-  // @todo ask  Suunto about this
-  const queueItemDocument = admin.firestore().collection('suuntoAppWorkoutQueue').doc(generateIDFromParts([workoutUserName, workoutID]));
-  await queueItemDocument.set({
-    userName: workoutUserName,
-    workoutID: workoutID,
-    retryCount: 0,
-    processed: false,
-  });
-  return queueItemDocument;
-}
