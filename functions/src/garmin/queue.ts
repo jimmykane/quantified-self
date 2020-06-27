@@ -20,7 +20,7 @@ import {
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
 
-export const insertToQueueForGarmin = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles
   const queueItemRefs:admin.firestore.DocumentReference[] = [];
   for (const activityFile of activityFiles){

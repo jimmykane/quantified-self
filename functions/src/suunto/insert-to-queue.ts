@@ -3,8 +3,8 @@ import { processSuuntoAppActivityQueueItem } from "./parse-queue";
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { addToQueueForSuunto } from '../queue';
 
-const TIMEOUT_IN_SECONDS = 540;
-const MEMORY = "2GB";
+const TIMEOUT_IN_SECONDS = 60;
+const MEMORY = "256MB";
 
 export const insertToQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY}).https.onRequest(async (req, res) => {
   // Check Auth first
