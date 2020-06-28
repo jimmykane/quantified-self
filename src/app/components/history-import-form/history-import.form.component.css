@@ -45,12 +45,6 @@ mat-icon{
   font-size: 1.6em;
 }
 
-mat-icon.suunto{
-  font-size: 3em;
-  width: 3em;
-  height: 1.5em;
-}
-
 .smaller{
   font-size: 0.90em;
   line-height: 0.90em;

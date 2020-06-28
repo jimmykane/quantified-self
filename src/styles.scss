@@ -214,4 +214,10 @@ mat-card.component-container{
 }
 
 
+.mat-tab-label.mat-tab-label-active {
+  opacity: 1 !important;
+}
 
+.avatar{
+  background-size: cover;
+}
