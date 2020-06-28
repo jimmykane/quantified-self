@@ -23,7 +23,8 @@ export const environment = {
     getSuuntoFITFile: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoFITFile',
     historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addHistoryToQueue',
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
-    getGarminAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminAuthRequestTokenRedirectURI',
+    getGarminHealthAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminHealthAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminHealthAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetGarminHealthAPIAccessToken',
+    deauthorizeGarminHealthAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeGarminHealthAPI',
   }
 };

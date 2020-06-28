@@ -2,7 +2,7 @@
   <mat-tab-group [dynamicHeight]="true">
     <mat-tab label="Download">
       <ng-template matTabLabel>
-        <mat-icon class="suunto" svgIcon="suunto"></mat-icon>
+        <mat-icon class="large-svg-icon" svgIcon="suunto"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
         <mat-card class="mat-elevation-z0 service-card">
@@ -12,7 +12,8 @@
             <!--          </div>-->
             <mat-card-subtitle>
               Suunto is a trusted companion for athletes and adventurers.<br/>
-              The durable and precise sports watches are tested in the toughest conditions and built to last in adventures
+              The durable and precise sports watches are tested in the toughest conditions and built to last in
+              adventures
               from the deepest oceans to the highest mountains.
             </mat-card-subtitle>
           </mat-card-header>
@@ -30,7 +31,8 @@
                     </mat-card-subtitle>
                   </mat-card-header>
                   <mat-divider></mat-divider>
-                  <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
+                  <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()"
+                        autocomplete="off">
                     <mat-form-field>
                       <label>
                         <input matInput placeholder="Link" formControlName="input">
@@ -62,7 +64,7 @@
                   <mat-card-header>
                     <mat-card-subtitle *ngIf="!suuntoAppTokens || !suuntoAppTokens.length">
                       Connect to Suunto app
-                      <mat-icon matTooltip="NOTE: Sync happens for activities done after this date">
+                      <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
                         info
                       </mat-icon>
                     </mat-card-subtitle>
@@ -74,7 +76,8 @@
 
                     <div mat-subheader>Accounts</div>
 
-                    <mat-list-item style="text-align: left" *ngFor="let serviceToken of suuntoAppTokens; let i = index;">
+                    <mat-list-item style="text-align: left"
+                                   *ngFor="let serviceToken of suuntoAppTokens; let i = index;">
                       <mat-icon mat-list-icon>account_circle</mat-icon>
                       <div mat-line>{{ serviceToken.userName }} </div>
                       <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
@@ -97,7 +100,8 @@
               </ng-template>
             </mat-tab>
 
-            <mat-tab label="History import" [disabled]="!user || isGuest || !suuntoAppTokens || !suuntoAppTokens.length">
+            <mat-tab label="History import"
+                     [disabled]="!user || isGuest || !suuntoAppTokens || !suuntoAppTokens.length">
               <ng-template matTabLabel>
                 <mat-icon matTooltip="History import">history</mat-icon>
               </ng-template>
@@ -125,12 +129,14 @@
                   <mat-card-header>
                     <mat-card-subtitle>
                       You can upload a GPX file to your Suunto app
-                      <mat-icon matTooltip="NOTE: Route sync needs Suunto app Android 4.20 and higher. For iOS there is no Suunto app version that supports this">
+                      <mat-icon
+                        matTooltip="NOTE: Route sync needs Suunto app Android 4.20 and higher. For iOS there is no Suunto app version that supports this">
                         info
                       </mat-icon>
                     </mat-card-subtitle>
-                    <mat-card-subtitle *ngIf="metaForService && metaForService.uploadedRoutesCount && metaForService.uploadedRoutesCount > 3">
-                      {{metaForService.uploadedRoutesCount}} routes uploaded
+                    <mat-card-subtitle
+                      *ngIf="suuntoAppMeta && suuntoAppMeta.uploadedRoutesCount && suuntoAppMeta.uploadedRoutesCount > 3">
+                      {{suuntoAppMeta.uploadedRoutesCount}} routes uploaded
                     </mat-card-subtitle>
                   </mat-card-header>
                   <mat-divider></mat-divider>
@@ -144,17 +150,62 @@
     </mat-tab>
     <mat-tab label="Garmin">
       <ng-template matTabLabel>
-        <mat-icon class="suunto" svgIcon="garmin"></mat-icon>
+        <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
         <mat-card class="mat-elevation-z0 service-card">
-          <button mat-stroked-button
-                  class="big"
-                  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                  *ngIf="(user && !this.isGuest)"
-                  (click)="connectWithGarmin($event)">
-            Connect with Garmin
-          </button>
+          <mat-card-header>
+            <mat-card-subtitle>
+              Garmin designs and builds products that enhance people’s lives. It’s what we do.
+              Since the company’s inception, the Garmin brand has been defined by its products.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-tab-group [dynamicHeight]="true">
+            <mat-tab label="Sync" [disabled]="!user || isGuest">
+              <ng-template matTabLabel>
+                <mat-icon matTooltip="Sync settings">sync</mat-icon>
+              </ng-template>
+              <ng-template matTabContent>
+                <mat-card class="mat-elevation-z0">
+                  <mat-card-header>
+                    <mat-card-subtitle *ngIf="!garminHealthAPIToken">
+                      Connect to Garmin Health API
+                      <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+                        info
+                      </mat-icon>
+                    </mat-card-subtitle>
+                    <mat-card-subtitle *ngIf="garminHealthAPIToken">Connected</mat-card-subtitle>
+                  </mat-card-header>
+                  <mat-divider></mat-divider>
+
+                  <mat-list *ngIf="garminHealthAPIToken">
+
+                    <div mat-subheader>Accounts</div>
+
+                    <mat-list-item style="text-align: left">
+                      <mat-icon mat-list-icon>account_circle</mat-icon>
+                      <div mat-line>{{ garminHealthAPIToken.userID }} </div>
+                      <div mat-line>Connected at {{garminHealthAPIToken.dateCreated  | date:'medium'}}</div>
+                    </mat-list-item>
+                  </mat-list>
+
+                  <button class="big"
+                          mat-flat-button color="warn"
+                          *ngIf="garminHealthAPIToken"
+                          (click)="deauthorizeGarminHealthAPI($event)">Disconnect
+                  </button>
+
+                  <button mat-stroked-button
+                          class="big"
+                          mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+                          *ngIf="(user && !this.isGuest) && !garminHealthAPIToken"
+                          (click)="connectWithGarmin($event)">
+                    Connect with Garmin
+                  </button>
+                </mat-card>
+              </ng-template>
+            </mat-tab>
+          </mat-tab-group>
         </mat-card>
       </ng-template>
     </mat-tab>

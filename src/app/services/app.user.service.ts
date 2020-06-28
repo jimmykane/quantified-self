@@ -56,6 +56,8 @@ import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-r
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
+import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth1-service-token.interface';
 
 
 @Injectable({
@@ -323,12 +325,12 @@ export class AppUserService implements OnDestroy {
       }));
   }
 
-   public async getGarminHealthAPITokens(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
+   public getGarminHealthAPIToken(user: User) {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).get().pipe(catchError(error => {
+      .doc(user.uid).valueChanges().pipe(catchError(error => {
         return [];
-      })).pipe(take(1)).pipe(map(doc => doc.data())).toPromise();
+      }));
   }
 
   private getAllUserMeta(user: User) {
@@ -376,10 +378,10 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async deauthorizeSuuntoAppService() {
+  public async deauthorizeSuuntoApp() {
     return this.http.post(
       environment.functions.deauthorizeSuuntoAppServiceURI,
-      {firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true)},
+      {},
       {
         headers:
           new HttpHeaders({
@@ -388,11 +390,23 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
+  public async deauthorizeGarminHealthAPI() {
+    return this.http.post(
+      environment.functions.deauthorizeGarminHealthAPI,
+      {},
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${await (await this.afAuth.currentUser).getIdToken(true)}`
+          })
+      }).toPromise();
+  }
+
 
   public async getCurrentUserGarminHealthAPIRedirectURI(): Promise<{redirect_url: string}> {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return <Promise<{redirect_url: string}>>this.http.post(
-      environment.functions.getGarminAuthRequestTokenRedirectURI, {},
+      environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI, {},
       {
         headers:
           new HttpHeaders({
@@ -438,20 +452,29 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const serviceToken = await this.getSuuntoAppToken(user);
-    if (serviceToken) {
+    const suuntoAppToken = await this.getSuuntoAppToken(user);
+    const garminHealthAPIToken = await this.getGarminHealthAPIToken(user).pipe(take(1)).toPromise();
+    if (suuntoAppToken) {
       try {
-        await this.deauthorizeSuuntoAppService();
+        await this.deauthorizeSuuntoApp();
       } catch (e) {
         Sentry.captureException(e);
-        console.error(`Could not deauthorize Suunto app`)
+        console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`)
       }
+    }
+    if (garminHealthAPIToken) {
       try {
-        return (await this.afAuth.currentUser).delete();
+        await this.deauthorizeGarminHealthAPI();
       } catch (e) {
         Sentry.captureException(e);
-        throw e;
+        console.error(`Could not deauthorize ${ServiceNames.GarminHealthAPI}`)
       }
+    }
+    try {
+      return (await this.afAuth.currentUser).delete();
+    } catch (e) {
+      Sentry.captureException(e);
+      throw e;
     }
   }
 
