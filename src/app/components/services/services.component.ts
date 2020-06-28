@@ -100,6 +100,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
       if (state && oauthToken && oauthVerifier){
         try {
           await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier)
+          this.snackBar.open('Successfully connected to Garmin Health API', null, {
+            duration: 10000,
+          })
         } catch (e) {
           Sentry.captureException(e);
         } finally {

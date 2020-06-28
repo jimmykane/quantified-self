@@ -168,17 +168,17 @@
               <ng-template matTabContent>
                 <mat-card class="mat-elevation-z0">
                   <mat-card-header>
-                    <mat-card-subtitle *ngIf="!garminHealthAPIToken.accessToken">
+                    <mat-card-subtitle *ngIf="!garminHealthAPIToken || !garminHealthAPIToken.accessToken">
                       Connect to Garmin Health API
                       <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
                         info
                       </mat-icon>
                     </mat-card-subtitle>
-                    <mat-card-subtitle *ngIf="garminHealthAPIToken.accessToken">Connected</mat-card-subtitle>
+                    <mat-card-subtitle *ngIf="garminHealthAPIToken && garminHealthAPIToken.accessToken">Connected</mat-card-subtitle>
                   </mat-card-header>
                   <mat-divider></mat-divider>
 
-                  <mat-list *ngIf="garminHealthAPIToken.accessToken">
+                  <mat-list *ngIf="garminHealthAPIToken && garminHealthAPIToken.accessToken">
 
                     <div mat-subheader>Accounts</div>
 
@@ -191,14 +191,14 @@
 
                   <button class="big"
                           mat-flat-button color="warn"
-                          *ngIf="garminHealthAPIToken.accessToken"
+                          *ngIf="garminHealthAPIToken && garminHealthAPIToken.accessToken"
                           (click)="deauthorizeGarminHealthAPI($event)">Disconnect
                   </button>
 
                   <button mat-stroked-button
                           class="big"
                           mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                          *ngIf="(user && !this.isGuest) && !garminHealthAPIToken.accessToken"
+                          *ngIf="(user && !this.isGuest) && !garminHealthAPIToken || !garminHealthAPIToken.accessToken"
                           (click)="connectWithGarmin($event)">
                     Connect with Garmin
                   </button>

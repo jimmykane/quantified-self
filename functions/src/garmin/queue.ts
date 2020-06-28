@@ -24,10 +24,6 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
   const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles
   const queueItemRefs:admin.firestore.DocumentReference[] = [];
   for (const activityFile of activityFiles){
-    console.log(activityFile.userId)
-    console.log(activityFile.userAccessToken)
-    console.log(activityFile.callbackURL)
-    console.log((new URLSearchParams(activityFile.callbackURL.split('?')[1])).get('activityFile'));
     let queueItemDocumentReference
     try{
       const activityFileID = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
@@ -42,7 +38,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           activityFileType: activityFile.fileType,
       });
       queueItemRefs.push(queueItemDocumentReference);
-    }catch (e) {
+    } catch (e) {
       console.log(e);
       res.status(500).send();
       return
