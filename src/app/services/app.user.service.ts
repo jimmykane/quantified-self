@@ -380,7 +380,7 @@ export class AppUserService implements OnDestroy {
 
   public async deauthorizeSuuntoApp() {
     return this.http.post(
-      environment.functions.deauthorizeSuuntoAppServiceURI,
+      environment.functions.deauthorizeSuuntoAppURI,
       {},
       {
         headers:

@@ -116,7 +116,7 @@ export const authToken = functions.region('europe-west2').https.onRequest(async 
 /**
  * Deauthorizes a Suunto app account upon user request
  */
-export const deauthorize = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed `)
