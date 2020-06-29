@@ -26,7 +26,13 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
 
   console.log(`Processing queue item ${queueItem.id} and username ${queueItem.userName} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
-  const tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.userName).get();
+  let tokenQuerySnapshots;
+  try {
+    tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.userName).get();
+  }catch (e) {
+    console.error(e)
+    return increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e);
+  }
 
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokenQuerySnapshots.size) {

@@ -231,6 +231,22 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 });
 
 
-export const deauthorizeGarminHealthAPIUser = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  console.log(JSON.stringify(req.body.deregistrations))
+export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  const deregistrations = req.body.deregistrations;
+  // Directly respond
+  res.status(200).send()
+  for (const deregistration of deregistrations){
+    try {
+      const tokenQuerySnapshots = await admin.firestore()
+        .collection('garminHealthAPITokens')
+        .where("userID", "==", deregistration.userId)
+        .where("userAccessToken", "==", deregistration.userId)
+        .get();
+      for (const tokenQuerySnapshotsDocument of tokenQuerySnapshots.docs) {
+        await tokenQuerySnapshotsDocument.ref.delete()
+      }
+    }catch (e) {
+      console.error(e);
+    }
+  }
 });
