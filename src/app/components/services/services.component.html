@@ -2,14 +2,11 @@
   <mat-tab-group [dynamicHeight]="true">
     <mat-tab label="Download">
       <ng-template matTabLabel>
-        <mat-icon class="large-svg-icon" svgIcon="suunto"></mat-icon>
+        <mat-icon class="large-svg-icon"  (click)="clicksIncrease()" svgIcon="suunto"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
         <mat-card class="mat-elevation-z0 service-card">
           <mat-card-header>
-            <!--          <div mat-card-avatar>-->
-            <!--            <mat-icon class="suunto"  svgIcon="suunto"></mat-icon>-->
-            <!--          </div>-->
             <mat-card-subtitle>
               Suunto is a trusted companion for athletes and adventurers.<br/>
               The durable and precise sports watches are tested in the toughest conditions and built to last in
@@ -148,7 +145,7 @@
         </mat-card>
       </ng-template>
     </mat-tab>
-    <mat-tab label="Garmin">
+    <mat-tab *ngIf="clicks > 10" label="Garmin">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
       </ng-template>

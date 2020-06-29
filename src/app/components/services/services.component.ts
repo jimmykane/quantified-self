@@ -34,6 +34,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppTokens: Auth2ServiceTokenInterface[];
   public garminHealthAPIToken: Auth1ServiceTokenInterface;
   public suuntoAppMeta: UserServiceMetaInterface
+
+  public clicks = 0;
+
   private userSubscription: Subscription;
 
   @HostListener('window:tokensReceived', ['$event'])
@@ -131,6 +134,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   async onImportAndOpen() {
     return this.onSubmit(true);
+  }
+
+  clicksIncrease() {
+    this.clicks += 1;
   }
 
   async onSubmit(shouldImportAndOpen?: boolean) {
