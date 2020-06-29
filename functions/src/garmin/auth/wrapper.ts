@@ -240,7 +240,7 @@ export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').
       const tokenQuerySnapshots = await admin.firestore()
         .collection('garminHealthAPITokens')
         .where("userID", "==", deregistration.userId)
-        .where("userAccessToken", "==", deregistration.userId)
+        .where("accessToken", "==", deregistration.userAccessToken)
         .get();
       for (const tokenQuerySnapshotsDocument of tokenQuerySnapshots.docs) {
         await tokenQuerySnapshotsDocument.ref.delete()
