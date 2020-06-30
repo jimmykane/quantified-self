@@ -24,9 +24,7 @@ import {UserFormComponent} from '../components/user-forms/user.form.component';
     UserSettingsComponent,
     UserFormComponent,
   ],
-  entryComponents: [
-    UserFormComponent,
-  ],
+  entryComponents: [],
   providers: [
   ]
 })

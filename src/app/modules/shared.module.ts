@@ -47,14 +47,7 @@ import { PromoDialogComponent } from '../components/promo-dialog/promo-dialog.co
     FilesStatusListComponent,
   ],
   providers: [],
-  entryComponents: [
-    EventFormComponent,
-    ActivityFormComponent,
-    ActivityCropFormComponent,
-    DeleteConfirmationComponent,
-    UploadErrorComponent,
-    PromoDialogComponent,
-  ],
+  entryComponents: [],
   exports: [
     ShadeComponent,
     PrivacyIconComponent,

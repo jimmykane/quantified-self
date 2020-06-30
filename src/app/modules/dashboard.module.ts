@@ -44,9 +44,7 @@ import { ActivityTypesMultiSelectComponent } from '../components/activity-types-
     TileMapComponent,
     ActivityTypesMultiSelectComponent,
   ],
-  entryComponents: [
-    EventsExportFormComponent,
-  ],
+  entryComponents: [],
   providers: [
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
     // @todo get it from settings as a service perhaps

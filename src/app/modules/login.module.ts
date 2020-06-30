@@ -23,10 +23,7 @@ import {PhoneFormComponent} from '../components/login/phone-form/phone.form.comp
     UserAgreementFormComponent,
     PhoneFormComponent,
   ],
-  entryComponents: [
-    UserAgreementFormComponent,
-    PhoneFormComponent,
-  ],
+  entryComponents: [],
   providers: [
   ]
 })
