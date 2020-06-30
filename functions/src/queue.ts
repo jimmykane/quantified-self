@@ -50,7 +50,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
 
 export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = 10;
-  const LIMIT = 200;
+  const LIMIT = 150;
   // @todo add queue item sort date for creation
   const collection = serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminHealthAPIActivityQueue';
   const querySnapshot = await admin.firestore().collection(collection).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
@@ -84,7 +84,7 @@ export async function addToQueueForSuunto(queueItem: {userName: string, workoutI
 }
 
 export async function addToQueueForGarmin(queueItem: {userID: string, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX'}): Promise<admin.firestore.DocumentReference> {
-  console.log(`Inserting to queue ${queueItem.userID} ${queueItem.activityFileID}`);
+  console.log(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.activityFileID])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToQueue( {
     id: generateIDFromParts([queueItem.userID, queueItem.activityFileID]),
     dateCreated: new Date().getTime(),
