@@ -4,9 +4,10 @@ import {
 import { TileAbstract } from '../tile.abstract';
 import { AppUserService } from '../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
-import { Input } from '@angular/core';
+import { Input, Directive } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 
+@Directive()
 export class TileActionsAbstract extends TileAbstract {
   @Input() isLoading: boolean;
   @Input() user: User;
