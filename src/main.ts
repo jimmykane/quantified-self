@@ -4,7 +4,6 @@ import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 import {environment} from './environments/environment';
 import {Log} from 'ng2-logger/browser';
 import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import 'hammerjs';
 
 import 'firebase/analytics';
 
