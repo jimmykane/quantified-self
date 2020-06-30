@@ -232,6 +232,11 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 
 
 export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  if (!req.body.deregistrations){
+    console.info(req.body);
+    res.status(200).send()
+    return
+  }
   const deregistrations = req.body.deregistrations;
   // Directly respond
   res.status(200).send()

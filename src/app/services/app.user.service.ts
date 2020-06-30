@@ -353,7 +353,7 @@ export class AppUserService implements OnDestroy {
 
   public shouldShowPromoForPatreon(user: User) {
     // Intentionally just check if only set for now
-    if (user.lastSeenPromo) {
+    if (!user || user.lastSeenPromo) {
       return false;
     }
     return (+user.lastSignInDate - +user.creationDate) > 60 * 60 * 24 * 30 * 1000; // Bigger than 1 months
