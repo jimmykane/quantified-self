@@ -3,9 +3,7 @@ import * as admin from 'firebase-admin';
 import {
   addToQueueForGarmin,
   increaseRetryCountForQueueItem,
-  MEMORY,
   parseQueueItems,
-  TIMEOUT_IN_SECONDS,
   updateToProcessed
 } from '../queue';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
@@ -17,6 +15,8 @@ import * as requestPromise from 'request-promise-native';
 import { GarminHealthAPIActivityQueueItemInterface, } from '../queue/queue-item.interface';
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
+const TIMEOUT_IN_SECONDS = 540;
+const MEMORY = "2GB";
 
 export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,

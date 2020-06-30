@@ -29,5 +29,3 @@ export { setAccessControlHeadersOnResponse } from './utils';
 export { setEvent } from './utils';
 export { updateToProcessed } from './queue';
 export { increaseRetryCountForQueueItem } from './queue';
-export { MEMORY } from './queue';
-export { TIMEOUT_IN_SECONDS } from './queue';

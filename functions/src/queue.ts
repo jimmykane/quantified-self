@@ -9,9 +9,6 @@ import {
 } from './queue/queue-item.interface';
 import { generateIDFromParts } from './utils';
 
-export const TIMEOUT_IN_SECONDS = 540;
-export const MEMORY = "2GB";
-
 export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, serviceName: ServiceNames, error: Error, incrementBy = 1) {
   queueItem.retryCount += incrementBy;
   queueItem.totalRetryCount = queueItem.totalRetryCount || 0;
@@ -68,9 +65,10 @@ export async function parseQueueItems(serviceName: ServiceNames) {
       console.error(e);
       console.error(new Error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`))
     }finally {
-      console.timeLog(`DownloadFit for file ${count + 1}`);
+      console.timeLog(`DownloadFit`);
     }
   }
+  console.timeEnd('DownloadFit');
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 }
 

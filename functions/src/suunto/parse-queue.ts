@@ -10,13 +10,13 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import {
   increaseRetryCountForQueueItem,
-  MEMORY,
   parseQueueItems,
-  TIMEOUT_IN_SECONDS,
   updateToProcessed
 } from '../queue';
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 
+const TIMEOUT_IN_SECONDS = 540;
+const MEMORY = "2GB";
 
 export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
