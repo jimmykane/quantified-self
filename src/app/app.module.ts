@@ -1,6 +1,6 @@
 import 'firebase/database';
 import 'firebase/firestore';
-import { ErrorHandler, Injectable, NgModule } from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
@@ -36,6 +36,7 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
 import { AppUpdateService } from './services/app.update.service';
+import { SentryErrorHandler } from './errors/sentry-error-handler';
 
 declare function require(moduleName: string): any;
 
@@ -45,23 +46,10 @@ Sentry.init({
   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
   environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
   release: appPackage.version,
+  integrations: [new Sentry.Integrations.TryCatch({
+    XMLHttpRequest: false,
+  })],
 });
-
-
-@Injectable({
-  providedIn: 'root'
-})
-export class SentryErrorHandler implements ErrorHandler {
-  constructor() {
-  }
-
-  handleError(error) {
-    // Sentry.showReportDialog({ eventId });
-    // const eventId = Sentry.captureException(error.originalError || error);
-    console.log(error);
-    Sentry.captureException(error)
-  }
-}
 
 
 @NgModule({
@@ -95,7 +83,7 @@ export class SentryErrorHandler implements ErrorHandler {
   providers: [
     ScreenTrackingService,
     UserTrackingService,
-    {provide: ErrorHandler, useClass: (environment.production || environment.beta) ? SentryErrorHandler : ErrorHandler},
+    {provide: ErrorHandler, useClass: SentryErrorHandler},
     {provide: REGION, useValue: 'europe-west2'},
     {
       provide: CONFIG, useValue: {
