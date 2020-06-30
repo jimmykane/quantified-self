@@ -53,7 +53,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   const querySnapshot = await admin.firestore().collection(collection).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
-  console.time('DownloadFit');
+  console.time('ParseQueueItem');
   for (const queueItem of querySnapshot.docs) {
     try {
       await (serviceName === ServiceNames.SuuntoApp
@@ -61,13 +61,13 @@ export async function parseQueueItems(serviceName: ServiceNames) {
         : processGarminHealthAPIActivityQueueItem(Object.assign({id: queueItem.id}, <GarminHealthAPIActivityQueueItemInterface>queueItem.data())));
       count++;
       console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
-      console.timeLog(`DownloadFit`);
+      console.timeLog('ParseQueueItem');
     } catch (e) {
       console.error(e);
       console.error(new Error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`))
     }
   }
-  console.timeEnd('DownloadFit');
+  console.timeEnd('ParseQueueItem');
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 }
 
