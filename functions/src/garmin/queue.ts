@@ -14,20 +14,21 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-dat
 import { generateIDFromParts, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
-import {
-  GarminHealthAPIActivityQueueItemInterface,
-} from '../queue/queue-item.interface';
+import { GarminHealthAPIActivityQueueItemInterface, } from '../queue/queue-item.interface';
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
 
-export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY
+}).https.onRequest(async (req, res) => {
   const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles
-  const queueItemRefs:admin.firestore.DocumentReference[] = [];
-  for (const activityFile of activityFiles){
+  const queueItemRefs: admin.firestore.DocumentReference[] = [];
+  for (const activityFile of activityFiles) {
     let queueItemDocumentReference
-    try{
+    try {
       const activityFileID = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
-      if (!activityFileID){
+      if (!activityFileID) {
         res.status(500).send();
         return;
       }
@@ -36,7 +37,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           userID: activityFile.userId,
           activityFileID: activityFileID,
           activityFileType: activityFile.fileType,
-      });
+        });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e) {
       console.log(e);
@@ -47,10 +48,10 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
   res.status(200).send();
 
-  for (const queueItemRef of queueItemRefs){
-    try{
+  for (const queueItemRef of queueItemRefs) {
+    try {
       await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
-    }catch (e) {
+    } catch (e) {
       console.error(e);
     }
   }
@@ -101,17 +102,14 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     if (e.statusCode === 400) {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20`))
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
-    }
-    if (e.statusCode === 500) {
+    } else if (e.statusCode === 500) {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20`))
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
+    } else {
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
+      await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
     }
-    console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
-    await increaseRetryCountForQueueItem(queueItem,ServiceNames.GarminHealthAPI, e);
-  }
-
-  if (!result) {
-    return false;
+    return;
   }
 
   try {
