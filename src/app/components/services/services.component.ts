@@ -218,10 +218,12 @@ export class ServicesComponent implements OnInit, OnDestroy {
       const redirectURI = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
       // Get the redirect url for the unsigned token created with the post
       const token = <{oauthToken: string, oauthTokenSecret: string, state: string}>await this.userService.getGarminHealthAPIToken(this.user).pipe(take(1)).toPromise()
-      // this.windowService.windowRef.location.href = 'https://www.google.com'
       this.windowService.windowRef.location.href = `${redirectURI.redirect_url}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${token.state}`)}`
     } catch (e){
       Sentry.captureException(e);
+      this.snackBar.open(`Could not connect to Garmin Connect due to ${e.message}`, null, {
+        duration: 5000,
+      });
     } finally {
       this.isLoading = false;
     }
