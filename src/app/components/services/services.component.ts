@@ -218,6 +218,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.isLoading = true;
       const redirectURI = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
       // @todo perhaps should return token etc
+      // @todo probably this will need fixing
       // Get the redirect url for the unsigned token created with the post
       const token = <{oauthToken: string, oauthTokenSecret: string, state: string}>await this.userService.getGarminHealthAPIToken(this.user).pipe(take(1)).toPromise();
       this.windowService.windowRef.location.href = `${redirectURI.redirect_url}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${token.state}`)}`
