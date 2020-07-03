@@ -34,10 +34,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppTokens: Auth2ServiceTokenInterface[];
   public garminHealthAPIToken: Auth1ServiceTokenInterface;
   public suuntoAppMeta: UserServiceMetaInterface
-  public selectedTabIndex: number;
-
-
-  public clicks = 0;
+  public selectedTabIndex = 0;
 
   private userSubscription: Subscription;
 
@@ -102,8 +99,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
       const state = this.route.snapshot.queryParamMap.get('state');
       const oauthToken = this.route.snapshot.queryParamMap.get('oauth_token');
       const oauthVerifier = this.route.snapshot.queryParamMap.get('oauth_verifier');
-      if (state && oauthToken && oauthVerifier){
+      if (state && oauthToken && oauthVerifier) {
         try {
+          // @todo fix view changed
           this.selectedTabIndex = 1;
           await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier);
           this.afa.logEvent('connected_to_service', {serviceName: ServiceNames.GarminHealthAPI});
@@ -138,10 +136,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   async onImportAndOpen() {
     return this.onSubmit(true);
-  }
-
-  clicksIncrease() {
-    this.clicks += 1;
   }
 
   async onSubmit(shouldImportAndOpen?: boolean) {
@@ -226,6 +220,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       const token = <{oauthToken: string, oauthTokenSecret: string, state: string}>await this.userService.getGarminHealthAPIToken(this.user).pipe(take(1)).toPromise();
       this.windowService.windowRef.location.href = `${redirectURI.redirect_url}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${token.state}`)}`
     } catch (e){
+      debugger
       Sentry.captureException(e);
       this.snackBar.open(`Could not connect to Garmin Connect due to ${e.message}`, null, {
         duration: 5000,

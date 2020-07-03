@@ -1,5 +1,5 @@
 <section class="component-container">
-  <mat-tab-group [dynamicHeight]="true" [(selectedIndex)]="selectedTabIndex">
+  <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex">
     <mat-tab label="Download">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon"  (click)="clicksIncrease()" svgIcon="suunto"></mat-icon>
@@ -145,7 +145,7 @@
         </mat-card>
       </ng-template>
     </mat-tab>
-    <mat-tab *ngIf="clicks > 5 || garminHealthAPIToken" label="Garmin">
+    <mat-tab label="Garmin">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
       </ng-template>
