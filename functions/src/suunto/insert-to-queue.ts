@@ -40,7 +40,7 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
   res.status(200).send();
 
   try{
-    await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, await queueItemDocumentReference.get()).data());
+    await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));
   }catch (e) {
     console.error(e)
   }
