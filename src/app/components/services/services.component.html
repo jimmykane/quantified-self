@@ -145,7 +145,7 @@
         </mat-card>
       </ng-template>
     </mat-tab>
-    <mat-tab label="Garmin">
+    <mat-tab label="Garmin" *ngIf="user && !isGuest">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
       </ng-template>
@@ -203,8 +203,7 @@
               </ng-template>
             </mat-tab>
 
-            <mat-tab label="History import"
-                     [disabled]="!user || isGuest">
+            <mat-tab label="History import">
               <ng-template matTabLabel>
                 <mat-icon matTooltip="History import">history</mat-icon>
               </ng-template>
