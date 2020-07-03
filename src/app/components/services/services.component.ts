@@ -257,6 +257,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     try {
       await this.userService.deauthorizeGarminHealthAPI();
+      this.garminHealthAPIToken = null
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,
       });
