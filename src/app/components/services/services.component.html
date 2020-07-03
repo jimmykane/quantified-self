@@ -2,7 +2,7 @@
   <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex">
     <mat-tab label="Download">
       <ng-template matTabLabel>
-        <mat-icon class="large-svg-icon"  (click)="clicksIncrease()" svgIcon="suunto"></mat-icon>
+        <mat-icon class="large-svg-icon" svgIcon="suunto"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
         <mat-card class="mat-elevation-z0 service-card">
@@ -204,7 +204,7 @@
             </mat-tab>
 
             <mat-tab label="History import"
-                     [disabled]="false">
+                     [disabled]="!user || isGuest">
               <ng-template matTabLabel>
                 <mat-icon matTooltip="History import">history</mat-icon>
               </ng-template>
