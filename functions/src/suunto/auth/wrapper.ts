@@ -32,7 +32,7 @@ const OAUTH_SCOPES = 'workout';
  * Redirects the User to the authentication consent screen. Also the 'state' cookie is set for later state
  * verification.
  */
-export const authRedirect = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const suuntoAppsuuntoAppAuthRedirect = functions.region('europe-west2').https.onRequest(async (req, res) => {
   const oauth2 = suuntoApiAuth();
   const state = req.cookies ? req.cookies.state : crypto.randomBytes(20).toString('hex');
   const signInWithService = req.query.signInWithService === 'true';
@@ -59,7 +59,7 @@ export const authRedirect = functions.region('europe-west2').https.onRequest(asy
  * The Firebase custom auth token, display name, photo URL and Suunto app acces token are sent back in a JSONP callback
  * function with function name defined by the 'callback' query parameter.
  */
-export const authToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const suuntoAppAuthToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
   const oauth2 = suuntoApiAuth();
   cookieParser()(req, res, async () => {
     try {

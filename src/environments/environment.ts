@@ -19,9 +19,9 @@ export const environment = {
   },
   functions: {
     deauthorizeSuuntoAppURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
-    uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRoute',
+    uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRouteToSuuntoApp',
     getSuuntoFITFile: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoFITFile',
-    historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addHistoryToQueue',
+    historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addSuuntoAppHistoryToQueue',
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
     getGarminHealthAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminHealthAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminHealthAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetGarminHealthAPIAccessToken',

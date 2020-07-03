@@ -10,7 +10,7 @@ import { isCorsAllowed, setAccessControlHeadersOnResponse } from './utils';
 /**
  * Uploads a route to the Suunto app
  */
-export const importRoute = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const importRouteToSuuntoAppToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed`);

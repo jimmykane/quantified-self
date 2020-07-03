@@ -20,7 +20,7 @@ const BATCH_SIZE = 450;
 /**
  * Add to the workout queue the workouts of a user for a selected date range
  */
-export const addHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed`);

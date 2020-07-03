@@ -7,7 +7,7 @@ import {suuntoApiAuth} from "./suunto/auth/auth";
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 //
-export const refreshTheRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
+export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
   console.log('This will be run every 2 hours!');
   // Suunto app refresh tokens should be refreshed every 180days we target at half days before 90 days
   const querySnapshot = await admin.firestore().collectionGroup('tokens').where("dateRefreshed", "<=", (new Date()).getTime() - (90 * 24 * 60 * 60 * 1000)).limit(50).get();

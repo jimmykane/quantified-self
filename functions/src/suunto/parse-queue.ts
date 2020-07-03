@@ -18,7 +18,7 @@ import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interfac
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "2GB";
 
-export const parseQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
+export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 

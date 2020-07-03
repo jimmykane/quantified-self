@@ -6,7 +6,7 @@ import { addToQueueForSuunto } from '../queue';
 const TIMEOUT_IN_SECONDS = 60;
 const MEMORY = "256MB";
 
-export const insertToQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY}).https.onRequest(async (req, res) => {
+export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY}).https.onRequest(async (req, res) => {
   // Check Auth first
   const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
   if (authentication !== req.headers.authorization){

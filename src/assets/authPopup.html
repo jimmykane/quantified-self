@@ -61,15 +61,15 @@ Please wait...
     // Start the auth flow.
     // @todo fix https://github.com/firebase/firebase-tools/issues/1314
     window.location.href = location.hostname === "localhost" ?
-      `http://localhost:5000/quantified-self-io/us-central1/authRedirect/?signInWithService=${signInWithService}&redirect_uri=${redirect_uri}` :
-      `https://europe-west2-quantified-self-io.cloudfunctions.net/authRedirect/?signInWithService=${signInWithService}&redirect_uri=${redirect_uri}`;
+      `http://localhost:5000/quantified-self-io/us-central1/suuntoAppAuthRedirect/?signInWithService=${signInWithService}&redirect_uri=${redirect_uri}` :
+      `https://europe-west2-quantified-self-io.cloudfunctions.net/suuntoAppAuthRedirect/?signInWithService=${signInWithService}&redirect_uri=${redirect_uri}`;
   } else {
     // console.log(2)
     // Use JSONP to load the 'token' Firebase Function to exchange the auth code against a Firebase custom token.
     const script = document.createElement('script');
     script.type = 'text/javascript';
     // @todo fix https://github.com/firebase/firebase-tools/issues/1314
-    var tokenFunctionURL = location.hostname === "localhost" ? 'http://localhost:5000/quantified-self-io/us-central1/authToken/' : `https://europe-west2-quantified-self-io.cloudfunctions.net/authToken/`;
+    var tokenFunctionURL = location.hostname === "localhost" ? 'http://localhost:5000/quantified-self-io/us-central1/suuntoAppAuthToken/' : `https://europe-west2-quantified-self-io.cloudfunctions.net/suuntoAppAuthToken/`;
     script.src = tokenFunctionURL +
       '?code=' + encodeURIComponent(code) +
       '&state=' + encodeURIComponent(state) +
