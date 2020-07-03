@@ -266,8 +266,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
         duration: 2000,
       });
+    } finally {
+      this.isLoading = false;
     }
-    this.isLoading = false;
   }
 
   ngOnDestroy(): void {
