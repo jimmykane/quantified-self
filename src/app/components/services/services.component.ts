@@ -93,8 +93,15 @@ export class ServicesComponent implements OnInit, OnDestroy {
         .getUserMetaForService(this.user, ServiceNames.SuuntoApp),
         this.userService.getGarminHealthAPIToken(this.user))
     })).pipe(tap((servicesMeta) => {
-      this.suuntoAppMeta = servicesMeta[0];
-      this.garminHealthAPIToken = servicesMeta[1];
+      if (!servicesMeta){
+        return servicesMeta;
+      }
+      if (servicesMeta[0]) {
+        this.suuntoAppMeta = servicesMeta[0];
+      }
+      if (servicesMeta[1]) {
+        this.garminHealthAPIToken = servicesMeta[1];
+      }
     })).subscribe(async (suuntoAppMeta) => {
       const state = this.route.snapshot.queryParamMap.get('state');
       const oauthToken = this.route.snapshot.queryParamMap.get('oauth_token');
