@@ -13,7 +13,7 @@ export const environment = {
     measurementId: 'G-F8YB8P8091'
   },
   functions: {
-    deauthorizeSuuntoAppURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorize',
+    deauthorizeSuuntoAppURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeSuuntoApp',
     uploadRoute: 'https://europe-west2-quantified-self-io.cloudfunctions.net/importRouteToSuuntoApp',
     getSuuntoFITFile: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getSuuntoFITFile',
     historyImportURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/addSuuntoAppHistoryToQueue',

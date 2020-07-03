@@ -32,7 +32,7 @@ const OAUTH_SCOPES = 'workout';
  * Redirects the User to the authentication consent screen. Also the 'state' cookie is set for later state
  * verification.
  */
-export const suuntoAppsuuntoAppAuthRedirect = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const suuntoAppAuthRedirect = functions.region('europe-west2').https.onRequest(async (req, res) => {
   const oauth2 = suuntoApiAuth();
   const state = req.cookies ? req.cookies.state : crypto.randomBytes(20).toString('hex');
   const signInWithService = req.query.signInWithService === 'true';

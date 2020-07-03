@@ -34,6 +34,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppTokens: Auth2ServiceTokenInterface[];
   public garminHealthAPIToken: Auth1ServiceTokenInterface;
   public suuntoAppMeta: UserServiceMetaInterface
+  public selectedTabIndex: number;
+
 
   public clicks = 0;
 
@@ -102,6 +104,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       const oauthVerifier = this.route.snapshot.queryParamMap.get('oauth_verifier');
       if (state && oauthToken && oauthVerifier){
         try {
+          this.selectedTabIndex = 1;
           await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier);
           this.afa.logEvent('connected_to_service', {serviceName: ServiceNames.GarminHealthAPI});
           this.snackBar.open('Successfully connected to Garmin Health API', null, {

@@ -1,5 +1,5 @@
 <section class="component-container">
-  <mat-tab-group [dynamicHeight]="true">
+  <mat-tab-group [dynamicHeight]="true" [(selectedIndex)]="selectedTabIndex">
     <mat-tab label="Download">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon"  (click)="clicksIncrease()" svgIcon="suunto"></mat-icon>
