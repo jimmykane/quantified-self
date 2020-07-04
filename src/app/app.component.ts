@@ -57,7 +57,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private windowService: AppWindowService,
     private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar) {
-
+    // this.afa.setAnalyticsCollectionEnabled(true)
     this.addIconsToRegistry();
   }
 
