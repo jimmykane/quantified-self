@@ -44,7 +44,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
         });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e) {
-      console.log(e);
+      console.error(e);
       res.status(500).send();
       return
     }
@@ -52,8 +52,10 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
   res.status(200).send();
 
+  console.log(`Processing ${queueItemRefs.length} freshly inserted to queue items`);
   for (const queueItemRef of queueItemRefs) {
     try {
+      console.log(`Processing freshly inserted queue item ${queueItemRef.id}`)
       await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
     } catch (e) {
       console.error(e);
@@ -87,7 +89,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
   let result;
   try {
-    console.time('DownloadFit');
+    console.time('DownloadFile');
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({
           url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
@@ -101,8 +103,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       gzip: true,
       url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
     });
-    console.timeEnd('DownloadFit');
-    console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userID}`)
+    console.timeEnd('DownloadFile');
+    console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`)
   } catch (e) {
     if (e.statusCode === 400) {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20`))
@@ -114,7 +116,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
     }
-    console.timeEnd('DownloadFit');
+    console.timeEnd('DownloadFile');
     return;
   }
 
