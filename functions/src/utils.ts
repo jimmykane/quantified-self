@@ -2,10 +2,13 @@ import * as base58 from 'bs58';
 import { Request, Response } from 'firebase-functions';
 import * as admin from "firebase-admin";
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import * as Pako from 'pako';
+import {
+  GarminHealthAPIEventMetaData,
+  SuuntoAppEventMetaData
+} from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 
 
 // @todo move to Sha256 see SO question
@@ -65,7 +68,7 @@ export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: MetaData) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData) {
     const writePromises: Promise<any>[] = [];
     event.setID(eventID);
     event.getActivities()

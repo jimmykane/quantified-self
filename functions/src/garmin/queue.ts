@@ -7,7 +7,6 @@ import {
   updateToProcessed
 } from '../queue';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import { generateIDFromParts, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
@@ -16,6 +15,7 @@ import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapter
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import * as xmldom from 'xmldom';
 import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'

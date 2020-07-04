@@ -10,9 +10,9 @@ import {
     isCorsAllowed,
     setAccessControlHeadersOnResponse
 } from "../utils";
-import {ServiceNames} from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
 const BATCH_SIZE = 450;

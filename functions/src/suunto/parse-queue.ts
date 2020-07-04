@@ -4,7 +4,6 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import { generateIDFromParts, setEvent } from "../utils";
-import { ServiceNames } from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import { getTokenData } from "../service-tokens";
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import {
@@ -14,6 +13,7 @@ import {
 } from '../queue';
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "2GB";
