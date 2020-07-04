@@ -1313,8 +1313,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
               return baseValue === Infinity ?  target.maxZoomed : target.minZoomed;
             })
           }
-          range = serie.xAxis.createSeriesRange(serie);
           stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
+          if (!stopEvent){
+            return;
+          }
+          range = serie.xAxis.createSeriesRange(serie);
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
           range.contents.stroke = am4core.color('#969393');
@@ -1342,6 +1345,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
           let stopEvent;
           stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
+          if (!stopEvent){
+            return;
+          }
           const range = axis.axisRanges.create();
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
