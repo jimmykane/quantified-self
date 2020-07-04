@@ -64,8 +64,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       throw new Error('User is required')
     }
     if (this.showDownloadOriginal) {
-      this.serviceMetaData = await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
-        .pipe(take(1)).toPromise();
+      this.serviceMetaData = <SuuntoAppEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
+        .pipe(take(1)).toPromise());
       this.changeDetectorRef.detectChanges();
     }
   }
