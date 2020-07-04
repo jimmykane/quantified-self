@@ -62,7 +62,6 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
     }
   }
   res.status(200);
-  res.write('SUCCESS');
   res.send();
 });
 

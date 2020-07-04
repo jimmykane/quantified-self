@@ -44,7 +44,6 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
     console.error(e)
   }
   res.status(200);
-  res.write('SUCCESS');
   res.send();
 });
 
