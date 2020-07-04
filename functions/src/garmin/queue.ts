@@ -137,7 +137,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
     // Id for the event should be serviceName + activityID
     const metaData = new MetaData(ServiceNames.GarminHealthAPI, queueItem.activityFileID, queueItem['userID'], new Date());
-    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([ServiceNames.GarminHealthAPI, queueItem.activityFileID]), event, metaData);
+    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.activityFileID]), event, metaData);
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);

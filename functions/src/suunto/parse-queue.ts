@@ -100,8 +100,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName} test`);
       // Id for the event should be serviceName + workoutID
       const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.workoutID, queueItem.userName, new Date());
-      // @todo move metadata to its own document for firestore read/write rules
-      await setEvent(parentID, generateIDFromParts(['suuntoApp', queueItem.workoutID]), event, metaData);
+      await setEvent(parentID, generateIDFromParts([queueItem.userName, queueItem.workoutID]), event, metaData);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName} test`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
