@@ -15,8 +15,8 @@ import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interfac
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
-const TIMEOUT_IN_SECONDS = 270;
-const MEMORY = "1GB";
+const TIMEOUT_IN_SECONDS = 300;
+const MEMORY = "2GB";
 
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
@@ -37,7 +37,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokenQuerySnapshots.size) {
     console.error(`No token found for queue item ${queueItem.id} and username ${queueItem.userName} increasing count just in case`);
-    return increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error(`No tokens found`));
+    return increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error(`No tokens found`), 20);
   }
 
   let processedCount = 0;

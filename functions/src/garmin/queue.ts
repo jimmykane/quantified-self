@@ -19,8 +19,8 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
-const TIMEOUT_IN_SECONDS = 270;
-const MEMORY = "1GB";
+const TIMEOUT_IN_SECONDS = 300;
+const MEMORY = "2GB";
 
 export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
@@ -81,7 +81,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
   if (!tokenQuerySnapshots.size) {
     console.error(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
-    return increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, new Error(`No tokens found`));
+    return increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, new Error(`No tokens found`), 20);
   }
 
   let serviceToken;
