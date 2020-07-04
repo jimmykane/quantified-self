@@ -333,6 +333,14 @@ export class AppUserService implements OnDestroy {
       }));
   }
 
+  public async getGarminHealthAPITokenAsPromise(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
+    return this.afs
+      .collection('garminHealthAPITokens')
+      .doc(user.uid).get().pipe(catchError(error => {
+        return [];
+      })).pipe(take(1)).pipe(map((doc) => doc.data())).toPromise();
+  }
+
   private getAllUserMeta(user: User) {
     return this.afs
       .collection('users')

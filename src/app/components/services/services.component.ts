@@ -83,26 +83,23 @@ export class ServicesComponent implements OnInit, OnDestroy {
           duration: 10000,
         });
       }
-      return this.userService.getSuuntoAppToken(user)
-    })).pipe(switchMap((tokens) => {
-      this.suuntoAppTokens = tokens;
-      if (!this.user || !this.suuntoAppTokens) {
-        return of(null);
+      return combineLatest([
+        this.userService.getSuuntoAppToken(user),
+        this.userService.getGarminHealthAPIToken(this.user),
+        this.userService
+          .getUserMetaForService(this.user, ServiceNames.SuuntoApp),
+      ])
+    })).pipe(tap((results) => {
+      if (!results){
+        this.suuntoAppTokens = null;
+        this.garminHealthAPIToken = null;
+        this.suuntoAppMeta = null;
+        return;
       }
-      return combineLatest(this.userService
-        .getUserMetaForService(this.user, ServiceNames.SuuntoApp),
-        this.userService.getGarminHealthAPIToken(this.user))
-    })).pipe(tap((servicesMeta) => {
-      if (!servicesMeta){
-        return servicesMeta;
-      }
-      if (servicesMeta[0]) {
-        this.suuntoAppMeta = servicesMeta[0];
-      }
-      if (servicesMeta[1]) {
-        this.garminHealthAPIToken = servicesMeta[1];
-      }
-    })).subscribe(async (suuntoAppMeta) => {
+      this.suuntoAppTokens = results[0];
+      this.garminHealthAPIToken = results[1];
+      this.suuntoAppMeta = results[2];
+    })).subscribe(async (results) => {
       const state = this.route.snapshot.queryParamMap.get('state');
       const oauthToken = this.route.snapshot.queryParamMap.get('oauth_token');
       const oauthVerifier = this.route.snapshot.queryParamMap.get('oauth_verifier');
@@ -221,10 +218,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
     try {
       this.isLoading = true;
       const redirectURI = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
-      // @todo perhaps should return token etc
-      // @todo probably this will need fixing
       // Get the redirect url for the unsigned token created with the post
-      const token = <{oauthToken: string, oauthTokenSecret: string, state: string}>await this.userService.getGarminHealthAPIToken(this.user).pipe(take(1)).toPromise();
+      const token = await this.userService.getGarminHealthAPITokenAsPromise(this.user);
       this.windowService.windowRef.location.href = `${redirectURI.redirect_url}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${token.state}`)}`
     } catch (e){
       Sentry.captureException(e);
