@@ -72,15 +72,15 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.userSubscription = this.authService.user.pipe(switchMap((user) => {
       this.user = user;
       if (!this.user) {
-        this.snackBar.open('You must login to connect and use the service features', 'OK', {
+        this.snackBar.open('You must login if you want to use the service features', 'OK', {
           duration: null,
         });
         return of(null);
       }
       this.isGuest = this.authService.isGuest();
       if (this.isGuest) {
-        this.snackBar.open('You must login with a non-guest account to connect and use the service features', 'OK', {
-          duration: 10000,
+        this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
+          duration: null,
         });
       }
       return combineLatest([
