@@ -94,7 +94,7 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
         'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
       },
       encoding: null,
-      gzip: true,
+      // gzip: true,
       url: `https://cloudapi.suunto.com/v2/workout/exportFit/${req.body.workoutID}`,
     });
     console.timeEnd('GetFIT');

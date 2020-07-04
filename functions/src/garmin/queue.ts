@@ -102,7 +102,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           secret: serviceToken.accessTokenSecret
         })),
       encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
-      gzip: true,
+      // gzip: true,
       url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
     });
     console.timeEnd('DownloadFile');
