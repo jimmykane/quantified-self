@@ -29,7 +29,7 @@
     "@angular/common": "10.0.2",
     "@angular/compiler": "10.0.2",
     "@angular/core": "10.0.2",
-    "@angular/fire": "6.0.3-canary.7cb6c03",
+    "@angular/fire": "6.0.2",
     "@angular/forms": "10.0.2",
     "@angular/material": "^10.0.1",
     "@angular/platform-browser": "10.0.2",
