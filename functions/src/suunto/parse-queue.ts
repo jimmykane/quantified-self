@@ -15,8 +15,8 @@ import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interfac
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
-const TIMEOUT_IN_SECONDS = 540;
-const MEMORY = "2GB";
+const TIMEOUT_IN_SECONDS = 270;
+const MEMORY = "1GB";
 
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
