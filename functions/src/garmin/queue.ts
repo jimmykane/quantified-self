@@ -109,17 +109,18 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
     }
+    console.timeEnd('DownloadFit');
     return;
   }
 
   try {
     const event = await EventImporterFIT.getFromArrayBuffer(result);
     event.name = event.startDate.toJSON(); // @todo improve
-    console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID} test`);
+    console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
     // Id for the event should be serviceName + activityID
     const metaData = new MetaData(ServiceNames.GarminHealthAPI, queueItem.activityFileID, queueItem['userID'], new Date());
     await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([ServiceNames.GarminHealthAPI, queueItem.activityFileID]), event, metaData);
-    console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID} test`);
+    console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);
   } catch (e) {
