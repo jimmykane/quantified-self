@@ -231,7 +231,9 @@ export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').
   }
   const deregistrations = req.body.deregistrations;
   // Directly respond
-  res.status(200).send()
+
+  res.status(200)
+  res.write('SUCCESS')
   console.log(`Deauthorizing ${deregistrations.length} users`)
   for (const deregistration of deregistrations){
 

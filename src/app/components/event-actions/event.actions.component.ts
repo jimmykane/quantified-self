@@ -19,11 +19,14 @@ import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { MetaDataInterface, ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import { environment } from '../../../environments/environment';
 import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AngularFireAuth } from '@angular/fire/auth';
+import {
+  ServiceNames,
+  SuuntoAppEventMetaDataInterface
+} from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 @Component({
   selector: 'app-event-actions',
@@ -38,7 +41,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() user: User;
   @Input() showDownloadOriginal = false;
 
-  serviceMetaData: MetaDataInterface
+  serviceMetaData: SuuntoAppEventMetaDataInterface
   private deleteConfirmationSubscription;
 
   constructor(

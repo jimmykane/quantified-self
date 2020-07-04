@@ -6,7 +6,6 @@ import {
   FormGroup,
   Validators,
 } from '@angular/forms';
-import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
@@ -14,8 +13,8 @@ import {Log} from 'ng2-logger/browser';
 import {AppUserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
-import {ServiceNames} from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
 @Component({

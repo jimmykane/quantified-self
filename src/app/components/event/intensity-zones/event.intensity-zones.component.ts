@@ -19,7 +19,6 @@ import {IntensityZones} from '@sports-alliance/sports-lib/lib/intensity-zones/in
 import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
 import {DataPower} from '@sports-alliance/sports-lib/lib/data/data.power';
 import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
-import {ChartHelper} from '../chart/chart-helper';
 import {AppColors} from '../../../services/color/app.colors';
 import {MatIconRegistry} from '@angular/material/icon';
 

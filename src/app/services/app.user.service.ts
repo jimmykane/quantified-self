@@ -56,8 +56,7 @@ import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-r
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
-import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth1-service-token.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
 @Injectable({
