@@ -131,16 +131,11 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
     });
   }catch (e) {
     console.error(e)
-  }
-
-  if (!result){
     res.status(500).send('Could not get access token for user');
     return;
   }
 
-
   const urlParams = new URLSearchParams(result);
-  result = null;
 
   try {
     result = await requestPromise.get({
@@ -156,9 +151,6 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
     });
   }catch (e) {
     console.error(e)
-  }
-
-  if (!result){
     res.status(500).send('Could not get user for access token');
     return;
   }
@@ -232,7 +224,7 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 
 
 export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  if (!req.body.deregistrations){
+  if (!req.body.deregistrations || !req.body.deregistrations.length){
     console.info(req.body);
     res.status(200).send()
     return
@@ -240,13 +232,16 @@ export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').
   const deregistrations = req.body.deregistrations;
   // Directly respond
   res.status(200).send()
+  console.log(`Deauthorizing ${deregistrations.length} users`)
   for (const deregistration of deregistrations){
+
     try {
       const tokenQuerySnapshots = await admin.firestore()
         .collection('garminHealthAPITokens')
         .where("userID", "==", deregistration.userId)
         .where("accessToken", "==", deregistration.userAccessToken)
         .get();
+      console.log(`Found ${tokenQuerySnapshots.size} to delete`)
       for (const tokenQuerySnapshotsDocument of tokenQuerySnapshots.docs) {
         await tokenQuerySnapshotsDocument.ref.delete()
       }
@@ -254,4 +249,5 @@ export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').
       console.error(e);
     }
   }
+  console.info(`Successfully deauthorized ${deregistrations.length}`)
 });
