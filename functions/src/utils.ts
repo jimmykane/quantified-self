@@ -109,8 +109,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
     } catch (e) {
         console.error(e);
-        debugger;
-        return
+        throw e;
         // Try to delete the parent entity and all subdata
         // await this.deleteAllEventData(user, event.getID());
     }
