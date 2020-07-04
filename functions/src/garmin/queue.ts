@@ -13,6 +13,10 @@ import { generateIDFromParts, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
 import { GarminHealthAPIActivityQueueItemInterface, } from '../queue/queue-item.interface';
+import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
+import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
+import * as xmldom from 'xmldom';
+
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
 const TIMEOUT_IN_SECONDS = 540;
@@ -93,7 +97,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           key: serviceToken.accessToken,
           secret: serviceToken.accessTokenSecret
         })),
-      encoding: null,
+      encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
+      gzip: true,
       url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
     });
     console.timeEnd('DownloadFit');
@@ -114,7 +119,18 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   }
 
   try {
-    const event = await EventImporterFIT.getFromArrayBuffer(result);
+    let event;
+    switch (queueItem.activityFileType){
+      case 'FIT':
+        event = await EventImporterFIT.getFromArrayBuffer(result);
+        break;
+      case 'GPX':
+        event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
+        break;
+      case 'TCX':
+        event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'));
+        break;
+    }
     event.name = event.startDate.toJSON(); // @todo improve
     console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
     // Id for the event should be serviceName + activityID

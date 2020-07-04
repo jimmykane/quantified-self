@@ -13,6 +13,7 @@
     "@types/request": "^2.48.5",
     "@types/request-promise-native": "^1.0.17",
     "@types/simple-oauth2": "^2.5.3",
+    "@types/xmldom": "^0.1.29",
     "bs58": "^4.0.1",
     "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
@@ -23,7 +24,8 @@
     "pako": "^1.0.11",
     "request": "^2.88.2",
     "request-promise-native": "^1.0.8",
-    "simple-oauth2": "^3.4.0"
+    "simple-oauth2": "^3.4.0",
+    "xmldom": "^0.3.0"
   },
   "scripts": {
     "lint": "tslint --project tsconfig.json",
