@@ -55,7 +55,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
   res.status(200);
   res.write('SUCCESS')
   console.log(`Processing ${queueItemRefs.length} freshly inserted to queue items`);
-  for (const queueItemRef of queueItemRefs) {
+  for (const queueItemRef of queueItemRefs.slice(0, 10)) {
     try {
       console.log(`Processing freshly inserted queue item ${queueItemRef.id}`)
       await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
