@@ -1530,10 +1530,10 @@
     "@sentry/types" "5.19.0"
     tslib "^1.9.3"
 
-"@sports-alliance/sports-lib@^4.2.13":
-  version "4.2.13"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.2.13.tgz#2f2bcb46e4f96cded60e6838685923b7566b39ca"
-  integrity sha512-SUs527aGJNmOOGb/mBxhk7xHUJ0fHZQxz8D5vwftEh+blq1d1tPGwcAP4EfpgRSg2mParP4pySlgtJYD9myhEg==
+"@sports-alliance/sports-lib@^4.2.15":
+  version "4.2.15"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.2.15.tgz#b7ff716bb7f29766d513dee4c51067e24f98f8d3"
+  integrity sha512-yG6GyKalLHszGlDx0Xzw/vqa3Ksbpi0u3S/k1Cb7rWuFIiVdAKo583KIg0xpiUGIFTBM4uvyMYjtJkhQNlXREw==
   dependencies:
     "@types/node" "^13.9.0"
     fast-xml-parser "^3.16.0"
@@ -3989,9 +3989,9 @@ ee-first@1.1.1:
   integrity sha1-WQxhFWsK4vTwJVcyoViyZrxWsh0=
 
 electron-to-chromium@^1.3.483:
-  version "1.3.487"
-  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.487.tgz#8075e6ea33ee2e79a2dfb2a2467033f014017258"
-  integrity sha512-m4QS3IDShxauFfYFpnEzRCcUI55oKB9acEnHCuY/hSCZMz9Pz2KJj+UBnGHxRxS/mS1aphqOQ5wI6gc3yDZ7ew==
+  version "1.3.488"
+  resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.488.tgz#9226229f5fbc825959210e81e0bb3e63035d1c06"
+  integrity sha512-NReBdOugu1yl8ly+0VDtiQ6Yw/1sLjnvflWq0gvY1nfUXU2PbA+1XAVuEb7ModnwL/MfUPjby7e4pAFnSHiy6Q==
 
 elliptic@^6.0.0, elliptic@^6.5.2:
   version "6.5.3"
