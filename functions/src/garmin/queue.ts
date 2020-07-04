@@ -52,8 +52,6 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
     }
   }
 
-  res.status(200);
-  res.write('SUCCESS')
   console.log(`Processing ${queueItemRefs.length} freshly inserted to queue items`);
   for (const queueItemRef of queueItemRefs.slice(0, 10)) {
     try {
@@ -63,13 +61,16 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
       console.error(e);
     }
   }
+  res.status(200);
+  res.write('SUCCESS');
+  res.send();
 });
 
 
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 

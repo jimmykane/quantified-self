@@ -36,8 +36,6 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
   }
 
   // All ok reply and take over internally
-  res.status(200);
-  res.write('SUCCESS');
 
   try{
     await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));
@@ -45,5 +43,8 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
     console.error(`Could not process activity due to ${e.message}`)
     console.error(e)
   }
+  res.status(200);
+  res.write('SUCCESS');
+  res.send();
 });
 
