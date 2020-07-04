@@ -73,6 +73,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
         },
         encoding: null,
+        gzip: true,
         url: `https://cloudapi.suunto.com/v2/workout/exportFit/${queueItem.workoutID}`,
       });
       console.timeEnd('DownloadFit');
