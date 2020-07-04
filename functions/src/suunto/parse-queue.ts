@@ -7,13 +7,13 @@ import { generateIDFromParts, setEvent } from "../utils";
 import { ServiceNames } from "@sports-alliance/sports-lib/lib/meta-data/meta-data.interface";
 import { getTokenData } from "../service-tokens";
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import {
   increaseRetryCountForQueueItem,
   parseQueueItems,
   updateToProcessed
 } from '../queue';
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "2GB";
@@ -98,8 +98,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
       const event = await EventImporterFIT.getFromArrayBuffer(result);
       event.name = event.startDate.toJSON(); // @todo improve
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName} test`);
-      // Id for the event should be serviceName + workoutID
-      const metaData = new MetaData(ServiceNames.SuuntoApp, queueItem.workoutID, queueItem.userName, new Date());
+      const metaData = new SuuntoAppEventMetaData(queueItem.workoutID, queueItem.userName, new Date());
       await setEvent(parentID, generateIDFromParts([queueItem.userName, queueItem.workoutID]), event, metaData);
       console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName} test`);
       processedCount++;

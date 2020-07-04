@@ -15,6 +15,8 @@ export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface{
 
 export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface{
   userID: string
+  startTimeInSeconds: number,
+  manual: boolean,
   activityFileID: string,
   activityFileType: 'FIT' | 'TCX' | 'GPX'
 }

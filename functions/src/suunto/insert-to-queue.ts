@@ -36,8 +36,8 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
   }
 
   // All ok reply and take over internally
-  // !!!No response sending after this!!!
-  res.status(200).send();
+  res.status(200);
+  res.write('SUCCESS');
 
   try{
     await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));

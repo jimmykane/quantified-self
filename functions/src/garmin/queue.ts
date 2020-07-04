@@ -7,7 +7,6 @@ import {
   updateToProcessed
 } from '../queue';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { MetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/meta-data.interface';
 import { generateIDFromParts, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
@@ -16,6 +15,7 @@ import { GarminHealthAPIActivityQueueItemInterface, } from '../queue/queue-item.
 import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import * as xmldom from 'xmldom';
+import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
@@ -39,6 +39,8 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
       queueItemDocumentReference = await addToQueueForGarmin(
         {
           userID: activityFile.userId,
+          startTimeInSeconds: activityFile.startTimeInSeconds,
+          manual: activityFile.manual,
           activityFileID: activityFileID,
           activityFileType: activityFile.fileType,
         });
@@ -50,8 +52,8 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
     }
   }
 
-  res.status(200).send();
-
+  res.status(200);
+  res.write('SUCCESS')
   console.log(`Processing ${queueItemRefs.length} freshly inserted to queue items`);
   for (const queueItemRef of queueItemRefs) {
     try {
@@ -135,9 +137,14 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     }
     event.name = event.startDate.toJSON(); // @todo improve
     console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
-    // Id for the event should be serviceName + activityID
-    const metaData = new MetaData(ServiceNames.GarminHealthAPI, queueItem.activityFileID, queueItem['userID'], new Date());
-    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.activityFileID]), event, metaData);
+    const metaData = new GarminHealthAPIEventMetaData(
+      queueItem.userID,
+      queueItem.activityFileID,
+      queueItem.activityFileType,
+      queueItem.manual || false,
+      queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
+      new Date());
+    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData);
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);

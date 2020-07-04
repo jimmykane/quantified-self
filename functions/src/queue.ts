@@ -83,12 +83,14 @@ export async function addToQueueForSuunto(queueItem: {userName: string, workoutI
   }, ServiceNames.SuuntoApp)
 }
 
-export async function addToQueueForGarmin(queueItem: {userID: string, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX'}): Promise<admin.firestore.DocumentReference> {
-  console.log(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.activityFileID])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
+export async function addToQueueForGarmin(queueItem: {userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX'}): Promise<admin.firestore.DocumentReference> {
+  console.log(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToQueue( {
-    id: generateIDFromParts([queueItem.userID, queueItem.activityFileID]),
+    id: generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]),
     dateCreated: new Date().getTime(),
     userID: queueItem.userID,
+    startTimeInSeconds: queueItem.startTimeInSeconds,
+    manual: queueItem.manual,
     activityFileID: queueItem.activityFileID,
     activityFileType: queueItem.activityFileType,
     retryCount: 0,
