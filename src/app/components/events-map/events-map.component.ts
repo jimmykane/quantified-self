@@ -4,6 +4,7 @@ import {
   ChangeDetectorRef,
   Component,
   Input,
+  NgZone,
   OnChanges,
   SimpleChanges,
   ViewChild
@@ -54,40 +55,45 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
 
 
   constructor(
-    private changeDetectorRef: ChangeDetectorRef, private eventColorService: AppEventColorService, private eventService: AppEventService) {
+    private zone: NgZone,
+    private changeDetectorRef: ChangeDetectorRef,
+    private eventColorService: AppEventColorService,
+    private eventService: AppEventService) {
     super(changeDetectorRef);
   }
 
   ngAfterViewInit() {
     this.agmMap.mapReady.subscribe(map => {
-      this.nativeMap = map;
-      if (this.showHeatMap) {
-        // const trafficLayer = new google.maps.TrafficLayer();
-        // trafficLayer.setMap(map);
-        // Latlng and heatmap
-        this.latLngArray = this.getLatLngArray(this.events);
-        this.heatMap = new google.maps.visualization.HeatmapLayer({
-          map: this.nativeMap,
-          data: this.latLngArray,
-          radius: 50,
-          // dissipating: false,
-        });
-      }
-      // Markers + layer
-      this.markers = this.getMarkersFromEvents(this.events);
-      this.markers.forEach(marker => marker.setMap(this.nativeMap));
-      if (this.clusterMarkers) {
-        this.markerClusterer = new MarkerClusterer(map,
-          this.markers,
-          {
-            imagePath: '/assets/icons/heatmap/m',
-            enableRetinaIcons: true,
-            averageCenter: true,
-            maxZoom: 18,
-            minimumClusterSize: 15,
+      this.zone.runOutsideAngular(() => {
+        this.nativeMap = map;
+        if (this.showHeatMap) {
+          // const trafficLayer = new google.maps.TrafficLayer();
+          // trafficLayer.setMap(map);
+          // Latlng and heatmap
+          this.latLngArray = this.getLatLngArray(this.events);
+          this.heatMap = new google.maps.visualization.HeatmapLayer({
+            map: this.nativeMap,
+            data: this.latLngArray,
+            radius: 50,
+            // dissipating: false,
           });
-      }
-      this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
+        }
+        // Markers + layer
+        this.markers = this.getMarkersFromEvents(this.events);
+        this.markers.forEach(marker => marker.setMap(this.nativeMap));
+        if (this.clusterMarkers) {
+          this.markerClusterer = new MarkerClusterer(map,
+            this.markers,
+            {
+              imagePath: '/assets/icons/heatmap/m',
+              enableRetinaIcons: true,
+              averageCenter: true,
+              maxZoom: 18,
+              minimumClusterSize: 15,
+            });
+        }
+        this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
+      });
       this.changeDetectorRef.detectChanges();
     });
   }
@@ -96,19 +102,21 @@ export class EventsMapComponent extends MapAbstract implements OnChanges, AfterV
     if (!this.nativeMap) {
       return;
     }
-    // Only process heatmaps once Google is initialized (map on load)
-    if (this.heatMap) {
-      this.latLngArray = this.getLatLngArray(this.events);
-      this.heatMap.setData(this.latLngArray);
-    }
-    // Only process custers once Google is initialized (map on load)
-    if (this.markerClusterer) {
-      this.markerClusterer.clearMarkers();
-      this.markers = this.getMarkersFromEvents(this.events);
-      this.markerClusterer.addMarkers(this.markers);
-      this.markerClusterer.repaint();
-    }
-    this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
+    this.zone.runOutsideAngular(() => {
+      // Only process heatmaps once Google is initialized (map on load)
+      if (this.heatMap) {
+        this.latLngArray = this.getLatLngArray(this.events);
+        this.heatMap.setData(this.latLngArray);
+      }
+      // Only process custers once Google is initialized (map on load)
+      if (this.markerClusterer) {
+        this.markerClusterer.clearMarkers();
+        this.markers = this.getMarkersFromEvents(this.events);
+        this.markerClusterer.addMarkers(this.markers);
+        this.markerClusterer.repaint();
+      }
+      this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)))
+    });
   }
 
   getStartPositionsFromEvents(events: EventInterface[]): DataPositionInterface[] {
