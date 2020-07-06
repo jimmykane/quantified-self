@@ -10,7 +10,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 /**
  * Uploads a route to the Suunto app
  */
-export const importRouteToSuuntoAppToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const importRouteToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed`);
