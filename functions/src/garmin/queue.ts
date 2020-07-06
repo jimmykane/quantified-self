@@ -69,7 +69,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 1 hour').onRun(async (context) => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 

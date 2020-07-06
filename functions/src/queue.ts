@@ -1,5 +1,4 @@
 import * as admin from 'firebase-admin';
-import { processSuuntoAppActivityQueueItem } from './suunto/parse-queue';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
   GarminHealthAPIActivityQueueItemInterface,
@@ -8,6 +7,7 @@ import {
 } from './queue/queue-item.interface';
 import { generateIDFromParts } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { processSuuntoAppActivityQueueItem } from './suunto/queue';
 
 export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, serviceName: ServiceNames, error: Error, incrementBy = 1) {
   queueItem.retryCount += incrementBy;

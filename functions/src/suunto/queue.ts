@@ -1,24 +1,66 @@
-'use strict';
-
-import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
-import * as requestPromise from "request-promise-native";
-import { generateIDFromParts, setEvent } from "../utils";
-import { getTokenData } from "../service-tokens";
-import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import {
-  increaseRetryCountForQueueItem,
-  parseQueueItems,
-  updateToProcessed
-} from '../queue';
+import * as functions from 'firebase-functions'
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
-import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { addToQueueForSuunto, increaseRetryCountForQueueItem, parseQueueItems, updateToProcessed } from '../queue';
+import * as admin from 'firebase-admin';
+import { getTokenData } from '../service-tokens';
+import * as requestPromise from 'request-promise-native';
+import { generateIDFromParts, setEvent } from '../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+
 
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
 
-export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({timeoutSeconds: TIMEOUT_IN_SECONDS, memory: MEMORY }).pubsub.schedule('every 20 minutes').onRun(async (context) => {
+export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY
+}).https.onRequest(async (req, res) => {
+  // Check Auth first
+  const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
+  if (authentication !== req.headers.authorization){
+    console.error(new Error(`Not authorised to post here received: ${req.headers.authorization}`));
+    res.status(403);
+    res.send();
+    return;
+  }
+
+  const userName = req.query.username ||  req.body.username;
+  const workoutID = req.query.workoutid ||  req.body.workoutid;
+
+  console.log(`Inserting to queue or processing ${workoutID} for ${userName}`);
+  let queueItemDocumentReference;
+  try {
+    queueItemDocumentReference = await addToQueueForSuunto({
+      userName: userName,
+      workoutID: workoutID,
+    });
+  }catch (e) {
+    console.error(e);
+  }
+
+  if (!queueItemDocumentReference){
+    res.status(500).send();
+    return
+  }
+
+  // All ok reply and take over internally
+
+  try{
+    await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));
+  }catch (e) {
+    console.error(`Could not process activity due to ${e.message}`)
+    console.error(e)
+  }
+  res.status(200);
+  res.send();
+})
+
+export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY
+}).pubsub.schedule('every 1 hour').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
@@ -29,7 +71,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
   let tokenQuerySnapshots;
   try {
     tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where("userName", "==", queueItem.userName).get();
-  }catch (e) {
+  } catch (e) {
     console.error(e)
     return increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e);
   }
@@ -50,7 +92,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
     // If import fails for the next token it will increase count (fail ) and try from start.
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot);
-    }catch (e) {
+    } catch (e) {
       console.error(e);
       console.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
       continue
@@ -79,12 +121,12 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
       console.timeEnd('DownloadFit');
       console.log(`Downloaded FIT file for ${queueItem.id} and token user ${serviceToken.userName}`)
     } catch (e) {
-      if (e.statusCode === 403){
+      if (e.statusCode === 403) {
         console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName} due to 403, increasing retry by 20`))
         await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e, 20);
         continue;
       }
-      if (e.statusCode === 500){
+      if (e.statusCode === 500) {
         console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userName} due to 500 increasing retry by 20`))
         await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e, 20);
         continue;
@@ -123,3 +165,4 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
   return updateToProcessed(queueItem, ServiceNames.SuuntoApp);
 
 }
+
