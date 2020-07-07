@@ -1,14 +1,11 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input } from '@angular/core';
-import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes, TileChartSettingsInterface
+  ChartTypes, TimeIntervals
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import { SummariesChartDataDateRages } from '../../summaries/summaries.component';
-import { TileAbstract } from "../tile.abstract";
-import { User } from "@sports-alliance/sports-lib/lib/users/user";
+import { TileAbstract } from '../tile.abstract';
 
 @Component({
   selector: 'app-tile-chart',
@@ -26,7 +23,7 @@ export class TileChartComponent extends TileAbstract {
   @Input() chartTheme: ChartThemes;
   @Input() filterLowValues: boolean;
   @Input() showActions: boolean;
-  @Input() dataDateRange: SummariesChartDataDateRages;
+  @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;
 
   public chartTypes = ChartTypes;
