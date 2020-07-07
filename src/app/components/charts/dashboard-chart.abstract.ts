@@ -1,10 +1,10 @@
 import {ChartAbstractDirective} from './chart-abstract.directive';
 import {AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges} from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {SummariesChartDataInterface} from '../summaries/summaries.component';
+import {SummariesChartDataDateRages, SummariesChartDataInterface} from '../summaries/summaries.component';
 import {
   ChartDataCategoryTypes,
-  ChartDataValueTypes, TimeIntervals
+  ChartDataValueTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
@@ -19,7 +19,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
   @Input() filterLowValues: boolean;
-  @Input() chartDataTimeInterval?: TimeIntervals;
+  @Input() chartDataDateRange?: SummariesChartDataDateRages;
   @Input() isLoading: boolean;
 
   protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
@@ -62,35 +62,35 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
   }
 
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDataTimeInterval: TimeIntervals): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDateDateRange: SummariesChartDataDateRages): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
     switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
         const axis = new am4charts.DateAxis();
         let key;
         axis.skipEmptyPeriods = true;
-        switch (chartDataTimeInterval) {
-          case TimeIntervals.Yearly:
+        switch (this.chartDataDateRange) {
+          case SummariesChartDataDateRages.Yearly:
             key = 'year';
             break;
-          case TimeIntervals.Monthly:
+          case SummariesChartDataDateRages.Monthly:
             key = 'month';
             break;
-          case TimeIntervals.Daily:
+          case SummariesChartDataDateRages.Daily:
             key = 'day';
             break;
-          case TimeIntervals.Hourly:
+          case SummariesChartDataDateRages.Hourly:
             key = 'hour';
             break;
           default:
-            throw new Error(`Not implemented for ${chartDataTimeInterval}`);
+            throw new Error(`Not implemented`);
         }
         axis.baseInterval = {
           'timeUnit': key,
           'count': 1
         };
-        axis.dateFormatter.dateFormat = this.getChartDateFormat(chartDataTimeInterval);
-        axis.dateFormats.setKey(key, this.getAxisDateFormat(chartDataTimeInterval));
-        axis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(chartDataTimeInterval));
+        axis.dateFormatter.dateFormat = this.getChartDateFormat(chartDateDateRange);
+        axis.dateFormats.setKey(key, this.getAxisDateFormat(chartDateDateRange));
+        axis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(chartDateDateRange));
         return axis;
       case ChartDataCategoryTypes.ActivityType:
         return new am4charts.CategoryAxis();
@@ -99,30 +99,30 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
   }
 
-  protected getChartDateFormat(timeInterval: TimeIntervals) {
-    switch (timeInterval) {
-      case TimeIntervals.Yearly:
+  protected getChartDateFormat(dateRange: SummariesChartDataDateRages) {
+    switch (dateRange) {
+      case SummariesChartDataDateRages.Yearly:
         return 'yyyy';
-      case TimeIntervals.Monthly:
+      case SummariesChartDataDateRages.Monthly:
         return 'MMM yyyy';
-      case TimeIntervals.Daily:
+      case SummariesChartDataDateRages.Daily:
         return 'dd MMM yyyy';
-      case TimeIntervals.Hourly:
+      case SummariesChartDataDateRages.Hourly:
         return 'HH:mm dd MMM yyyy';
       default:
         throw new Error(`Not implemented`)
     }
   }
 
-  protected getAxisDateFormat(timeInterval: TimeIntervals) {
-    switch (timeInterval) {
-      case TimeIntervals.Yearly:
+  protected getAxisDateFormat(dateRange: SummariesChartDataDateRages) {
+    switch (dateRange) {
+      case SummariesChartDataDateRages.Yearly:
         return 'yyyy';
-      case TimeIntervals.Monthly:
+      case SummariesChartDataDateRages.Monthly:
         return 'MMM';
-      case TimeIntervals.Daily:
+      case SummariesChartDataDateRages.Daily:
         return 'dd';
-      case TimeIntervals.Hourly:
+      case SummariesChartDataDateRages.Hourly:
         return 'HH:mm';
       default:
         throw new Error(`Not implemented`)

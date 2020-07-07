@@ -64,7 +64,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     });
 
     chartTitle.marginTop = am4core.percent(20);
-    const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
+    const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataDateRange));
     if (categoryAxis instanceof am4charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';
     } else if (categoryAxis instanceof am4charts.DateAxis) {

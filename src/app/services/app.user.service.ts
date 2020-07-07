@@ -38,7 +38,7 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes, TileChartSettingsInterface, TileMapSettingsInterface,
-  TileSettingsInterface, TileTypes, TimeIntervals,
+  TileSettingsInterface, TileTypes,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
@@ -107,7 +107,6 @@ export class AppUserService implements OnDestroy {
       type: TileTypes.Chart,
       chartType: ChartTypes.ColumnsHorizontal,
       dataType: DataDistance.type,
-      dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
@@ -145,7 +144,6 @@ export class AppUserService implements OnDestroy {
       chartType: ChartTypes.Pie,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataType: DataDuration.type,
-      dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
       size: { columns: 1, rows: 1 },
@@ -155,7 +153,6 @@ export class AppUserService implements OnDestroy {
       type: TileTypes.Chart,
       chartType: ChartTypes.ColumnsHorizontal,
       dataType: DataDistance.type,
-      dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
@@ -167,7 +164,6 @@ export class AppUserService implements OnDestroy {
       chartType: ChartTypes.PyramidsVertical,
       dataCategoryType: ChartDataCategoryTypes.DateType,
       dataType: DataAscent.type,
-      dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
       filterLowValues: true,
       size: { columns: 1, rows: 1 },

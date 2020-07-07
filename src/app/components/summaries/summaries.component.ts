@@ -27,8 +27,7 @@ import {
   TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
-  TileTypes,
-  TimeIntervals,
+  TileTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { MatDialog } from '@angular/material/dialog';
@@ -110,15 +109,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
       case ChartDataCategoryTypes.DateType:
-        switch (this.getEventsTimeInterval(events)) {
-          case TimeIntervals.Yearly:
+        switch (this.getEventsDateRange(events)) {
+          case SummariesChartDataDateRages.Yearly:
             return new Date(event.startDate.getFullYear(), 0).getTime();
-          case TimeIntervals.Monthly:
-            // @todo add  weekly
+          case SummariesChartDataDateRages.Monthly:
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
-          case TimeIntervals.Daily:
+          case SummariesChartDataDateRages.Daily:
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
-          case TimeIntervals.Hourly:
+          case SummariesChartDataDateRages.Hourly:
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate(), event.startDate.getHours(), event.startDate.getMinutes()).getTime();
           default:
             return event.startDate.getTime()
@@ -131,7 +129,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return null;
     }
     return isSummariesChartTile(item) ?
-      `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.timeInterval}`
+      `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.dataDateRange}`
       : `${item.clusterMarkers}${item.mapTheme}${item.mapType}${item.name}${item.order}${item.showHeatMap}`
   }
 
@@ -183,7 +181,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           const chartTile = <TileChartSettingsInterface>tile;
           chartsAndData.push({
             ...chartTile, ...{
-              timeInterval: this.getEventsTimeInterval(events), // Defaults to daily
+              dataDateRange: events && events.length ? this.getEventsDateRange(events) : SummariesChartDataDateRages.Daily, // Default to daily
               data: events ? // The below will create a new instance of this events due to filtering
                 this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType)
                 : [] // We send null if there are no events for the input date range
@@ -334,32 +332,28 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
    * Expects the input to be sorted already
    * @param events
    */
-  private getEventsTimeInterval(events?: EventInterface[]): TimeIntervals {
-    // return  TimeIntervals.Daily
-    if (!events || !events.length) {
-      return TimeIntervals.Daily
-    }
+  private getEventsDateRange(events?: EventInterface[]): SummariesChartDataDateRages {
     const startDate = events[0].startDate;
     const endDate = events[events.length - 1].startDate;
     //  Not the same year ? create a year category
     if (endDate.getFullYear() !== startDate.getFullYear()) {
-      return TimeIntervals.Yearly;
+      return SummariesChartDataDateRages.Yearly;
     }
     // Not the same month ? create a monthly category
     if (endDate.getMonth() !== startDate.getMonth()) {
       // First check if the date range is in 30 day and return daily
       if (endDate.getTime() <= startDate.getTime() + (1000 * 31 * 24 * 60 * 60)) {
-        return TimeIntervals.Daily
+        return SummariesChartDataDateRages.Daily
       }
-      return TimeIntervals.Monthly;
+      return SummariesChartDataDateRages.Monthly;
     }
     // Not the same day ? Return daily
     if (endDate.getDate() !== startDate.getDate()) {
-      return TimeIntervals.Daily;
+      return SummariesChartDataDateRages.Daily;
     }
     // Not the same hour ? Return hourly
     // @todo implement the rest of the cases
-    return TimeIntervals.Hourly;
+    return SummariesChartDataDateRages.Hourly;
   }
 
   // @todo refactor
@@ -387,7 +381,7 @@ export interface SummariesChartDataInterface {
 }
 
 export interface SummariesChartTileInterface extends TileChartSettingsInterface {
-  timeInterval: TimeIntervals
+  dataDateRange: SummariesChartDataDateRages
   data: SummariesChartDataInterface[]
 }
 
@@ -395,6 +389,13 @@ export interface SummariesMapTileInterface extends TileMapSettingsInterface {
   events: EventInterface[];
 }
 
+export enum SummariesChartDataDateRages {
+  Hourly,
+  Daily,
+  Monthly,
+  Yearly,
+}
+
 export function isSummariesChartTile(tile): tile is SummariesChartTileInterface {
-  return 'dateGroup' in tile;
+  return 'dataDateRange' in tile;
 }
