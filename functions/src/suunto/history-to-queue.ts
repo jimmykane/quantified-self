@@ -110,7 +110,7 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
     result.payload = result.payload.filter((activity: any) => (new Date(activity.startTime)) >= startDate &&  (new Date(activity.startTime)) <= endDate)
 
     if (result.payload.length === 0) {
-      console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
+      console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} and for the dates of ${startDate} to ${endDate}`);
       continue;
     }
 
