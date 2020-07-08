@@ -396,5 +396,5 @@ export interface SummariesMapTileInterface extends TileMapSettingsInterface {
 }
 
 export function isSummariesChartTile(tile): tile is SummariesChartTileInterface {
-  return 'dateGroup' in tile;
+  return 'timeInterval' in tile;
 }
