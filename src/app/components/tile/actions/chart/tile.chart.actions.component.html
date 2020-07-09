@@ -72,7 +72,7 @@
     </mat-form-field>
   </section>
 
-  <section mat-menu-item>
+  <section mat-menu-item *ngIf="chartDataCategoryType === chartCategoryTypes.DateType">
     <mat-form-field>
       <mat-label>Time interval</mat-label>
       <mat-select placeholder="Time interval" [value]="chartTimeInterval"
