@@ -44,7 +44,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
-    chart.padding(10, 0, 0, 1);
+    chart.padding(10, 0, 0, 10);
     chart.paddingBottom = this.vertical ? 20 : 0;
     chart.fontSize = '0.8em';
 
@@ -146,7 +146,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       series.stroke = chart.colors.getIndex(9); // Init stroke
       // series.tension = 1;
       const bullet = series.bullets.push(new am4charts.CircleBullet());
-      bullet.radius = am4core.percent(55);
+      bullet.circle.radius = 2;
+      bullet.fillOpacity = 0.8;
+      bullet.circle.radius = 3;
       bullet.adapter.add('fill', (fill, target) => {
         if (!target.dataItem) {
           return fill;
@@ -227,6 +229,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
       categoryLabel.label.padding(1, 4, 0, 4);
     }
+
 
     categoryLabel.label.hideOversized = false;
     categoryLabel.label.truncate = false;
