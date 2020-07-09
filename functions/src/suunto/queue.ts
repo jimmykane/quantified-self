@@ -14,8 +14,8 @@ const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
 
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY
+  timeoutSeconds: 60,
+  memory: '1GB'
 }).https.onRequest(async (req, res) => {
   // Check Auth first
   const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
