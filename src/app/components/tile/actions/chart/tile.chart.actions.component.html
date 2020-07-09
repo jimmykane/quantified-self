@@ -1,132 +1,148 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
+<button mat-icon-button [matMenuTriggerFor]="menu"
+        (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-    <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 11">
-      <button mat-menu-item class="big" (click)="addNewTile($event)">
-        <mat-icon>add</mat-icon>
-        <span>Add new</span>
-        <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
-      </button>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Type</mat-label>
-        <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
-          <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">
-            {{tileType.value}}
+  <section class="first" *ngIf="user.settings.dashboardSettings.tiles.length <= 11">
+    <button mat-menu-item class="big" (click)="addNewTile($event)">
+      <mat-icon>add</mat-icon>
+      <span>Add new</span>
+      <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
+    </button>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Type</mat-label>
+      <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
+        <mat-option *ngFor="let tileType of tileTypes | keyvalue" [value]="tileType.value">
+          {{tileType.value}}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Chart type</mat-label>
+      <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
+        <mat-option *ngFor="let chartType of chartTypes | keyvalue" [value]="chartType.value">
+          {{chartType.value}}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>What data to look at</mat-label>
+      <mat-select placeholder="Type" [value]="chartDataType" (selectionChange)="changeChartDataType($event)">
+        <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
+                      [disabled]="dataGroup.disabled">
+          <mat-option *ngFor="let data of dataGroup.data" [value]="data">
+            {{data}}
           </mat-option>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Chart type</mat-label>
-        <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
-          <mat-option *ngFor="let chartType of chartTypes | keyvalue" [value]="chartType.value">
-            {{chartType.value}}
+        </mat-optgroup>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>How to look at the data</mat-label>
+      <mat-select placeholder="Type calculation" [value]="chartDataValueType"
+                  (selectionChange)="changeChartDataValueType($event)">
+        <section *ngIf="chartType !== chartTypes.Pie">
+          <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue"
+                      [value]="chartValueType.value">
+            {{chartValueType.value}}
           </mat-option>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>What data to look at</mat-label>
-        <mat-select placeholder="Type" [value]="chartDataType" (selectionChange)="changeChartDataType($event)">
-          <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
-                        [disabled]="dataGroup.disabled">
-            <mat-option *ngFor="let data of dataGroup.data" [value]="data">
-              {{data}}
-            </mat-option>
-          </mat-optgroup>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>How to look at the data</mat-label>
-        <mat-select placeholder="Type calculation" [value]="chartDataValueType"
-                    (selectionChange)="changeChartDataValueType($event)">
-          <section *ngIf="chartType !== chartTypes.Pie">
-            <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue"
-                        [value]="chartValueType.value">
-              {{chartValueType.value}}
-            </mat-option>
-          </section>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Base data on</mat-label>
-        <mat-select placeholder="Category type" [value]="chartDataCategoryType"
-                    (selectionChange)="changeChartDataCategoryType($event)">
-          <section>
-            <mat-option *ngFor="let chartCategoryType of chartCategoryTypes | keyvalue"
-                        [value]="chartCategoryType.value">
-              {{chartCategoryType.value}}
-            </mat-option>
-          </section>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Column Size</mat-label>
-        <mat-select placeholder="Size" [value]="size.columns"
-                    (selectionChange)="changeTileColumnSize($event)">
-          <section>
-            <mat-option [value]="1">
-              Single
-            </mat-option>
-            <mat-option [value]="2">
-              Double
-            </mat-option>
-            <mat-option [value]="3">
-              Triple
-            </mat-option>
-            <mat-option [value]="4">
-              Quad
-            </mat-option>
-          </section>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Row Size</mat-label>
-        <mat-select placeholder="Size" [value]="size.rows"
-                    (selectionChange)="changeTileRowSize($event)">
-          <section>
-            <mat-option [value]="1">
-              Single
-            </mat-option>
-            <mat-option [value]="2">
-              Double
-            </mat-option>
-            <mat-option [value]="3">
-              Triple
-            </mat-option>
-            <mat-option [value]="4">
-              Quad
-            </mat-option>
-          </section>
-        </mat-select>
-      </mat-form-field>
-    </section>
-    <section mat-menu-item>
-      <mat-slide-toggle
-        [color]="'accent'"
-        (change)="switchFilterLowValues($event)"
-        [(ngModel)]="filterLowValues">
-      <span matTooltip="Turn this on to declutter the charts and show what is important instead of all">
-        Filter out low values
-      </span>
-      </mat-slide-toggle>
-    </section>
-    <section *ngIf="user.settings.dashboardSettings.tiles.length > 1">
-      <button class="big" mat-menu-item (click)="deleteTile($event)">
-        <mat-icon>delete_outline</mat-icon>
-      </button>
-    </section>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Base data on</mat-label>
+      <mat-select placeholder="Category type" [value]="chartDataCategoryType"
+                  (selectionChange)="changeChartDataCategoryType($event)">
+        <section>
+          <mat-option *ngFor="let chartCategoryType of chartCategoryTypes | keyvalue"
+                      [value]="chartCategoryType.value">
+            {{chartCategoryType.value}}
+          </mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Time interval</mat-label>
+      <mat-select placeholder="Time interval" [value]="chartTimeInterval"
+                  (selectionChange)="changeChartTimeInterval($event)">
+        <section>
+          <mat-option [value]="0">Auto</mat-option>
+          <mat-option [value]="2">Daily</mat-option>
+          <mat-option [value]="3">Weekly</mat-option>
+          <mat-option [value]="5">Monthly</mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Column Size</mat-label>
+      <mat-select placeholder="Size" [value]="size.columns"
+                  (selectionChange)="changeTileColumnSize($event)">
+        <section>
+          <mat-option [value]="1">
+            Single
+          </mat-option>
+          <mat-option [value]="2">
+            Double
+          </mat-option>
+          <mat-option [value]="3">
+            Triple
+          </mat-option>
+          <mat-option [value]="4">
+            Quad
+          </mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+  <section mat-menu-item>
+    <mat-form-field>
+      <mat-label>Row Size</mat-label>
+      <mat-select placeholder="Size" [value]="size.rows"
+                  (selectionChange)="changeTileRowSize($event)">
+        <section>
+          <mat-option [value]="1">
+            Single
+          </mat-option>
+          <mat-option [value]="2">
+            Double
+          </mat-option>
+          <mat-option [value]="3">
+            Triple
+          </mat-option>
+          <mat-option [value]="4">
+            Quad
+          </mat-option>
+        </section>
+      </mat-select>
+    </mat-form-field>
+  </section>
+<!--  <section mat-menu-item>-->
+<!--    <mat-slide-toggle-->
+<!--      [color]="'accent'"-->
+<!--      (change)="switchFilterLowValues($event)"-->
+<!--      [(ngModel)]="filterLowValues">-->
+<!--      <span matTooltip="Turn this on to declutter the charts and show what is important instead of all">-->
+<!--        Filter out low values-->
+<!--      </span>-->
+<!--    </mat-slide-toggle>-->
+<!--  </section>-->
+  <section *ngIf="user.settings.dashboardSettings.tiles.length > 1">
+    <button class="big" mat-menu-item (click)="deleteTile($event)">
+      <mat-icon>delete_outline</mat-icon>
+    </button>
+  </section>
 </mat-menu>

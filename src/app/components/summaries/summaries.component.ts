@@ -35,6 +35,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import * as equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import * as weeknumber from 'weeknumber'
+import { time } from '@amcharts/amcharts4/core';
 
 @Component({
   selector: 'app-summaries',
@@ -94,7 +96,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.unsubscribeFromAll();
   }
 
-  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes): string | number {
+  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): string | number {
     switch (categoryType) {
       case ChartDataCategoryTypes.ActivityType:
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
@@ -110,12 +112,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
       case ChartDataCategoryTypes.DateType:
-        switch (this.getEventsTimeInterval(events)) {
+        switch (timeInterval !== TimeIntervals.Auto ? timeInterval : this.getEventsTimeInterval(events)) {
           case TimeIntervals.Yearly:
             return new Date(event.startDate.getFullYear(), 0).getTime();
           case TimeIntervals.Monthly:
-            // @todo add  weekly
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
+          case TimeIntervals.Weekly:
+            // See https://stackoverflow.com/questions/16590500/javascript-calculate-date-from-week-number
+            return new Date(event.startDate.getFullYear(), 0, (1 + (weeknumber.weekNumber(event.startDate) - 1) * 7)).getTime();
           case TimeIntervals.Daily:
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
           case TimeIntervals.Hourly:
@@ -181,11 +185,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       switch (tile.type) {
         case TileTypes.Chart:
           const chartTile = <TileChartSettingsInterface>tile;
+          chartTile.dataTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto
           chartsAndData.push({
             ...chartTile, ...{
-              timeInterval: this.getEventsTimeInterval(events), // Defaults to daily
+              timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
               data: events ? // The below will create a new instance of this events due to filtering
-                this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType)
+                this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType, chartTile.dataTimeInterval)
                 : [] // We send null if there are no events for the input date range
             }
           });
@@ -248,7 +253,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }, 0);
   }
 
-  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes) {
+  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals) {
     // Return empty if ascent is to be skipped
     if (dataType === DataAscent.type) {
       events = events.filter(event => {
@@ -275,8 +280,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!stat) {
         return valueByTypeMap;
       }
-      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, events, categoryType)) ||
-        {
+      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, events, categoryType, timeInterval))
+        || {
           value: null,
           count: 0
         };
@@ -301,7 +306,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!isNumber(summariesChartDataInterface.value) || (summariesChartDataInterface.value === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
-      valueByTypeMap.set(this.getCategoryKey(event, events, categoryType), summariesChartDataInterface); // @todo break the join (not use display value)
+      valueByTypeMap.set(this.getCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, { value: number, count: number }>());
 
@@ -335,7 +340,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
    * @param events
    */
   private getEventsTimeInterval(events?: EventInterface[]): TimeIntervals {
-    // return  TimeIntervals.Daily
     if (!events || !events.length) {
       return TimeIntervals.Daily
     }

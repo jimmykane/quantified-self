@@ -11,7 +11,7 @@ import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes, TileChartSettingsInterface, TileTypes,
+  ChartTypes, TileChartSettingsInterface, TileTypes, TimeIntervals,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {AppUserService} from '../../../../services/app.user.service';
 import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
@@ -35,6 +35,7 @@ import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import { TileActionsAbstract } from '../tile.actions.abstract';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { EnumeratorHelpers } from '../../../../helpers/enumerator-helpers';
 
 
 @Component({
@@ -47,7 +48,8 @@ export class TileChartActionsComponent extends TileActionsAbstract implements On
   @Input() chartType: ChartTypes;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
-  @Input() chartDataCategoryType: ChartDataCategoryTypes; // @todo take in use
+  @Input() chartDataCategoryType: ChartDataCategoryTypes;
+  @Input() chartTimeInterval: TimeIntervals;
   @Input() chartOrder: number;
   @Input() filterLowValues: boolean;
 
@@ -153,6 +155,12 @@ export class TileChartActionsComponent extends TileActionsAbstract implements On
   async changeChartDataCategoryType(event) {
     this.afa.logEvent('dashboard_tile_action', {method: 'changeChartDataCategoryType'});
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
+    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
+  async changeChartTimeInterval(event) {
+    this.afa.logEvent('dashboard_tile_action', {method: 'changeChartTimeInterval'});
+    (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataTimeInterval = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 

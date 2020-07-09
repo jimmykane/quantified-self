@@ -144,8 +144,9 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       // series.filters.push(ChartHelper.getShadowFilter());
 
       series.stroke = chart.colors.getIndex(9); // Init stroke
-      series.tension = 0.5;
+      // series.tension = 1;
       const bullet = series.bullets.push(new am4charts.CircleBullet());
+      bullet.radius = am4core.percent(55);
       bullet.adapter.add('fill', (fill, target) => {
         if (!target.dataItem) {
           return fill;
