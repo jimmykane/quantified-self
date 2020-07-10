@@ -192,7 +192,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       // regressionSeries.filters.push(ChartHelper.getShadowFilter());
     }
 
-    // @todo refactor this
+    // @todo base on count !
     if (this.chartDataTimeInterval !== TimeIntervals.Daily
       && this.chartDataTimeInterval !== TimeIntervals.Hourly) {
       const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
