@@ -13,7 +13,6 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DashboardChartAbstract } from '../dashboard-chart.abstract';
-import { ChartHelper } from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 
 import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
@@ -62,7 +61,6 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       const value = this.getAggregateData(data, this.chartDataValueType);
       return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} @ ${TimeIntervals[this.chartDataTimeInterval]})`;
     });
-
     chartTitle.marginTop = am4core.percent(20);
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
     if (categoryAxis instanceof am4charts.CategoryAxis) {
@@ -195,24 +193,14 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     }
 
     // @todo refactor this
-    const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
-    series.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-    series.dataFields[this.getSeriesValuesFieldName()] = 'value';
-
-    if (regressionSeries) {
-      regressionSeries.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = 'value';
-    }
-
-    if (this.vertical) {
-      categoryLabel.dy = -15;
-    } else {
-      categoryLabel.label.dx = 35;
-    }
-
-
-    // @todo refactor
-    if (this.type === 'columns' || this.type === 'pyramids') {
+    if (this.chartDataTimeInterval !== TimeIntervals.Daily
+      && this.chartDataTimeInterval !== TimeIntervals.Hourly) {
+      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+      if (this.vertical) {
+        categoryLabel.dy = -15;
+      } else {
+        categoryLabel.label.dx = 35;
+      }
       categoryLabel.label.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
@@ -228,20 +216,24 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         return this.getFillColor(chart, target.dataItem.index)
       });
       categoryLabel.label.padding(1, 4, 0, 4);
+      categoryLabel.label.hideOversized = false;
+      categoryLabel.label.truncate = false;
+      categoryLabel.label.adapter.add('fill', (fill, target) => {
+        if (categoryAxis instanceof am4charts.CategoryAxis) {
+          return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+        }
+        return this.getFillColor(chart, target.dataItem.index)
+      });
+    }
+    series.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
+    series.dataFields[this.getSeriesValuesFieldName()] = 'value';
+
+    if (regressionSeries) {
+      regressionSeries.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
+      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = 'value';
     }
 
-
-    categoryLabel.label.hideOversized = false;
-    categoryLabel.label.truncate = false;
-    categoryLabel.label.adapter.add('fill', (fill, target) => {
-      if (categoryAxis instanceof am4charts.CategoryAxis) {
-        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
-      }
-      return this.getFillColor(chart, target.dataItem.index)
-    });
-
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
-
     return chart;
   }
 
