@@ -19,7 +19,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 
 
 @Component({
@@ -60,7 +60,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
+      return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} @ ${TimeIntervals[this.chartDataTimeInterval]})`;
     });
 
     chartTitle.marginTop = am4core.percent(20);
