@@ -116,7 +116,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     // Disable the preloader
     chart.preloader.disabled = true;
 
-    if (this.filterLowValues) {
+    if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
       const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
       grouper.threshold = 5;
       grouper.groupName = 'Other';

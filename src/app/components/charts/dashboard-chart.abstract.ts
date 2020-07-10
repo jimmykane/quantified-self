@@ -18,7 +18,6 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
   @Input() chartDataCategoryType: ChartDataCategoryTypes;
-  @Input() filterLowValues: boolean;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() isLoading: boolean;
 
@@ -50,9 +49,6 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     if (simpleChanges.data) {
 
       this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
-      // if (this.filterLowValues) {
-      //   this.data = this.filterOutLowValues(this.data)
-      // }
       if (this.chart) {
         this.chart.data = this.data || [];
         // @todo should it also invalidate?

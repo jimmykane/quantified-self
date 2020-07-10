@@ -110,7 +110,6 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      filterLowValues: true,
       size: { columns: 1, rows: 1 },
     };
   }
@@ -147,7 +146,6 @@ export class AppUserService implements OnDestroy {
       dataType: DataDuration.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      filterLowValues: true,
       size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Distance',
@@ -158,7 +156,6 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      filterLowValues: true,
       size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Ascent',
@@ -169,7 +166,6 @@ export class AppUserService implements OnDestroy {
       dataType: DataAscent.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      filterLowValues: true,
       size: { columns: 1, rows: 1 },
     }]
   }

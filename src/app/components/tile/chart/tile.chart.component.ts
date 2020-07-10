@@ -21,7 +21,6 @@ export class TileChartComponent extends TileAbstract {
   @Input() dataValueType: ChartDataValueTypes;
   @Input() dataCategoryType: ChartDataCategoryTypes;
   @Input() chartTheme: ChartThemes;
-  @Input() filterLowValues: boolean;
   @Input() showActions: boolean;
   @Input() dataTimeInterval: TimeIntervals;
   @Input() data: any;

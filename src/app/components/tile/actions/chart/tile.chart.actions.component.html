@@ -130,16 +130,6 @@
       </mat-select>
     </mat-form-field>
   </section>
-<!--  <section mat-menu-item>-->
-<!--    <mat-slide-toggle-->
-<!--      [color]="'accent'"-->
-<!--      (change)="switchFilterLowValues($event)"-->
-<!--      [(ngModel)]="filterLowValues">-->
-<!--      <span matTooltip="Turn this on to declutter the charts and show what is important instead of all">-->
-<!--        Filter out low values-->
-<!--      </span>-->
-<!--    </mat-slide-toggle>-->
-<!--  </section>-->
   <section *ngIf="user.settings.dashboardSettings.tiles.length > 1">
     <button class="big" mat-menu-item (click)="deleteTile($event)">
       <mat-icon>delete_outline</mat-icon>
