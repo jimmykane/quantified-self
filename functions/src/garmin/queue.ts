@@ -23,8 +23,8 @@ const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
 
 export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY
+  timeoutSeconds: 60,
+  memory: '1GB'
 }).https.onRequest(async (req, res) => {
   const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles
   const queueItemRefs: admin.firestore.DocumentReference[] = [];
@@ -52,8 +52,9 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
     }
   }
 
-  console.log(`Processing ${queueItemRefs.length} freshly inserted to queue items`);
-  for (const queueItemRef of queueItemRefs.slice(0, 10)) {
+  console.log(`Processing 1 of ${queueItemRefs.length} freshly inserted to queue items. The rest are queued`);
+
+  for (const queueItemRef of queueItemRefs.slice(0, 1)) {
     try {
       console.log(`Processing freshly inserted queue item ${queueItemRef.id}`)
       await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
