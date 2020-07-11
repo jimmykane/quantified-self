@@ -21,7 +21,9 @@
 
   <span>Please support this project on Patreon</span>
 
-  <button mat-stroked-button onclick="window.open('https://www.patreon.com/dimitrioskanellopoulos')">Support this project on Patreon</button>
+  <button mat-stroked-button onclick="window.open('https://www.patreon.com/dimitrioskanellopoulos')">Support this
+    project on Patreon
+  </button>
 
 </mat-list>
 
@@ -80,7 +82,19 @@
 
       <mat-checkbox formControlName="accepted">
         <mat-hint>
-            <b>I understand that</b>: <span class="smaller">History import can take up to days depending on how many activities you have. Your activities will start appearing at your dashboard.</span><br/>
+          <b>I understand that</b>
+          <br/>
+          <span class="smaller">
+            <span *ngIf="serviceName === serviceNames.SuuntoApp">
+              History import can take up to days depending on how many activities you have.
+            </span>
+            <span *ngIf="serviceName === serviceNames.GarminHealthAPI">
+              You can do a history import every 14 days.
+              <br/>
+              For any other reason contact us.
+            </span>
+            <br/>
+            Your activities will start appearing at your dashboard.</span><br/>
         </mat-hint>
       </mat-checkbox>
 

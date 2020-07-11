@@ -96,6 +96,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   const oauthVerifier = req.body.oauthVerifier;
 
   if (!state || !oauthVerifier){
+    console.error(`Missing state or oauthVerifier`);
     res.status(500).send('Bad Request');
     return;
   }
@@ -108,6 +109,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   }
 
   if (state !== tokensDocumentSnapshotData.state){
+    console.error(`Invalid state ${state} vs ${tokensDocumentSnapshotData.state}`);
     res.status(403).send('Unauthorized');
     return;
   }

@@ -335,7 +335,7 @@ export class AppUserService implements OnDestroy {
   public async getGarminHealthAPITokenAsPromise(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).get().pipe(catchError(error => {
+      .doc(user.uid).get({source: 'server'}).pipe(catchError(error => {
         return [];
       })).pipe(take(1)).pipe(map((doc) => doc.data())).toPromise();
   }
