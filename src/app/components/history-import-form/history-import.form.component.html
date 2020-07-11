@@ -1,4 +1,4 @@
-<mat-list *ngIf="userMetaForService && !isAllowedToDoHistoryImport">
+<mat-list *ngIf="userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport">
   <div mat-subheader>Status</div>
 
   <mat-list-item style="text-align: left">
@@ -7,7 +7,7 @@
     <div mat-line>{{ userMetaForService.didLastHistoryImport | date: 'medium'}}</div>
   </mat-list-item>
 
-  <mat-list-item style="text-align: left">
+  <mat-list-item style="text-align: left" *ngIf="serviceName === serviceNames.SuuntoApp">
     <mat-icon mat-list-icon>confirmation_number</mat-icon>
     <div mat-line>Activities Queued</div>
     <div mat-line>{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities</div>

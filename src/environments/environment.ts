@@ -25,6 +25,7 @@ export const environment = {
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
     getGarminHealthAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminHealthAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminHealthAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetGarminHealthAPIAccessToken',
+    backfillHealthAPIActivities: 'http://localhost:5000/quantified-self-io/europe-west2/backfillHealthAPIActivities',
     deauthorizeGarminHealthAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeGarminHealthAPI',
   }
 };

@@ -35,6 +35,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public garminHealthAPIToken: Auth1ServiceTokenInterface;
   public suuntoAppMeta: UserServiceMetaInterface
   public selectedTabIndex = 0;
+  public serviceNames = ServiceNames;
 
   private userSubscription: Subscription;
 
@@ -115,7 +116,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         } catch (e) {
           Sentry.captureException(e);
         } finally {
-          this.router.navigate(['services'], {preserveQueryParams: false});
+          await this.router.navigate(['services'], {preserveQueryParams: false});
         }
       }
       this.isLoading = false;

@@ -385,6 +385,21 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
+  public async backfillHealthAPIActivities(startDate: Date, endDate: Date) {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return this.http.post(
+      environment.functions.backfillHealthAPIActivities, {
+        startDate: startDate,
+        endDate: endDate
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
   public async deauthorizeSuuntoApp() {
     return this.http.post(
       environment.functions.deauthorizeSuuntoAppURI,

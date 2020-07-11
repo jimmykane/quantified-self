@@ -44,9 +44,13 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
   }
 
 
-
   const startDate = new Date(req.body.startDate);
   const endDate = new Date(req.body.endDate);
+
+  if (!startDate || !endDate){
+    res.status(500).send('No start and/or end date');
+    return;
+  }
 
   // First check last history import
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.SuuntoApp).get();

@@ -111,7 +111,7 @@
                     </mat-card-subtitle>
                   </mat-card-header>
                   <mat-divider></mat-divider>
-                  <app-history-import-form [user]="user"></app-history-import-form>
+                  <app-history-import-form [user]="user" [serviceName]="serviceNames.SuuntoApp"></app-history-import-form>
                 </mat-card>
               </ng-template>
             </mat-tab>
@@ -203,7 +203,8 @@
               </ng-template>
             </mat-tab>
 
-            <mat-tab label="History import">
+            <mat-tab label="History import"
+                     [disabled]="!user || isGuest || !garminHealthAPIToken">
               <ng-template matTabLabel>
                 <mat-icon matTooltip="History import">history</mat-icon>
               </ng-template>
@@ -212,10 +213,11 @@
                 <mat-card class="mat-elevation-z0">
                   <mat-card-header>
                     <mat-card-subtitle>
-                      Coming soon! You will be able to import your Garmin History!
+                      Import your Garmin Connect activity history
                     </mat-card-subtitle>
                   </mat-card-header>
                   <mat-divider></mat-divider>
+                  <app-history-import-form [user]="user" [serviceName]="serviceNames.GarminHealthAPI"></app-history-import-form>
                 </mat-card>
               </ng-template>
             </mat-tab>

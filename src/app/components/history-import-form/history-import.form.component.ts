@@ -26,18 +26,15 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 export class HistoryImportFormComponent implements OnInit, OnDestroy {
   @Input() user: User;
-  protected logger = Log.create('ActivityFormComponent');
-
+  @Input() serviceName: ServiceNames;
+  protected logger = Log.create('HistoryImportFormComponent');
   public formGroup: FormGroup;
-
   public userMetaForService: UserServiceMetaInterface;
   public userMetaForServiceSubscription: Subscription;
-
   public isAllowedToDoHistoryImport = false;
-
   public nextImportAvailableDate: Date;
-
   public isLoading: boolean;
+  public serviceNames = ServiceNames
 
   constructor(
     private userService: AppUserService,
@@ -76,21 +73,38 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     this.formGroup.disable();
 
     this.userMetaForServiceSubscription = await this.userService
-      .getUserMetaForService(this.user, ServiceNames.SuuntoApp)
+      .getUserMetaForService(this.user, this.serviceName)
       .subscribe((userMetaForService) => {
-        if (!userMetaForService || !userMetaForService.processedActivitiesFromLastHistoryImportCount) {
+        this.userMetaForService = userMetaForService;
+        if (!userMetaForService.didLastHistoryImport) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
           return;
         }
-        this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
-        this.userMetaForService = userMetaForService;
 
-        // He is only allowed if he did it about 7 days ago
-        this.isAllowedToDoHistoryImport =
-          this.nextImportAvailableDate < (new Date())
-          || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
-        this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
+        switch (this.serviceName) {
+          case ServiceNames.SuuntoApp:
+            if (!userMetaForService.processedActivitiesFromLastHistoryImportCount) {
+              this.isAllowedToDoHistoryImport = true;
+              this.formGroup.enable();
+              return;
+            }
+            this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
+            this.isAllowedToDoHistoryImport =
+              this.nextImportAvailableDate < (new Date())
+              || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
+            this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
+            break;
+          case ServiceNames.GarminHealthAPI:
+            this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000)) < new Date()
+            this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000));
+            break;
+          default:
+            const e = new Error(`Service name is not available ${this.serviceName} for history import`);
+            Sentry.captureException(e);
+            this.formGroup.disable();
+            this.isAllowedToDoHistoryImport = false;
+        }
       });
 
     // Set this to done loading
@@ -124,16 +138,18 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     try {
-      await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value);
+      this.serviceName === ServiceNames.SuuntoApp
+        ? await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value)
+        : await this.userService.backfillHealthAPIActivities(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value);
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
-      this.afa.logEvent('imported_history', {method: ServiceNames.SuuntoApp});
+      this.afa.logEvent('imported_history', {method: this.serviceName});
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
       this.logger.error(e);
-      this.snackBar.open(`Could import history due to ${e.message}`, null, {
+      this.snackBar.open(`Could import history for ${this.serviceName} due to ${e.message}`, null, {
         duration: 2000,
       });
     } finally {
