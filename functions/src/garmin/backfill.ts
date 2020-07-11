@@ -7,7 +7,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://healthapi.garmin.com/wellness-api/rest/backfill/activities'
-const TIMEOUT_IN_SECONDS = 60;
+const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "256MB";
 
 export const backfillHealthAPIActivities = functions.region('europe-west2').runWith({
