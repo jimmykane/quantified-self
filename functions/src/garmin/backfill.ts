@@ -76,8 +76,6 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
   const maxDeltaInMS = 7776000000
   const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
-  console.log(batchCount)
-
   let summaryStartTimeInSeconds = startDate.getTime() / 1000;
   let summaryEndTimeInSeconds;
   for (let i = 0; i < batchCount; i++) {
