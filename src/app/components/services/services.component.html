@@ -204,7 +204,7 @@
             </mat-tab>
 
             <mat-tab label="History import"
-                     [disabled]="!user || isGuest || !garminHealthAPIToken">
+                     [disabled]="!user || isGuest || !garminHealthAPIToken.accessToken">
               <ng-template matTabLabel>
                 <mat-icon matTooltip="History import">history</mat-icon>
               </ng-template>
