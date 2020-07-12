@@ -83,6 +83,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
           duration: null,
         });
+        return of(null);
       }
       return combineLatest([
         this.userService.getSuuntoAppToken(user),
@@ -218,10 +219,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async connectWithGarmin(event) {
     try {
       this.isLoading = true;
-      const redirectURI = await this.userService.getCurrentUserGarminHealthAPIRedirectURI();
+      const tokenAndURI = await this.userService.getCurrentUserGarminHealthAPITokenAndRedirectURI();
       // Get the redirect url for the unsigned token created with the post
-      const token = await this.userService.getGarminHealthAPITokenAsPromise(this.user);
-      this.windowService.windowRef.location.href = `${redirectURI.redirect_url}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${token.state}`)}`
+      this.windowService.windowRef.location.href = `${tokenAndURI.redirect_uri}?oauth_token=${tokenAndURI.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${tokenAndURI.state}`)}`
     } catch (e){
       Sentry.captureException(e);
       this.snackBar.open(`Could not connect to Garmin Connect due to ${e.message}`, null, {

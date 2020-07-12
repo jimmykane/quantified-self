@@ -56,15 +56,18 @@ export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('e
 
   const urlParams = new URLSearchParams(result);
 
+  const state = crypto.randomBytes(20).toString('hex')
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
     oauthToken: urlParams.get('oauth_token'),
     oauthTokenSecret: urlParams.get('oauth_token_secret'),
-    state: crypto.randomBytes(20).toString('hex')
+    state: state
   })
 
   // Send the response wit hte prepeared stuff to the client and let him handle the state etc
   res.send({
-    redirect_url: REQUEST_TOKEN_CONFIRMATION_URI,
+    redirect_uri: REQUEST_TOKEN_CONFIRMATION_URI,
+    oauthToken: urlParams.get('oauth_token'),
+    state: state,
   })
 });
 

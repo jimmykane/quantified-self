@@ -319,7 +319,10 @@ export class AppUserService implements OnDestroy {
   public getSuuntoAppToken(user: User) {
     return this.afs
       .collection('suuntoAppAccessTokens')
-      .doc<Auth2ServiceTokenInterface>(user.uid).collection('tokens').valueChanges().pipe(catchError(error => {
+      .doc<Auth2ServiceTokenInterface>(user.uid)
+      .collection('tokens')
+      .valueChanges()
+      .pipe(catchError(error => {
         return [];
       }));
   }
@@ -327,7 +330,8 @@ export class AppUserService implements OnDestroy {
    public getGarminHealthAPIToken(user: User) {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).valueChanges().pipe(catchError(error => {
+      .doc(user.uid).valueChanges()
+      .pipe(catchError(error => {
         return [];
       }));
   }
@@ -335,9 +339,14 @@ export class AppUserService implements OnDestroy {
   public async getGarminHealthAPITokenAsPromise(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).get({source: 'server'}).pipe(catchError(error => {
+      .doc(user.uid)
+      .get({source: 'server'})
+      .pipe(catchError(error => {
         return [];
-      })).pipe(take(1)).pipe(map((doc) => doc.data())).toPromise();
+      }))
+      .pipe(take(1))
+      .pipe(map((doc) => doc.data()))
+      .toPromise();
   }
 
   private getAllUserMeta(user: User) {
@@ -424,10 +433,10 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-
-  public async getCurrentUserGarminHealthAPIRedirectURI(): Promise<{redirect_url: string}> {
+  // @todo this is currently not used due to https://stackoverflow.com/questions/62858565/angularfire-firestore-not-getting-fresh-written-document
+  public async getCurrentUserGarminHealthAPITokenAndRedirectURI(): Promise<{redirect_uri: string, state: string, oauthToken: string}> {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
-    return <Promise<{redirect_url: string}>>this.http.post(
+    return <Promise<{redirect_uri: string, state: string, oauthToken: string}>>this.http.post(
       environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI, {},
       {
         headers:
