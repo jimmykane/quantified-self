@@ -118,7 +118,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
           return '';
         }
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
+        return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `${target.dataItem.dataContext['count']} Activities` : ``}`
       });
 
       // Add distinctive colors for each column using adapter
@@ -173,7 +173,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
           return '';
         }
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-        return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
+        return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `${target.dataItem.dataContext['count']} Activities` : ``}`
       });
       // bullet.filters.push(ChartHelper.getShadowFilter());
     }
