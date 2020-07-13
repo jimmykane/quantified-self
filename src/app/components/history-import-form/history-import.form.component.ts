@@ -76,7 +76,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
       .getUserMetaForService(this.user, this.serviceName)
       .subscribe((userMetaForService) => {
         this.userMetaForService = userMetaForService;
-        if (!userMetaForService.didLastHistoryImport) {
+        if (!userMetaForService || !userMetaForService.didLastHistoryImport) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
           return;
