@@ -52,6 +52,9 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
     }
   }
 
+  res.status(200);
+  res.write('SUCCESS')
+
   console.log(`Processing 1 of ${queueItemRefs.length} freshly inserted to queue items. The rest are queued`);
 
   for (const queueItemRef of queueItemRefs.slice(0, 1)) {
@@ -62,8 +65,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
       console.error(e);
     }
   }
-  res.status(200);
-  res.send();
+  res.end();
 });
 
 
