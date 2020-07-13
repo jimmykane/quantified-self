@@ -257,7 +257,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): SummariesChartDataInterface[] {
-    debugger;
     if (this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`]) {
       return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`];
     }

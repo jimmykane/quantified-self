@@ -59,7 +59,8 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
 
   protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(changeDetector);
-    // am4core.options.onlyShowOnViewport = true;
+    am4core.options.onlyShowOnViewport = false;
+    am4core.options.queue = false;
     am4core.options.commercialLicense = true;
     // @todo test perf
     am4core.options.autoDispose = true;
