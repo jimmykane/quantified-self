@@ -61,7 +61,7 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 1 hours').onRun(async (context) => {
+}).pubsub.schedule('every 2 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 

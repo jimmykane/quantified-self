@@ -47,7 +47,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
 
 export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = 10;
-  const LIMIT = 100;
+  const LIMIT = 200;
   // @todo add queue item sort date for creation
   const collection = serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminHealthAPIActivityQueue';
   const querySnapshot = await admin.firestore().collection(collection).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries

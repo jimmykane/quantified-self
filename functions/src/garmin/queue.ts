@@ -72,7 +72,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 1 hours').onRun(async (context) => {
+}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 
@@ -132,7 +132,33 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
         event = await EventImporterFIT.getFromArrayBuffer(result);
         break;
       case 'GPX':
-        event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
+        try {
+          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
+        }catch (e) {
+          console.error(`Could not decode as GPX trying as FIT`)
+        }
+        if (!event){
+          // Let it fail in any case
+          // @todo extract or encode somehow
+          // I hate this
+          console.time('DownloadFile');
+          result = await requestPromise.get({
+            headers: oAuth.toHeader(oAuth.authorize({
+                url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+                method: 'get',
+              },
+              {
+                key: serviceToken.accessToken,
+                secret: serviceToken.accessTokenSecret
+              })),
+            encoding: null,
+            // gzip: true,
+            url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+          });
+          console.timeEnd('DownloadFile');
+          console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`)
+          event = await EventImporterFIT.getFromArrayBuffer(result); // Let it fail here
+        }
         break;
       case 'TCX':
         event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'));
