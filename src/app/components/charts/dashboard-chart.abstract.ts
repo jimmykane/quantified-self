@@ -105,7 +105,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
       case TimeIntervals.Monthly:
         return 'MMM yyyy';
       case TimeIntervals.Weekly:
-        return `'Week' ww yyyy`;
+        return `'Week' ww (dd MMM yyyy)`;
       case TimeIntervals.Daily:
         return 'dd MMM yyyy';
       case TimeIntervals.Hourly:
