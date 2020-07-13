@@ -63,6 +63,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
 
+  private getChartDataCache: {string: SummariesChartDataInterface[] }[] = []
+
   constructor(private router: Router,
               private authService: AppAuthService,
               private eventService: AppEventService,
@@ -88,6 +90,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
     if (simpleChanges.events || simpleChanges.user) {
+      this.getChartDataCache = [];
       return this.unsubscribeAndCreateCharts();
     }
   }
@@ -253,7 +256,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }, 0);
   }
 
-  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals) {
+  private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): SummariesChartDataInterface[] {
+    debugger;
+    if (this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`]) {
+      return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`];
+    }
     // Return empty if ascent is to be skipped
     if (dataType === DataAscent.type) {
       events = events.filter(event => {
@@ -317,7 +324,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         valueByCategory.set(type, {value: item.value / item.count, count: item.count});
       });
     }
-    return this.convertToCategories(valueByCategory);
+    const map  = this.convertToCategories(valueByCategory)
+    return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`] = map;
   }
 
   /**
