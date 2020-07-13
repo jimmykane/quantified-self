@@ -122,7 +122,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth()).getTime();
           case TimeIntervals.Weekly:
             // See https://stackoverflow.com/questions/16590500/javascript-calculate-date-from-week-number
-            return new Date(event.startDate.getFullYear(), 0, (1 + (weeknumber.weekNumber(event.startDate) - 1) * 7)).getTime();
+            const date = new Date(event.startDate.getFullYear(), 0, (1 + (weeknumber.weekNumber(event.startDate) - 1) * 7));
+            date.setDate(date.getDate() + (1 - date.getDay()));
+            return date.getTime();
           case TimeIntervals.Daily:
             return new Date(event.startDate.getFullYear(), event.startDate.getMonth(), event.startDate.getDate()).getTime();
           case TimeIntervals.Hourly:
