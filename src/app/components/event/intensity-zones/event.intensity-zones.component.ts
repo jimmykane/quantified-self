@@ -208,8 +208,8 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = am4core.percent(80);
-      series.columns.template.column.cornerRadiusBottomRight = 2;
-      series.columns.template.column.cornerRadiusTopRight = 2;
+      series.columns.template.column.cornerRadiusBottomRight = 8;
+      series.columns.template.column.cornerRadiusTopRight = 8;
 
       const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
       categoryLabel.label.adapter.add('text', (text, target) => {
