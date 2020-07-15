@@ -434,9 +434,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Add the anotation
     chart.plugins.push(new am4plugins_annotation.Annotation());
 
-    // Disable the preloader
-    chart.preloader.disabled = true;
-
     // Attach events
     chart.events.on('validated', (ev) => {
       this.logger.info('validated');

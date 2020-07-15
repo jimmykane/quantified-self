@@ -74,6 +74,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     return this.zone.runOutsideAngular(() => {
       this.setChartThemes(this.chartTheme, this.useAnimations);
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
+      chart.preloader.disabled = true;
       this.logger.info(`Created outsize of zone chart with id ${chart.uid}`);
       // chart.pixelPerfect = true;
       // chart.colors.step = 2;

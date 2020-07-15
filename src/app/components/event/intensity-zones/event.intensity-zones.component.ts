@@ -65,8 +65,6 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
 
   protected createChart(): am4charts.XYChart {
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
-    // Disable the preloader
-    chart.preloader.disabled = true;
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(12, 0, 0, 0);
