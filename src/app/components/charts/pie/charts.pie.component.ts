@@ -62,7 +62,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? `` : `.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")`}} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} - ${target.dataItem.values.value.percent.toFixed(1)}% - [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
+      return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? `` : `.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")`}}\n${target.dataItem.values.value.percent.toFixed(1)}%\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `${target.dataItem.dataContext['count']} Activities` : ``}`
     });
 
     pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {
