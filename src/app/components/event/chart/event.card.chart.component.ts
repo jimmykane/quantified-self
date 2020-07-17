@@ -16,13 +16,13 @@ import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/ac
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import { XYSeries } from '@amcharts/amcharts4/charts';
+import { AxisRenderer, AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
 import { Subscription } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
 import { debounceTime } from 'rxjs/operators';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DataStore, DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib/lib/data/data.pace';
 import {
   ChartCursorBehaviours,
@@ -35,7 +35,10 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataSwimPace, DataSwimPaceMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import { DataSwimPaceMaxMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
+import {
+  DataSwimPaceMax,
+  DataSwimPaceMaxMinutesPer100Yard
+} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
 import { DataGPSAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
 import { DataAccumulatedPower } from '@sports-alliance/sports-lib/lib/data/data.accumulated-power';
 import { DataTemperature } from '@sports-alliance/sports-lib/lib/data/data.temperature';
@@ -100,6 +103,26 @@ import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.l
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppColors } from '../../../services/color/app.colors';
+import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
+import { DataAltitudeMax } from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
+import { DataAltitudeAvg } from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
+import { DataCadence } from '@sports-alliance/sports-lib/lib/data/data.cadence';
+import { DataCadenceMin } from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
+import { DataCadenceAvg } from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
+import { DataCadenceMax } from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
+import { DataSpeedMax } from '@sports-alliance/sports-lib/lib/data/data.speed-max';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import { DataSpeedMin } from '@sports-alliance/sports-lib/lib/data/data.speed-min';
+import { DataPaceMax } from '@sports-alliance/sports-lib/lib/data/data.pace-max';
+import { DataPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
+import { DataPaceMin } from '@sports-alliance/sports-lib/lib/data/data.pace-min';
+import { DataSwimPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
+import { DataSwimPaceMin } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-min';
+import { DataVerticalSpeedMax } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-max';
+import { DataVerticalSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-avg';
+import { DataVerticalSpeedMin } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-min';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -922,7 +945,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private getYAxisForSeries(series: XYSeries) {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(series.dummyData.stream.type));
-    if (!sameTypeSeries) {
+    if (sameTypeSeries) {
+      yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
+    } else {
       // Create a new axis
       yAxis = this.chart.yAxes.push(this.createYAxisForSeries(series.dummyData.stream.type));
       // yAxis.disabled = true; // Disable at start
@@ -1000,21 +1025,24 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         series.dummyData.stream.type === DataPower.type ? yAxis.extraMax = this.extraMaxForPower : yAxis.extraMax = 0.1;
       }
 
-      yAxis.title.adapter.add('text', () => {
-        if (DynamicDataLoader.getUnitBasedDataTypesFromDataType(series.name, this.userUnitSettings).length > 1) {
-          return `${series.name}`
-        } else {
-          return `${series.name}`
-          // return `${series.name} [font-size: 0.9em](${DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit})[/]`
-        }
+      yAxis.title.adapter.add('text', (text, target) => {
+        (<AxisRendererY>target.parent).axis.series.each((axisSeries) => {
+          text = `${axisSeries.name}`;
+          if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
+            text += `    [font-size: 0.7em]Min: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+          }
+          if (DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]) {
+            text += `    [font-size: 0.7em]Avg: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+          }
+          if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
+            text += `    [font-size: 0.7em]Avg: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+          }
+        })
+
+        return text;
       });
 
-    } else {
-      // Share
-      yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
-
     }
-
     return yAxis;
   }
 
@@ -1306,12 +1334,12 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           let stopEvent;
           // See https://github.com/amcharts/amcharts4/issues/2574#issuecomment-642635857
           if (!(<am4charts.ValueAxis>serie.yAxis).adapter.isEnabled('baseValue')) {
-            (<am4charts.ValueAxis>serie.yAxis).adapter.add('baseValue', function(baseValue, target) {
-              return baseValue === Infinity ?  target.maxZoomed : target.minZoomed;
+            (<am4charts.ValueAxis>serie.yAxis).adapter.add('baseValue', function (baseValue, target) {
+              return baseValue === Infinity ? target.maxZoomed : target.minZoomed;
             })
           }
           stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
-          if (!stopEvent){
+          if (!stopEvent) {
             return;
           }
           range = serie.xAxis.createSeriesRange(serie);
@@ -1342,7 +1370,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
           let stopEvent;
           stopEvent = stopEvents[startEventIndex - 1] ? stopEvents[startEventIndex - 1] : stopAllEvents[startEventIndex - 1];
-          if (!stopEvent){
+          if (!stopEvent) {
             return;
           }
           const range = axis.axisRanges.create();
@@ -1422,7 +1450,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
           // This is with no retina etc
           // We use no retina for performance for now
-          const screenPixes =  Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]);
+          const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]);
           this.logger.info(`Grouping data on ${screenPixes}`);
           xAxis.groupData = true;
           // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
@@ -1484,3 +1512,41 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
   }
 }
+
+//
+// const ChartSeriesMinMaxAVGConfig = {
+//   [DataHeartRate.type]: {
+//     max: DataHeartRateMax.type,
+//     avg: DataHeartRateAvg.type
+//   },
+//   [DataAltitude.type]: {
+//     max: DataAltitudeMax.type,
+//     avg: DataAltitudeAvg.type
+//   },
+//   [DataCadence.type]: {
+//     max: DataCadenceMax.type,
+//     avg: DataCadenceAvg.type,
+//     min: DataCadenceMin.type
+//   },
+//   [DataSpeed.type]: {
+//     max: DataSpeedMax.type,
+//     avg: DataSpeedAvg.type,
+//     min: DataSpeedMin.type
+//   },
+//   [DataPace.type]: {
+//     max: DataPaceMax.type,
+//     avg: DataPaceAvg.type,
+//     min: DataPaceMin.type
+//   },
+//   [DataSwimPace.type]: {
+//     max: DataSwimPaceMax.type,
+//     avg: DataSwimPaceAvg.type,
+//     min: DataSwimPaceMin.type
+//   },
+//   [DataVerticalSpeed.type]: {
+//     max: DataVerticalSpeedMax.type,
+//     avg: DataVerticalSpeedAvg.type,
+//     min: DataVerticalSpeedMin.type
+//   },
+//
+// }
