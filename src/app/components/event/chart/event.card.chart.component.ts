@@ -1033,14 +1033,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
       yAxis.title.adapter.add('text', (text, target) => {
         text = `${series.name}`;
-        (<AxisRendererY>target.parent).axis.series.each((axisSeries) => {
+        if (!this.stackYAxes){
+          return text;
+        }
+        (<AxisRendererY>target.parent).axis.series.each((axisSeries, index) => {
           console.log(axisSeries.dummyData.stream.type)
           if (axisSeries.hidden){
             return ``;
-          }
-          // text = `${axisSeries.name}`;
-          if (!this.stackYAxes){
-            return text;
           }
           if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
             text += `    [font-size: 0.7em]Min: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
@@ -1050,6 +1049,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
           if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
             text += `    [font-size: 0.7em]Max: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+          }
+          if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length){
+            text += ` / `;
           }
         })
 
