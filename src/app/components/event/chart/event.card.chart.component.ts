@@ -614,6 +614,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       series.yAxis.height = am4core.percent(100);
       series.yAxis.invalidate();
+      // series.yAxis.invalidateLayout()
+      // series.yAxis.invalidateSeries()
+      series.yAxis.invalidateLabels()
       this.chartSettingsLocalStorageService.showSeriesID(this.event, series.id);
     });
     // Hidden
@@ -633,6 +636,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
       // series.yAxis.disabled = true;
       series.yAxis.invalidate();
+      // series.yAxis.invalidateLayout()
+      // series.yAxis.invalidateSeries()
+      series.yAxis.invalidateLabels()
+
       this.chartSettingsLocalStorageService.hideSeriesID(this.event, series.id);
     });
   }
@@ -1024,10 +1031,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       } else {
         series.dummyData.stream.type === DataPower.type ? yAxis.extraMax = this.extraMaxForPower : yAxis.extraMax = 0.1;
       }
-
       yAxis.title.adapter.add('text', (text, target) => {
+        text = `${series.name}`;
         (<AxisRendererY>target.parent).axis.series.each((axisSeries) => {
-          text = `${axisSeries.name}`;
+          console.log(axisSeries.dummyData.stream.type)
+          if (axisSeries.hidden){
+            return ``;
+          }
+          // text = `${axisSeries.name}`;
+          if (!this.stackYAxes){
+            return text;
+          }
           if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
             text += `    [font-size: 0.7em]Min: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
           }
@@ -1035,7 +1049,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
             text += `    [font-size: 0.7em]Avg: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
           }
           if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
-            text += `    [font-size: 0.7em]Avg: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+            text += `    [font-size: 0.7em]Max: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
           }
         })
 
@@ -1512,41 +1526,3 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
   }
 }
-
-//
-// const ChartSeriesMinMaxAVGConfig = {
-//   [DataHeartRate.type]: {
-//     max: DataHeartRateMax.type,
-//     avg: DataHeartRateAvg.type
-//   },
-//   [DataAltitude.type]: {
-//     max: DataAltitudeMax.type,
-//     avg: DataAltitudeAvg.type
-//   },
-//   [DataCadence.type]: {
-//     max: DataCadenceMax.type,
-//     avg: DataCadenceAvg.type,
-//     min: DataCadenceMin.type
-//   },
-//   [DataSpeed.type]: {
-//     max: DataSpeedMax.type,
-//     avg: DataSpeedAvg.type,
-//     min: DataSpeedMin.type
-//   },
-//   [DataPace.type]: {
-//     max: DataPaceMax.type,
-//     avg: DataPaceAvg.type,
-//     min: DataPaceMin.type
-//   },
-//   [DataSwimPace.type]: {
-//     max: DataSwimPaceMax.type,
-//     avg: DataSwimPaceAvg.type,
-//     min: DataSwimPaceMin.type
-//   },
-//   [DataVerticalSpeed.type]: {
-//     max: DataVerticalSpeedMax.type,
-//     avg: DataVerticalSpeedAvg.type,
-//     min: DataVerticalSpeedMin.type
-//   },
-//
-// }
