@@ -1032,30 +1032,36 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         series.dummyData.stream.type === DataPower.type ? yAxis.extraMax = this.extraMaxForPower : yAxis.extraMax = 0.1;
       }
       yAxis.title.adapter.add('text', (text, target) => {
-        text = `${series.name}`;
         if (!this.stackYAxes){
-          return text;
+          return `${series.name}`;
         }
+        const map = {
+          max: '',
+          min: '',
+          avg: ''
+        };
         (<AxisRendererY>target.parent).axis.series.each((axisSeries, index) => {
           console.log(axisSeries.dummyData.stream.type)
           if (axisSeries.hidden){
-            return ``;
+            return;
           }
           if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
-            text += `    [font-size: 0.7em]Min: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+            map.min +=  `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
           }
           if (DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]) {
-            text += `    [font-size: 0.7em]Avg: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+            map.avg +=  `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
           }
           if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
-            text += `    [font-size: 0.7em]Max: ${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}[/]`
+            map.max +=  `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
           }
           if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length){
-            text += ` / `;
+            map.min += `, `
+            map.avg += `,  `
+            map.max += `,  `
           }
-        })
 
-        return text;
+        })
+        return `[font-size: 1.1em]${series.name}[/] [bold font-size: 0.9em]Min:[/] [font-size: 0.8em]${map.min}[/] [bold font-size: 0.9em]Avg:[/] [font-size: 0.8em]${map.avg}[/] [bold font-size: 0.9em]Max:[/] [font-size: 0.8em]${map.max}[/]`
       });
 
     }
