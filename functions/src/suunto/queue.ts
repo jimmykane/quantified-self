@@ -15,7 +15,7 @@ const MEMORY = "2GB";
 
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
-  memory: '1GB'
+  memory: '256MB'
 }).https.onRequest(async (req, res) => {
   // Check Auth first
   const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
@@ -45,28 +45,31 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
     return
   }
 
-  // All ok reply and take over internally
-  res.status(200);
-  res.write('SUCCESS');
+  res.status(200).send()
 
-  try{
-    await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));
-  }catch (e) {
-    console.error(`Could not process activity due to ${e.message}`)
-    console.error(e)
-  }
-  res.end();
+  // return
+  // // All ok reply and take over internally
+  //
+  // // res.write('SUCCESS');
+  //
+  // try{
+  //   await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));
+  // }catch (e) {
+  //   console.error(`Could not process activity ${queueItemDocumentReference.id} due to ${e.message}`)
+  //   console.error(e)
+  // }
+  // // console.log(`Response end`)
+  // res.status(200).send()
 })
 
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 2 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 6 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
 export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWorkoutQueueItemInterface) {
-
   console.log(`Processing queue item ${queueItem.id} and username ${queueItem.userName} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots;
