@@ -144,14 +144,14 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
       console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userName} test`);
       const metaData = new SuuntoAppEventMetaData(queueItem.workoutID, queueItem.userName, new Date());
       await setEvent(parentID, generateIDFromParts([queueItem.userName, queueItem.workoutID]), event, metaData);
-      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName} test`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
       // await queueItem.ref.delete();
     } catch (e) {
       // @todo should delete event  or separate catch
       console.error(e);
-      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userName} to ${queueItem.retryCount + 1}`));
+      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, e);
       continue;
     }

@@ -180,7 +180,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   } catch (e) {
     // @todo should delete meta etc
     console.error(e);
-    console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1}`));
+    console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${e.message}`));
     await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
   }
 }
