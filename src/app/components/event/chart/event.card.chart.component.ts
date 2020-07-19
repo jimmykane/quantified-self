@@ -1061,7 +1061,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
 
         })
-        return `[font-size: 1.1em]${series.name}[/] [bold font-size: 0.9em]Min:[/] [font-size: 0.8em]${map.min}[/] [bold font-size: 0.9em]Avg:[/] [font-size: 0.8em]${map.avg}[/] [bold font-size: 0.9em]Max:[/] [font-size: 0.8em]${map.max}[/]`
+        return `[font-size: 0.9em]${series.name}[/] [bold font-size: 0.8em]Min:[/] [font-size: 0.7em]${map.min}[/] [bold font-size: 0.8em]Avg:[/] [font-size: 0.7em]${map.avg}[/] [bold font-size: 0.8em]Max:[/] [font-size: 0.7em]${map.max}[/]`
       });
 
     }
