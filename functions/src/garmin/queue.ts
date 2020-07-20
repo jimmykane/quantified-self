@@ -51,28 +51,28 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
       return
     }
   }
-
-  res.status(200);
-  res.write('SUCCESS')
-
-  console.log(`Processing 1 of ${queueItemRefs.length} freshly inserted to queue items. The rest are queued`);
-
-  for (const queueItemRef of queueItemRefs.slice(0, 1)) {
-    try {
-      console.log(`Processing freshly inserted queue item ${queueItemRef.id}`)
-      await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  res.end();
+  console.log(`Inserted to queue ${queueItemRefs.length}`);
+  res.status(200).send();
+  // res.write('SUCCESS')
+  //
+  // console.log(`Processing 1 of ${queueItemRefs.length} freshly inserted to queue items. The rest are queued`);
+  //
+  // for (const queueItemRef of queueItemRefs.slice(0, 1)) {
+  //   try {
+  //     console.log(`Processing freshly inserted queue item ${queueItemRef.id}`)
+  //     await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
+  //   } catch (e) {
+  //     console.error(e);
+  //   }
+  // }
+  // res.end();
 });
 
 
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 6 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 

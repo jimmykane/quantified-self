@@ -38,13 +38,11 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
     });
   }catch (e) {
     console.error(e);
-  }
-
-  if (!queueItemDocumentReference){
     res.status(500).send();
     return
   }
 
+  console.log(`Inserted to queue ${queueItemDocumentReference.id} for workoutID ${workoutID} and userName ${userName}`);
   res.status(200).send()
 
   // return
@@ -65,7 +63,7 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY
-}).pubsub.schedule('every 6 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
