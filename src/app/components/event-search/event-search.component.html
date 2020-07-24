@@ -10,42 +10,19 @@
   <app-shade [isActive]="isLoading"></app-shade>
 
   <section>
-    <mat-form-field style=" margin-right: 1em;" class="big">
-      <input matInput [matDatepicker]="startDatepicker" (click)="startDatepicker.open()" placeholder="From 00:00:00"
-             (dateChange)="onDateChange($event)"
-             formControlName="startDate">
-      <mat-datepicker-toggle matSuffix [for]="startDatepicker">
-        <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
-      </mat-datepicker-toggle>
-      <mat-datepicker #startDatepicker startView="month"></mat-datepicker>
-      <!--    <mat-hint>The start date</mat-hint>-->
-      <mat-error *ngIf="hasError('startDate')">
-        invalid date
-      </mat-error>
-    </mat-form-field>
+    <mat-form-field *ngIf="searchFormGroup" style=" margin-right: 1em;" class="big">
+      <mat-date-range-input [formGroup]="searchFormGroup"  [rangePicker]="picker">
+        <input matStartDate [formControl]="searchFormGroup.controls.startDate" placeholder="From 00:00:00">
+        <input matEndDate [formControl]="searchFormGroup.controls.endDate" placeholder="To 23:59:59">
+      </mat-date-range-input>
+      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-date-range-picker #picker></mat-date-range-picker>
 
-    <mat-form-field style=" margin-right: 1em;" class="big">
-      <input matInput [matDatepicker]="endDatepicker" (click)="endDatepicker.open()" placeholder="To 23:59:59 "
-             (dateChange)="onDateChange($event)"
-             formControlName="endDate">
-      <mat-datepicker-toggle matSuffix [for]="endDatepicker">
-        <mat-icon matDatepickerToggleIcon>keyboard_arrow_down</mat-icon>
-      </mat-datepicker-toggle>
-      <mat-datepicker #endDatepicker startView="month"></mat-datepicker>
-      <!--    <mat-hint>The end date</mat-hint>-->
-      <mat-error *ngIf="hasError('endDate')">
-        invalid date
-      </mat-error>
-    </mat-form-field>
+      <mat-error *ngIf="searchFormGroup.controls.startDate.hasError('matStartDateInvalid')">Invalid start date</mat-error>
+      <mat-error *ngIf="searchFormGroup.controls.endDate.hasError('matEndDateInvalid')">Invalid end date</mat-error>
 
-<!--    <mat-form-field class="big">-->
-<!--      <mat-select placeholder="Filter by activities" formControlName="activityTypes" multiple (selectionChange)="onActivityTypesChange($event)">-->
-<!--        <mat-option>None</mat-option>-->
-<!--        <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">-->
-<!--          {{activityType}}-->
-<!--        </mat-option>-->
-<!--      </mat-select>-->
-<!--    </mat-form-field>-->
+
+    </mat-form-field>
 
     <app-activity-types-multi-select class="big" [selectedActivityTypes]="selectedActivityTypes"
                                      (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
