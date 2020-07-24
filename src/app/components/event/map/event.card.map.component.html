@@ -18,21 +18,18 @@
     <agm-map *ngIf="activitiesMapData.length > 0"
              [mapTypeId]="user && user.settings ? user.settings.mapSettings.mapType : 'roadmap'"
              (mapTypeIdChange)="changeMapType($event)"
-             [fullscreenControl]="true"
-             [mapTypeControl]="true"
-             [scaleControl]="true"
-             [rotateControl]="true"
-             [zoomControl]="true"
              [gestureHandling]="'cooperative'"
              [scrollwheel]="null"
-             [mapTypeControlOptions]="mapTypeControlOptions"
-             [zoomControlOptions]="zoomControlOptions"
-             [rotateControlOptions]="rotateControlOptions"
              [tilt]="45"
              [controlSize]="32"
              [disableDefaultUI]="true"
-             [styles]="getStyles(theme)"
-             [streetViewControl]="false">
+             [styles]="getStyles(theme)">
+      <agm-fullscreen-control></agm-fullscreen-control>
+      <agm-scale-control></agm-scale-control>
+      <agm-rotate-control [position]="6"></agm-rotate-control>
+      <agm-zoom-control [position]="7"></agm-zoom-control>
+      <agm-street-view-control></agm-street-view-control>
+      <agm-map-type-control [style]="0" [mapTypeIds]="mapTypeIds" [position]="2"></agm-map-type-control>
       <ng-container *ngFor="let activityMapData of activitiesMapData">
         <!-- Start Marker -->
         <agm-marker

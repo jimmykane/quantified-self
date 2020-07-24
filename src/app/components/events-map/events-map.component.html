@@ -38,11 +38,11 @@
   </mat-card-actions>
 </mat-card>
 <agm-map [controlSize]="32"
-         [streetViewControl]="false"
          [mapTypeId]="type"
          [backgroundColor]="'none'"
-         [scaleControl]="true"
          [styles]="getStyles(theme)">
+  <agm-scale-control></agm-scale-control>
+  <agm-street-view-control></agm-street-view-control>
   <agm-polyline *ngFor="let positionsByActivity of selectedEventPositionsByActivity"
     [strokeColor]="positionsByActivity.color">
     <!-- Points -->

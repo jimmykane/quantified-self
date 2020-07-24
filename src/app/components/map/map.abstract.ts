@@ -1,8 +1,8 @@
 import { ChangeDetectorRef, Directive } from '@angular/core';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { LatLngBoundsLiteral } from '@agm/core';
 import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
 
 declare function require(moduleName: string): any;
 const mapStyles = require('./map-styles.json');

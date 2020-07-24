@@ -22,7 +22,7 @@
   },
   "private": true,
   "dependencies": {
-    "@agm/core": "^1.1.0",
+    "@agm/core": "^3.0.0-beta.0",
     "@amcharts/amcharts4": "4.9.33",
     "@angular/animations": "10.0.5",
     "@angular/cdk": "^10.1.0",

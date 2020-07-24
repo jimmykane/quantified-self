@@ -12,11 +12,6 @@ import {
 } from '@angular/core';
 import {
   AgmMap,
-  ControlPosition,
-  MapTypeControlOptions,
-  PolyMouseEvent,
-  RotateControlOptions,
-  ZoomControlOptions
 } from '@agm/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
@@ -59,21 +54,9 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeControlOptions: MapTypeControlOptions = {
-    // mapTypeIds: [MapTypeId.HYBRID, MapTypeId.ROADMAP, MapTypeId.SATELLITE, MapTypeId.TERRAIN],
-    mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'],
-    position: ControlPosition.LEFT_TOP,
-    style: 0
-  };
+  public mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'];
   /** key is the activity id **/
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
-  public rotateControlOptions: RotateControlOptions = {
-    position: ControlPosition.LEFT_BOTTOM,
-  };
-  public zoomControlOptions: ZoomControlOptions = {
-    position: ControlPosition.RIGHT_TOP
-  };
-  private streamsSubscriptions: Subscription[] = [];
   private activitiesCursorSubscription: Subscription;
   private logger = Log.create('EventCardMapAGMComponent');
 
@@ -107,57 +90,12 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       this.bindToNewData();
     }
 
-    // // Get the new activityMapData
-    // this.activitiesMapData = this.cacheNewData();
-    // // No need to do anything if the base did not change (Event)
-    // if (!simpleChanges.event) {
-    //   return;
-    // }
-    // // If the event has changed then fit the bounds to show the new location
-    // this.agmMap.triggerResize().then(() => {
-    //   const googleMaps: GoogleMapsAPIWrapper = this.agmMap._mapsWrapper;
-    //   googleMaps.fitBounds(this.getBounds());
-    // });
-
   }
 
   openLapMarkerInfoWindow(lap) {
     this.openedLapMarkerInfoWindow = lap;
     this.openedActivityStartMarkerInfoWindow = void 0;
   }
-
-  // getBounds(): LatLngBoundsLiteral {
-  //   const pointsWithPosition = this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), []);
-  //   if (!pointsWithPosition.length) {
-  //     return <LatLngBoundsLiteral>{
-  //       east: 0,
-  //       west: 0,
-  //       north: 0,
-  //       south: 0,
-  //     };
-  //   }
-  //   const mostEast = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
-  //   });
-  //   const mostWest = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
-  //   });
-  //
-  //   const mostNorth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
-  //   });
-  //
-  //   const mostSouth = pointsWithPosition.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
-  //     return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
-  //   });
-  //
-  //   return <LatLngBoundsLiteral>{
-  //     east: mostEast.longitudeDegrees,
-  //     west: mostWest.longitudeDegrees,
-  //     north: mostNorth.latitudeDegrees,
-  //     south: mostSouth.latitudeDegrees,
-  //   };
-  // }
 
   openActivityStartMarkerInfoWindow(activity) {
     this.openedActivityStartMarkerInfoWindow = activity;
@@ -225,7 +163,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     }
   }
 
-  async lineMouseMove(event: PolyMouseEvent, activityMapData: MapData) {
+  async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
     this.activityCursorService.clear();
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
@@ -244,7 +182,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     });
   }
 
-  lineMouseOut(event: PolyMouseEvent, activityMapData: MapData) {
+  lineMouseOut(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
     // this.activitiesCursors.delete(activityMapData.activity.getID());
   }
 
@@ -267,9 +205,6 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
   ngOnDestroy(): void {
     this.unSubscribeFromAll();
-    this.streamsSubscriptions.forEach((streamsSubscription) => {
-      streamsSubscription.unsubscribe()
-    })
   }
 
   private bindToNewData() {
@@ -346,9 +281,6 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   }
 
   private unSubscribeFromAll() {
-    this.streamsSubscriptions.forEach((streamsSubscription) => {
-      streamsSubscription.unsubscribe()
-    });
     if (this.activitiesCursorSubscription) {
       this.activitiesCursorSubscription.unsubscribe();
     }
