@@ -200,7 +200,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
   onResize(width) {
-    this.resizeMapToBounds();
+    // this.resizeMapToBounds();
   }
 
   ngOnDestroy(): void {
