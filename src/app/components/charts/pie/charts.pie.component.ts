@@ -115,7 +115,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
 
     if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
       const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
-      grouper.threshold = 5;
+      grouper.threshold = 10;
       grouper.groupName = 'Other';
       grouper.clickBehavior = 'zoom';
       grouper.zoomOutButton.align = 'left';

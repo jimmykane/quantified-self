@@ -1041,7 +1041,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           avg: ''
         };
         (<AxisRendererY>target.parent).axis.series.each((axisSeries, index) => {
-          console.log(axisSeries.dummyData.stream.type)
+          // console.log(axisSeries.dummyData.stream.type)
           if (axisSeries.hidden){
             return;
           }
