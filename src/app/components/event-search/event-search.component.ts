@@ -1,5 +1,6 @@
 import {
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   EventEmitter,
   Input,
@@ -38,16 +39,11 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
 
-
   constructor(changeDetector: ChangeDetectorRef) {
     super(changeDetector);
   }
 
   ngOnInit(): void {
-
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
     this.searchFormGroup = new FormGroup({
       search: new FormControl(null, [
         // Validators.required,
@@ -60,6 +56,16 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
         // Validators.required,
       ]),
     });
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.searchFormGroup) {
+      return;
+    }
+    const startDate = this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate
+    const endDate = this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate;
+    this.searchFormGroup.get('startDate').setValue(startDate)
+    this.searchFormGroup.get('endDate').setValue(endDate)
   }
 
 
@@ -77,8 +83,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search').value,
-      startDate: this.searchFormGroup.get('startDate').value,
-      endDate: this.searchFormGroup.get('endDate').value,
+      startDate: new Date(this.searchFormGroup.get('startDate').value.setHours(0, 0, 0)),
+      endDate: new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)),
       activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
     });
@@ -92,27 +98,22 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
-    // if (event.source.value === DateRanges.custom){
-    //   this.selectedDateRange = event.source.value;
-    //   return;
-    // }
-    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
-    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
+    // this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate, {emmit: false});
+    // this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate, {emmit: false});
     this.selectedDateRange = event.source.value;
     this.search();
   }
 
   onDateChange(event) {
+  }
+
+  setCustomDateRange(event) {
     this.selectedDateRange = this.dateRanges.custom;
-    // Start date should be on 00:00:00 but end date needs fix
-    if (this.searchFormGroup.get('endDate').value) {
-      this.searchFormGroup.get('endDate').setValue(new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)));
-    }
   }
 
   onActivityTypesChange(activityTypes) {
-   this.selectedActivityTypes = activityTypes;
-   this.search()
+    this.selectedActivityTypes = activityTypes;
+    this.search()
   }
 
   validateAllFormFields(formGroup: FormGroup) {
