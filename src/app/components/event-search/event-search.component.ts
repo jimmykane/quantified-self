@@ -98,8 +98,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
-    // this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate, {emmit: false});
-    // this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate, {emmit: false});
+    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate, {emmitEvent: false});
+    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate, {emmitEvent: false});
     this.selectedDateRange = event.source.value;
     this.search();
   }
