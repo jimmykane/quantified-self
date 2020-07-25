@@ -69,6 +69,11 @@ export class SideNavComponent implements OnInit, OnDestroy {
     window.open('https://www.patreon.com/dimitrioskanellopoulos');
   }
 
+  async gitHubSponsor() {
+    this.afa.logEvent('github_sponsor');
+    window.open('https://github.com/sponsors/jimmykane?utm_source=qs');
+  }
+
   async logout() {
     this.afa.logEvent('logout', {});
     this.router.navigate(['/']).then(async () => {
