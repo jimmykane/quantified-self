@@ -17,7 +17,6 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 import {DashboardChartAbstract} from '../dashboard-chart.abstract';
-import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
@@ -51,7 +50,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     // pieSeries.rangeChangeDuration = 500;
     // pieSeries.sequencedInterpolation = true;
 
-    pieSeries.slices.template.propertyFields.isActive = 'pulled';
+    // pieSeries.slices.template.propertyFields.isActive = 'pulled';
     pieSeries.slices.template.strokeWidth = 0.4;
     pieSeries.slices.template.strokeOpacity = 1;
     pieSeries.slices.template.stroke = am4core.color('#175e84');
@@ -124,13 +123,5 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     }
 
     return chart;
-  }
-
-  /**
-   * Noop here for this component
-   * @param data
-   */
-  filterOutLowValues(data: SummariesChartDataInterface[]): SummariesChartDataInterface[] {
-    return data;
   }
 }
