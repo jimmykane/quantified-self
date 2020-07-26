@@ -16,7 +16,7 @@ import { TileChartComponent } from '../components/tile/chart/tile.chart.componen
 import { TileMapComponent } from '../components/tile/map/tile.map.component';
 import { TileChartActionsComponent } from '../components/tile/actions/chart/tile.chart.actions.component';
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
-import { DateAdapter } from '@angular/material/core';
+import { DateAdapter, MAT_DATE_LOCALE } from '@angular/material/core';
 import { MondayDateAdapter } from '../adapters/date.adapter';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 
@@ -49,6 +49,9 @@ import { ActivityTypesMultiSelectComponent } from '../components/activity-types-
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
     // @todo get it from settings as a service perhaps
     {provide: DateAdapter, useClass: MondayDateAdapter},
+    {provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
+        ? window.navigator.languages[0]
+        : window.navigator['userLanguage'] || window.navigator.language},
   ],
 })
 
