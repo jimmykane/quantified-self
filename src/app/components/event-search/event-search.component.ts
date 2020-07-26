@@ -83,8 +83,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search').value,
-      startDate: new Date(this.searchFormGroup.get('startDate').value.setHours(0, 0, 0)),
-      endDate: new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)),
+      startDate: this.searchFormGroup.get('startDate').value ? new Date(this.searchFormGroup.get('startDate').value.setHours(0, 0, 0)) : null,
+      endDate: this.searchFormGroup.get('endDate').value ? new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)) : null,
       activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
     });
@@ -238,9 +238,9 @@ export const maxDateDistanceValidator: ValidatorFn = (control: FormGroup): Valid
 };
 
 export interface Search {
-  searchTerm: string,
-  startDate: Date,
-  endDate: Date,
+  searchTerm?: string,
+  startDate?: Date,
+  endDate?: Date,
   dateRange: DateRanges,
-  activityTypes: ActivityTypes[]
+  activityTypes?: ActivityTypes[]
 }

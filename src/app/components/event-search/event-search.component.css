@@ -2,7 +2,7 @@ mat-icon{
   vertical-align: middle;
 }
 mat-form-field.big{
-  width: calc(33% - 0.8em);
+  width: calc(50% - 0.8em);
 }
 
 form{
