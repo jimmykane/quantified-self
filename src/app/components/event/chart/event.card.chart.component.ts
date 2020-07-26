@@ -1184,6 +1184,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return button;
   }
 
+  // @todo
+
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
     this.logger.info(`Stream data for ${stream.type} ${stream.getData().length}`);

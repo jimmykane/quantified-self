@@ -28,9 +28,13 @@
       <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
       </span>
     </button>
-  <button mat-menu-item (click)="download()">
+  <button mat-menu-item (click)="downloadJSON()">
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>
+  </button>
+  <button mat-menu-item *ngIf="event.getActivities().length === 1" (click)="downloadGPX()">
+    <mat-icon>file_download</mat-icon>
+    <span>Download as GPX</span>
   </button>
   <button *ngIf="serviceMetaData" mat-menu-item (click)="downloadSuuntoFIT()">
     <mat-icon>file_download</mat-icon>

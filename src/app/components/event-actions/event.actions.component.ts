@@ -27,6 +27,7 @@ import {
   ServiceNames,
   SuuntoAppEventMetaDataInterface
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 
 @Component({
   selector: 'app-event-actions',
@@ -149,14 +150,26 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   //   // });
   // }
 
-  async download() {
+  async downloadJSON() {
     const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event.getID());
     this.fileService.downloadFile(
       blob,
       this.event.name,
-      EventExporterJSON.fileExtension,
+      new EventExporterJSON().fileExtension,
     );
-    this.snackBar.open('File served', null, {
+    this.snackBar.open('JSON file served', null, {
+      duration: 2000,
+    });
+  }
+
+  async downloadGPX() {
+    const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event.getID());
+    this.fileService.downloadFile(
+      blob,
+      this.event.name,
+      new EventExporterGPX().fileExtension,
+    );
+    this.snackBar.open('GPX file served', null, {
       duration: 2000,
     });
   }

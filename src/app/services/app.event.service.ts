@@ -23,6 +23,7 @@ import {
   EventMetaDataInterface,
   ServiceNames
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 
 
 @Injectable({
@@ -286,10 +287,18 @@ export class AppEventService implements OnDestroy {
   }
 
   public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
-    const jsonString = await EventExporterJSON.getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
+    const jsonString = await new EventExporterJSON().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
     return (new Blob(
       [jsonString],
-      {type: EventExporterJSON.fileType},
+      {type: new EventExporterJSON().fileType},
+    ));
+  }
+
+  public async getEventAsGPXBloB(user: User, eventID: string): Promise<Blob> {
+    const gpxString = await new EventExporterGPX().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
+    return (new Blob(
+      [gpxString],
+      {type: new EventExporterGPX().fileType},
     ));
   }
 
