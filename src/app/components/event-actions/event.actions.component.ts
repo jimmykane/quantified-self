@@ -28,6 +28,7 @@ import {
   SuuntoAppEventMetaDataInterface
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
+import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 
 @Component({
   selector: 'app-event-actions',
@@ -111,7 +112,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   hasPositionalData() {
-    return this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
+    return this.event.getStat(DataStartPosition.type) || this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
   }
 
   editEvent() {
