@@ -1520,10 +1520,10 @@
     "@sentry/types" "5.20.1"
     tslib "^1.9.3"
 
-"@sports-alliance/sports-lib@^5.0.3":
-  version "5.0.3"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.0.3.tgz#7ad8340a596ec2efb2087d23d28a69b91b007181"
-  integrity sha512-wowtMHqyuG/dlGMTy0bpVRatLHlPCgKign9BREjXdY0aYUaC9/pWe/XYNx5MKtI+uNloRIbwB/Hm0+d9z3nDtQ==
+"@sports-alliance/sports-lib@^5.0.4":
+  version "5.0.4"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.0.4.tgz#b0fcbd1f34bafba36ebc67cf82650f41d97fd020"
+  integrity sha512-qvIO5jw8JvgOwut9lqZrDx7K+oub/Tbjtpg4GQLW6NanIjfLpQvIuRiY1rD8i7xTNrjq1AzYd3mbKQaINwOkbw==
   dependencies:
     "@types/node" "^14.0.26"
     fast-xml-parser "^3.17.4"
@@ -2731,9 +2731,9 @@ caniuse-api@^3.0.0:
     lodash.uniq "^4.5.0"
 
 caniuse-lite@^1.0.0, caniuse-lite@^1.0.30001032, caniuse-lite@^1.0.30001061, caniuse-lite@^1.0.30001093:
-  version "1.0.30001106"
-  resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001106.tgz#7e2132711295ef30ffe5ee45b71936354d105d8c"
-  integrity sha512-XqSQKt9Fd3Z9BoN0cpSaITcTInKhMNGkaWtQ4rDnyQU1BJzzWDWCUi3cJflaPWk2kbrkYkfMrMrjIFzb3kd6NQ==
+  version "1.0.30001107"
+  resolved "https://registry.yarnpkg.com/caniuse-lite/-/caniuse-lite-1.0.30001107.tgz#809360df7a5b3458f627aa46b0f6ed6d5239da9a"
+  integrity sha512-86rCH+G8onCmdN4VZzJet5uPELII59cUzDphko3thQFgAQG1RNa+sVLDoALIhRYmflo5iSIzWY3vu1XTWtNMQQ==
 
 canonical-path@1.0.0:
   version "1.0.0"
