@@ -37,6 +37,8 @@ import { UploadActivitiesComponent } from './components/upload/upload-activities
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
 import { AppUpdateService } from './services/app.update.service';
 import { SentryErrorHandler } from './errors/sentry-error-handler';
+import { DateAdapter, MAT_DATE_LOCALE } from '@angular/material/core';
+import { MondayDateAdapter } from './adapters/date.adapter';
 
 declare function require(moduleName: string): any;
 
@@ -98,6 +100,12 @@ Sentry.init({
     {provide: APP_VERSION, useValue: appPackage.version},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
     {provide: DEBUG_MODE, useValue: (environment.localhost || environment.beta)},
+
+    // @todo get it from settings as a service perhaps
+    {provide: DateAdapter, useClass: MondayDateAdapter},
+    {provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
+        ? window.navigator.languages[0]
+        : window.navigator['userLanguage'] || window.navigator.language},
   ],
   bootstrap: [AppComponent],
 })

@@ -47,11 +47,6 @@ import { ActivityTypesMultiSelectComponent } from '../components/activity-types-
   entryComponents: [],
   providers: [
     {provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore},
-    // @todo get it from settings as a service perhaps
-    {provide: DateAdapter, useClass: MondayDateAdapter},
-    {provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
-        ? window.navigator.languages[0]
-        : window.navigator['userLanguage'] || window.navigator.language},
   ],
 })
 
