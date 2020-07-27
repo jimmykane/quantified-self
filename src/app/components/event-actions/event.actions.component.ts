@@ -110,6 +110,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     return this.event.getFirstActivity().hasStreamData(DataDistance.type);
   }
 
+  hasPositionalData() {
+    return this.event.getActivities().filter(activity => activity.hasPositionData()).length > 0
+  }
+
   editEvent() {
     const dialogRef = this.dialog.open(EventFormComponent, {
       width: '75vw',

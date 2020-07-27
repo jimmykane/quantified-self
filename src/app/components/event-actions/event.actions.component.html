@@ -32,7 +32,7 @@
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>
   </button>
-  <button mat-menu-item *ngIf="event.getActivities().length === 1" (click)="downloadGPX()">
+  <button mat-menu-item *ngIf="hasPositionalData()" (click)="downloadGPX()">
     <mat-icon>file_download</mat-icon>
     <span>Download as GPX</span>
   </button>
