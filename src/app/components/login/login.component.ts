@@ -49,15 +49,12 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    this.isLoading = true;
     this.userSubscription = this.authService.user.subscribe((user) => {
       if (user) {
         this.router.navigate(['/dashboard']);
-        this.snackBar.open(`You are already logged in`, null, {
-          duration: 5000,
-        });
       }
     })
-    this.isLoading = true;
     try {
       const result = await this.afAuth.getRedirectResult();
       if (result.user) {
@@ -72,6 +69,8 @@ export class LoginComponent implements OnInit, OnDestroy {
     } finally {
       this.isLoading = false;
     }
+
+
   }
 
 
