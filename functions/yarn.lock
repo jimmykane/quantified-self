@@ -23,6 +23,13 @@
     chalk "^2.0.0"
     js-tokens "^4.0.0"
 
+"@babel/runtime@^7.8.4":
+  version "7.11.0"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.11.0.tgz#f10245877042a815e07f7e693faff0ae9d3a2aac"
+  integrity sha512-qArkXsjJq7H+T86WrIFV0Fnu/tNOkZ4cgXmjkzAu3b/58D5mFIO8JH/y77t7C9q0OdDRdh9s7Ue5GasYssxtXw==
+  dependencies:
+    regenerator-runtime "^0.13.4"
+
 "@firebase/app-types@0.6.1":
   version "0.6.1"
   resolved "https://registry.yarnpkg.com/@firebase/app-types/-/app-types-0.6.1.tgz#dcbd23030a71c0c74fc95d4a3f75ba81653850e9"
@@ -272,15 +279,16 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@sports-alliance/sports-lib@^4.2.18":
-  version "4.2.18"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-4.2.18.tgz#586491bc5a0593525a1de30c376922d3c6b17ea0"
-  integrity sha512-ZKcBUA+tk+r7ymxbwO0179OXfXiGQQLPqascUI3dmP4fgtSqczI9mRZRI17bKwGIAUAlIrisPnG3P1E24j97GA==
+"@sports-alliance/sports-lib@^5.0.7":
+  version "5.0.7"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.0.7.tgz#ac6d55cced9e1ca07ef624e4f69d50052da9dfed"
+  integrity sha512-olHBE5RZXfy9H+8+ShzYqiavNLJPgjhOmTrqrYrJlwZcTmvA892SkoKYKhbUoHA8jD5Tvno8gtVCD1GbZwKs9A==
   dependencies:
-    "@types/node" "^13.9.0"
-    fast-xml-parser "^3.16.0"
-    fit-file-parser "^1.6.17"
-    geolib "^3.2.1"
+    "@types/node" "^14.0.26"
+    fast-xml-parser "^3.17.4"
+    fit-file-parser "^1.8.1"
+    geolib "^3.3.1"
+    gpx-builder "^3.5.0"
     kalmanjs "^1.1.0"
     lowpassf "^0.5.0"
     moving-median "^1.0.0"
@@ -394,10 +402,15 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-14.0.14.tgz#24a0b5959f16ac141aeb0c5b3cd7a15b7c64cbce"
   integrity sha512-syUgf67ZQpaJj01/tRTknkMNoBBLWJOBODF0Zm4NrXmiSuxjymFrxnTu1QVYRubhVkRcZLYZG8STTwJRdVm/WQ==
 
-"@types/node@^13.7.0", "@types/node@^13.9.0":
+"@types/node@^13.7.0":
   version "13.13.12"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-13.13.12.tgz#9c72e865380a7dc99999ea0ef20fc9635b503d20"
   integrity sha512-zWz/8NEPxoXNT9YyF2osqyA9WjssZukYpgI4UYZpOjcyqwIUqWGkcCionaEb9Ki+FULyPyvNFpg/329Kd2/pbw==
+
+"@types/node@^14.0.26":
+  version "14.0.27"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-14.0.27.tgz#a151873af5a5e851b51b3b065c9e63390a9e0eb1"
+  integrity sha512-kVrqXhbclHNHGu9ztnAwSncIgJv/FaxmzXJvGXNdcCpV1b8u1/Mi6z6m0vwy0LzKeXFTPLH0NzwmoJ3fNCIq0g==
 
 "@types/node@^8.10.59":
   version "8.10.61"
@@ -1041,7 +1054,7 @@ fast-text-encoding@^1.0.0:
   resolved "https://registry.yarnpkg.com/fast-text-encoding/-/fast-text-encoding-1.0.3.tgz#ec02ac8e01ab8a319af182dae2681213cfe9ce53"
   integrity sha512-dtm4QZH9nZtcDt8qJiOH9fcQd1NAgi+K1O2DbE6GG1PPCK/BWfOH3idCTRQ4ImXRUOyopDEgDEnVEE7Y/2Wrig==
 
-fast-xml-parser@^3.16.0:
+fast-xml-parser@^3.17.4:
   version "3.17.4"
   resolved "https://registry.yarnpkg.com/fast-xml-parser/-/fast-xml-parser-3.17.4.tgz#d668495fb3e4bbcf7970f3c24ac0019d82e76477"
   integrity sha512-qudnQuyYBgnvzf5Lj/yxMcf4L9NcVWihXJg7CiU1L+oUCq8MUnFEfH2/nXR/W5uq+yvUN1h7z6s7vs2v1WkL1A==
@@ -1098,10 +1111,10 @@ firebase-functions@^3.7.0:
     express "^4.17.1"
     lodash "^4.17.14"
 
-fit-file-parser@^1.6.17:
-  version "1.6.18"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.6.18.tgz#614cf7858f6cb7979f228b70f8cb7b9e909440e6"
-  integrity sha512-DmlXBIoikIeJ1fOb+85oJx/laXRXLYLaQDMJKyhhGjTcl+Xhv2/kTMRsLgLNAyq28GdBuVJGX2kpCNpd9+xveg==
+fit-file-parser@^1.8.1:
+  version "1.8.1"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.8.1.tgz#7df3d66ee92034152196662d22d341e6b5829e4d"
+  integrity sha512-dBx9rA632HdGibPrmqGBlP6mGyxxnPr/uj7TxdzOyKjfWVViRsZXIyBBMPJpvVn5uu8UMrwCQjU9odmA7d9dPA==
   dependencies:
     buffer "^5.1.0"
 
@@ -1209,7 +1222,7 @@ gcs-resumable-upload@^2.2.4:
     pumpify "^2.0.0"
     stream-events "^1.0.4"
 
-geolib@^3.2.1:
+geolib@^3.3.1:
   version "3.3.1"
   resolved "https://registry.yarnpkg.com/geolib/-/geolib-3.3.1.tgz#f144a53b6a6858e81111ff71d137318389927611"
   integrity sha512-sfahBXFcgELdpumDZV5b3KWiINkZxC5myAkLk067UUcTmTXaiE9SWmxMEHztn/Eus4JX6kesHxaIuZlniYgUtg==
@@ -1275,6 +1288,14 @@ google-p12-pem@^2.0.0:
   integrity sha512-S4blHBQWZRnEW44OcR7TL9WR+QCqByRvhNDZ/uuQfpxywfupikf/miba8js1jZi6ZOGv5slgSuoshCWh6EMDzg==
   dependencies:
     node-forge "^0.9.0"
+
+gpx-builder@^3.5.0:
+  version "3.5.0"
+  resolved "https://registry.yarnpkg.com/gpx-builder/-/gpx-builder-3.5.0.tgz#8d1b8d65f5d26e363dabf0001373cad5a4da5ba3"
+  integrity sha512-huG4aYa3KqbES7zzjFNcHjEQLd+wxehsHrJUDQkuF/IE3UFdMfGs9kdS2N8lb+ZeyHLgw0vpNpo90+/OdajiGw==
+  dependencies:
+    "@babel/runtime" "^7.8.4"
+    xmlbuilder "^15.0.0"
 
 graceful-fs@^4.1.2:
   version "4.2.4"
@@ -2032,6 +2053,11 @@ readable-stream@^2.0.0, readable-stream@~2.3.6:
     string_decoder "~1.1.1"
     util-deprecate "~1.0.1"
 
+regenerator-runtime@^0.13.4:
+  version "0.13.7"
+  resolved "https://registry.yarnpkg.com/regenerator-runtime/-/regenerator-runtime-0.13.7.tgz#cac2dacc8a1ea675feaabaeb8ae833898ae46f55"
+  integrity sha512-a54FxoJDIr27pgf7IgeQGxmqUNYrcV338lf/6gH456HZ/PhX+5BcwHXG9ajESmwe6WRO0tAzRUrRmNONWgkrew==
+
 regexp.prototype.flags@^1.3.0:
   version "1.3.0"
   resolved "https://registry.yarnpkg.com/regexp.prototype.flags/-/regexp.prototype.flags-1.3.0.tgz#7aba89b3c13a64509dabcf3ca8d9fbb9bdf5cb75"
@@ -2506,6 +2532,11 @@ xdg-basedir@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/xdg-basedir/-/xdg-basedir-4.0.0.tgz#4bc8d9984403696225ef83a1573cbbcb4e79db13"
   integrity sha512-PSNhEJDejZYV7h50BohL09Er9VaIefr2LMAf3OEmpCkjOi34eYyQYAXUTjEQtZJTKcF0E2UKTh+osDLsgNim9Q==
+
+xmlbuilder@^15.0.0:
+  version "15.1.1"
+  resolved "https://registry.yarnpkg.com/xmlbuilder/-/xmlbuilder-15.1.1.tgz#9dcdce49eea66d8d10b42cae94a79c3c8d0c2ec5"
+  integrity sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==
 
 xmldom@^0.3.0:
   version "0.3.0"
