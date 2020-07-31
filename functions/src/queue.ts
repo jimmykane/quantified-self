@@ -63,7 +63,6 @@ export async function parseQueueItems(serviceName: ServiceNames) {
       console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`)
       console.timeLog('ParseQueueItems');
     } catch (e) {
-      console.error(e);
       console.error(new Error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`))
     }
   }
