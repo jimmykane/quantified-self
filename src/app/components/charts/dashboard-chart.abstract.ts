@@ -15,9 +15,9 @@ import * as am4core from '@amcharts/amcharts4/core';
 @Directive()
 export abstract class DashboardChartAbstract extends ChartAbstractDirective implements OnChanges, AfterViewInit {
   @Input() data: any;
-  @Input() chartDataType: string;
-  @Input() chartDataValueType: ChartDataValueTypes;
-  @Input() chartDataCategoryType: ChartDataCategoryTypes;
+  @Input() chartDataType?: string;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() isLoading: boolean;
 

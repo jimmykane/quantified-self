@@ -55,7 +55,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public numberOfCols: number;
 
 
-  public tiles: (SummariesChartTileInterface | SummariesMapTileInterface)[] = [];
+  public tiles: (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[] = [];
 
   public tileTypes = TileTypes;
 
@@ -185,8 +185,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.loaded();
   }
 
-  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface | SummariesMapTileInterface)[] {
-    return tiles.reduce((chartsAndData: (SummariesChartTileInterface | SummariesMapTileInterface)[], tile) => {
+  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[] {
+    return tiles.reduce((chartsAndData: (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[], tile) => {
       switch (tile.type) {
         case TileTypes.Chart:
           const chartTile = <TileChartSettingsInterface>tile;
@@ -204,6 +204,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           const mapTile = <TileMapSettingsInterface>tile;
           chartsAndData.push({
             ...mapTile, ...{
+              events: this.events,
+            }
+          });
+          break;
+        case TileTypes.BrianDevine:
+          const BrianDevineTile = <TileSettingsInterface>tile;
+          chartsAndData.push({
+            ...BrianDevineTile, ...{
               events: this.events,
             }
           });
