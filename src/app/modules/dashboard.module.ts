@@ -19,7 +19,9 @@ import { ActivityTypesMultiSelectComponent } from '../components/activity-types-
 import {MAT_MOMENT_DATE_FORMATS, MomentDateAdapter} from '@angular/material-moment-adapter';
 import {DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE} from '@angular/material/core';
 import { ChartsBrianDevineComponent } from '../components/charts/brian-devine/charts.brian-devine.component';
-import { TileBrianDevineComponent } from '../components/tile/brain-devine/tile.brian-devine.component';
+import { ChartsTimelineComponent } from '../components/charts/timeline/charts.timeline.component';
+import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
+import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
 
 @NgModule({
   imports: [
@@ -44,8 +46,10 @@ import { TileBrianDevineComponent } from '../components/tile/brain-devine/tile.b
     TileChartComponent,
     TileMapComponent,
     ActivityTypesMultiSelectComponent,
+    ChartsTimelineComponent,
+    ChartsPieComponent,
+    ChartsXYComponent,
     ChartsBrianDevineComponent,
-    TileBrianDevineComponent,
   ],
   entryComponents: [],
   providers: [

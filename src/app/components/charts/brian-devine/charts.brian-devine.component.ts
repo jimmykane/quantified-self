@@ -96,16 +96,16 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       } else {
         range.axisFill.fillOpacity = 0.8;
       }
-      range.axisFill.radius = -28;
-      range.axisFill.adapter.add('innerRadius', function(innerRadius, target) {
-        return dateAxis.renderer.pixelRadius + 7;
-      })
+      // range.axisFill.radius = -28;
+      // range.axisFill.adapter.add('innerRadius', function(innerRadius, target) {
+      //   return dateAxis.renderer.pixelRadius + 7;
+      // })
       range.axisFill.fill = am4core.color('#b9ce37');
       range.axisFill.stroke = am4core.color('#5f6062');
       range.grid.disabled = true;
       range.label.text = chart.dateFormatter.language.translate(chart.dateFormatter.months[i])
-      range.label.bent = true;
-      range.label.radius = 10;
+      // range.label.bent = true;
+      // range.label.radius = 10;
       range.label.fontSize = 10;
       range.label.paddingBottom = 5;
       range.label.interactionsEnabled = false;
@@ -113,7 +113,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       range.axisFill.cursorOverStyle = am4core.MouseCursorStyle.pointer;
       range.axisFill.events.on('hit', function(event) {
         if (dateAxis.start == 0 && dateAxis.end == 1) {
-          dateAxis.zoomToDates(event.target.dataItem.date, event.target.dataItem.endDate);
+          // dateAxis.zoomToDates(event.target.dataItem.date, event.target.dataItem.endDate);
         } else {
           dateAxis.zoom({ start: 0, end: 1 });
         }

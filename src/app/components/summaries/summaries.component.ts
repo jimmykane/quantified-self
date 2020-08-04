@@ -24,6 +24,7 @@ import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  ChartTypes,
   TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
@@ -36,7 +37,6 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import * as equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import * as weeknumber from 'weeknumber'
-import { time } from '@amcharts/amcharts4/core';
 
 @Component({
   selector: 'app-summaries',
@@ -63,7 +63,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
 
-  private getChartDataCache: {string: SummariesChartDataInterface[] }[] = []
+  private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
 
   constructor(private router: Router,
               private authService: AppAuthService,
@@ -185,33 +185,51 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.loaded();
   }
 
+  /**
+   * Contrustucts an object to the view template `TileSettingsInterface`
+   * @param tiles
+   * @param events
+   * @private
+   */
   private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[] {
     return tiles.reduce((chartsAndData: (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[], tile) => {
       switch (tile.type) {
+        // Chart
         case TileTypes.Chart:
           const chartTile = <TileChartSettingsInterface>tile;
           chartTile.dataTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto
-          chartsAndData.push({
-            ...chartTile, ...{
-              timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
-              data: events ? // The below will create a new instance of this events due to filtering
-                this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType, chartTile.dataTimeInterval)
-                : [] // We send null if there are no events for the input date range
-            }
-          });
+          // 2 Different processing here, one generic and one for Brian Devine
+          switch (chartTile.chartType) {
+            case ChartTypes.BrianDevine:
+              chartsAndData.push({
+                ...chartTile, ...{
+                  data: events
+                    ? { // The below will create a new instance of this events due to filtering.
+                        // We need here 2 set of data
+                      daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
+                      weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly)
+                    }
+                    : {daily: [], weekly: []} // We send null if there are no events for the input date range
+                }
+              });
+              break;
+            default:
+              chartsAndData.push({
+                ...chartTile, ...{
+                  timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
+                  data: events ? // The below will create a new instance of this events due to filtering
+                    this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType, chartTile.dataTimeInterval)
+                    : [] // We send null if there are no events for the input date range
+                }
+              });
+              break;
+          }
           break;
+        // Map
         case TileTypes.Map:
           const mapTile = <TileMapSettingsInterface>tile;
           chartsAndData.push({
             ...mapTile, ...{
-              events: this.events,
-            }
-          });
-          break;
-        case TileTypes.BrianDevine:
-          const BrianDevineTile = <TileSettingsInterface>tile;
-          chartsAndData.push({
-            ...BrianDevineTile, ...{
               events: this.events,
             }
           });
@@ -333,7 +351,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         valueByCategory.set(type, {value: item.value / item.count, count: item.count});
       });
     }
-    const map  = this.convertToCategories(valueByCategory)
+    const map = this.convertToCategories(valueByCategory)
     return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`] = map;
   }
 

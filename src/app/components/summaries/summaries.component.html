@@ -35,17 +35,6 @@
         [size]="tile.size"
         [order]="tile.order"
       ></app-tile-map>
-      <app-tile-brian-devine-chart
-        *ngIf="tile.type === tileTypes.BrianDevine"
-        [user]="user"
-        [type]="tile.type"
-        [isLoading]="isLoading"
-        [data]="tile.data"
-        [showActions]="showActions"
-        [chartTheme]="chartTheme"
-        [size]="tile.size"
-        [order]="tile.order"
-      ></app-tile-brian-devine-chart>
     </mat-grid-tile>
   </mat-grid-list>
 </section>
