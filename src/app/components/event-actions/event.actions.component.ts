@@ -174,6 +174,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.event.name,
       new EventExporterGPX().fileExtension,
     );
+    this.afa.logEvent('downloaded_gpx_file');
     this.snackBar.open('GPX file served', null, {
       duration: 2000,
     });
