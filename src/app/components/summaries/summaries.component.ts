@@ -203,11 +203,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
             case ChartTypes.BrianDevine:
               chartsAndData.push({
                 ...chartTile, ...{
-                  data: { // The below will create a new instance of this events due to filtering.
+                  data: events
+                    ? { // The below will create a new instance of this events due to filtering.
                         // We need here 2 set of data
                       daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
                       weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly)
                     }
+                    : {daily: [], weekly: []} // We send null if there are no events for the input date range
                 }
               });
               break;
@@ -215,8 +217,9 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
               chartsAndData.push({
                 ...chartTile, ...{
                   timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
-                  data: // The below will create a new instance of this events due to filtering
+                  data: events ? // The below will create a new instance of this events due to filtering
                     this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType, chartTile.dataTimeInterval)
+                    : [] // We send null if there are no events for the input date range
                 }
               });
               break;
