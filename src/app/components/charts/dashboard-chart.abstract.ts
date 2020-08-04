@@ -47,7 +47,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
 
     if (simpleChanges.data) {
-
+      // @todo not sure if "important" as the caller also does the same
       this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
       if (this.chart) {
         this.chart.data = this.data || [];
