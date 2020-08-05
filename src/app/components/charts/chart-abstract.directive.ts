@@ -41,7 +41,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
   @Input() useAnimations: boolean;
 
 
-  protected chart: am4charts.PieChart | am4charts.XYChart;
+  protected chart: am4charts.PieChart | am4charts.XYChart | am4charts.RadarChart;
   protected logger = Log.create('ChartAbstract');
   protected subscriptions: Subscription[] = [];
 

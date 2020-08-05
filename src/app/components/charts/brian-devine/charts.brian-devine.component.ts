@@ -12,6 +12,7 @@ import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import { DashboardChartAbstract } from '../dashboard-chart.abstract';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 
 @Component({
   selector: 'app-brian-devine-chart',
@@ -23,7 +24,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
   @Input() data: { weekly: any[], daily: any[] };
 
-
+  protected chart: am4charts.RadarChart;
   protected logger = Log.create('ChartsBrianDevineComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
@@ -33,7 +34,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
   ngAfterViewInit(): void {
     am4core.options.queue = true;
     am4core.options.onlyShowOnViewport = false;
-    this.chart = <am4charts.XYChart>this.createChart();
+    this.chart = this.createChart();
     this.chart.data = this.data.weekly || [];
   }
 
@@ -41,66 +42,72 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     this.isLoading ? this.loading() : this.loaded();
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
-    if (simpleChanges.chartTheme && this.chart) {
+    if (simpleChanges.data || (simpleChanges.chartTheme && this.chart)) {
       this.destroyChart();
-      this.chart = <am4charts.XYChart>this.createChart();
-      this.chart.data = this.data.weekly || [];
+      // this.chart.data = this.data.weekly || [];
+      this.data.weekly = [...this.data.weekly]
+        .sort(this.sortData(this.chartDataCategoryType))
+        .map((data) => {
+          return {...data, ...{endTime: data.time + 7 * 24 * 60 * 60 * 1000}}
+        });
+      this.data.daily = [...this.data.daily]
+        .sort(this.sortData(this.chartDataCategoryType)).map((data) => {
+          return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
+        });
+      this.chart = <am4charts.RadarChart>this.createChart();
+      this.chart.data = this.data.weekly;
+      this.chart.yAxes.each((axis) => axis.data = this.data.daily)
+      this.chart.series.each((series) => series.data = this.data.daily)
     }
 
-    if (!this.data) {
-      return;
-    }
 
-    if (simpleChanges.data) {
-
-      // @todo not sure if "important" as the caller also does the same
-      this.data.weekly = [...this.data.weekly].sort(this.sortData(this.chartDataCategoryType)).map((data) => {
-        return {...data, ...{endTime: data.time + 7 * 24 * 60 * 60 * 1000}}
-      }) // Important to create new array
-      this.data.daily = [...this.data.daily].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
-      if (this.chart) {
-        this.chart.data = this.data.weekly || [];
-        // @todo should it also invalidate?
-        this.chart.invalidateLabels();
-      }
-    }
   }
 
-  protected createChart(): am4charts.XYChart {
-    debugger
+  protected createChart(): am4charts.RadarChart {
+    // debugger
     const chart = <am4charts.RadarChart>super.createChart(am4charts.RadarChart);
     chart.innerRadius = am4core.percent(15);
     chart.radius = am4core.percent(90);
     // chart.data = weeklyData; // Add weekly
     chart.fontSize = '11px';
     chart.startAngle = 95;
-    chart.endAngle = chart.startAngle + 350;
+    chart.endAngle = chart.startAngle + 345;
     // Create axes
-    const dateAxis = chart.xAxes.push(<am4charts.DateAxis<am4charts.AxisRendererCircular>>new am4charts.DateAxis());
-    dateAxis.baseInterval = {timeUnit: 'week', count: 1};
+    // debugger;
+    const dateAxis = chart.xAxes.push(<am4charts.DateAxis<am4charts.AxisRendererCircular>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
+    // dateAxis.baseInterval = {timeUnit: 'week', count: 1};
     dateAxis.renderer.innerRadius = am4core.percent(40);
     dateAxis.renderer.minGridDistance = 5;
     dateAxis.renderer.labels.template.relativeRotation = 0;
     dateAxis.renderer.labels.template.location = 0.5;
     dateAxis.renderer.labels.template.radius = am4core.percent(-57);
     dateAxis.renderer.labels.template.fontSize = '8px';
-    dateAxis.dateFormats.setKey('week', 'w');
-    dateAxis.periodChangeDateFormats.setKey('week', 'w');
+    // dateAxis.dateFormats.setKey('week', 'w');
+    // dateAxis.periodChangeDateFormats.setKey('week', 'w');
+    // dateAxis.dateFormatter.dateFormat = this.getChartDateFormat(this.chartDataTimeInterval);
+    // dateAxis.dateFormats.setKey(key, this.getAxisDateFormat(this.chartDataTimeInterval));
+    // dateAxis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(this.chartDataTimeInterval));
+
     dateAxis.cursorTooltipEnabled = false;
+
+    // Add ranges
+    this.createDateAxisRanges(dateAxis, this.data);
 
     const valueAxis = chart.yAxes.push(<am4charts.ValueAxis<am4charts.AxisRendererRadial>>new am4charts.ValueAxis());
     valueAxis.renderer.inversed = true;
     valueAxis.renderer.radius = am4core.percent(40);
     valueAxis.renderer.minGridDistance = 15;
     valueAxis.renderer.minLabelPosition = 0.05;
+    valueAxis.renderer.grid.template.disabled = true;
     valueAxis.renderer.axisAngle = 90;
     valueAxis.cursorTooltipEnabled = false;
     valueAxis.renderer.labels.template.fill = am4core.color('#ffffff');
+    valueAxis.renderer.labels.template.disabled = true;
 
     // weekday axis
     const weekDayAxis = chart.yAxes.push(<am4charts.CategoryAxis<am4charts.AxisRendererRadial>>new am4charts.CategoryAxis());
     weekDayAxis.dataFields.category = 'day';
-    // weekDayAxis.data = dailyData; @todo
+    weekDayAxis.data = this.data.daily;
     weekDayAxis.renderer.innerRadius = am4core.percent(50);
     weekDayAxis.renderer.minGridDistance = 10;
     weekDayAxis.renderer.grid.template.location = 0;
@@ -109,48 +116,11 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     weekDayAxis.cursorTooltipEnabled = false;
     weekDayAxis.renderer.labels.template.fill = am4core.color('#ffffff');
 
-    // add month ranges
-    // const firstDay = new Date(data[0]["Activity Date"]);
-    const firstDay = new Date('01-01-2020');
-
-    for (let i = 0; i < 13; i++) {
-      const range = dateAxis.axisRanges.create();
-      range.date = new Date(firstDay.getFullYear(), i, 0, 0, 0, 0);
-      range.endDate = new Date(firstDay.getFullYear(), i + 1, 0, 0, 0, 0);
-      if (i % 2) {
-        range.axisFill.fillOpacity = 0.4;
-      } else {
-        range.axisFill.fillOpacity = 0.8;
-      }
-      (<am4charts.AxisFillCircular>range.axisFill).radius = -28;
-      (<am4charts.AxisFillCircular>range.axisFill).adapter.add('innerRadius', function (innerRadius, target) {
-        return dateAxis.renderer.pixelRadius + 7;
-      })
-      range.axisFill.fill = am4core.color('#b9ce37');
-      range.axisFill.stroke = am4core.color('#5f6062');
-      range.grid.disabled = true;
-      range.label.text = chart.dateFormatter.language.translate(chart.dateFormatter.months[i]);
-      (<am4charts.AxisLabelCircular>range.label).bent = true;
-      (<am4charts.AxisLabelCircular>range.label).radius = 10;
-      range.label.fontSize = 10;
-      range.label.paddingBottom = 5;
-      range.label.interactionsEnabled = false;
-      range.axisFill.interactionsEnabled = true;
-      range.axisFill.cursorOverStyle = am4core.MouseCursorStyle.pointer;
-      range.axisFill.events.on('hit', function (event) {
-        if (dateAxis.start == 0 && dateAxis.end == 1) {
-          // dateAxis.zoomToDates(event.target.dataItem.date, event.target.dataItem.endDate); @todo
-        } else {
-          dateAxis.zoom({start: 0, end: 1});
-        }
-      })
-    }
-
 
     // Create series
     const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
-    columnSeries.dataFields.dateX = 'date';
-    columnSeries.dataFields.valueY = 'distance';
+    columnSeries.dataFields.dateX = 'time';
+    columnSeries.dataFields.valueY = 'value';
     columnSeries.columns.template.strokeOpacity = 0;
     columnSeries.columns.template.width = am4core.percent(95);
     columnSeries.fill = am4core.color('#ffffff');
@@ -158,17 +128,24 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     columnSeries.tooltip.fontSize = 10;
     columnSeries.tooltip.pointerOrientation = 'down';
     columnSeries.tooltip.background.fillOpacity = 0.5;
-    columnSeries.columns.template.tooltipText = '[bold]{date} - {endDate}\n[font-size:13px]Total {valueY} km';
+    columnSeries.columns.template.tooltipText = '{valueY}';
+    columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
+      if (!target.dataItem || !target.dataItem.dataContext) {
+        return '';
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+    });
     columnSeries.cursorTooltipEnabled = false;
 
 
     // bubble series
     const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
-    bubbleSeries.dataFields.dateX = 'date';
+    bubbleSeries.dataFields.dateX = 'time';
     bubbleSeries.dataFields.categoryY = 'day';
-    bubbleSeries.dataFields.value = 'distance';
+    bubbleSeries.dataFields.value = 'value';
     bubbleSeries.yAxis = weekDayAxis;
-    // bubbleSeries.data = dailyData; @todo
+    bubbleSeries.data = this.data.daily;
     bubbleSeries.strokeOpacity = 0;
     bubbleSeries.maskBullets = false;
     bubbleSeries.cursorTooltipEnabled = false;
@@ -180,7 +157,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleBullet.locationX = 0.5;
     bubbleBullet.stroke = am4core.color('#b9ce37');
     bubbleBullet.fill = am4core.color('#b9ce37');
-    bubbleBullet.tooltipText = '[bold]{date}, {value} km\n[font-size:13px]{title}';
+    bubbleBullet.tooltipText = '{value}';
+    bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
+      if (!target.dataItem || !target.dataItem.dataContext) {
+        return '';
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+    });
     bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
       return -target.circle.radius;
     })
@@ -200,7 +184,11 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     label.fill = am4core.color('#ffffff');
     label.fontSize = 12;
     label.fontWeight = 'bold';
-    label.text = 'WEEKLY\nTOTALS';
+    label.adapter.add('text', (text, target, key) => {
+      const data = target.parent.parent.parent.parent.parent.parent['data'];
+      const value = this.getAggregateData(data, this.chartDataValueType);
+      return `[font-size: 1.4em]${value.getDisplayType()}[/]\n[bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/]\n(${this.chartDataValueType})`;
+    });
 
     const title = chart.createChild(am4core.Label);
     title.fill = am4core.color('#b9ce37');
@@ -227,4 +215,53 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
   // ngOnChanges(changes: SimpleChanges) {
   // }
+  private processChartChanges() {
+
+  }
+
+  private createDateAxisRanges(axis: am4charts.DateAxis<am4charts.AxisRendererCircular>, data: { weekly: any[], daily: any[] }) {
+    // add month ranges
+    const firstDay = new Date(this.data.daily[0].time);
+    const lastDay = new Date(this.data.daily[this.data.daily.length - 1].time);
+
+    const totalNumberOfMonths = lastDay.getMonth() - firstDay.getMonth() +
+      (12 * (lastDay.getFullYear() - firstDay.getFullYear())) + 1 // Note the +1 here
+
+    // debugger
+    for (let i = 0; i < totalNumberOfMonths; i++) {
+      const range = axis.axisRanges.create();
+      range.date = new Date(firstDay.getFullYear(), i, 0, 0, 0, 0);
+      range.endDate = new Date(firstDay.getFullYear(), i + 1, 0, 0, 0, 0)
+      if (i % 2) {
+        range.axisFill.fillOpacity = 0.4;
+      } else {
+        range.axisFill.fillOpacity = 0.8;
+      }
+      (<am4charts.AxisFillCircular>range.axisFill).radius = -28;
+      (<am4charts.AxisFillCircular>range.axisFill).adapter.add('innerRadius', function (innerRadius, target) {
+        return axis.renderer.pixelRadius + 7;
+      })
+      range.axisFill.fill = am4core.color('#b9ce37');
+      range.axisFill.stroke = am4core.color('#5f6062');
+      range.grid.disabled = true;
+      range.label.text = totalNumberOfMonths > 12
+        ? `${range.endDate.toLocaleString('default', {month: 'long'})} ${range.endDate.getFullYear()}`
+        : `${range.endDate.toLocaleString('default', {month: 'long'})}`;
+      // range.label.text = chart.dateFormatter.language.translate(chart.dateFormatter.months[range.date.getMonth()]);
+      (<am4charts.AxisLabelCircular>range.label).bent = true;
+      (<am4charts.AxisLabelCircular>range.label).radius = 10;
+      range.label.fontSize = 10;
+      range.label.paddingBottom = 5;
+      range.label.interactionsEnabled = false;
+      range.axisFill.interactionsEnabled = true;
+      range.axisFill.cursorOverStyle = am4core.MouseCursorStyle.pointer;
+      range.axisFill.events.on('hit', function (event) {
+        if (axis.start === 0 && axis.end === 1) {
+          axis.zoomToDates((<any>event.target.dataItem).date, (<any>event.target.dataItem).endDate);
+        } else {
+          axis.zoom({start: 0, end: 1});
+        }
+      })
+    }
+  }
 }

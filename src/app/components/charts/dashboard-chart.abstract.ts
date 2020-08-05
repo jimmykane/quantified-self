@@ -47,6 +47,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
 
     if (simpleChanges.data) {
+      // @todo this might change even if not needed
       // @todo not sure if "important" as the caller also does the same
       this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
       if (this.chart) {
@@ -132,7 +133,7 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
   }
 
-  protected getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
+  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes): DataInterface {
     switch (chartDataValueType) {
       case ChartDataValueTypes.Average:
         let count = 0;

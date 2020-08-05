@@ -203,6 +203,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
             case ChartTypes.BrianDevine:
               chartsAndData.push({
                 ...chartTile, ...{
+                  timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
                   data: events
                     ? { // The below will create a new instance of this events due to filtering.
                         // We need here 2 set of data
