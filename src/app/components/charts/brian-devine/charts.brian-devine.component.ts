@@ -118,59 +118,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
 
     // Create series
-    const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
-    columnSeries.dataFields.dateX = 'time';
-    columnSeries.dataFields.valueY = 'value';
-    columnSeries.columns.template.strokeOpacity = 0;
-    columnSeries.columns.template.width = am4core.percent(95);
-    columnSeries.fill = am4core.color('#ffffff');
-    columnSeries.fillOpacity = 0.6;
-    columnSeries.tooltip.fontSize = 10;
-    columnSeries.tooltip.pointerOrientation = 'down';
-    columnSeries.tooltip.background.fillOpacity = 0.5;
-    columnSeries.columns.template.tooltipText = '{valueY}';
-    columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext) {
-        return '';
-      }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
-    });
-    columnSeries.cursorTooltipEnabled = false;
-
-
-    // bubble series
-    const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
-    bubbleSeries.dataFields.dateX = 'time';
-    bubbleSeries.dataFields.categoryY = 'day';
-    bubbleSeries.dataFields.value = 'value';
-    bubbleSeries.yAxis = weekDayAxis;
-    bubbleSeries.data = this.data.daily;
-    bubbleSeries.strokeOpacity = 0;
-    bubbleSeries.maskBullets = false;
-    bubbleSeries.cursorTooltipEnabled = false;
-    bubbleSeries.tooltip.fontSize = 10;
-    bubbleSeries.tooltip.pointerOrientation = 'down';
-    bubbleSeries.tooltip.background.fillOpacity = 0.4;
-
-    const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
-    bubbleBullet.locationX = 0.5;
-    bubbleBullet.stroke = am4core.color('#b9ce37');
-    bubbleBullet.fill = am4core.color('#b9ce37');
-    bubbleBullet.tooltipText = '{value}';
-    bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext) {
-        return '';
-      }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
-    });
-    bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
-      return -target.circle.radius;
-    })
-
-    bubbleSeries.heatRules.push({target: bubbleBullet.circle, min: 2, max: 12, dataField: 'value', property: 'radius'});
-    bubbleSeries.dataItems.template.locations.categoryY = 0.5;
+    this.createSeriesForChart(chart, weekDayAxis);
 
 
     chart.cursor = new am4charts.RadarCursor();
@@ -263,5 +211,61 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         }
       })
     }
+  }
+
+  private createSeriesForChart(chart: am4charts.RadarChart, axis: am4charts.CategoryAxis<am4charts.AxisRendererRadial>){
+    const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
+    columnSeries.dataFields.dateX = 'time';
+    columnSeries.dataFields.valueY = 'value';
+    columnSeries.columns.template.strokeOpacity = 0;
+    columnSeries.columns.template.width = am4core.percent(95);
+    columnSeries.fill = am4core.color('#ffffff');
+    columnSeries.fillOpacity = 0.6;
+    columnSeries.tooltip.fontSize = 10;
+    columnSeries.tooltip.pointerOrientation = 'down';
+    columnSeries.tooltip.background.fillOpacity = 0.5;
+    columnSeries.columns.template.tooltipText = '{valueY}';
+    columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
+      if (!target.dataItem || !target.dataItem.dataContext) {
+        return '';
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+    });
+    columnSeries.cursorTooltipEnabled = false;
+
+
+    // bubble series
+    const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
+    bubbleSeries.dataFields.dateX = 'time';
+    bubbleSeries.dataFields.categoryY = 'day';
+    bubbleSeries.dataFields.value = 'value';
+    bubbleSeries.yAxis = axis;
+    bubbleSeries.data = this.data.daily;
+    bubbleSeries.strokeOpacity = 0;
+    bubbleSeries.maskBullets = false;
+    bubbleSeries.cursorTooltipEnabled = false;
+    bubbleSeries.tooltip.fontSize = 10;
+    bubbleSeries.tooltip.pointerOrientation = 'down';
+    bubbleSeries.tooltip.background.fillOpacity = 0.8;
+
+    const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
+    bubbleBullet.locationX = 0.5;
+    bubbleBullet.stroke = am4core.color('#b9ce37');
+    bubbleBullet.fill = am4core.color('#b9ce37');
+    bubbleBullet.tooltipText = '{value}';
+    bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
+      if (!target.dataItem || !target.dataItem.dataContext) {
+        return '';
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+    });
+    bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
+      return -target.circle.radius;
+    })
+
+    bubbleSeries.heatRules.push({target: bubbleBullet.circle, min: 2, max: 12, dataField: 'value', property: 'radius'});
+    bubbleSeries.dataItems.template.locations.categoryY = 0.5;
   }
 }
