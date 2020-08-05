@@ -240,6 +240,11 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
+      showMapPoints: new FormControl(this.user.settings.mapSettings.showPoints, [
+        // Validators.required,
+        // Validators.minLength(1),
+      ]),
+
       showMapArrows: new FormControl(this.user.settings.mapSettings.showArrows, [
         // Validators.required,
         // Validators.minLength(1),
@@ -306,6 +311,7 @@ export class UserSettingsComponent implements OnChanges {
           mapSettings: <UserMapSettingsInterface>{
             theme: this.userSettingsFormGroup.get('mapTheme').value,
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
+            showPoints: this.userSettingsFormGroup.get('showMapPoints').value,
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,
             lapTypes: this.userSettingsFormGroup.get('mapLapTypes').value,
             mapType: this.userSettingsFormGroup.get('mapType').value,

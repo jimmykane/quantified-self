@@ -30,6 +30,7 @@ import { debounceTime } from 'rxjs/operators';
 import { MapAbstract } from '../../map/map.abstract';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import Circle = google.maps.Circle;
 
 @Component({
   selector: 'app-event-card-map',
@@ -46,6 +47,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   @Input() selectedActivities: ActivityInterface[];
   @Input() theme: MapThemes;
   @Input() showLaps: boolean;
+  @Input() showPoints: boolean;
   @Input() showArrows: boolean;
   @Input() strokeWidth: number;
   @Input() lapTypes: LapTypes[] = [];
@@ -127,6 +129,18 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       strokeWeight: 0.8,
       scale: 1.2,
       anchor: {x: 12, y: 12}
+    }
+  }
+
+  getCircleMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 0,
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
+      scale: 1.2,
+      // anchor: {x: 12, y: 12}
     }
   }
 
