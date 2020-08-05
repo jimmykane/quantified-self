@@ -69,7 +69,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     }
   }
 
-  protected createChart(chartType?: typeof am4charts.Chart): am4charts.Chart {
+  protected createChart(chartType?: typeof am4charts.Chart, data?: any): am4charts.Chart {
     this.logger.info(`Creating chart`);
     return this.zone.runOutsideAngular(() => {
       this.setChartThemes(this.chartTheme, this.useAnimations);

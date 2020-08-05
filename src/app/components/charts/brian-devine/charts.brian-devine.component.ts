@@ -13,6 +13,8 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import { DashboardChartAbstract } from '../dashboard-chart.abstract';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { Activity } from '@sports-alliance/sports-lib/lib/activities/activity';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 @Component({
   selector: 'app-brian-devine-chart',
@@ -22,7 +24,13 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.sto
 })
 export class ChartsBrianDevineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
-  @Input() data: { weekly: any[], daily: any[] };
+  @Input() data: {
+    weekly: any[], daily: any[],
+    perActivityType:
+      {
+        activityType: ActivityTypes, weekly: any[], daily: any[],
+      }[]
+  };
 
   protected chart: am4charts.RadarChart;
   protected logger = Log.create('ChartsBrianDevineComponent');
@@ -34,8 +42,9 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
   ngAfterViewInit(): void {
     am4core.options.queue = true;
     am4core.options.onlyShowOnViewport = false;
-    this.chart = this.createChart();
-    this.chart.data = this.data.weekly || [];
+    if (!this.chart) {
+      this.chart = this.createChart(am4charts.RadarChart, this.data);
+    }
   }
 
   ngOnChanges(simpleChanges) {
@@ -43,7 +52,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.data || (simpleChanges.chartTheme && this.chart)) {
-      this.destroyChart();
       // this.chart.data = this.data.weekly || [];
       this.data.weekly = [...this.data.weekly]
         .sort(this.sortData(this.chartDataCategoryType))
@@ -54,18 +62,26 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         .sort(this.sortData(this.chartDataCategoryType)).map((data) => {
           return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
         });
-      this.chart = <am4charts.RadarChart>this.createChart();
-      this.chart.data = this.data.weekly;
-      this.chart.yAxes.each((axis) => axis.data = this.data.daily)
-      this.chart.series.each((series) => series.data = this.data.daily)
+      this.chart = <am4charts.RadarChart>this.createChart(am4charts.RadarChart, this.data);
+      // this.chart.yAxes.each((axis) => axis.data = this.data.daily)
+      // this.chart.series.each((series) => series.data = this.data.daily)
     }
 
 
   }
 
-  protected createChart(): am4charts.RadarChart {
+  protected createChart(chartType?: typeof am4charts.Chart, data?: {
+    weekly: any[], daily: any[],
+    perActivityType:
+      {
+        activityType: ActivityTypes, weekly: any[], daily: any[],
+      }[]
+  }): am4charts.RadarChart {
+
     // debugger
     const chart = <am4charts.RadarChart>super.createChart(am4charts.RadarChart);
+    chart.data = data.weekly;
+
     chart.innerRadius = am4core.percent(15);
     chart.radius = am4core.percent(90);
     // chart.data = weeklyData; // Add weekly
@@ -118,7 +134,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
 
     // Create series
-    this.createSeriesForChart(chart, weekDayAxis);
+
+    this.data.perActivityType.forEach((activityData, index) => {
+      if (index > 0){
+        return
+      }
+      this.createSeriesForChart(activityData.activityType, chart, weekDayAxis, {daily: data.daily, weekly: data.weekly});
+
+    })
 
 
     chart.cursor = new am4charts.RadarCursor();
@@ -133,8 +156,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     label.fontSize = 12;
     label.fontWeight = 'bold';
     label.adapter.add('text', (text, target, key) => {
-      const data = target.parent.parent.parent.parent.parent.parent['data'];
-      const value = this.getAggregateData(data, this.chartDataValueType);
+      const dataItem = target.parent.parent.parent.parent.parent.parent['data'];
+      const value = this.getAggregateData(dataItem, this.chartDataValueType);
       return `[font-size: 1.4em]${value.getDisplayType()}[/]\n[bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/]\n(${this.chartDataValueType})`;
     });
 
@@ -213,7 +236,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     }
   }
 
-  private createSeriesForChart(chart: am4charts.RadarChart, axis: am4charts.CategoryAxis<am4charts.AxisRendererRadial>){
+  private createSeriesForChart(activityType: ActivityTypes, chart: am4charts.RadarChart, axis: am4charts.CategoryAxis<am4charts.AxisRendererRadial>, data: { weekly: any[], daily: any[], }) {
+    debugger
     const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
     columnSeries.dataFields.dateX = 'time';
     columnSeries.dataFields.valueY = 'value';
@@ -229,8 +253,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
     columnSeries.cursorTooltipEnabled = false;
 
@@ -241,7 +265,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleSeries.dataFields.categoryY = 'day';
     bubbleSeries.dataFields.value = 'value';
     bubbleSeries.yAxis = axis;
-    bubbleSeries.data = this.data.daily;
+    bubbleSeries.data = data.daily;
     bubbleSeries.strokeOpacity = 0;
     bubbleSeries.maskBullets = false;
     bubbleSeries.cursorTooltipEnabled = false;
@@ -251,15 +275,15 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
     bubbleBullet.locationX = 0.5;
-    bubbleBullet.stroke = am4core.color('#b9ce37');
-    bubbleBullet.fill = am4core.color('#b9ce37');
+    bubbleBullet.stroke = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+    bubbleBullet.fill = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
     bubbleBullet.tooltipText = '{value}';
     bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
     bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
       return -target.circle.radius;

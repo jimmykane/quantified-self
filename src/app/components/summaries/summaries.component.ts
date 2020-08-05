@@ -99,7 +99,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.unsubscribeFromAll();
   }
 
-  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): string | number {
+  getEventCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): string | number {
     switch (categoryType) {
       case ChartDataCategoryTypes.ActivityType:
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
@@ -201,16 +201,27 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           // 2 Different processing here, one generic and one for Brian Devine
           switch (chartTile.chartType) {
             case ChartTypes.BrianDevine:
+              const data = {
+                daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
+                weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly),
+                perActivityType: [],
+              };
+              const activityTypes = new Set(events.map((event) => this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, chartTile.dataTimeInterval)));
+              activityTypes.forEach((activityType) => {
+                const eventsWithSameActivityType = events.filter((event) => this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, chartTile.dataTimeInterval) === activityType)
+                data.perActivityType.push({
+                  activityType: activityType,
+                    // The below will create a new instance of this events due to filtering.
+                    // We need here 2 set of data
+                    daily: this.getChartData(eventsWithSameActivityType, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
+                    weekly: this.getChartData(eventsWithSameActivityType, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly)
+                });
+
+              })
               chartsAndData.push({
                 ...chartTile, ...{
                   timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
-                  data: events
-                    ? { // The below will create a new instance of this events due to filtering.
-                        // We need here 2 set of data
-                      daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
-                      weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly)
-                    }
-                    : {daily: [], weekly: []} // We send null if there are no events for the input date range
+                  data: data
                 }
               });
               break;
@@ -315,7 +326,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!stat) {
         return valueByTypeMap;
       }
-      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, events, categoryType, timeInterval))
+      const summariesChartDataInterface = valueByTypeMap.get(this.getEventCategoryKey(event, events, categoryType, timeInterval))
         || {
           value: null,
           count: 0
@@ -341,7 +352,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!isNumber(summariesChartDataInterface.value) || (summariesChartDataInterface.value === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
-      valueByTypeMap.set(this.getCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
+      valueByTypeMap.set(this.getEventCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string, { value: number, count: number }>());
 
