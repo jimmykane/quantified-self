@@ -70,8 +70,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     chart.radius = am4core.percent(90);
     // chart.data = weeklyData; // Add weekly
     chart.fontSize = '11px';
-    chart.startAngle = 95;
-    chart.endAngle = chart.startAngle + 345;
+    chart.startAngle = 100;
+    chart.endAngle = chart.startAngle + 340;
     // Create axes
     // debugger;
     const dateAxis = chart.xAxes.push(<am4charts.DateAxis<am4charts.AxisRendererCircular>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
@@ -114,7 +114,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     weekDayAxis.renderer.line.disabled = true;
     weekDayAxis.renderer.axisAngle = 90;
     weekDayAxis.cursorTooltipEnabled = false;
-    weekDayAxis.renderer.labels.template.fill = am4core.color('#ffffff');
+    // weekDayAxis.renderer.labels.template.fill = am4core.color('#ffffff');
 
 
     // Create series
@@ -129,7 +129,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     const label = chart.radarContainer.createChild(am4core.Label);
     label.horizontalCenter = 'middle';
     label.verticalCenter = 'middle';
-    label.fill = am4core.color('#ffffff');
+    // label.fill = am4core.color('#ffffff');
     label.fontSize = 12;
     label.fontWeight = 'bold';
     label.adapter.add('text', (text, target, key) => {
@@ -149,14 +149,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // @todo
     // title.text = '[bold]IN ' + firstDay.getFullYear() + '\nI CYCLED ' + Math.round(total) + ' km.\n[font-size:11; #ffffff]Each circle represents a bike ride. Size represents distance.';
 
-    const link = chart.createChild(am4core.TextLink);
-    link.fill = am4core.color('#ffffff');
-    link.fontSize = 13;
-    link.url = 'https://www.instagram.com/brian_devine/';
-    link.valign = 'bottom';
-    link.align = 'right';
-    link.marginRight = 10;
-    link.text = 'Chart design inspired by Brian Devine';
+    // const link = chart.createChild(am4core.TextLink);
+    // link.fill = am4core.color('#ffffff');
+    // link.fontSize = 13;
+    // link.url = 'https://www.instagram.com/brian_devine/';
+    // link.valign = 'bottom';
+    // link.align = 'right';
+    // link.marginRight = 10;
+    // link.text = 'Chart design inspired by Brian Devine';
 
     return chart;
   }
