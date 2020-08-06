@@ -26,10 +26,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
   @Input() data: {
     weekly: any[], daily: any[],
-    perActivityType:
-      {
-        activityType: ActivityTypes, weekly: any[], daily: any[],
-      }[]
+    activityTypes: ActivityTypes[]
   };
 
   protected chart: am4charts.RadarChart;
@@ -52,17 +49,17 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.data || (simpleChanges.chartTheme && this.chart)) {
-      // this.chart.data = this.data.weekly || [];
       this.data.weekly = [...this.data.weekly]
-        .sort(this.sortData(this.chartDataCategoryType))
         .map((data) => {
           return {...data, ...{endTime: data.time + 7 * 24 * 60 * 60 * 1000}}
         });
       this.data.daily = [...this.data.daily]
-        .sort(this.sortData(this.chartDataCategoryType)).map((data) => {
+        .map((data) => {
           return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
         });
       this.chart = <am4charts.RadarChart>this.createChart(am4charts.RadarChart, this.data);
+      debugger;
+      // this.chart.data = this.data.daily;
       // this.chart.yAxes.each((axis) => axis.data = this.data.daily)
       // this.chart.series.each((series) => series.data = this.data.daily)
     }
@@ -71,20 +68,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
   }
 
   protected createChart(chartType?: typeof am4charts.Chart, data?: {
-    weekly: any[], daily: any[],
-    perActivityType:
-      {
-        activityType: ActivityTypes, weekly: any[], daily: any[],
-      }[]
-  }): am4charts.RadarChart {
+    weekly: any[], daily: any[], activityTypes: ActivityTypes[]}): am4charts.RadarChart {
 
     // debugger
     const chart = <am4charts.RadarChart>super.createChart(am4charts.RadarChart);
-    chart.data = data.weekly;
+    // chart.data = data.weekly; @todo is this needed
 
     chart.innerRadius = am4core.percent(15);
     chart.radius = am4core.percent(90);
-    // chart.data = weeklyData; // Add weekly
     chart.fontSize = '11px';
     chart.startAngle = 100;
     chart.endAngle = chart.startAngle + 340;
@@ -120,27 +111,49 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     valueAxis.renderer.labels.template.fill = am4core.color('#ffffff');
     valueAxis.renderer.labels.template.disabled = true;
 
-    // weekday axis
-    const weekDayAxis = chart.yAxes.push(<am4charts.CategoryAxis<am4charts.AxisRendererRadial>>new am4charts.CategoryAxis());
-    weekDayAxis.dataFields.category = 'day';
-    weekDayAxis.data = this.data.daily;
-    weekDayAxis.renderer.innerRadius = am4core.percent(50);
-    weekDayAxis.renderer.minGridDistance = 10;
-    weekDayAxis.renderer.grid.template.location = 0;
-    weekDayAxis.renderer.line.disabled = true;
-    weekDayAxis.renderer.axisAngle = 90;
-    weekDayAxis.cursorTooltipEnabled = false;
-    // weekDayAxis.renderer.labels.template.fill = am4core.color('#ffffff');
+    // day axis
+    const dayAxis = chart.yAxes.push(<am4charts.CategoryAxis<am4charts.AxisRendererRadial>>new am4charts.CategoryAxis());
+    dayAxis.dataFields.category = 'day';
+    dayAxis.data = this.data.daily;
+    dayAxis.renderer.innerRadius = am4core.percent(50);
+    dayAxis.renderer.minGridDistance = 10;
+    dayAxis.renderer.grid.template.location = 0;
+    dayAxis.renderer.line.disabled = true;
+    dayAxis.renderer.axisAngle = 90;
+    dayAxis.cursorTooltipEnabled = false;
+    // dayAxis.renderer.labels.template.fill = am4core.color('#ffffff');
 
+
+debugger
 
     // Create series
-
-    this.data.perActivityType.forEach((activityData, index) => {
-      if (index > 0){
-        return
+    const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
+    columnSeries.data = data.weekly;
+    columnSeries.dataFields.dateX = 'time';
+    columnSeries.dataFields.valueY = 'value';
+    columnSeries.columns.template.strokeOpacity = 0;
+    columnSeries.columns.template.width = am4core.percent(95);
+    columnSeries.fill = am4core.color('#ffffff');
+    columnSeries.fillOpacity = 0.6;
+    columnSeries.tooltip.fontSize = 10;
+    columnSeries.tooltip.pointerOrientation = 'down';
+    columnSeries.tooltip.background.fillOpacity = 0.5;
+    columnSeries.columns.template.tooltipText = '{valueY}';
+    columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
+      if (!target.dataItem || !target.dataItem.dataContext) {
+        return '';
       }
-      this.createSeriesForChart(activityData.activityType, chart, weekDayAxis, {daily: data.daily, weekly: data.weekly});
+      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+    });
+    columnSeries.cursorTooltipEnabled = false;
 
+
+    this.data.activityTypes.forEach((activityType, index) => {
+      // if (index > 0){
+      //   return
+      // }
+      this.createSeriesForChart(activityType, chart, dayAxis, data);
     })
 
 
@@ -237,33 +250,16 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
   }
 
   private createSeriesForChart(activityType: ActivityTypes, chart: am4charts.RadarChart, axis: am4charts.CategoryAxis<am4charts.AxisRendererRadial>, data: { weekly: any[], daily: any[], }) {
-    debugger
-    const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
-    columnSeries.dataFields.dateX = 'time';
-    columnSeries.dataFields.valueY = 'value';
-    columnSeries.columns.template.strokeOpacity = 0;
-    columnSeries.columns.template.width = am4core.percent(95);
-    columnSeries.fill = am4core.color('#ffffff');
-    columnSeries.fillOpacity = 0.6;
-    columnSeries.tooltip.fontSize = 10;
-    columnSeries.tooltip.pointerOrientation = 'down';
-    columnSeries.tooltip.background.fillOpacity = 0.5;
-    columnSeries.columns.template.tooltipText = '{valueY}';
-    columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext) {
-        return '';
-      }
-      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
-    });
-    columnSeries.cursorTooltipEnabled = false;
+    // debugger
+    // debugger
+
 
 
     // bubble series
     const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
     bubbleSeries.dataFields.dateX = 'time';
     bubbleSeries.dataFields.categoryY = 'day';
-    bubbleSeries.dataFields.value = 'value';
+    bubbleSeries.dataFields.value = activityType;
     bubbleSeries.yAxis = axis;
     bubbleSeries.data = data.daily;
     bubbleSeries.strokeOpacity = 0;
@@ -282,13 +278,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      debugger
+      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);
       return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
     bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
       return -target.circle.radius;
     })
-
+    // //
     bubbleSeries.heatRules.push({target: bubbleBullet.circle, min: 2, max: 12, dataField: 'value', property: 'radius'});
     bubbleSeries.dataItems.template.locations.categoryY = 0.5;
   }
