@@ -15,6 +15,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { Activity } from '@sports-alliance/sports-lib/lib/activities/activity';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-brian-devine-chart',
@@ -57,8 +58,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         .map((data) => {
           return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
         });
-      this.chart = <am4charts.RadarChart>this.createChart(am4charts.RadarChart, this.data);
       debugger;
+      this.chart = <am4charts.RadarChart>this.createChart(am4charts.RadarChart, this.data);
       // this.chart.data = this.data.daily;
       // this.chart.yAxes.each((axis) => axis.data = this.data.daily)
       // this.chart.series.each((series) => series.data = this.data.daily)
@@ -89,6 +90,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     dateAxis.renderer.labels.template.location = 0.5;
     dateAxis.renderer.labels.template.radius = am4core.percent(-57);
     dateAxis.renderer.labels.template.fontSize = '8px';
+
     // dateAxis.dateFormats.setKey('week', 'w');
     // dateAxis.periodChangeDateFormats.setKey('week', 'w');
     // dateAxis.dateFormatter.dateFormat = this.getChartDateFormat(this.chartDataTimeInterval);
@@ -111,10 +113,11 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     valueAxis.renderer.labels.template.fill = am4core.color('#ffffff');
     valueAxis.renderer.labels.template.disabled = true;
 
+
     // day axis
     const dayAxis = chart.yAxes.push(<am4charts.CategoryAxis<am4charts.AxisRendererRadial>>new am4charts.CategoryAxis());
     dayAxis.dataFields.category = 'day';
-    dayAxis.data = this.data.daily;
+    dayAxis.data = data.daily;
     dayAxis.renderer.innerRadius = am4core.percent(50);
     dayAxis.renderer.minGridDistance = 10;
     dayAxis.renderer.grid.template.location = 0;
@@ -124,7 +127,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // dayAxis.renderer.labels.template.fill = am4core.color('#ffffff');
 
 
-debugger
 
     // Create series
     const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
@@ -150,9 +152,9 @@ debugger
 
 
     this.data.activityTypes.forEach((activityType, index) => {
-      // if (index > 0){
-      //   return
-      // }
+      if (index > 0){
+        // return
+      }
       this.createSeriesForChart(activityType, chart, dayAxis, data);
     })
 
@@ -261,8 +263,11 @@ debugger
     bubbleSeries.dataFields.categoryY = 'day';
     bubbleSeries.dataFields.value = activityType;
     bubbleSeries.yAxis = axis;
-    bubbleSeries.data = data.daily;
+    bubbleSeries.data = data.daily.filter((dataItem) => isNumber(dataItem[activityType]));
     bubbleSeries.strokeOpacity = 0;
+
+    // bubbleSeries.fillOpacity = 0;
+
     bubbleSeries.maskBullets = false;
     bubbleSeries.cursorTooltipEnabled = false;
     bubbleSeries.tooltip.fontSize = 10;
@@ -278,7 +283,6 @@ debugger
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      debugger
       const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);
       return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
