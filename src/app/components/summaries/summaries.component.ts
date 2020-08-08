@@ -311,7 +311,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     // Create the map
-    const valueByCategory = events.reduce((valueByTypeMap: Map<string | number, { [type: string]: number, value: number, count: number }>, event) => {
+    const valueByCategory = events.reduce((valueByTypeMap: Map<string | number, { [type: string]: number, count: number }>, event) => {
       const stat = event.getStat(dataType);
       if (!stat) {
         return valueByTypeMap;
@@ -321,7 +321,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         || {
           [key]: null,
           [`${key}-Count`]: 0,
-          value: null,
+          [valueType]: null,
           count: 0
         };
       // Bump em up
@@ -331,16 +331,16 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       summariesChartDataInterface[`${key}-Count`] += 1;
       switch (valueType) {
         case ChartDataValueTypes.Maximum:
-          summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value > <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
+          summariesChartDataInterface[valueType] = isNumber(summariesChartDataInterface[valueType]) ? (summariesChartDataInterface[valueType] > <number>stat.getValue() ? summariesChartDataInterface[valueType] : <number>stat.getValue()) : <number>stat.getValue();
           summariesChartDataInterface[key] = isNumber(summariesChartDataInterface[key]) ? (summariesChartDataInterface[key] > <number>stat.getValue() ? summariesChartDataInterface[key] : <number>stat.getValue()) : <number>stat.getValue();
           break;
         case ChartDataValueTypes.Minimum:
-          summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value < <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
+          summariesChartDataInterface[valueType] = isNumber(summariesChartDataInterface[valueType]) ? (summariesChartDataInterface[valueType] < <number>stat.getValue() ? summariesChartDataInterface[valueType] : <number>stat.getValue()) : <number>stat.getValue();
           summariesChartDataInterface[key] = isNumber(summariesChartDataInterface[key]) ? (summariesChartDataInterface[key] < <number>stat.getValue() ? summariesChartDataInterface[key] : <number>stat.getValue()) : <number>stat.getValue();
           break;
         case ChartDataValueTypes.Average:
         case ChartDataValueTypes.Total:
-          summariesChartDataInterface.value = summariesChartDataInterface.value ? summariesChartDataInterface.value + <number>stat.getValue() : <number>stat.getValue();
+          summariesChartDataInterface[valueType] = summariesChartDataInterface[valueType] ? summariesChartDataInterface[valueType] + <number>stat.getValue() : <number>stat.getValue();
           summariesChartDataInterface[key] = summariesChartDataInterface[key] ? summariesChartDataInterface[key] + <number>stat.getValue() : <number>stat.getValue();
           break;
         default:
@@ -348,12 +348,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
       // Last additional check here.
       // If you want to pass nulls this should be removed
-      if (!isNumber(summariesChartDataInterface.value) || (summariesChartDataInterface.value === 0 && valueType === ChartDataValueTypes.Total)) {
+      if (!isNumber(summariesChartDataInterface[valueType]) || (summariesChartDataInterface[valueType] === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
       valueByTypeMap.set(this.getEventCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string|number, { [type: string]: number, value: number, count: number }>());
+    }, new Map<string|number, { [type: string]: number, count: number }>());
 
 
     if (valueType === ChartDataValueTypes.Average) {
@@ -361,7 +361,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       valueByCategory.forEach((item, type) => {
         valueByCategory.set(type, {
           // [key]: item.value / item.count, @todo support for activityType category
-          value: item.value / item.count,
+          [valueType]: item.value / item.count,
           count: item.count
         });
       });
@@ -376,13 +376,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
    * @todo remove/simplify
    * @param valueByType
    */
-  private convertToCategories(valueByType: Map<string | number, { [type: string]: number, value: number, count: number }>): SummariesChartDataInterface[] {
+  private convertToCategories(valueByType: Map<string | number, { [type: string]: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
       data.push({...{time: type, type: type, ...item}});
     });
     return data // @todo ?
-      .filter(dataItem => isNumber(dataItem.value))
+    //   .filter(dataItem => isNumber(dataItem.value))
   }
 
   /**

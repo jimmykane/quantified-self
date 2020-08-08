@@ -137,7 +137,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
     columnSeries.data = data.weekly;
     columnSeries.dataFields.dateX = 'time';
-    columnSeries.dataFields.valueY = 'value';
+    columnSeries.dataFields.valueY = this.chartDataValueType;
     columnSeries.columns.template.strokeOpacity = 0;
     columnSeries.columns.template.width = am4core.percent(95);
     columnSeries.fill = am4core.color('#ffffff');
@@ -150,7 +150,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
       return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
     columnSeries.cursorTooltipEnabled = false;
@@ -299,7 +299,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       return -target.circle.radius;
     })
     bubbleBullet.circle.adapter.add('radius', (value, target, key) => {
-      return 10 * (target.dataItem['value'] / target.dataItem.dataContext['value']) * 100 / 100
+      const radius = 10 * (target.dataItem['value'] / target.dataItem.dataContext[this.chartDataValueType]) * 100 / 100
+      // if (radius> 10){
+      //   debugger
+      // }
+      // debugger
+      return 10 * (target.dataItem['value'] / target.dataItem.dataContext[this.chartDataValueType]) * 100 / 100
+
+
       return am4core.percent(100)
       // debugger;
     })
@@ -310,7 +317,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       return 10
       // debugger;
     })
-    
+
     bubbleSeries.zIndex = 10
     bubbleSeries.adapter.add('zIndex', (value, target, key) => {
       console.log(value)

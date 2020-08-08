@@ -139,22 +139,22 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
         let count = 0;
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
           count++;
-          sum += dataItem.value;
+          sum += dataItem[chartDataValueType];
           return sum;
         }, 0) / count);
       case ChartDataValueTypes.Maximum:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem.value ? dataItem.value : min;
+          min = min <= dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
           return min;
         }, -Infinity));
       case ChartDataValueTypes.Minimum:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem.value ? dataItem.value : min;
+          min = min > dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
           return min;
         }, Infinity));
       case ChartDataValueTypes.Total:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem.value;
+          sum += dataItem[chartDataValueType];
           return sum;
         }, 0));
     }

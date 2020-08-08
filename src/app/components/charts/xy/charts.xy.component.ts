@@ -115,7 +115,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
         }
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
       });
 
@@ -170,7 +170,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
         }
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
       });
       // bullet.filters.push(ChartHelper.getShadowFilter());
@@ -200,7 +200,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         categoryLabel.label.dx = 35;
       }
       categoryLabel.label.adapter.add('text', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       categoryLabel.label.background = new am4core.RoundedRectangle();
@@ -224,11 +224,11 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
     }
     series.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-    series.dataFields[this.getSeriesValuesFieldName()] = 'value';
+    series.dataFields[this.getSeriesValuesFieldName()] = this.chartDataValueType;
 
     if (regressionSeries) {
       regressionSeries.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = 'value';
+      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = this.chartDataValueType;
     }
 
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;
