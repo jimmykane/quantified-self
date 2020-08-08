@@ -284,6 +284,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }, 0);
   }
 
+
+  // @todo replace key "value" with the name of the dataType (eg avg,max,min, etc)
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): SummariesChartDataInterface[] {
     if (this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`]) {
       return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`];
@@ -318,11 +320,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const summariesChartDataInterface = valueByTypeMap.get(this.getEventCategoryKey(event, events, categoryType, timeInterval))
         || {
           [key]: null,
+          [`${key}-Count`]: 0,
           value: null,
           count: 0
         };
       // Bump em up
       summariesChartDataInterface.count++;
+      // additional check here and bump up intentionaly
+      summariesChartDataInterface[`${key}-Count`] = summariesChartDataInterface[`${key}-Count`] || 0;
+      summariesChartDataInterface[`${key}-Count`] += 1;
       switch (valueType) {
         case ChartDataValueTypes.Maximum:
           summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value > <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
@@ -347,7 +353,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
       valueByTypeMap.set(this.getEventCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string, { value: number, count: number }>());
+    }, new Map<string|number, { [type: string]: number, value: number, count: number }>());
 
 
     if (valueType === ChartDataValueTypes.Average) {

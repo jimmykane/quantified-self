@@ -10,6 +10,7 @@ import {
 import { Log } from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
+import { RadarSeriesDataItem } from '@amcharts/amcharts4/charts';
 import { DashboardChartAbstract } from '../dashboard-chart.abstract';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
@@ -28,6 +29,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     weekly: any[], daily: any[],
     activityTypes: ActivityTypes[]
   };
+
+  useAnimations = true;
 
   protected chart: am4charts.RadarChart;
   protected logger = Log.create('ChartsBrianDevineComponent');
@@ -89,7 +92,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     dateAxis.renderer.labels.template.relativeRotation = 0;
     dateAxis.renderer.labels.template.location = 0.5;
     dateAxis.renderer.labels.template.radius = am4core.percent(-57);
-    dateAxis.renderer.labels.template.fontSize = '8px';
+    dateAxis.renderer.labels.template.fontSize = '1em';
 
     // dateAxis.dateFormats.setKey('week', 'w');
     // dateAxis.periodChangeDateFormats.setKey('week', 'w');
@@ -277,23 +280,51 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleSeries.tooltip.background.fillOpacity = 0.8;
 
 
+    // bubbleSeries.bulletsContainer.parent = chart.seriesContainer;
+
     const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
     bubbleBullet.locationX = 0.5;
     bubbleBullet.stroke = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
     bubbleBullet.fill = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+    // bubbleBullet.fillOpacity = 0;
     bubbleBullet.tooltipText = '{value}';
     bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
       const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext[`${activityType}-Count`] ? `[bold]${target.dataItem.dataContext[`${activityType}-Count`]}[/b] Activities` : ``}`
     });
     bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
       return -target.circle.radius;
     })
+    bubbleBullet.circle.adapter.add('radius', (value, target, key) => {
+      return 10 * (target.dataItem['value'] / target.dataItem.dataContext['value']) * 100 / 100
+      return am4core.percent(100)
+      // debugger;
+    })
+
+    bubbleBullet.zIndex = 10
+    bubbleBullet.adapter.add('zIndex', (value, target, key) => {
+      debugger
+      return 10
+      // debugger;
+    })
+    
+    bubbleSeries.zIndex = 10
+    bubbleSeries.adapter.add('zIndex', (value, target, key) => {
+      console.log(value)
+      return 10
+      // debugger;
+    })
+
+    // bubbleBullet.adapter.add('strokeWidth', (value, target, key) => {
+    //   return 10 * (target.dataItem['value'] / target.dataItem.dataContext['value']) * 100 / 100
+    //   return am4core.percent(100)
+    //   // debugger;
+    // })
     // //
-    bubbleSeries.heatRules.push({target: bubbleBullet.circle, min: 2, max: 12, dataField: 'value', property: 'radius'});
+    // bubbleSeries.heatRules.push({target: bubbleBullet.circle, min: 1, max: 14, dataField: 'value', property: 'radius'});
     bubbleSeries.dataItems.template.locations.categoryY = 0.5;
   }
 }
