@@ -10,12 +10,12 @@ import {
 import { Log } from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import { RadarSeriesDataItem } from '@amcharts/amcharts4/charts';
 import { DashboardChartAbstract } from '../dashboard-chart.abstract';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-brian-devine-chart',
@@ -52,10 +52,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.data || (simpleChanges.chartTheme && this.chart)) {
-      this.data.weekly = [...this.data.weekly].sort(this.sortData(ChartDataCategoryTypes.DateType))
-        .map((data) => {
-          return {...data, ...{endTime: data.time + 7 * 24 * 60 * 60 * 1000}}
-        });
       this.data.daily = [...this.data.daily].sort(this.sortData(ChartDataCategoryTypes.DateType))
         .map((data) => {
           return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
@@ -280,7 +276,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleSeries.tooltip.background.fillOpacity = 0.8;
 
 
-    // bubbleSeries.bulletsContainer.parent = chart.seriesContainer;
+    bubbleSeries.bulletsContainer.parent = chart.seriesContainer;
 
     const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
     bubbleBullet.locationX = 0.5;
@@ -293,7 +289,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         return '';
       }
       const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);
-      return `{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext[`${activityType}-Count`] ? `[bold]${target.dataItem.dataContext[`${activityType}-Count`]}[/b] Activities` : ``}`
+      return `${activityType}\n{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext[`${activityType}-Count`] ? `[bold]${target.dataItem.dataContext[`${activityType}-Count`]}[/b] Activities` : ``}`
     });
     bubbleBullet.adapter.add('tooltipY', function (tooltipY, target) {
       return -target.circle.radius;
@@ -304,26 +300,52 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       //   debugger
       // }
       // debugger
-      return 10 * (target.dataItem['value'] / target.dataItem.dataContext[this.chartDataValueType]) * 100 / 100
-
+      // return 10 * (target.dataItem['value'] / target.dataItem.dataContext[this.chartDataValueType]) * 100 / 100
+      // return 6 * (1 + (target.dataItem['value'] / target.dataItem.dataContext[this.chartDataValueType]) * 100 / 100)
+      const activityDataFromDataItem = this.data.activityTypes.reduce((obj, dataActivityType) => {
+        if (!isNumber(target.dataItem.dataContext[dataActivityType])) {
+          return obj
+        }
+        obj[dataActivityType] = target.dataItem.dataContext[dataActivityType]
+        return obj
+      }, {})
+      const index = Object.keys(activityDataFromDataItem).sort(function (a, b) {
+        return activityDataFromDataItem[a] - activityDataFromDataItem[b]
+      }).indexOf(activityType);
+      const k = Object.keys(activityDataFromDataItem)
+      const a = ((1 / Object.keys(activityDataFromDataItem).length) * 100) * (index + 1) ;
+      // debugger
+      return 10 * (a/100)
 
       return am4core.percent(100)
       // debugger;
     })
 
-    bubbleBullet.zIndex = 10
-    bubbleBullet.adapter.add('zIndex', (value, target, key) => {
-      debugger
-      return 10
-      // debugger;
+    bubbleBullet.adapter.add('dx', (value, target, key) => {
+      if (activityType === ActivityTypes.Walking){
+        target.zIndex = 1000000
+        bubbleBullet.zIndex = 1000000
+        bubbleBullet.circle.zIndex = 1000000
+        return 0;
+
+      }
+      // Find the activities from the dataItem
+      const activityDataFromDataItem = this.data.activityTypes.reduce((obj, dataActivityType) => {
+        if (!isNumber( target.dataItem.dataContext[dataActivityType])){
+          return obj
+        }
+        obj[dataActivityType] = target.dataItem.dataContext[dataActivityType]
+        return obj
+      }, {})
+      const index = Object.keys(activityDataFromDataItem).sort(function (a, b) {
+        return activityDataFromDataItem[a] - activityDataFromDataItem[b]
+      }).indexOf(activityType);
+
+      target.zIndex = index
+      bubbleBullet.zIndex = index
+      return 0;
     })
 
-    bubbleSeries.zIndex = 10
-    bubbleSeries.adapter.add('zIndex', (value, target, key) => {
-      console.log(value)
-      return 10
-      // debugger;
-    })
 
     // bubbleBullet.adapter.add('strokeWidth', (value, target, key) => {
     //   return 10 * (target.dataItem['value'] / target.dataItem.dataContext['value']) * 100 / 100
