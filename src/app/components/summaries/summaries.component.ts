@@ -353,17 +353,25 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       }
       valueByTypeMap.set(this.getEventCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string|number, { [type: string]: number, count: number }>());
-
+    }, new Map<string | number, { [type: string]: number, count: number }>());
 
     if (valueType === ChartDataValueTypes.Average) {
       // Calc avg
       valueByCategory.forEach((item, type) => {
-        valueByCategory.set(type, {
-          // [key]: item.value / item.count, @todo support for activityType category
-          [valueType]: item.value / item.count,
+        Object.keys(valueByCategory).forEach((key) => {
+          if (!valueByCategory[`${key}-Count`]) {
+            return;
+          }
+          valueByCategory.set(type, {...item, ...{
+            count: item.count,
+            [key]: item[key] / item[`${key}-Count`]
+          }})
+        })
+        valueByCategory.set(type, {...item, ...{
+          // [key]: item[valueType] / item.count,
+          [valueType]: item[valueType] / item.count,
           count: item.count
-        });
+        }});
       });
     }
     const map = this.convertToCategories(valueByCategory)
