@@ -198,6 +198,32 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // link.marginRight = 10;
     // link.text = 'Chart design inspired by Brian Devine';
 
+    chart.events.on("ready",  () => {
+      chart.series.each( (series) =>  {
+        series.bullets.each( (bullet) => {
+          bullet.clones.each( (item) => {
+            if (!item.dataItem || !item.dataItem.dataContext) {
+              return;
+            }
+
+            // Find the activities from the dataItem
+            const activityDataFromDataItem = this.data.activityTypes.reduce((obj, dataActivityType) => {
+              if (!isNumber(item.dataItem.dataContext[dataActivityType])) {
+                return obj
+              }
+              obj[dataActivityType] = item.dataItem.dataContext[dataActivityType]
+              return obj
+            }, {})
+            const index = Object.keys(activityDataFromDataItem).sort(function (a, b) {
+              return activityDataFromDataItem[b] - activityDataFromDataItem[a]
+            }).indexOf(series.name);
+
+            item.zIndex = index
+          })
+        })
+      })
+    });
+
     return chart;
   }
 
@@ -260,6 +286,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     // bubble series
     const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
+    bubbleSeries.name = activityType;
     bubbleSeries.dataFields.dateX = 'time';
     bubbleSeries.dataFields.categoryY = 'day';
     bubbleSeries.dataFields.value = activityType;
@@ -276,7 +303,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleSeries.tooltip.background.fillOpacity = 0.8;
 
 
-    bubbleSeries.bulletsContainer.parent = chart.seriesContainer;
+    bubbleSeries.bulletsContainer = chart.bulletsContainer;
 
     const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
     bubbleBullet.locationX = 0.5;
@@ -312,48 +339,10 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       const index = Object.keys(activityDataFromDataItem).sort(function (a, b) {
         return activityDataFromDataItem[a] - activityDataFromDataItem[b]
       }).indexOf(activityType);
-      const k = Object.keys(activityDataFromDataItem)
-      const a = ((1 / Object.keys(activityDataFromDataItem).length) * 100) * (index + 1) ;
+      const percentage = ((1 / Object.keys(activityDataFromDataItem).length) * 100) * (index + 1);
       // debugger
-      return 10 * (a/100)
-
-      return am4core.percent(100)
-      // debugger;
+      return 12 * (percentage / 100)
     })
-
-    bubbleBullet.adapter.add('dx', (value, target, key) => {
-      if (activityType === ActivityTypes.Walking){
-        target.zIndex = 1000000
-        bubbleBullet.zIndex = 1000000
-        bubbleBullet.circle.zIndex = 1000000
-        return 0;
-
-      }
-      // Find the activities from the dataItem
-      const activityDataFromDataItem = this.data.activityTypes.reduce((obj, dataActivityType) => {
-        if (!isNumber( target.dataItem.dataContext[dataActivityType])){
-          return obj
-        }
-        obj[dataActivityType] = target.dataItem.dataContext[dataActivityType]
-        return obj
-      }, {})
-      const index = Object.keys(activityDataFromDataItem).sort(function (a, b) {
-        return activityDataFromDataItem[a] - activityDataFromDataItem[b]
-      }).indexOf(activityType);
-
-      target.zIndex = index
-      bubbleBullet.zIndex = index
-      return 0;
-    })
-
-
-    // bubbleBullet.adapter.add('strokeWidth', (value, target, key) => {
-    //   return 10 * (target.dataItem['value'] / target.dataItem.dataContext['value']) * 100 / 100
-    //   return am4core.percent(100)
-    //   // debugger;
-    // })
-    // //
-    // bubbleSeries.heatRules.push({target: bubbleBullet.circle, min: 1, max: 14, dataField: 'value', property: 'radius'});
     bubbleSeries.dataItems.template.locations.categoryY = 0.5;
   }
 }
