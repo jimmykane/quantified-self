@@ -273,7 +273,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     columnSeries.tooltip.background.fillOpacity = 1;
     columnSeries.columns.template.tooltipText = '{valueY}';
     columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext) {
+      if (!target.dataItem || !target.dataItem.dataContext || !target.dataItem.dataContext[activityType]) {
         return '';
       }
       const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);
