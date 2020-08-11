@@ -226,9 +226,9 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       range.date = new Date(firstDay.getFullYear(), i, 0, 0, 0, 0);
       range.endDate = new Date(firstDay.getFullYear(), i + 1, 0, 0, 0, 0)
       if (i % 2) {
-        range.axisFill.fillOpacity = 0.4;
+        range.axisFill.fillOpacity = 0.6;
       } else {
-        range.axisFill.fillOpacity = 0.8;
+        range.axisFill.fillOpacity = 1;
       }
       (<am4charts.AxisFillCircular>range.axisFill).radius = -28;
       (<am4charts.AxisFillCircular>range.axisFill).adapter.add('innerRadius', function (innerRadius, target) {
@@ -283,6 +283,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     // bubble series
     const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
+    bubbleSeries.simplifiedProcessing = true
     bubbleSeries.name = activityType;
     bubbleSeries.dataFields.dateX = 'time';
     bubbleSeries.dataFields.categoryY = 'day';
@@ -297,7 +298,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleSeries.cursorTooltipEnabled = false;
     bubbleSeries.tooltip.fontSize = 10;
     bubbleSeries.tooltip.pointerOrientation = 'down';
-    bubbleSeries.tooltip.background.fillOpacity = 0.8;
+    // bubbleSeries.tooltip.background.fillOpacity = 0.8;
 
 
     bubbleSeries.bulletsContainer = chart.bulletsContainer;
@@ -306,7 +307,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     bubbleBullet.locationX = 0.5;
     bubbleBullet.stroke = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
     bubbleBullet.fill = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
-    bubbleBullet.fillOpacity = 0;
+    // bubbleBullet.fillOpacity = 0;
     bubbleBullet.tooltipText = '{value}';
     bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.dataContext) {
