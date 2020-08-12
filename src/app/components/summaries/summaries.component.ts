@@ -351,6 +351,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!isNumber(summariesChartDataInterface[valueType]) || (summariesChartDataInterface[valueType] === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
+      if (!isNumber(summariesChartDataInterface[key])){
+        delete summariesChartDataInterface[key];
+        delete summariesChartDataInterface[`${key}-Count`];
+      }
       valueByTypeMap.set(this.getEventCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
     }, new Map<string | number, { [type: string]: number, count: number }>());
