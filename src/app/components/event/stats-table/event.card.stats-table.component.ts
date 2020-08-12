@@ -51,6 +51,8 @@ export class EventCardStatsTableComponent implements OnChanges {
     // @todo refactor and extract to service
     // @todo perfromance this costs! Gets called more than 1-2 times, about 5
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
+      const a  = activity.getStats();
+      debugger
       Array.from(activity.getStats().values()).forEach((stat) => {
         // If its not derived set it
         if (!DynamicDataLoader.isUnitDerivedDataType(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType())) {
@@ -62,6 +64,7 @@ export class EventCardStatsTableComponent implements OnChanges {
         if (!this.userUnitSettings) {
           return
         }
+
 
         // If the user has preference
         if (

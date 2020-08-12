@@ -52,15 +52,12 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.data || (simpleChanges.chartTheme && this.chart)) {
-      this.data.daily = [...this.data.daily].sort(this.sortData(ChartDataCategoryTypes.DateType))
+      this.data.daily = this.data.daily
         .map((data) => {
           return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
         });
-      // debugger;
+      // debugger
       this.chart = <am4charts.RadarChart>this.createChart(am4charts.RadarChart, this.data);
-      // this.chart.data = this.data.daily;
-      // this.chart.yAxes.each((axis) => axis.data = this.data.daily)
-      // this.chart.series.each((series) => series.data = this.data.daily)
     }
 
 
@@ -310,7 +307,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // bubbleBullet.fillOpacity = 0;
     bubbleBullet.tooltipText = '{value}';
     bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.dataContext) {
+      if (!target.dataItem || !target.dataItem.dataContext || !target.dataItem.dataContext[activityType]) {
         return '';
       }
       const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);

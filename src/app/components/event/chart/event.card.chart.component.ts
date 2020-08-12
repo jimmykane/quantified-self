@@ -29,7 +29,6 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
@@ -103,26 +102,7 @@ import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.l
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppColors } from '../../../services/color/app.colors';
-import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
-import { DataAltitudeMax } from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
-import { DataAltitudeAvg } from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
-import { DataCadence } from '@sports-alliance/sports-lib/lib/data/data.cadence';
-import { DataCadenceMin } from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
-import { DataCadenceAvg } from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
-import { DataCadenceMax } from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
-import { DataSpeedMax } from '@sports-alliance/sports-lib/lib/data/data.speed-max';
-import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import { DataSpeedMin } from '@sports-alliance/sports-lib/lib/data/data.speed-min';
-import { DataPaceMax } from '@sports-alliance/sports-lib/lib/data/data.pace-max';
-import { DataPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
-import { DataPaceMin } from '@sports-alliance/sports-lib/lib/data/data.pace-min';
-import { DataSwimPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
-import { DataSwimPaceMin } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-min';
-import { DataVerticalSpeedMax } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-max';
-import { DataVerticalSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-avg';
-import { DataVerticalSpeedMin } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-min';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -393,36 +373,36 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         const labelData = <LabelData>{
           name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
           average: {
-            value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
-            unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayUnit()}`
+            value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
+            unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
           },
           max: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayUnit()}`
           },
           min: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayUnit()}`
           },
           minToMaxDiff: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
           }
         };
         if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
           labelData.gain = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
           };
           labelData.loss = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
           };
         }
         if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
           labelData.slopePercentage = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
           };
         }
         // Todo should group pace and derived units
@@ -822,7 +802,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
 
       // @todo should do the same with distance (miles) and vertical speed
-      [...new Set(EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
+      [...new Set(ActivityUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
         .filter((stream) => {
           switch (stream.type) {
             case  DataDistance.type:

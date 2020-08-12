@@ -28,6 +28,7 @@ import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/dat
 import { DataGradeAdjustedSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed-avg';
 import { DataMovingTime } from '@sports-alliance/sports-lib/lib/data/data.moving-time';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -59,7 +60,7 @@ export class EventCardStatsGridComponent implements OnChanges {
       this.stats = [...this.selectedActivities[0].getStats().values()];
 
     } else {
-      this.stats = EventUtilities.getSummaryStatsForActivities(this.selectedActivities);
+      this.stats = ActivityUtilities.getSummaryStatsForActivities(this.selectedActivities);
     }
 
     const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
