@@ -49,11 +49,8 @@ export class EventCardStatsTableComponent implements OnChanges {
 
     // Collect all the stat types from all the activities
     // @todo refactor and extract to service
-    // @todo perfromance this costs! Gets called more than 1-2 times, about 5
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
-      const a  = activity.getStats();
-      debugger
-      Array.from(activity.getStats().values()).forEach((stat) => {
+      activity.getStatsAsArray().forEach((stat) => {
         // If its not derived set it
         if (!DynamicDataLoader.isUnitDerivedDataType(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType())) {
           statsMap.set(stat.getType(), stat);
