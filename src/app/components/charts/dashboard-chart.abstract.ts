@@ -15,9 +15,9 @@ import * as am4core from '@amcharts/amcharts4/core';
 @Directive()
 export abstract class DashboardChartAbstract extends ChartAbstractDirective implements OnChanges, AfterViewInit {
   @Input() data: any;
-  @Input() chartDataType: string;
-  @Input() chartDataValueType: ChartDataValueTypes;
-  @Input() chartDataCategoryType: ChartDataCategoryTypes;
+  @Input() chartDataType?: string;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() isLoading: boolean;
 
@@ -47,7 +47,8 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
 
     if (simpleChanges.data) {
-
+      // @todo this might change even if not needed
+      // @todo not sure if "important" as the caller also does the same
       this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
       if (this.chart) {
         this.chart.data = this.data || [];
@@ -132,28 +133,28 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
   }
 
-  protected getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
+  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes): DataInterface {
     switch (chartDataValueType) {
       case ChartDataValueTypes.Average:
         let count = 0;
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
           count++;
-          sum += dataItem.value;
+          sum += dataItem[chartDataValueType];
           return sum;
         }, 0) / count);
       case ChartDataValueTypes.Maximum:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem.value ? dataItem.value : min;
+          min = min <= dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
           return min;
         }, -Infinity));
       case ChartDataValueTypes.Minimum:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem.value ? dataItem.value : min;
+          min = min > dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
           return min;
         }, Infinity));
       case ChartDataValueTypes.Total:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem.value;
+          sum += dataItem[chartDataValueType];
           return sum;
         }, 0));
     }

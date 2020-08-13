@@ -24,6 +24,7 @@ import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
+  ChartTypes,
   TileChartSettingsInterface,
   TileMapSettingsInterface,
   TileSettingsInterface,
@@ -36,7 +37,6 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import * as equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import * as weeknumber from 'weeknumber'
-import { time } from '@amcharts/amcharts4/core';
 
 @Component({
   selector: 'app-summaries',
@@ -55,7 +55,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   public numberOfCols: number;
 
 
-  public tiles: (SummariesChartTileInterface | SummariesMapTileInterface)[] = [];
+  public tiles: (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[] = [];
 
   public tileTypes = TileTypes;
 
@@ -63,7 +63,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private chartThemeSubscription: Subscription;
   private chartTheme: ChartThemes;
 
-  private getChartDataCache: {string: SummariesChartDataInterface[] }[] = []
+  private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
 
   constructor(private router: Router,
               private authService: AppAuthService,
@@ -99,7 +99,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.unsubscribeFromAll();
   }
 
-  getCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): string | number {
+  getEventCategoryKey(event: EventInterface, events: EventInterface[], categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): string | number {
     switch (categoryType) {
       case ChartDataCategoryTypes.ActivityType:
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
@@ -185,21 +185,47 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     this.loaded();
   }
 
-  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface | SummariesMapTileInterface)[] {
-    return tiles.reduce((chartsAndData: (SummariesChartTileInterface | SummariesMapTileInterface)[], tile) => {
+  /**
+   * Contrustucts an object to the view template `TileSettingsInterface`
+   * @param tiles
+   * @param events
+   * @private
+   */
+  private getChartsAndData(tiles: TileSettingsInterface[], events?: EventInterface[]): (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[] {
+    return tiles.reduce((chartsAndData: (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)[], tile) => {
       switch (tile.type) {
+        // Chart
         case TileTypes.Chart:
           const chartTile = <TileChartSettingsInterface>tile;
           chartTile.dataTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto
-          chartsAndData.push({
-            ...chartTile, ...{
-              timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
-              data: events ? // The below will create a new instance of this events due to filtering
-                this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType, chartTile.dataTimeInterval)
-                : [] // We send null if there are no events for the input date range
-            }
-          });
+          // 2 Different processing here, one generic and one for Brian Devine
+          switch (chartTile.chartType) {
+            case ChartTypes.BrianDevine:
+              const data = {
+                daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
+                weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly),
+                activityTypes: [...new Set(events.map((event) => this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, chartTile.dataTimeInterval)))]
+              };
+              chartsAndData.push({
+                ...chartTile, ...{
+                  timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
+                  data: data
+                }
+              });
+              break;
+            default:
+              chartsAndData.push({
+                ...chartTile, ...{
+                  timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
+                  data: events ? // The below will create a new instance of this events due to filtering
+                    this.getChartData(events, chartTile.dataType, chartTile.dataValueType, chartTile.dataCategoryType, chartTile.dataTimeInterval)
+                    : [] // We send null if there are no events for the input date range
+                }
+              });
+              break;
+          }
           break;
+        // Map
         case TileTypes.Map:
           const mapTile = <TileMapSettingsInterface>tile;
           chartsAndData.push({
@@ -258,6 +284,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }, 0);
   }
 
+
+  // @todo replace key "value" with the name of the dataType (eg avg,max,min, etc)
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): SummariesChartDataInterface[] {
     if (this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`]) {
       return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`];
@@ -283,49 +311,74 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     // Create the map
-    const valueByCategory = events.reduce((valueByTypeMap: Map<string | number, { value: number, count: number }>, event) => {
+    const valueByCategory = events.reduce((valueByTypeMap: Map<string | number, { [type: string]: number, count: number }>, event) => {
       const stat = event.getStat(dataType);
       if (!stat) {
         return valueByTypeMap;
       }
-      const summariesChartDataInterface = valueByTypeMap.get(this.getCategoryKey(event, events, categoryType, timeInterval))
+      const key = this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, timeInterval)
+      const summariesChartDataInterface = valueByTypeMap.get(this.getEventCategoryKey(event, events, categoryType, timeInterval))
         || {
-          value: null,
+          [key]: null,
+          [`${key}-Count`]: 0,
+          [valueType]: null,
           count: 0
         };
       // Bump em up
       summariesChartDataInterface.count++;
+      // additional check here and bump up intentionaly
+      summariesChartDataInterface[`${key}-Count`] = summariesChartDataInterface[`${key}-Count`] || 0;
+      summariesChartDataInterface[`${key}-Count`] += 1;
       switch (valueType) {
         case ChartDataValueTypes.Maximum:
-          summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value > <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
+          summariesChartDataInterface[valueType] = isNumber(summariesChartDataInterface[valueType]) ? (summariesChartDataInterface[valueType] > <number>stat.getValue() ? summariesChartDataInterface[valueType] : <number>stat.getValue()) : <number>stat.getValue();
+          summariesChartDataInterface[key] = isNumber(summariesChartDataInterface[key]) ? (summariesChartDataInterface[key] > <number>stat.getValue() ? summariesChartDataInterface[key] : <number>stat.getValue()) : <number>stat.getValue();
           break;
         case ChartDataValueTypes.Minimum:
-          summariesChartDataInterface.value = isNumber(summariesChartDataInterface.value) ? (summariesChartDataInterface.value < <number>stat.getValue() ? summariesChartDataInterface.value : <number>stat.getValue()) : <number>stat.getValue();
+          summariesChartDataInterface[valueType] = isNumber(summariesChartDataInterface[valueType]) ? (summariesChartDataInterface[valueType] < <number>stat.getValue() ? summariesChartDataInterface[valueType] : <number>stat.getValue()) : <number>stat.getValue();
+          summariesChartDataInterface[key] = isNumber(summariesChartDataInterface[key]) ? (summariesChartDataInterface[key] < <number>stat.getValue() ? summariesChartDataInterface[key] : <number>stat.getValue()) : <number>stat.getValue();
           break;
         case ChartDataValueTypes.Average:
         case ChartDataValueTypes.Total:
-          summariesChartDataInterface.value = summariesChartDataInterface.value ? summariesChartDataInterface.value + <number>stat.getValue() : <number>stat.getValue();
+          summariesChartDataInterface[valueType] = summariesChartDataInterface[valueType] ? summariesChartDataInterface[valueType] + <number>stat.getValue() : <number>stat.getValue();
+          summariesChartDataInterface[key] = summariesChartDataInterface[key] ? summariesChartDataInterface[key] + <number>stat.getValue() : <number>stat.getValue();
           break;
         default:
           throw new Error('Not implemented');
       }
       // Last additional check here.
       // If you want to pass nulls this should be removed
-      if (!isNumber(summariesChartDataInterface.value) || (summariesChartDataInterface.value === 0 && valueType === ChartDataValueTypes.Total)) {
+      if (!isNumber(summariesChartDataInterface[valueType]) || (summariesChartDataInterface[valueType] === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
-      valueByTypeMap.set(this.getCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
+      if (!isNumber(summariesChartDataInterface[key])){
+        delete summariesChartDataInterface[key];
+        delete summariesChartDataInterface[`${key}-Count`];
+      }
+      valueByTypeMap.set(this.getEventCategoryKey(event, events, categoryType, timeInterval), summariesChartDataInterface); // @todo break the join (not use display value)
       return valueByTypeMap
-    }, new Map<string, { value: number, count: number }>());
-
+    }, new Map<string | number, { [type: string]: number, count: number }>());
 
     if (valueType === ChartDataValueTypes.Average) {
       // Calc avg
       valueByCategory.forEach((item, type) => {
-        valueByCategory.set(type, {value: item.value / item.count, count: item.count});
+        Object.keys(valueByCategory).forEach((key) => {
+          if (!valueByCategory[`${key}-Count`]) {
+            return;
+          }
+          valueByCategory.set(type, {...item, ...{
+            count: item.count,
+            [key]: item[key] / item[`${key}-Count`]
+          }})
+        })
+        valueByCategory.set(type, {...item, ...{
+          // [key]: item[valueType] / item.count,
+          [valueType]: item[valueType] / item.count,
+          count: item.count
+        }});
       });
     }
-    const map  = this.convertToCategories(valueByCategory)
+    const map = this.convertToCategories(valueByCategory)
     return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`] = map;
   }
 
@@ -335,13 +388,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
    * @todo remove/simplify
    * @param valueByType
    */
-  private convertToCategories(valueByType: Map<string | number, { value: number, count: number }>): SummariesChartDataInterface[] {
+  private convertToCategories(valueByType: Map<string | number, { [type: string]: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
-      data.push({time: type, type: type, value: item.value, count: item.count})
+      data.push({...{time: type, type: type, ...item}});
     });
-    return data
-      .filter(dataItem => isNumber(dataItem.value))
+    return data // @todo ?
+    //   .filter(dataItem => isNumber(dataItem.value))
   }
 
   /**

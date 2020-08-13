@@ -569,6 +569,7 @@ export class AppUserService implements OnDestroy {
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || AppUserService.getDefaultMapTheme();
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
+    settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();

@@ -62,6 +62,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
   public chartGainAndLossThreshold: number = AppUserService.getDefaultGainAndLossThreshold();
   public chartDataTypesToUse: string[];
   public showMapLaps = true;
+  public showMapPoints = false;
   public showMapArrows = true;
   public chartDownSamplingLevel = AppUserService.getDefaultDownSamplingLevel();
   public chartTheme: ChartThemes;
@@ -142,6 +143,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
         this.useChartAnimations = user.settings.chartSettings.useAnimations;
         this.chartDisableGrouping = user.settings.chartSettings.disableGrouping;
         this.showMapLaps = user.settings.mapSettings.showLaps;
+        this.showMapPoints = user.settings.mapSettings.showPoints;
         this.showChartLaps = user.settings.chartSettings.showLaps;
         this.showChartGrid = user.settings.chartSettings.showGrid;
         this.stackChartYAxes = user.settings.chartSettings.stackYAxes;

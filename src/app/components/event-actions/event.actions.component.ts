@@ -29,6 +29,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 @Component({
   selector: 'app-event-actions',
@@ -134,7 +135,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     this.event.getFirstActivity().clearStreams();
     this.event.getFirstActivity().addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.event.getFirstActivity().getID()).pipe(take(1)).toPromise());
     this.event.getFirstActivity().clearStats();
-    EventUtilities.generateMissingStreamsAndStatsForActivity(this.event.getFirstActivity());
+    ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.event.getFirstActivity());
     EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.writeAllEventData(this.user, this.event);
     this.snackBar.open('Activity and event statistics have been recalculated', null, {
@@ -174,6 +175,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.event.name,
       new EventExporterGPX().fileExtension,
     );
+    this.afa.logEvent('downloaded_gpx_file');
     this.snackBar.open('GPX file served', null, {
       duration: 2000,
     });
