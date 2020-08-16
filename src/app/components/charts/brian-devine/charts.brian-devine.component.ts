@@ -25,7 +25,7 @@ import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/ti
 })
 export class ChartsBrianDevineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
 
-  chartDataCategoryType?: ChartDataCategoryTypes.ActivityType;
+  chartDataCategoryType = ChartDataCategoryTypes.DateType;
 
   @Input() data: {
     weekly: any[], daily: any[],
@@ -58,7 +58,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         .map((data) => {
           return {...data, ...{day: new Date(data.time).toLocaleString('en-us', {weekday: 'short'})}}
         });
-      // debugger
       this.chart = <am4charts.RadarChart>this.createChart(am4charts.RadarChart, this.data);
     }
 
@@ -71,17 +70,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     return this.zone.runOutsideAngular(() => {
 
-    // debugger
     const chart = <am4charts.RadarChart>super.createChart(am4charts.RadarChart);
-    // chart.data = data.weekly; @todo is this needed
-
     chart.innerRadius = am4core.percent(15);
     chart.radius = am4core.percent(90);
     chart.fontSize = '11px';
     chart.startAngle = 100;
     chart.endAngle = chart.startAngle + 340;
+
     // Create axes
-    // debugger;
     const dateAxis = chart.xAxes.push(<am4charts.DateAxis<am4charts.AxisRendererCircular>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
     // dateAxis.baseInterval = {timeUnit: 'week', count: 1};
     dateAxis.renderer.innerRadius = am4core.percent(40);
@@ -219,7 +215,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     const totalNumberOfMonths = lastDay.getMonth() - firstDay.getMonth() +
       (12 * (lastDay.getFullYear() - firstDay.getFullYear())) + 1 // Note the +1 here
 
-    // debugger
     for (let i = 0; i < totalNumberOfMonths; i++) {
       const range = axis.axisRanges.create();
       range.date = new Date(firstDay.getFullYear(), i, 0, 0, 0, 0);
