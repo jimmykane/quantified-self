@@ -172,7 +172,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event.getID());
     this.fileService.downloadFile(
       blob,
-      this.event.name,
+      this.getFileName(this.event),
       new EventExporterGPX().fileExtension,
     );
     this.afa.logEvent('downloaded_gpx_file');
@@ -197,7 +197,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
             }),
           responseType: 'arraybuffer',
         }).toPromise();
-        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), this.serviceMetaData.serviceWorkoutID, 'fit');
+        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), `${this.getFileName(this.event)}#${this.serviceMetaData.serviceWorkoutID}`, 'fit');
         this.snackBar.open('Download started', null, {
           duration: 2000,
         });
@@ -231,5 +231,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
   }
 
+  private getFileName(event): string {
+    return `${this.event.startDate.toISOString()}#${this.event.getActivityTypesAsString()}`
+  }
 
 }
