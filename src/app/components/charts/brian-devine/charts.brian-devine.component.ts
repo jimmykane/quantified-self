@@ -14,8 +14,8 @@ import { DashboardChartAbstract } from '../dashboard-chart.abstract';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 
 @Component({
   selector: 'app-brian-devine-chart',
@@ -24,6 +24,8 @@ import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpe
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartsBrianDevineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+
+  chartDataCategoryType?: ChartDataCategoryTypes.ActivityType;
 
   @Input() data: {
     weekly: any[], daily: any[],
@@ -328,7 +330,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         return activityDataFromDataItem[a] - activityDataFromDataItem[b]
       }).indexOf(activityType);
       const percentage = ((1 / Object.keys(activityDataFromDataItem).length) * 100) * (index + 1);
-      return 10 * (percentage / 100)
+      return 8 * (percentage / 100)
     })
 
 
