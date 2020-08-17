@@ -161,15 +161,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     // @todo
     // title.text = '[bold]IN ' + firstDay.getFullYear() + '\nI CYCLED ' + Math.round(total) + ' km.\n[font-size:11; #ffffff]Each circle represents a bike ride. Size represents distance.';
 
-    // const link = chart.createChild(am4core.TextLink);
-    // link.fill = am4core.color('#ffffff');
-    // link.fontSize = 13;
-    // link.url = 'https://www.instagram.com/brian_devine/';
-    // link.valign = 'bottom';
-    // link.align = 'right';
-    // link.marginRight = 10;
-    // link.text = 'Chart design inspired by Brian Devine';
-
     chart.events.on("ready",  () => {
       chart.series.each( (series) =>  {
         series.bullets.each( (bullet) => {
@@ -229,16 +220,16 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         return axis.renderer.pixelRadius + 7;
       })
       range.axisFill.fill = am4core.color('#b9ce37');
-      range.axisFill.stroke = am4core.color('#5f6062');
+      // range.axisFill.stroke = am4core.color('#5f6062');
       range.grid.disabled = true;
       range.label.text = totalNumberOfMonths > 12
         ? `${range.endDate.toLocaleString('default', {month: 'long'})} ${range.endDate.getFullYear()}`
         : `${range.endDate.toLocaleString('default', {month: 'long'})}`;
       // range.label.text = chart.dateFormatter.language.translate(chart.dateFormatter.months[range.date.getMonth()]);
       (<am4charts.AxisLabelCircular>range.label).bent = true;
-      (<am4charts.AxisLabelCircular>range.label).radius = 10;
-      range.label.fontSize = 10;
-      range.label.paddingBottom = 5;
+      (<am4charts.AxisLabelCircular>range.label).radius = 12;
+      range.label.fontSize = 12;
+      range.label.paddingBottom = 2;
       range.label.interactionsEnabled = false;
       range.axisFill.interactionsEnabled = true;
       range.axisFill.cursorOverStyle = am4core.MouseCursorStyle.pointer;
