@@ -160,7 +160,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event.getID());
     this.fileService.downloadFile(
       blob,
-      this.event.name,
+      this.getFileName(this.event),
       new EventExporterJSON().fileExtension,
     );
     this.snackBar.open('JSON file served', null, {
