@@ -84,14 +84,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     dateAxis.renderer.minGridDistance = 5;
     dateAxis.renderer.labels.template.relativeRotation = 0;
     dateAxis.renderer.labels.template.location = 0.5;
-    dateAxis.renderer.labels.template.radius = am4core.percent(-57);
+    dateAxis.renderer.labels.template.radius = am4core.percent(-58);
     dateAxis.renderer.labels.template.fontSize = '1em';
 
     // dateAxis.dateFormats.setKey('week', 'w');
     // dateAxis.periodChangeDateFormats.setKey('week', 'w');
     // dateAxis.dateFormatter.dateFormat = this.getChartDateFormat(this.chartDataTimeInterval);
-    // dateAxis.dateFormats.setKey(key, this.getAxisDateFormat(this.chartDataTimeInterval));
-    // dateAxis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(this.chartDataTimeInterval));
+    // dateAxis.dateFormats.setKey('week', this.getAxisDateFormat(this.chartDataTimeInterval));
+    // dateAxis.periodChangeDateFormats.setKey('week', this.getAxisDateFormat(this.chartDataTimeInterval));
 
     dateAxis.cursorTooltipEnabled = false;
 
@@ -150,14 +150,14 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     //   return `[font-size: 1.4em]${value.getDisplayType()}[/]\n[bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/]\n(${this.chartDataValueType})`;
     // });
 
-    const title = chart.createChild(am4core.Label);
-    title.fill = am4core.color('#b9ce37');
-    title.fontSize = 20;
-    title.isMeasured = false;
-    title.valign = 'top';
-    title.align = 'left';
-    title.wrap = true;
-    title.width = 200;
+    // const title = chart.createChild(am4core.Label);
+    // title.fill = am4core.color('#b9ce37');
+    // title.fontSize = 20;
+    // title.isMeasured = false;
+    // title.valign = 'top';
+    // title.align = 'left';
+    // title.wrap = true;
+    // title.width = 200;
     // @todo
     // title.text = '[bold]IN ' + firstDay.getFullYear() + '\nI CYCLED ' + Math.round(total) + ' km.\n[font-size:11; #ffffff]Each circle represents a bike ride. Size represents distance.';
 
@@ -262,7 +262,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         return '';
       }
       const dataItem = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[activityType]);
-      return `${activityType}\n{dateX}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext[`${activityType}-Count`] ? `[bold]${target.dataItem.dataContext[`${activityType}-Count`]}[/b] Activities` : ``}`
+      return `${activityType}\n{dateX.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")}\n[bold]${this.chartDataValueType}: ${dataItem.getDisplayValue()}${dataItem.getDisplayUnit()}[/b]\n${target.dataItem.dataContext[`${activityType}-Count`] ? `[bold]${target.dataItem.dataContext[`${activityType}-Count`]}[/b] Activities` : ``}`
     });
     columnSeries.cursorTooltipEnabled = false;
 
