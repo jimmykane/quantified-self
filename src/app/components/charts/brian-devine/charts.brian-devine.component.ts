@@ -32,7 +32,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     activityTypes: ActivityTypes[]
   };
 
-  useAnimations = true;
+  useAnimations = false;
 
   protected chart: am4charts.RadarChart;
   protected logger = Log.create('ChartsBrianDevineComponent');
