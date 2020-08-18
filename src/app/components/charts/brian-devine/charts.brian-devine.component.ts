@@ -189,10 +189,11 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     for (let i = 0; i < totalNumberOfMonths; i++) {
       const range = axis.axisRanges.create();
-      range.date = new Date(firstDay.getFullYear(), i, 0, 0, 0, 0);
-      range.endDate = new Date(firstDay.getFullYear(), i + 1, 0, 0, 0, 0)
+      range.date = new Date(firstDay.getFullYear(), i, 0, 24, 0, 0);
+      range.endDate = new Date(firstDay.getFullYear(), i + 1, 0, 23, 59, 59, 999)
+      console.log(`StartDate: ${range.date} end date: ${range.endDate}`)
       if (i % 2) {
-        range.axisFill.fillOpacity = 0.6;
+        range.axisFill.fillOpacity = 1;
       } else {
         range.axisFill.fillOpacity = 1;
       }
@@ -200,55 +201,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       (<am4charts.AxisFillCircular>range.axisFill).adapter.add('innerRadius', function (innerRadius, target) {
         return axis.renderer.pixelRadius + 7;
       })
-      switch (range.date.getMonth()) {
-        case 0:
-          range.axisFill.fill = am4core.color('#b9ce37');
-          break;
-        case 1:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 2:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 3:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 4:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 5:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 6:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 7:
-          range.axisFill.fill = am4core.color('#b9ce37');
-          break;
-        case 8:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 9:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 10:
-          range.axisFill.fill = am4core.color('#b9ce37');
-
-          break;
-        case 11:
-          range.axisFill.fill = am4core.color('#b9ce37');
-          break;
-        default:
-          break;
-      }
+      range.axisFill.fill = this.getColorForMonth(range.date.getMonth())
       // range.axisFill.stroke = am4core.color('#b9ce37');
       range.grid.disabled = true;
       range.label.text = totalNumberOfMonths > 12
@@ -350,5 +303,35 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
 
     bubbleSeries.dataItems.template.locations.categoryY = 0.5;
+  }
+
+  private getColorForMonth(month: number){
+    switch (month) {
+      default:
+      case 0:
+        return am4core.color('#0b85ce');
+      case 1:
+        return am4core.color('#1893bc');
+      case 2:
+        return am4core.color('#0da157');
+      case 3:
+        return am4core.color('#88bc4e');
+      case 4:
+        return am4core.color('#ced629');
+      case 5:
+        return am4core.color('#f3bf1e');
+      case 6:
+        return am4core.color('#f39b1f');
+      case 7:
+        return am4core.color('#f13f19');
+      case 8:
+        return am4core.color('#f15c74');
+      case 9:
+        return am4core.color('#c9428e');
+      case 10:
+        return am4core.color('#8752ba');
+      case 11:
+        return am4core.color('#5f58c0');
+    }
   }
 }
