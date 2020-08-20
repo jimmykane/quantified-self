@@ -28,7 +28,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSa
   const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
   const oauth2 = suuntoApiAuth();
   // doc.data() is never undefined for query doc snapshots
-  const token = oauth2.accessToken.create({
+  const token = oauth2.createToken({
     'access_token': serviceTokenData.accessToken,
     'refresh_token': serviceTokenData.refreshToken,
     'expires_at': new Date(serviceTokenData.expiresAt) // We need to convert to date here for the lib to be able to check .expired()

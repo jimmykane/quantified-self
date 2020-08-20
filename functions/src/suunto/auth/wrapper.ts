@@ -13,6 +13,7 @@ import { suuntoApiAuth } from "./auth";
 import { getTokenData } from "../../service-tokens";
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { AccessToken } from 'simple-oauth2';
 
 
 const OAUTH_SCOPES = 'workout';
@@ -50,7 +51,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-
 
   const oauth2 = suuntoApiAuth();
   const state = crypto.randomBytes(20).toString('hex')
-  redirectUri = oauth2.authorizationCode.authorizeURL({
+  redirectUri = oauth2.authorizeURL({
     redirect_uri: redirectUri,
     scope: OAUTH_SCOPES,
     state: state
@@ -116,12 +117,12 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
 
   const oauth2 = suuntoApiAuth();
 
-  let results
+  let results: AccessToken
   try {
-    results = await oauth2.authorizationCode.getToken({
+    results = await oauth2.getToken({
       code: code,
       scope: OAUTH_SCOPES,
-      state: state,
+      // state: state,
       redirect_uri: redirectUri
     });
 
@@ -141,14 +142,14 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
   await admin.firestore()
     .collection('suuntoAppAccessTokens')
     .doc(userID).collection('tokens')
-    .doc(results.user)
+    .doc(results.token.user)
     .set(<Auth2ServiceTokenInterface>{
-      accessToken: results.access_token,
-      refreshToken: results.refresh_token,
-      tokenType: results.token_type,
-      expiresAt: currentDate.getTime() + (results.expires_in * 1000),
-      scope: results.scope,
-      userName: results.user,
+      accessToken: results.token.access_token,
+      refreshToken: results.token.refresh_token,
+      tokenType: results.token.token_type,
+      expiresAt: currentDate.getTime() + (results.token.expires_in * 1000),
+      scope: results.token.scope,
+      userName: results.token.user,
       dateCreated: currentDate.getTime(),
       dateRefreshed: currentDate.getTime(),
     })
