@@ -36,7 +36,7 @@
     "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "10"
+    "node": "12"
   },
   "devDependencies": {
     "firebase-functions-test": "^0.2.1",
