@@ -39,24 +39,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   private userSubscription: Subscription;
 
-  @HostListener('window:tokensReceived', ['$event'])
-  async tokensReceived(event) {
-    await this.userService.setSuuntoAppToken(this.user, event.detail.serviceAuthResponse);
-    this.isLoading = false;
-    this.snackBar.open(`Connected successfully`, null, {
-      duration: 2000,
-    });
-    this.afa.logEvent('connected_to_service', {serviceName: event.detail.serviceName});
-  }
-  @HostListener('window:authError', ['$event'])
-  async authError(event) {
-    this.isLoading = false;
-    Sentry.captureException(new Error(`Could not connect to Suunto app. Please try another browser or allow popups and cross-site cookies form this site. ERROR: ${event.detail.error}`));
-    this.snackBar.open(`Could not connect to Suunto app. Please try another browser or allow popups and cross-site cookies form this site. ERROR: ${event.detail.error}`, null, {
-      duration: 10000,
-    });
-  }
-
   constructor(private http: HttpClient, private fileService: AppFileService,
               private afa: AngularFireAnalytics,
               private eventService: AppEventService,
@@ -102,25 +84,50 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.garminHealthAPIToken = results[1];
       this.suuntoAppMeta = results[2];
     })).subscribe(async (results) => {
+      const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
       const state = this.route.snapshot.queryParamMap.get('state');
       const oauthToken = this.route.snapshot.queryParamMap.get('oauth_token');
       const oauthVerifier = this.route.snapshot.queryParamMap.get('oauth_verifier');
-      if (state && oauthToken && oauthVerifier) {
-        try {
-          // @todo fix view changed
-          this.selectedTabIndex = 1;
-          await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier);
-          this.afa.logEvent('connected_to_service', {serviceName: ServiceNames.GarminHealthAPI});
-          this.snackBar.open('Successfully connected to Garmin Health API', null, {
-            duration: 10000,
-          })
-        } catch (e) {
-          Sentry.captureException(e);
-        } finally {
-          await this.router.navigate(['services'], {preserveQueryParams: false});
-        }
+      const code = this.route.snapshot.queryParamMap.get('code');
+      if (!serviceName) {
+        this.isLoading = false;
+        return;
       }
-      this.isLoading = false;
+      try {
+        switch (serviceName) {
+          default:
+            throw new Error(`Not implemented for service name ${serviceName}`);
+            break;
+          case ServiceNames.SuuntoApp:
+            if (state && code) {
+              this.selectedTabIndex = 0;
+              await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
+              this.afa.logEvent('connected_to_service', {serviceName: ServiceNames.SuuntoApp});
+              this.snackBar.open(`Successfully connected to ${ServiceNames.SuuntoApp}`, null, {
+                duration: 10000,
+              });
+            }
+            break;
+          case ServiceNames.GarminHealthAPI:
+            if (state && oauthToken && oauthVerifier) {
+              this.selectedTabIndex = 1;
+              await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier);
+              this.afa.logEvent('connected_to_service', {serviceName: ServiceNames.GarminHealthAPI});
+              this.snackBar.open(`Successfully connected to ${ServiceNames.GarminHealthAPI}`, null, {
+                duration: 10000,
+              });
+            }
+            break;
+        }
+      } catch (e) {
+        Sentry.captureException(e);
+        this.snackBar.open(`Could not connect due to ${e}`, null, {
+          duration: 10000,
+        });
+      } finally {
+        this.isLoading = false;
+        await this.router.navigate(['services'], {preserveQueryParams: false});
+      }
     });
     this.suuntoAppLinkFormGroup = new FormGroup({
       input: new FormControl('', [
@@ -129,12 +136,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       ]),
     });
   }
-
-  @HostListener('window:resize', ['$event'])
-  getColumnsToDisplayDependingOnScreenSize(event?) {
-    return window.innerWidth < 600 ? 1 : 2;
-  }
-
 
   hasError(field: string) {
     return !(this.suuntoAppLinkFormGroup.get(field).valid && this.suuntoAppLinkFormGroup.get(field).touched);
@@ -203,17 +204,20 @@ export class ServicesComponent implements OnInit, OnDestroy {
     });
   }
 
-  connectWithSuuntoApp(event) {
-    this.isLoading = true;
-    const wnd = window.open('assets/authPopup.html?signInWithService=false', 'name', 'height=585,width=400');
-    if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
-      this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
+  async connectWithSuuntoApp(event) {
+    try {
+      this.isLoading = true;
+      const tokenAndURI = await this.userService.getCurrentUserSuuntoAppTokenAndRedirectURI();
+      // Get the redirect url for the unsigned token created with the post
+      this.windowService.windowRef.location.href = `${tokenAndURI.redirect_uri}&redirect_uri=${encodeURIComponent(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}`)}`
+    } catch (e){
+      Sentry.captureException(e);
+      this.snackBar.open(`Could not connect to ${ServiceNames.SuuntoApp} due to ${e.message}`, null, {
         duration: 5000,
       });
-      Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
-      return
+    } finally {
+      this.isLoading = false;
     }
-    // wnd.onunload = () => this.isLoading = false;
   }
 
   async connectWithGarmin(event) {
@@ -221,10 +225,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
       this.isLoading = true;
       const tokenAndURI = await this.userService.getCurrentUserGarminHealthAPITokenAndRedirectURI();
       // Get the redirect url for the unsigned token created with the post
-      this.windowService.windowRef.location.href = `${tokenAndURI.redirect_uri}?oauth_token=${tokenAndURI.oauthToken}&oauth_callback=${encodeURI(`${this.windowService.currentDomain}/services?state=${tokenAndURI.state}`)}`
+      this.windowService.windowRef.location.href = `${tokenAndURI.redirect_uri}?oauth_token=${tokenAndURI.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${tokenAndURI.state}&serviceName=${ServiceNames.GarminHealthAPI}`)}`
     } catch (e){
       Sentry.captureException(e);
-      this.snackBar.open(`Could not connect to Garmin Connect due to ${e.message}`, null, {
+      this.snackBar.open(`Could not connect to  ${ServiceNames.GarminHealthAPI} due to ${e.message}`, null, {
         duration: 5000,
       });
     } finally {

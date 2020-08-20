@@ -1,12 +1,10 @@
 'use strict';
 
 import * as functions from 'firebase-functions'
-import * as cookieParser from "cookie-parser";
 import * as crypto from "crypto";
 import * as admin from "firebase-admin";
 import {
-  determineRedirectURI,
-  generateIDFromParts,
+  getUserIDFromFirebaseToken,
   isCorsAllowed,
   setAccessControlHeadersOnResponse
 } from "../../utils";
@@ -17,101 +15,148 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/serv
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
-// const OAUTH_REDIRECT_PATH = `https://${process.env.GCLOUD_PROJECT}.firebaseapp.com/popup.html`;
 const OAUTH_SCOPES = 'workout';
 
-// const OAUTH_CALLBACK_PATH = '/authPopup.html';
 
-// Path to the OAuth handlers.
-// const OAUTH_REDIRECT_URI_LOCALHOST = `http://localhost:4200/assets/authPopup.html`;
-// const OAUTH_REDIRECT_URI_BETA = `https://beta.quantified-self.io/assets/authPopup.html`;
-// const OAUTH_REDIRECT_URI = `https://quantified-self.io/assets/authPopup.html`;
-
-
-/**
- * Redirects the User to the authentication consent screen. Also the 'state' cookie is set for later state
- * verification.
- */
-export const suuntoAppAuthRedirect = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  const oauth2 = suuntoApiAuth();
-  const state = req.cookies ? req.cookies.state : crypto.randomBytes(20).toString('hex');
-  const signInWithService = req.query.signInWithService === 'true';
-  console.log('Setting state cookie for verification:', state);
-  const requestHost = req.get('host');
-  let secureCookie = true;
-  if (requestHost && requestHost.indexOf('localhost:') === 0) {
-    secureCookie = false;
+export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  // Directly set the CORS header
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
+    console.error(`Not allowed`);
+    res.status(403);
+    res.send('Unauthorized');
+    return
   }
-  console.log('Need a secure cookie (i.e. not on localhost)?', secureCookie);
-  res.cookie('state', state, {maxAge: 3600000, secure: secureCookie, httpOnly: true});
-  res.cookie('signInWithService', signInWithService, {maxAge: 3600000, secure: secureCookie, httpOnly: true});
-  const redirectUri = oauth2.authorizationCode.authorizeURL({
-    redirect_uri: determineRedirectURI(req),
+
+  setAccessControlHeadersOnResponse(req, res);
+
+  if (req.method === 'OPTIONS') {
+    res.status(200);
+    res.send();
+    return;
+  }
+
+  const userID = await getUserIDFromFirebaseToken(req);
+  if (!userID) {
+    res.status(403).send('Unauthorized');
+    return;
+  }
+  let redirectUri = req.body.redirectUri;
+
+  if (!redirectUri) {
+    console.error(`Missing redirectUri`);
+    res.status(500).send('Bad Request');
+    return;
+  }
+
+  const oauth2 = suuntoApiAuth();
+  const state = crypto.randomBytes(20).toString('hex')
+  redirectUri = oauth2.authorizationCode.authorizeURL({
+    redirect_uri: redirectUri,
     scope: OAUTH_SCOPES,
     state: state
   });
-  console.log('Redirecting to:', redirectUri);
-  res.redirect(redirectUri);
+
+
+  await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).set({
+    state: state
+  })
+
+  // Send the response wit hte prepeared stuff to the client and let him handle the state etc
+  res.send({
+    redirect_uri: redirectUri,
+  })
 });
-/**
- * Exchanges a given auth code passed in the 'code' URL query parameter for a Firebase auth token.
- * The request also needs to specify a 'state' query parameter which will be checked against the 'state' cookie.
- * The Firebase custom auth token, display name, photo URL and Suunto app acces token are sent back in a JSONP callback
- * function with function name defined by the 'callback' query parameter.
- */
-export const suuntoAppAuthToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
+
+
+export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  // Directly set the CORS header
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
+    console.error(`Not allowed`);
+    res.status(403);
+    res.send('Unauthorized');
+    return
+  }
+
+  setAccessControlHeadersOnResponse(req, res);
+
+  if (req.method === 'OPTIONS') {
+    res.status(200);
+    res.send();
+    return;
+  }
+
+  const userID = await getUserIDFromFirebaseToken(req);
+  if (!userID) {
+    res.status(403).send('Unauthorized');
+    return;
+  }
+
+  const state = req.body.state
+  const code = req.body.code;
+  const redirectUri = req.body.redirectUri;
+
+  if (!state || !code || !redirectUri) {
+    console.error(`Missing state or code or redirectUri`);
+    res.status(500).send('Bad Request');
+    return;
+  }
+
+  const tokensDocumentSnapshotData = (await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).get()).data();
+  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.state) {
+    res.status(500).send('Bad request');
+    console.error('No token/state found')
+    return;
+  }
+
+  if (state !== tokensDocumentSnapshotData.state) {
+    console.error(`Invalid state ${state} vs ${tokensDocumentSnapshotData.state}`);
+    res.status(403).send('Unauthorized');
+    return;
+  }
+
   const oauth2 = suuntoApiAuth();
-  cookieParser()(req, res, async () => {
-    try {
-      const currentDate = new Date();
-      const signInWithService = req.cookies.signInWithService === 'true';
-      console.log('Should sign in:', signInWithService);
-      console.log('Received verification state:', req.cookies.state);
-      console.log('Received state:', req.query.state);
-      // if (!req.cookies.state) {
-      //   throw new Error('State cookie not set or expired. Maybe you took too long to authorize. Please try again.');
-      // } else if (req.cookies.state !== req.query.state) {
-      //   throw new Error('State validation failed');
-      // }
 
-      console.log('Received auth code:', req.query.code);
-      const results = await oauth2.authorizationCode.getToken({
-        code: String(req.query.code),
-        redirect_uri: determineRedirectURI(req), // @todo fix,
-      });
+  let results
+  try {
+    results = await oauth2.authorizationCode.getToken({
+      code: code,
+      scope: OAUTH_SCOPES,
+      state: state,
+      redirect_uri: redirectUri
+    });
 
-      // console.log('Auth code exchange result received:', results);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send('Authorization code flow error');
+    return;
+  }
 
-      // We have an access token and the user identity now.
-      const accessToken = results.access_token;
-      const suuntoAppUserName = results.user;
+  if (!results) {
+    console.error(`No results for ${ServiceNames.SuuntoApp} Authorization access token call`);
+    res.status(500).send('Bad request');
+  }
 
-      // Create a Firebase account and get the Custom Auth Token.
-      let firebaseToken;
-      if (signInWithService) {
-        firebaseToken = await createFirebaseAccount(suuntoAppUserName, accessToken);
-      }
-      return res.jsonp({
-        firebaseAuthToken: firebaseToken,
-        serviceAuthResponse: <Auth2ServiceTokenInterface>{
-          accessToken: results.access_token,
-          refreshToken: results.refresh_token,
-          tokenType: results.token_type,
-          expiresAt: currentDate.getTime() + (results.expires_in * 1000),
-          scope: results.scope,
-          userName: results.user,
-          dateCreated: currentDate.getTime(),
-          dateRefreshed: currentDate.getTime(),
-        },
-        serviceName: ServiceNames.SuuntoApp
-      });
-    } catch (error) {
-      return res.jsonp({
-        error: error.toString(),
-      });
-    }
-  });
+  const currentDate = new Date();
+
+  await admin.firestore()
+    .collection('suuntoAppAccessTokens')
+    .doc(userID).collection('tokens')
+    .doc(results.user)
+    .set(<Auth2ServiceTokenInterface>{
+      accessToken: results.access_token,
+      refreshToken: results.refresh_token,
+      tokenType: results.token_type,
+      expiresAt: currentDate.getTime() + (results.expires_in * 1000),
+      scope: results.scope,
+      userName: results.user,
+      dateCreated: currentDate.getTime(),
+      dateRefreshed: currentDate.getTime(),
+    })
+
+  console.log(`User ${userID} successfully connected to Suunto API`)
+  res.status(200).send();
 });
+
 
 /**
  * Deauthorizes a Suunto app account upon user request
@@ -214,39 +259,4 @@ export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onReq
   res.send({result: 'Deauthorized'});
 
 });
-
-
-/**
- * Creates a Firebase account with the given user profile and returns a custom auth token allowing
- * signing-in this account.
- *
- * @returns {Promise<string>} The Firebase custom auth token in a promise.
- */
-async function createFirebaseAccount(serviceUserID: string, accessToken: string) {
-  // The UID we'll assign to the user.
-  const uid = generateIDFromParts(['suuntoApp', serviceUserID]);
-
-  // Save the access token to the Firestore
-  // const databaseTask  = admin.firestore().collection('suuntoAppAccessTokens').doc(`${uid}`).set({accessToken: accessToken});
-
-  // Create or update the user account.
-  try {
-    await admin.auth().updateUser(uid, {
-      displayName: serviceUserID,
-      // photoURL: photoURL,
-    })
-  } catch (e) {
-    if (e.code === 'auth/user-not-found') {
-      await admin.auth().createUser({
-        uid: uid,
-        displayName: serviceUserID,
-        // photoURL: photoURL,
-      });
-    }
-  }
-  // Create a Firebase custom auth token.
-  const token = await admin.auth().createCustomToken(uid);
-  console.log('Created Custom token for UID "', uid, '" Token:', token);
-  return token;
-}
 

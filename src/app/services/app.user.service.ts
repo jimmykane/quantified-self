@@ -57,6 +57,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
 import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { AppWindowService } from './app.window.service';
 
 
 @Injectable({
@@ -283,6 +284,7 @@ export class AppUserService implements OnDestroy {
     private eventService: AppEventService,
     private afAuth: AngularFireAuth,
     private http: HttpClient,
+    private windowService: AppWindowService,
   ) {
 
   }
@@ -433,7 +435,6 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  // @todo this is currently not used due to https://stackoverflow.com/questions/62858565/angularfire-firestore-not-getting-fresh-written-document
   public async getCurrentUserGarminHealthAPITokenAndRedirectURI(): Promise<{redirect_uri: string, state: string, oauthToken: string}> {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return <Promise<{redirect_uri: string, state: string, oauthToken: string}>>this.http.post(
@@ -446,12 +447,42 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier) {
+  public async getCurrentUserSuuntoAppTokenAndRedirectURI(): Promise<{redirect_uri: string}> {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return <Promise<{redirect_uri: string}>>this.http.post(
+      environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI, {
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}`)
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier: string) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetGarminHealthAPIAccessToken, {
         state: state,
         oauthVerifier: oauthVerifier
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string) {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return this.http.post(
+      environment.functions.requestAndSetSuuntoAPIAccessToken, {
+        state: state,
+        code: code,
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}`)
       },
       {
         headers:

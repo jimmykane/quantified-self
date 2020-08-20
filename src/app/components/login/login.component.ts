@@ -107,19 +107,6 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = false;
   }
 
-  async suuntoAppLogin() {
-    this.isLoading = true;
-    // Open the popup that will start the auth flow.
-    const wnd = window.open('assets/authPopup.html?signInWithService=true', 'name', 'height=585,width=400');
-    if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
-      this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
-        duration: 5000,
-      });
-      Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
-    }
-    wnd.onunload = () => this.isLoading = false;
-  }
-
   private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
     this.isLoading = true;
     try {

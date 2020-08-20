@@ -27,5 +27,7 @@ export const environment = {
     requestAndSetGarminHealthAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetGarminHealthAPIAccessToken',
     backfillHealthAPIActivities: 'http://localhost:5000/quantified-self-io/europe-west2/backfillHealthAPIActivities',
     deauthorizeGarminHealthAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeGarminHealthAPI',
+    getSuuntoAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoAPIAuthRequestTokenRedirectURI',
+    requestAndSetSuuntoAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetSuuntoAPIAccessToken',
   }
 };

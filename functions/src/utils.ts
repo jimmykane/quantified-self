@@ -118,3 +118,36 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     }
 }
 
+/**
+ * Creates a Firebase account with the given user profile and returns a custom auth token allowing
+ * signing-in this account.
+ *
+ * @returns {Promise<string>} The Firebase custom auth token in a promise.
+ */
+export async function createFirebaseAccount(serviceUserID: string, accessToken: string) {
+  // The UID we'll assign to the user.
+  const uid = generateIDFromParts(['suuntoApp', serviceUserID]);
+
+  // Save the access token to the Firestore
+  // const databaseTask  = admin.firestore().collection('suuntoAppAccessTokens').doc(`${uid}`).set({accessToken: accessToken});
+
+  // Create or update the user account.
+  try {
+    await admin.auth().updateUser(uid, {
+      displayName: serviceUserID,
+      // photoURL: photoURL,
+    })
+  } catch (e) {
+    if (e.code === 'auth/user-not-found') {
+      await admin.auth().createUser({
+        uid: uid,
+        displayName: serviceUserID,
+        // photoURL: photoURL,
+      });
+    }
+  }
+  // Create a Firebase custom auth token.
+  const token = await admin.auth().createCustomToken(uid);
+  console.log('Created Custom token for UID "', uid, '" Token:', token);
+  return token;
+}
