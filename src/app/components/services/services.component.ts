@@ -22,7 +22,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 
 @Component({
-  selector: 'app-home',
+  selector: 'app-services',
   templateUrl: './services.component.html',
   styleUrls: ['./services.component.css'],
 })
@@ -68,8 +68,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
         return of(null);
       }
       return combineLatest([
-        this.userService.getSuuntoAppToken(user),
-        this.userService.getGarminHealthAPIToken(this.user),
+        this.userService.getServiceToken(this.user, ServiceNames.SuuntoApp),
+        this.userService.getServiceToken(this.user, ServiceNames.GarminHealthAPI),
         this.userService
           .getUserMetaForService(this.user, ServiceNames.SuuntoApp),
       ])
@@ -207,7 +207,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async connectWithSuuntoApp(event) {
     try {
       this.isLoading = true;
-      const tokenAndURI = await this.userService.getCurrentUserSuuntoAppTokenAndRedirectURI();
+      const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.SuuntoApp);
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = `${tokenAndURI.redirect_uri}&redirect_uri=${encodeURIComponent(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}`)}`
     } catch (e){
@@ -223,10 +223,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async connectWithGarmin(event) {
     try {
       this.isLoading = true;
-      const tokenAndURI = await this.userService.getCurrentUserGarminHealthAPITokenAndRedirectURI();
+      const tokenAndURI = <{redirect_uri: string, state: string, oauthToken: string}>(await this.userService.getCurrentUserServiceTokenAndRedirectURI(ServiceNames.GarminHealthAPI));
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = `${tokenAndURI.redirect_uri}?oauth_token=${tokenAndURI.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${tokenAndURI.state}&serviceName=${ServiceNames.GarminHealthAPI}`)}`
-    } catch (e){
+    } catch (e) {
       Sentry.captureException(e);
       this.snackBar.open(`Could not connect to  ${ServiceNames.GarminHealthAPI} due to ${e.message}`, null, {
         duration: 5000,
@@ -239,7 +239,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async deauthorizeSuuntoApp(event) {
     this.isLoading = true;
     try {
-      await this.userService.deauthorizeSuuntoApp();
+      await this.userService.deauthorizeService(ServiceNames.SuuntoApp);
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,
       });
@@ -256,7 +256,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async deauthorizeGarminHealthAPI(event) {
     this.isLoading = true;
     try {
-      await this.userService.deauthorizeGarminHealthAPI();
+      await this.userService.deauthorizeService(ServiceNames.GarminHealthAPI);
       this.garminHealthAPIToken = null
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,

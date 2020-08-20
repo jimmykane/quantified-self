@@ -318,7 +318,18 @@ export class AppUserService implements OnDestroy {
       .set(JSON.parse(JSON.stringify(token)))
   }
 
-  public getSuuntoAppToken(user: User) {
+  public getServiceToken(user: User, serviceName: ServiceNames){
+    switch (serviceName) {
+      default:
+        throw new Error(`Not implemented for service ${serviceName}`);
+      case ServiceNames.SuuntoApp:
+        return this.getSuuntoAppToken(user);
+      case ServiceNames.GarminHealthAPI:
+        return this.getGarminHealthAPIToken(user);
+    }
+  }
+
+  private getSuuntoAppToken(user: User) {
     return this.afs
       .collection('suuntoAppAccessTokens')
       .doc<Auth2ServiceTokenInterface>(user.uid)
@@ -329,26 +340,13 @@ export class AppUserService implements OnDestroy {
       }));
   }
 
-   public getGarminHealthAPIToken(user: User) {
+   private getGarminHealthAPIToken(user: User) {
     return this.afs
       .collection('garminHealthAPITokens')
       .doc(user.uid).valueChanges()
       .pipe(catchError(error => {
         return [];
       }));
-  }
-
-  public async getGarminHealthAPITokenAsPromise(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
-    return this.afs
-      .collection('garminHealthAPITokens')
-      .doc(user.uid)
-      .get({source: 'server'})
-      .pipe(catchError(error => {
-        return [];
-      }))
-      .pipe(take(1))
-      .pipe(map((doc) => doc.data()))
-      .toPromise();
   }
 
   private getAllUserMeta(user: User) {
@@ -411,34 +409,15 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async deauthorizeSuuntoApp() {
-    return this.http.post(
-      environment.functions.deauthorizeSuuntoAppURI,
-      {},
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
-          })
-      }).toPromise();
-  }
-
-  public async deauthorizeGarminHealthAPI() {
-    return this.http.post(
-      environment.functions.deauthorizeGarminHealthAPI,
-      {},
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${await (await this.afAuth.currentUser).getIdToken(true)}`
-          })
-      }).toPromise();
-  }
-
-  public async getCurrentUserGarminHealthAPITokenAndRedirectURI(): Promise<{redirect_uri: string, state: string, oauthToken: string}> {
+  public async deauthorizeService(serviceName: ServiceNames) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
-    return <Promise<{redirect_uri: string, state: string, oauthToken: string}>>this.http.post(
-      environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI, {},
+    const serviceNamesToFunctionsURI = {
+      [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoAppURI,
+      [ServiceNames.GarminHealthAPI]: environment.functions.deauthorizeGarminHealthAPI
+    }
+    return this.http.post(
+      serviceNamesToFunctionsURI[serviceName],
+      {},
       {
         headers:
           new HttpHeaders({
@@ -447,11 +426,15 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async getCurrentUserSuuntoAppTokenAndRedirectURI(): Promise<{redirect_uri: string}> {
+  public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{redirect_uri: string}|{redirect_uri: string, state: string, oauthToken: string}>{
+    const serviceNamesToFunctionsURI = {
+      [ServiceNames.SuuntoApp]: environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI,
+      [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI
+    }
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return <Promise<{redirect_uri: string}>>this.http.post(
-      environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI, {
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}`)
+      serviceNamesToFunctionsURI[serviceName], {
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}`)
       },
       {
         headers:
@@ -518,7 +501,7 @@ export class AppUserService implements OnDestroy {
     const garminHealthAPIToken = await this.getGarminHealthAPIToken(user).pipe(take(1)).toPromise();
     if (suuntoAppToken) {
       try {
-        await this.deauthorizeSuuntoApp();
+        await this.deauthorizeService(ServiceNames.SuuntoApp);
       } catch (e) {
         Sentry.captureException(e);
         console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`)
@@ -526,7 +509,7 @@ export class AppUserService implements OnDestroy {
     }
     if (garminHealthAPIToken) {
       try {
-        await this.deauthorizeGarminHealthAPI();
+        await this.deauthorizeService(ServiceNames.GarminHealthAPI);
       } catch (e) {
         Sentry.captureException(e);
         console.error(`Could not deauthorize ${ServiceNames.GarminHealthAPI}`)
