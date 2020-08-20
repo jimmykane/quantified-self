@@ -165,9 +165,9 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
 export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed `)
+    console.error(`Not allowed`);
     res.status(403);
-    res.send();
+    res.send('Unauthorized');
     return
   }
 
@@ -179,34 +179,15 @@ export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onReq
     return;
   }
 
-  if (!req.headers.authorization) {
-    console.error(`No authorization'`);
-    res.status(403);
-    res.send();
-    return
-  }
-
-  let decodedIdToken;
-  try {
-    decodedIdToken = await admin.auth().verifyIdToken(req.headers.authorization);
-  } catch (e) {
-    console.error(e);
-    console.error(`Could not verify user token aborting operation`);
-    res.status(500);
-    res.send();
+  const userID = await getUserIDFromFirebaseToken(req);
+  if (!userID){
+    res.status(403).send('Unauthorized');
     return;
   }
 
-  if (!decodedIdToken) {
-    console.error(`Could not verify and decode token`);
-    res.status(500);
-    res.send();
-    return;
-  }
+  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
 
-  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
-
-  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
+  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   // Deauthorize all tokens for that user
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
@@ -226,10 +207,10 @@ export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onReq
         },
         url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
       });
-      console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`)
+      console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`)
     } catch (e) {
       console.error(e);
-      console.error(`Could not deauthorize token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
+      console.error(`Could not deauthorize token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
       res.status(500);
       res.send({result: 'Could not deauthorize'});
       return;
@@ -248,12 +229,12 @@ export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onReq
       }
     } catch (e) {
       console.error(e);
-      console.error(`Could not delete token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
+      console.error(`Could not delete token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
       res.status(500);
       res.send({result: 'Could not delete token'});
       return;
     }
-    console.log(`Deleted successfully token ${tokenQueryDocumentSnapshot.id} for ${decodedIdToken.uid}`);
+    console.log(`Deleted successfully token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
   }
 
   res.status(200);
