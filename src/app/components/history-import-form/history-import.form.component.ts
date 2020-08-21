@@ -1,4 +1,4 @@
-import { Component, Inject, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
 import {
   AbstractControl,
   FormArray,
@@ -24,13 +24,12 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
   providers: [],
 })
 
-export class HistoryImportFormComponent implements OnInit, OnDestroy {
-  @Input() user: User;
+export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges {
   @Input() serviceName: ServiceNames;
+  @Input() userMetaForService: UserServiceMetaInterface;
+
   protected logger = Log.create('HistoryImportFormComponent');
   public formGroup: FormGroup;
-  public userMetaForService: UserServiceMetaInterface;
-  public userMetaForServiceSubscription: Subscription;
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
   public isLoading: boolean;
@@ -44,13 +43,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    if (!this.user) {
-      throw new Error('Component needs a user')
-    }
-    // Set this to loading
-    this.isLoading = true;
-
-    // Now build the controls
     this.formGroup = new FormGroup({
       formArray: new FormArray([
         new FormGroup({
@@ -72,41 +64,51 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
 
     this.formGroup.disable();
 
-    this.userMetaForServiceSubscription = await this.userService
-      .getUserMetaForService(this.user, this.serviceName)
-      .subscribe((userMetaForService) => {
-        this.userMetaForService = userMetaForService;
-        if (!userMetaForService || !userMetaForService.didLastHistoryImport) {
+    this.processChanges();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (!this.serviceName) {
+      throw new Error('Component needs serviceName')
+    }
+    if (this.formGroup) {
+      this.processChanges()
+    }
+  }
+
+  private processChanges() {
+    this.isLoading = true;
+    if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
+      this.isAllowedToDoHistoryImport = true;
+      this.formGroup.enable();
+      // Set this to done loading
+      this.isLoading = false;
+      return;
+    }
+
+    switch (this.serviceName) {
+      case ServiceNames.SuuntoApp:
+        if (!this.userMetaForService.processedActivitiesFromLastHistoryImportCount) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
-          return;
+          break;
         }
-
-        switch (this.serviceName) {
-          case ServiceNames.SuuntoApp:
-            if (!userMetaForService.processedActivitiesFromLastHistoryImportCount) {
-              this.isAllowedToDoHistoryImport = true;
-              this.formGroup.enable();
-              return;
-            }
-            this.nextImportAvailableDate = new Date(userMetaForService.didLastHistoryImport + ((userMetaForService.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
-            this.isAllowedToDoHistoryImport =
-              this.nextImportAvailableDate < (new Date())
-              || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
-            this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
-            break;
-          case ServiceNames.GarminHealthAPI:
-            this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000)) < new Date()
-            this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000));
-            break;
-          default:
-            const e = new Error(`Service name is not available ${this.serviceName} for history import`);
-            Sentry.captureException(e);
-            this.formGroup.disable();
-            this.isAllowedToDoHistoryImport = false;
-        }
-      });
-
+        this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
+        this.isAllowedToDoHistoryImport =
+          this.nextImportAvailableDate < (new Date())
+          || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
+        this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
+        break;
+      case ServiceNames.GarminHealthAPI:
+        this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000)) < new Date()
+        this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000));
+        break;
+      default:
+        Sentry.captureException(new Error(`Service name is not available ${this.serviceName} for history import`));
+        this.formGroup.disable();
+        this.isAllowedToDoHistoryImport = false;
+        break;
+    }
     // Set this to done loading
     this.isLoading = false;
   }
@@ -169,9 +171,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.userMetaForServiceSubscription) {
-      this.userMetaForServiceSubscription.unsubscribe();
-    }
+
   }
 }
 

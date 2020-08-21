@@ -17,7 +17,7 @@ export abstract class FormsAbstract {
 
 
   // @todo extract to abstract for all forms
-  hasError(formGroup: FormGroup, field?: string) {
+  hasError(formGroup: any, field?: string) {
     if (!field) {
       return !formGroup.valid;
     }

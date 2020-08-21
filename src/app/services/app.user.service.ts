@@ -323,13 +323,13 @@ export class AppUserService implements OnDestroy {
       default:
         throw new Error(`Not implemented for service ${serviceName}`);
       case ServiceNames.SuuntoApp:
-        return this.getSuuntoAppToken(user);
+        return this.getSuuntoAppTokens(user);
       case ServiceNames.GarminHealthAPI:
-        return this.getGarminHealthAPIToken(user);
+        return this.getGarminHealthAPITokens(user);
     }
   }
 
-  private getSuuntoAppToken(user: User) {
+  private getSuuntoAppTokens(user: User) {
     return this.afs
       .collection('suuntoAppAccessTokens')
       .doc<Auth2ServiceTokenInterface>(user.uid)
@@ -340,10 +340,10 @@ export class AppUserService implements OnDestroy {
       }));
   }
 
-   private getGarminHealthAPIToken(user: User) {
+   private getGarminHealthAPITokens(user: User) {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).valueChanges()
+      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consisten with the other provides that support more than one token
       .pipe(catchError(error => {
         return [];
       }));
@@ -497,8 +497,8 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const suuntoAppToken = await this.getSuuntoAppToken(user);
-    const garminHealthAPIToken = await this.getGarminHealthAPIToken(user).pipe(take(1)).toPromise();
+    const suuntoAppToken = await this.getSuuntoAppTokens(user);
+    const garminHealthAPIToken = await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise();
     if (suuntoAppToken) {
       try {
         await this.deauthorizeService(ServiceNames.SuuntoApp);

@@ -6,6 +6,8 @@ import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import {HistoryImportFormComponent} from '../components/history-import-form/history-import.form.component';
 import { UploadRoutesComponent } from '../components/upload/upload-routes/upload-routes.component';
+import { ServicesSuuntoComponent } from '../components/services/suunto/services.suunto.component';
+import { ServicesGarminComponent } from '../components/services/garmin/services.garmin.component';
 
 
 @NgModule({
@@ -16,7 +18,7 @@ import { UploadRoutesComponent } from '../components/upload/upload-routes/upload
     ServicesRoutingModule,
   ],
   exports: [],
-  declarations: [ServicesComponent, HistoryImportFormComponent, UploadRoutesComponent],
+  declarations: [ServicesComponent, ServicesSuuntoComponent, ServicesGarminComponent, HistoryImportFormComponent, UploadRoutesComponent],
   entryComponents: [],
   providers: []
 })
