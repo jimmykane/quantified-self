@@ -18,6 +18,22 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   public serviceName = ServiceNames.SuuntoApp;
 
+  isConnectedToService(): boolean {
+    return !!this.serviceTokens && !!this.serviceTokens.length
+  }
+
+  buildRedirectURIFromServiceToken(token: {redirect_uri: string}): string {
+    return token.redirect_uri
+  }
+
+  async requestAndSetToken() {
+    const state = this.route.snapshot.queryParamMap.get('state');
+    const code = this.route.snapshot.queryParamMap.get('code');
+    if (state && code) {
+      await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
+    }
+  }
+
   async ngOnInit() {
     this.suuntoAppLinkFormGroup = new FormGroup({
       input: new FormControl('', [
@@ -93,21 +109,4 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       }
     });
   }
-
-  async requestAndSetToken() {
-    const state = this.route.snapshot.queryParamMap.get('state');
-    const code = this.route.snapshot.queryParamMap.get('code');
-    if (state && code) {
-      await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
-    }
-  }
-
-  isConnectedToService(): boolean {
-    return !!this.serviceTokens && !!this.serviceTokens.length
-  }
-
-  buildRedirectURIFromServiceToken(token: {redirect_uri: string}): string {
-    return token.redirect_uri
-  }
-
 }
