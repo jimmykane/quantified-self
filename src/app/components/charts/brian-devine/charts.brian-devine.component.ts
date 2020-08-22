@@ -185,8 +185,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     const lastDay = new Date(new Date(this.data.daily[this.data.daily.length - 1].time).getFullYear(), 11, 31, 11, 59, 59, 999);
     const firstMonth = firstDay.getMonth();
 
-
-    console.log(firstDay, lastDay)
+    // console.log(firstDay, lastDay)
 
     const totalNumberOfMonths = lastDay.getMonth() - firstDay.getMonth() +
       (12 * (lastDay.getFullYear() - firstDay.getFullYear())) + 1 // Note the +1 here
@@ -196,6 +195,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       range.date = new Date(firstDay.getFullYear(), i + firstMonth, 0, 24, 0, 0);
       range.endDate = new Date(firstDay.getFullYear(), i + firstMonth + 1, 0, 23, 59, 59, 999)
       console.log(`StartDate: ${range.date} end date: ${range.endDate}`)
+
       range.axisFill.fillOpacity = 1;
       (<am4charts.AxisFillCircular>range.axisFill).radius = -28;
       (<am4charts.AxisFillCircular>range.axisFill).adapter.add('innerRadius', function (innerRadius, target) {

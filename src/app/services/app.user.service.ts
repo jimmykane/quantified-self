@@ -322,16 +322,21 @@ export class AppUserService implements OnDestroy {
     switch (serviceName) {
       default:
         throw new Error(`Not implemented for service ${serviceName}`);
+      case ServiceNames.COROSAPI:
       case ServiceNames.SuuntoApp:
-        return this.getSuuntoAppTokens(user);
+        return this.getServiceTokens(user, serviceName);
       case ServiceNames.GarminHealthAPI:
         return this.getGarminHealthAPITokens(user);
     }
   }
 
-  private getSuuntoAppTokens(user: User) {
+  private getServiceTokens(user: User, serviceName: ServiceNames) {
+    const serviceNamesToCollectionName = {
+      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
+      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
+    }
     return this.afs
-      .collection('suuntoAppAccessTokens')
+      .collection(serviceNamesToCollectionName[serviceName])
       .doc<Auth2ServiceTokenInterface>(user.uid)
       .collection('tokens')
       .valueChanges()
@@ -343,7 +348,7 @@ export class AppUserService implements OnDestroy {
    private getGarminHealthAPITokens(user: User) {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consisten with the other provides that support more than one token
+      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consistent with the other provides that support more than one token
       .pipe(catchError(error => {
         return [];
       }));
@@ -497,24 +502,20 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const suuntoAppToken = await this.getSuuntoAppTokens(user);
-    const garminHealthAPIToken = await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise();
-    if (suuntoAppToken) {
+    const serviceTokens = [
+      {[ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise()},
+      {[ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise()},
+      {[ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise()}
+    ].filter((serviceToken) => serviceToken[Object.keys(serviceToken)[0]])
+    for (const serviceToken of serviceTokens) {
       try {
-        await this.deauthorizeService(ServiceNames.SuuntoApp);
+        await this.deauthorizeService(<ServiceNames>Object.keys(serviceToken)[0]);
       } catch (e) {
         Sentry.captureException(e);
         console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`)
       }
     }
-    if (garminHealthAPIToken) {
-      try {
-        await this.deauthorizeService(ServiceNames.GarminHealthAPI);
-      } catch (e) {
-        Sentry.captureException(e);
-        console.error(`Could not deauthorize ${ServiceNames.GarminHealthAPI}`)
-      }
-    }
+
     try {
       return (await this.afAuth.currentUser).delete();
     } catch (e) {

@@ -8,6 +8,7 @@ import {HistoryImportFormComponent} from '../components/history-import-form/hist
 import { UploadRoutesComponent } from '../components/upload/upload-routes/upload-routes.component';
 import { ServicesSuuntoComponent } from '../components/services/suunto/services.suunto.component';
 import { ServicesGarminComponent } from '../components/services/garmin/services.garmin.component';
+import { ServicesCorosComponent } from '../components/services/coros/services.coros.component';
 
 
 @NgModule({
@@ -18,7 +19,7 @@ import { ServicesGarminComponent } from '../components/services/garmin/services.
     ServicesRoutingModule,
   ],
   exports: [],
-  declarations: [ServicesComponent, ServicesSuuntoComponent, ServicesGarminComponent, HistoryImportFormComponent, UploadRoutesComponent],
+  declarations: [ServicesComponent, ServicesSuuntoComponent, ServicesGarminComponent, ServicesCorosComponent, HistoryImportFormComponent, UploadRoutesComponent],
   entryComponents: [],
   providers: []
 })
