@@ -20,6 +20,13 @@ mat-icon.amcharts{
   height: 42px;
 }
 
+mat-icon.firebase{
+  margin-top: 0em;
+  width: 200px;
+  height: 60px;
+}
+
+
 section{
   padding: 0;
   margin: 0;

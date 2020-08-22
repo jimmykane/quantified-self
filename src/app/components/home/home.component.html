@@ -127,16 +127,17 @@
     </mat-list>
   </mat-card>
   <mat-card class="mat-elevation-z0 footer">
-    <span class="amcharts mat-h3">Powered by</span>
+    <mat-icon class="firebase" svgIcon="firebase"
+              onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
     <mat-divider [inset]="true"></mat-divider>
     <mat-icon class="large-svg-icon" svgIcon="suunto" (click)="router.navigate(['/services']);"></mat-icon>
+    <mat-divider [inset]="true"></mat-divider>
+    <mat-icon class="large-svg-icon-coros" svgIcon="coros" (click)="router.navigate(['/services']);"></mat-icon>
     <mat-divider [inset]="true"></mat-divider>
     <mat-icon class="large-svg-icon" svgIcon="garmin" (click)="router.navigate(['/services']);"></mat-icon>
     <mat-divider [inset]="true"></mat-divider>
     <mat-icon class="amcharts" svgIcon="amcharts"
               onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
     <mat-divider [inset]="true"></mat-divider>
-    <mat-icon class="amcharts" svgIcon="firebase"
-              onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
   </mat-card>
 </section>
