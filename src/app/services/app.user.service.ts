@@ -60,6 +60,9 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 import { AppWindowService } from './app.window.service';
 
 
+/**
+ * @todo  break up to partners (Services) and user
+ */
 @Injectable({
   providedIn: 'root',
 })
