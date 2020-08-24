@@ -141,7 +141,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       label.horizontalCenter = 'middle';
       label.verticalCenter = 'middle';
       // label.fill = am4core.color('#ffffff');
-      label.fontWeight = 'bold';
+      // label.fontWeight = 'bold';
       const aggrValue = this.getAggregateData(data.daily, this.chartDataValueType);
       label.text = `[font-size: 1.3em]${aggrValue.getDisplayType()}[/]\n[bold font-size: 1.2em]${aggrValue.getDisplayValue()}${aggrValue.getDisplayUnit()}[/]\n(${this.chartDataValueType})`
 
@@ -207,8 +207,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       // range.label.text = chart.dateFormatter.language.translate(chart.dateFormatter.months[range.date.getMonth()]);
       (<am4charts.AxisLabelCircular>range.label).bent = true;
       (<am4charts.AxisLabelCircular>range.label).radius = 12;
-      range.label.fontSize = 12;
-      range.label.paddingBottom = 2;
+      range.label.fontSize = '1.1em';
+      range.label.paddingBottom = 0;
       range.label.interactionsEnabled = false;
       range.axisFill.interactionsEnabled = true;
       range.axisFill.cursorOverStyle = am4core.MouseCursorStyle.pointer;
@@ -248,7 +248,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     columnSeries.columns.template.width = am4core.percent(95);
     columnSeries.fill = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
     // columnSeries.fillOpacity = 0.6;
-    columnSeries.tooltip.fontSize = 10;
+    columnSeries.tooltip.fontSize = '1em';
     columnSeries.tooltip.pointerOrientation = 'down';
     columnSeries.tooltip.background.fillOpacity = 1;
     columnSeries.columns.template.tooltipText = '{valueY}';
@@ -276,7 +276,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     bubbleSeries.maskBullets = false;
     bubbleSeries.cursorTooltipEnabled = false;
-    bubbleSeries.tooltip.fontSize = 10;
+    bubbleSeries.tooltip.fontSize = '1em';
     bubbleSeries.tooltip.pointerOrientation = 'down';
     // bubbleSeries.tooltip.background.fillOpacity = 0.8;
 
