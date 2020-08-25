@@ -83,7 +83,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.renderer.opposite = this.vertical;
-    valueAxis.extraMax = this.vertical ? 0.15 : 0.20;
+    valueAxis.extraMax = this.vertical ? 0.15 : 0.10;
     valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
@@ -197,7 +197,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       if (this.vertical) {
         categoryLabel.dy = -15;
       } else {
-        categoryLabel.label.dx = 35;
+        categoryLabel.label.dx = 55;
       }
       categoryLabel.label.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
