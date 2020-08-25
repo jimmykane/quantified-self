@@ -46,8 +46,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     am4core.options.queue = true;
     am4core.options.onlyShowOnViewport = false;
     this.chart = this.createChart(am4charts.RadarChart, this.data);
-    this.createDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0), this.data)
     this.createSeriesForChart(this.chart, <CategoryAxis<am4charts.AxisRendererRadial>>this.chart.yAxes.getIndex(1), this.data)
+    this.createDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0), this.data)
   }
 
 
@@ -73,8 +73,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       if (this.chart) {
         this.clearSeriesForChart(this.chart);
         this.clearDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0));
-        this.createDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0), this.data)
         this.createSeriesForChart(this.chart, <CategoryAxis<am4charts.AxisRendererRadial>>this.chart.yAxes.getIndex(1), this.data)
+        this.createDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0), this.data)
       }
     }
   }
@@ -178,8 +178,9 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
   private createDateAxisRanges(axis: am4charts.DateAxis<am4charts.AxisRendererCircular>, data: { weekly: any[], daily: any[] }) {
     // add month ranges
-    const firstDay = new Date(this.data.daily[0].time);
-    const lastDay =  new Date(this.data.daily[this.data.daily.length - 1].time);
+    // debugger
+    const firstDay = new Date(data.weekly[0].time);
+    const lastDay =  new Date(data.weekly[data.weekly.length - 1].time + (7 * 24 * 60 * 60 * 1000));
     const firstMonth = firstDay.getMonth();
 
     // console.log(firstDay, lastDay)
@@ -189,8 +190,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
     for (let i = 0; i < totalNumberOfMonths; i++) {
       const range = axis.axisRanges.create();
-      range.date = new Date(firstDay.getFullYear(), i + firstMonth, 0, 24, 0, 0);
-      range.endDate = new Date(firstDay.getFullYear(), i + firstMonth + 1, 0, 23, 59, 59, 999)
+      range.date = i === 0 ? firstDay : new Date(firstDay.getFullYear(), i + firstMonth, 0, 24, 0, 0);
+      range.endDate = i === totalNumberOfMonths - 1 ? lastDay : new Date(firstDay.getFullYear(), i + firstMonth + 1, 0, 23, 59, 59, 999)
       console.log(`StartDate: ${range.date} end date: ${range.endDate}`)
 
       range.axisFill.fillOpacity = 1;
