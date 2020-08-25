@@ -46,6 +46,9 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
     am4core.options.queue = true;
     am4core.options.onlyShowOnViewport = false;
     this.chart = this.createChart(am4charts.RadarChart, this.data);
+    if (!this.data  || !this.data.daily || !this.data.daily.length || !this.data.weekly || !this.data.weekly.length) {
+      return
+    }
     this.createSeriesForChart(this.chart, <CategoryAxis<am4charts.AxisRendererRadial>>this.chart.yAxes.getIndex(1), this.data)
     this.createDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0), this.data)
   }
@@ -53,6 +56,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
 
   ngOnChanges(simpleChanges) {
+    console.log('change')
     this.isLoading ? this.loading() : this.loaded();
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
@@ -61,8 +65,12 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       this.chart = this.createChart(am4charts.RadarChart, this.data);
     }
 
-    if (!this.data) {
-      return;
+    if (!this.data  || !this.data.daily || !this.data.daily.length || !this.data.weekly || !this.data.weekly.length) {
+      if (this.chart){
+        this.clearSeriesForChart(this.chart);
+        this.clearDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0));
+      }
+      return
     }
 
     if (simpleChanges.data) {
