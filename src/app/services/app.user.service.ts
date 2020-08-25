@@ -442,7 +442,7 @@ export class AppUserService implements OnDestroy {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return <Promise<{redirect_uri: string}>>this.http.post(
       serviceNamesToFunctionsURI[serviceName], {
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}`)
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
       },
       {
         headers:
@@ -473,7 +473,7 @@ export class AppUserService implements OnDestroy {
       environment.functions.requestAndSetSuuntoAPIAccessToken, {
         state: state,
         code: code,
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}`)
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
       },
       {
         headers:

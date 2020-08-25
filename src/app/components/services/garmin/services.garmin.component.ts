@@ -26,6 +26,6 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   buildRedirectURIFromServiceToken(token: {redirect_uri: string, state: string, oauthToken: string}): string {
-    return  `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${this.serviceName}`)}`
+    return  `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${this.serviceName}&connect=1`)}`
   }
 }

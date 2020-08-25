@@ -80,7 +80,12 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.serviceMeta = results[1];
     })).subscribe(async (results) => {
       const serviceName = this.route.snapshot.queryParamMap.get('serviceName');
+      const shouldConnect = this.route.snapshot.queryParamMap.get('connect');
       if (!serviceName || serviceName !== this.serviceName) {
+        this.isLoading = false;
+        return;
+      }
+      if (!shouldConnect) {
         this.isLoading = false;
         return;
       }
@@ -92,12 +97,12 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         });
       } catch (e) {
         Sentry.captureException(e);
-        this.snackBar.open(`Could not connect due to ${e}`, null, {
+        this.snackBar.open(`Could not connect due to ${e.message}`, null, {
           duration: 10000,
         });
       } finally {
         this.isLoading = false;
-        await this.router.navigate(['services'], {preserveQueryParams: false});
+        await this.router.navigate(['services'], {queryParams: { serviceName: serviceName }, preserveQueryParams: false});
       }
     });
   }
@@ -113,7 +118,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
     } catch (e) {
       Sentry.captureException(e);
-      this.snackBar.open(`Could not connect to ${ServiceNames.SuuntoApp} due to ${e.message}`, null, {
+      this.snackBar.open(`Could not connect to ${this.serviceName} due to ${e.message}`, null, {
         duration: 5000,
       });
     } finally {
