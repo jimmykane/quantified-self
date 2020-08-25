@@ -10,8 +10,7 @@ import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
 import {
   ChartDataCategoryTypes,
-  ChartDataValueTypes,
-  ChartTypes, TileChartSettingsInterface, TileTypes, TimeIntervals,
+  ChartDataValueTypes, TileChartSettingsInterface, TileTypes, TimeIntervals,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {AppUserService} from '../../../../services/app.user.service';
 import {DataAltitudeMax} from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
@@ -170,4 +169,15 @@ export class TileChartActionsComponent extends TileActionsAbstract implements On
   }
 
 
+}
+
+export enum ChartTypes {
+  Pie = 'Pie',
+  ColumnsHorizontal = 'Columns Horizontal',
+  ColumnsVertical = 'Columns Vertical',
+  PyramidsVertical = 'Pyramids Vertical',
+  LinesHorizontal = 'Lines Horizontal',
+  LinesVertical = 'Lines Vertical',
+  Spiral = 'Spiral',
+  // BrianDevine = 'Brian Devine'
 }
