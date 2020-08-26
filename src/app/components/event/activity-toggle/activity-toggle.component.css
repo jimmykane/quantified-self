@@ -7,7 +7,7 @@ mat-card-subtitle{
 }
 
 mat-card-header{
-  min-width: 240px;
+  /*min-width: 240px;*/
 }
 
 
@@ -33,5 +33,11 @@ mat-card-header mat-card-title{
   margin: 0;
   line-height: 2.5em;
   margin-left: 0.5em;
-  margin-top: -0.6em;
+  /*margin-top: -0.6em;*/
 }
+
+mat-slide-toggle{
+  margin-top: 0.6em;
+}
+
+

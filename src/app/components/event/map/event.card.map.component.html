@@ -12,6 +12,16 @@
     </mat-card-subtitle>
   </mat-card-header>
   <section class="container">
+    <mat-card class="map-legend mat-elevation-z0" *ngIf="agmMap && event.getActivities().length > 1">
+      <app-activity-toggle *ngFor="let activity of event.getActivities()"
+                           [activity]="activity"
+                           [event]="event"
+                           [showActions]="false"
+                           [showToggle]="false"
+                           [showStats]="false"
+                           [showDate]="false">
+      </app-activity-toggle>
+    </mat-card>
     <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
     <!-- Map -->
     <section class="placeholder" *ngIf="activitiesMapData.length === 0"></section>
