@@ -19,7 +19,7 @@ import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/ac
 import { LapInterface } from '@sports-alliance/sports-lib/lib/laps/lap.interface';
 import { Log } from 'ng2-logger/browser';
 import { AppEventService } from '../../../services/app.event.service';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
@@ -60,6 +60,9 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   /** key is the activity id **/
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
   private activitiesCursorSubscription: Subscription;
+  private lineMouseMoveSubject: Subject<{event: google.maps.PolyMouseEvent, activityMapData: MapData }> = new Subject()
+  private lineMouseMoveSubscription: Subscription;
+
   private logger = Log.create('EventCardMapAGMComponent');
 
   constructor(
@@ -76,6 +79,11 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
+    this.lineMouseMoveSubscription = this.lineMouseMoveSubject.pipe(
+      debounceTime(250)
+    ).subscribe(value => {
+      this.lineMouseMove(value.event, value.activityMapData);
+    });
     this.logger.info(`Initialized`);
   }
 
@@ -177,7 +185,11 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     }
   }
 
-  async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
+  onLineMouseMove(event, activityMapData: MapData) {
+    this.lineMouseMoveSubject.next({event: event, activityMapData: activityMapData});
+  }
+
+  private async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
     this.activityCursorService.clear();
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
@@ -235,7 +247,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
     // Set the cursor
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(1000)
+      debounceTime(250)
     ).subscribe((cursors) => {
       this.logger.info(`Cursor on subscription`);
       cursors.forEach(cursor => {
@@ -297,6 +309,9 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   private unSubscribeFromAll() {
     if (this.activitiesCursorSubscription) {
       this.activitiesCursorSubscription.unsubscribe();
+    }
+    if (this.lineMouseMoveSubscription) {
+      this.lineMouseMoveSubscription.unsubscribe();
     }
   }
 

@@ -736,7 +736,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(1000)
+      debounceTime(250)
     ).subscribe((cursors) => {
       this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
