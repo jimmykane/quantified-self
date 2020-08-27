@@ -190,7 +190,6 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   }
 
   private async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
-    this.activityCursorService.clear();
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()
@@ -201,6 +200,8 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     if (!nearest) {
       return;
     }
+
+    this.activityCursorService.clear();
 
     this.activityCursorService.setCursor({
       activityID: activityMapData.activity.getID(),
