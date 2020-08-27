@@ -263,8 +263,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
-    chart.cursor.events.on("cursorpositionchanged", function(ev) {
-      ev.target.triggerMove(ev.target.point, "soft");
+    chart.cursor.events.on('cursorpositionchanged', function(ev) {
+      ev.target.triggerMove(ev.target.point, 'soft');
     });
 
 
@@ -1016,7 +1016,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         series.dummyData.stream.type === DataPower.type ? yAxis.extraMax = this.extraMaxForPower : yAxis.extraMax = 0.1;
       }
       yAxis.title.adapter.add('text', (text, target) => {
-        if (!this.stackYAxes){
+        if (!this.stackYAxes) {
           return `${series.name}`;
         }
         const map = {
@@ -1026,7 +1026,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         };
         (<AxisRendererY>target.parent).axis.series.each((axisSeries, index) => {
           // console.log(axisSeries.dummyData.stream.type)
-          if (axisSeries.hidden){
+          if (axisSeries.hidden) {
             return;
           }
           if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
@@ -1038,7 +1038,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
             map.max +=  `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
           }
-          if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length){
+          if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length) {
             map.min += `, `
             map.avg += `,  `
             map.max += `,  `
