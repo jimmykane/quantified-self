@@ -56,7 +56,6 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
 
 
   ngOnChanges(simpleChanges) {
-    console.log('change')
     this.isLoading ? this.loading() : this.loaded();
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
@@ -83,6 +82,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         this.clearDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0));
         this.createSeriesForChart(this.chart, <CategoryAxis<am4charts.AxisRendererRadial>>this.chart.yAxes.getIndex(1), this.data)
         this.createDateAxisRanges(<DateAxis<AxisRendererCircular>>this.chart.xAxes.getIndex(0), this.data)
+        this.chart.invalidateLabels()
       }
     }
   }
@@ -150,35 +150,12 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
       label.verticalCenter = 'middle';
       // label.fill = am4core.color('#ffffff');
       // label.fontWeight = 'bold';
-      const aggrValue = this.getAggregateData(data.daily, this.chartDataValueType);
-      label.text = `[font-size: 1.3em]${aggrValue.getDisplayType()}[/]\n[bold font-size: 1.2em]${aggrValue.getDisplayValue()}${aggrValue.getDisplayUnit()}[/]\n(${this.chartDataValueType})`
-
-      chart.events.on('ready', () => {
-        chart.series.each((series) => {
-          series.bullets.each((bullet) => {
-            bullet.clones.each((item) => {
-              if (!item.dataItem || !item.dataItem.dataContext) {
-                return;
-              }
-
-              // Find the activities from the dataItem
-              const activityDataFromDataItem = this.data.activityTypes.reduce((obj, dataActivityType) => {
-                if (!isNumber(item.dataItem.dataContext[dataActivityType])) {
-                  return obj
-                }
-                obj[dataActivityType] = item.dataItem.dataContext[dataActivityType]
-                return obj
-              }, {})
-              item.zIndex = Object.keys(activityDataFromDataItem).sort(function (a, b) {
-                return activityDataFromDataItem[b] - activityDataFromDataItem[a]
-              }).indexOf(series.name) + 1
-              // debugger;
-              chart.invalidateLayout();
-            })
-          })
-        })
-      });
-
+      // label.text =
+      label.adapter.add('text', (value, target, key) => {
+        const aggrValue = this.getAggregateData(data.daily, this.chartDataValueType);
+        return `[font-size: 1.3em]${aggrValue.getDisplayType()}[/]\n[bold font-size: 1.2em]${aggrValue.getDisplayValue()}${aggrValue.getDisplayUnit()}[/]\n(${this.chartDataValueType})`
+      })
+      
       return chart;
     })
 
