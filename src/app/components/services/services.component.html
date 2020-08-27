@@ -16,7 +16,7 @@
         <app-services-garmin [user]="user"></app-services-garmin>
       </ng-template>
     </mat-tab>
-    <mat-tab label="COROS" [disabled]="!user || isGuest">
+    <mat-tab label="COROS" [disabled]="!user || isGuest || true">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon-coros" svgIcon="coros"></mat-icon>
       </ng-template>
