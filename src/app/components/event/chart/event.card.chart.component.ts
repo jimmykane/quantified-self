@@ -288,7 +288,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return;
       }
 
-      // event.target.triggerMove(event.target.point, 'soft');
+      event.target.triggerMove(event.target.point, 'soft');
       let xAxis;
       switch (this.xAxisType) {
         case XAxisTypes.Time:
