@@ -10,9 +10,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {
-  AgmMap,
-} from '@agm/core';
+import { AgmMap, } from '@agm/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -30,7 +28,6 @@ import { debounceTime } from 'rxjs/operators';
 import { MapAbstract } from '../../map/map.abstract';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
-import Circle = google.maps.Circle;
 
 @Component({
   selector: 'app-event-card-map',
@@ -190,6 +187,11 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   }
 
   private async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
+    this.activitiesCursors.set(activityMapData.activity.getID(), {
+      latitudeDegrees: event.latLng.lat(),
+      longitudeDegrees: event.latLng.lng()
+    });
+    this.changeDetectorRef.detectChanges();
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()
@@ -201,11 +203,12 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       return;
     }
 
-    this.activityCursorService.clear();
+    // this.activityCursorService.clear();
 
     this.activityCursorService.setCursor({
       activityID: activityMapData.activity.getID(),
       time: nearest.time,
+      byMap: true,
     });
   }
 
@@ -251,7 +254,8 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       debounceTime(250)
     ).subscribe((cursors) => {
       this.logger.info(`Cursor on subscription`);
-      cursors.forEach(cursor => {
+      cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
+        console.log(cursor)
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
         if (cursorActivityMapData) {
           const position = cursorActivityMapData.positions.reduce((prev, curr) => Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
@@ -260,6 +264,10 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
               latitudeDegrees: position.latitudeDegrees,
               longitudeDegrees: position.longitudeDegrees
             });
+            this.agmMap._mapsWrapper.panTo({
+              lat: position.latitudeDegrees,
+              lng: position.longitudeDegrees
+            })
           }
         }
       });

@@ -147,7 +147,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   protected logger = Log.create('EventCardChartComponent');
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
-  private activitiesCursors: ActivityCursorInterface[] = [];
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
@@ -263,11 +262,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
-    chart.cursor.events.on('cursorpositionchanged', function(ev) {
-      ev.target.triggerMove(ev.target.point, 'soft');
-    });
-
-
     chart.zoomOutButton.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z'
     const tempButton = new am4core.Button();
 
@@ -288,20 +282,29 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
       this.logger.info(`Cursor position changed ${event.target.point.x} ${event.target.point.y}`);
+      // Avoid rewriting cursor change if it's triggered from this component
+      if (event.target['_stick'] === 'hard') {
+        event.target.triggerMove(event.target.point, 'soft');
+        return;
+      }
+
+      // event.target.triggerMove(event.target.point, 'soft');
       let xAxis;
       switch (this.xAxisType) {
         case XAxisTypes.Time:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
           this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
             activityID: activity.getID(),
-            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime()
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime(),
+            byChart: true,
           }));
           break;
         case XAxisTypes.Duration:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
           this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
             activityID: activity.getID(),
-            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000)
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
+            byChart: true,
           }));
           break;
       }
@@ -744,34 +747,26 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     ).subscribe((cursors) => {
       this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
-        this.activitiesCursors = [];
         return;
       }
 
       // @todo fix scrollbar for cursor
-      cursors.forEach((cursor) => {
-        const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
-
-        // Do not trigger update
-        if (activityCursor && (activityCursor.time === cursor.time)) {
-          return;
-        }
+      cursors.filter(cursor => cursor.byMap === true).forEach((cursor) => {
 
         this.chart.xAxes.values.forEach(xAxis => {
           switch (this.xAxisType) {
             case XAxisTypes.Time:
-              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'none');
+              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'hard');
               break;
             case XAxisTypes.Duration:
               const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
               if (cursorActivity) {
-                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'none');
+                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'hard');
               }
               break;
           }
         })
       });
-      this.activitiesCursors = cursors;
     });
 
 

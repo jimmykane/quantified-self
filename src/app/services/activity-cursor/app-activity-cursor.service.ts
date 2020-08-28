@@ -14,6 +14,7 @@ export class AppActivityCursorService {
   }
 
   public setCursor(cursor: ActivityCursorInterface) {
+    // debugger
     const activityCursor = this.cursors.getValue().find(c => c.activityID === cursor.activityID);
     // If there is no current cursor then justs add it and return
     if (!activityCursor) {
@@ -28,6 +29,8 @@ export class AppActivityCursorService {
     }
     // Now update the time
     activityCursor.time = cursor.time;
+    activityCursor.byChart = cursor.byChart;
+    activityCursor.byMap = cursor.byMap;
     this.cursors.next(this.cursors.getValue());
   }
 
@@ -46,4 +49,6 @@ export class AppActivityCursorService {
 export interface ActivityCursorInterface {
   activityID: string
   time: number;
+  byChart?: boolean;
+  byMap?: boolean;
 }
