@@ -316,11 +316,6 @@ export class AppUserService implements OnDestroy {
     return Promise.resolve(user);
   }
 
-  public async setSuuntoAppToken(user: User, token: Auth2ServiceTokenInterface) {
-    return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(token.userName)
-      .set(JSON.parse(JSON.stringify(token)))
-  }
-
   public getServiceToken(user: User, serviceName: ServiceNames){
     switch (serviceName) {
       default:
@@ -420,8 +415,9 @@ export class AppUserService implements OnDestroy {
   public async deauthorizeService(serviceName: ServiceNames) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     const serviceNamesToFunctionsURI = {
-      [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoAppURI,
-      [ServiceNames.GarminHealthAPI]: environment.functions.deauthorizeGarminHealthAPI
+      [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoApp,
+      [ServiceNames.GarminHealthAPI]: environment.functions.deauthorizeGarminHealthAPI,
+      [ServiceNames.COROSAPI]: environment.functions.deauthorizeCOROSAPI,
     }
     return this.http.post(
       serviceNamesToFunctionsURI[serviceName],
@@ -437,7 +433,8 @@ export class AppUserService implements OnDestroy {
   public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{redirect_uri: string}|{redirect_uri: string, state: string, oauthToken: string}>{
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI,
-      [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI
+      [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI,
+      [ServiceNames.COROSAPI]: environment.functions.getCOROSAPIAuthRequestTokenRedirectURI
     }
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return <Promise<{redirect_uri: string}>>this.http.post(
@@ -474,6 +471,22 @@ export class AppUserService implements OnDestroy {
         state: state,
         code: code,
         redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string) {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return this.http.post(
+      environment.functions.requestAndSetCOROSAPIAccessToken, {
+        state: state,
+        code: code,
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
       },
       {
         headers:

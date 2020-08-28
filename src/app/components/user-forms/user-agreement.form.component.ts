@@ -31,8 +31,6 @@ export class UserAgreementFormComponent implements OnInit {
 
   public userFormGroup: FormGroup;
   private readonly signInMethod: string;
-  private readonly serviceName?: string;
-  private readonly serviceToken?: Auth2ServiceTokenInterface;
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -44,8 +42,6 @@ export class UserAgreementFormComponent implements OnInit {
     private afa: AngularFireAnalytics,
   ) {
     this.user = data.user; // Perhaps move to service?
-    this.serviceName = data.serviceName;
-    this.serviceToken = data.serviceToken;
     this.signInMethod = data.signInMethod;
     if (!this.user || !this.signInMethod) {
       throw new Error('Component needs user');
@@ -92,10 +88,6 @@ export class UserAgreementFormComponent implements OnInit {
       this.user.acceptedTrackingPolicy = true;
       this.user.acceptedDiagnosticsPolicy = true;
       const dbUser = await this.userService.createOrUpdateUser(this.user);
-      // debugger;
-      if (this.serviceName && this.serviceToken) {
-        await this.userService.setSuuntoAppToken(dbUser, this.serviceToken);
-      }
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });

@@ -52,13 +52,23 @@ service cloud.firestore {
        }
     }
 
+    match /COROSAPIAccessTokens/{userID} {
+      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+       match /tokens/{document=**} {
+          allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+       }
+    }
+
     match /garminHealthAPITokens/{userID} {
       allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
-
     match /garminHealthAPIActivityQueue/{userID} {
       allow read, write: if false;
+    }
+
+    match /COROSAPIWorkoutQueue/{userID} {
+          allow read, write: if false;
     }
 
     match /suuntoAppWorkoutQueue/{userID} {

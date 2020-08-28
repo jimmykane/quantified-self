@@ -33,7 +33,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   async tokensReceived(event) {
     this.isLoading = true;
     const loggedInUser = await this.afAuth.signInWithCustomToken(event.detail.firebaseAuthToken);
-    return this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
+    return this.redirectOrShowDataPrivacyDialog(loggedInUser);
   }
 
 
@@ -69,8 +69,6 @@ export class LoginComponent implements OnInit, OnDestroy {
     } finally {
       this.isLoading = false;
     }
-
-
   }
 
 
@@ -107,14 +105,11 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = false;
   }
 
-  private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
+  private async redirectOrShowDataPrivacyDialog(loginServiceUser) {
     this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
-        if (serviceName && serviceToken) {
-          await this.userService.setSuuntoAppToken(databaseUser, serviceToken)
-        }
         this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
         await this.router.navigate(['/dashboard']);
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'}`, null, {
@@ -122,22 +117,20 @@ export class LoginComponent implements OnInit, OnDestroy {
         });
         return;
       }
-      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous', serviceName, serviceToken)
+      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous')
     } catch (e) {
       Sentry.captureException(e);
       this.isLoading = false;
     }
   }
 
-  private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
+  private showUserAgreementFormDialog(user: User, signInMethod: string) {
     const dialogRef = this.dialog.open(UserAgreementFormComponent, {
       minWidth: '80vw',
       disableClose: true,
       data: {
         user: user,
         signInMethod: signInMethod,
-        serviceName: serviceName,
-        serviceToken: serviceToken,
       },
     });
 

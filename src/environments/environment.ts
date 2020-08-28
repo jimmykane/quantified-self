@@ -18,7 +18,7 @@ export const environment = {
     measurementId: 'G-6YE27NNKDT'
   },
   functions: {
-    deauthorizeSuuntoAppURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
+    deauthorizeSuuntoApp: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
     uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRouteToSuuntoApp',
     getSuuntoFITFile: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoFITFile',
     historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addSuuntoAppHistoryToQueue',
@@ -29,5 +29,8 @@ export const environment = {
     deauthorizeGarminHealthAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeGarminHealthAPI',
     getSuuntoAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoAPIAuthRequestTokenRedirectURI',
     requestAndSetSuuntoAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetSuuntoAPIAccessToken',
+    getCOROSAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getCOROSAPIAuthRequestTokenRedirectURI',
+    requestAndSetCOROSAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetCOROSAPIAccessToken',
+    deauthorizeCOROSAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeCOROSAPI',
   }
 };

@@ -1,0 +1,1 @@
+export const SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME = 'suuntoAppAccessTokens'

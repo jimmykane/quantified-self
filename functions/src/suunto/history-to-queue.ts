@@ -16,6 +16,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 
 const BATCH_SIZE = 450;
+const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 /**
  * Add to the workout queue the workouts of a user for a selected date range
@@ -76,7 +77,7 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
 
     let serviceToken;
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
     }catch (e) {
       console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       res.status(500);

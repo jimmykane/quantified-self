@@ -7,6 +7,8 @@ import { getTokenData } from "./service-tokens";
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
+const SERVICE_NAME = ServiceNames.SuuntoApp
+
 /**
  * Uploads a route to the Suunto app
  */
@@ -65,7 +67,7 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
     } catch (e) {
       console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       res.status(500);

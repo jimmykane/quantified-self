@@ -2,9 +2,10 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
-import {suuntoApiAuth} from "./suunto/auth/auth";
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { getServiceConfig } from './OAuth2';
+import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 
 //
 export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
@@ -14,7 +15,7 @@ export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').ru
   let count = 0;
   for (const authToken of querySnapshot.docs){
     try {
-      await getTokenData(authToken, true);
+      await getTokenData(authToken, ServiceNames.SuuntoApp, true);
       count++;
     }catch (e) {
       console.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`)
@@ -23,12 +24,11 @@ export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').ru
   console.log(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
 });
 
-export async function getTokenData(doc: QueryDocumentSnapshot, forceRefreshAndSave = false): Promise<Auth2ServiceTokenInterface> {
-
+export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false, useStaging = false): Promise<Auth2ServiceTokenInterface> {
+  const serviceConfig = getServiceConfig(serviceName, useStaging)
   const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
-  const oauth2 = suuntoApiAuth();
   // doc.data() is never undefined for query doc snapshots
-  const token = oauth2.createToken({
+  const token = serviceConfig.oauth2Client.createToken({
     'access_token': serviceTokenData.accessToken,
     'refresh_token': serviceTokenData.refreshToken,
     'expires_at': new Date(serviceTokenData.expiresAt) // We need to convert to date here for the lib to be able to check .expired()

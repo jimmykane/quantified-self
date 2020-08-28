@@ -16,7 +16,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     const state = this.route.snapshot.queryParamMap.get('state');
     const code = this.route.snapshot.queryParamMap.get('code');
     if (state && code) {
-      await this.userService.requestAndSetCurrentUserSuuntoAppAccessToken(state, code);
+      await this.userService.requestAndSetCurrentUserCOROSAPIAccessToken(state, code);
     }
   }
 

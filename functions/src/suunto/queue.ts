@@ -12,6 +12,7 @@ import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-dat
 
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
+const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
@@ -93,7 +94,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
     // IF refresh fails it will go and try to import the for the next token
     // If import fails for the next token it will increase count (fail ) and try from start.
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot);
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME);
     } catch (e) {
       console.error(e);
       console.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));

@@ -12,6 +12,7 @@ admin.initializeApp({
 export * from "./suunto/st-workout-download-as-fit"
 export * from "./suunto/auth/wrapper"
 export * from "./garmin/auth/wrapper"
+export * from "./coros/auth/wrapper"
 export * from "./service-tokens"
 export * from "./suunto/queue"
 export * from "./suunto/history-to-queue"

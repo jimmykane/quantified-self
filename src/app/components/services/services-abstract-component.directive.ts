@@ -102,7 +102,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         });
       } finally {
         this.isLoading = false;
-        await this.router.navigate(['services'], {queryParams: { serviceName: serviceName }, preserveQueryParams: false});
+        // await this.router.navigate(['services'], {queryParams: { serviceName: serviceName }, preserveQueryParams: false});
       }
     });
   }
@@ -111,8 +111,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async connectWithService(event) {
+    this.isLoading = true;
     try {
-      this.isLoading = true;
       const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
