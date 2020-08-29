@@ -113,7 +113,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   results = await serviceConfig.oauth2Client.getToken({
     code: code,
     scope: serviceConfig.oAuthScopes,
-    redirect_uri: 'test'
+    redirect_uri: redirectUri
   });
 
 
