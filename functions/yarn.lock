@@ -291,10 +291,10 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@sports-alliance/sports-lib@^5.1.9":
-  version "5.1.9"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.1.9.tgz#bc883b9b0b448c441d66da5334c9439191fdba3a"
-  integrity sha512-eo4B+YPAXn+pBzS3MZDSg1vyH0wr8ESFGLMruIbDCy3kHu21NlRPWAB67glm8ALCZB/EXh/vMuW13txvhwRVEQ==
+"@sports-alliance/sports-lib@^5.1.10":
+  version "5.1.10"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.1.10.tgz#df2aad78341a5c49b70bc445db97cf30582f7f9d"
+  integrity sha512-JbTqCAIRE9Dcnqivr5SN9a21ekdoIGOjek1K/lA8DxDNPqCUhs8pjnhdysz0860bFfzVK7G0QYDzk+ifpFKdFQ==
   dependencies:
     "@types/node" "^14.6.1"
     fast-xml-parser "^3.17.4"
