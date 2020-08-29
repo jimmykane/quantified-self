@@ -2,18 +2,18 @@ import * as functions from 'firebase-functions'
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { addToQueueForSuunto, increaseRetryCountForQueueItem, parseQueueItems, updateToProcessed } from '../queue';
 import * as admin from 'firebase-admin';
-import { getTokenData } from '../service-tokens';
+import { getTokenData } from '../tokens';
 import * as requestPromise from 'request-promise-native';
 import { generateIDFromParts, setEvent } from '../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import { SuuntoAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { SERVICE_NAME } from './constants';
 
 
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
-const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,

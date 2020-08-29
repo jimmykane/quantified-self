@@ -1,6 +1,5 @@
 'use strict';
 
-import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import {
   Auth2ServiceTokenInterface,
@@ -8,28 +7,27 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { getServiceConfig } from './OAuth2';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
+import QuerySnapshot = admin.firestore.QuerySnapshot;
+import { getServiceConfig } from './OAuth2';
 
 //
-export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 2 hours').onRun(async (context) => {
-  // Suunto app refresh tokens should be refreshed every 180days we target at half days before 90 days
-  const querySnapshot = await admin.firestore().collectionGroup('tokens').where("dateRefreshed", "<=", (new Date()).getTime() - (90 * 24 * 60 * 60 * 1000)).limit(50).get();
+export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: ServiceNames){
   console.log(`Found ${querySnapshot.size} auth tokens to process`);
   let count = 0;
   for (const authToken of querySnapshot.docs) {
     try {
-      await getTokenData(authToken, ServiceNames.SuuntoApp, true);
+      await getTokenData(authToken, serviceName, true);
       count++;
     } catch (e) {
       console.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`)
     }
   }
   console.log(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
-});
+}
 
 export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false, useStaging = false): Promise<SuuntoAPIAuth2ServiceTokenInterface|COROSAPIAuth2ServiceTokenInterface> {
-  const serviceConfig = getServiceConfig(serviceName)
+  const serviceConfig = getServiceConfig(serviceName, true)
   const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
   // doc.data() is never undefined for query doc snapshots
   const token = serviceConfig.oauth2Client.createToken({
@@ -45,6 +43,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
         throw new Error('Not Implemented');
       case ServiceNames.COROSAPI:
         return <COROSAPIAuth2ServiceTokenInterface>{
+          serviceName: serviceName,
           accessToken: serviceTokenData.accessToken,
           refreshToken: serviceTokenData.refreshToken,
           expiresAt: serviceTokenData.expiresAt,
@@ -56,6 +55,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
         };
       case ServiceNames.SuuntoApp:
         return <SuuntoAPIAuth2ServiceTokenInterface>{
+          serviceName: serviceName,
           accessToken: serviceTokenData.accessToken,
           refreshToken: serviceTokenData.refreshToken,
           expiresAt: serviceTokenData.expiresAt,
@@ -76,6 +76,10 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
   const date = new Date();
   try {
     responseToken = await token.refresh();
+    // COROS Exception for response
+    if (responseToken.token.message && responseToken.token.message !== 'OK'){
+      throw new Error('Something went wrong')
+    }
     console.log(`Successfully refreshed token ${doc.id}`);
   } catch (e) {
     console.error(`Could not refresh token for user ${doc.id}`, e);
@@ -97,6 +101,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
       throw new Error('Not implemented')
     case ServiceNames.SuuntoApp:
       newToken = <SuuntoAPIAuth2ServiceTokenInterface>{
+        serviceName: serviceName,
         accessToken: responseToken.token.access_token,
         refreshToken: responseToken.token.refresh_token,
         expiresAt: responseToken.token.expires_at.getTime() - 6000,
@@ -108,16 +113,9 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
       }
       break;
     case ServiceNames.COROSAPI:
-      newToken = <COROSAPIAuth2ServiceTokenInterface>{
-        accessToken: responseToken.token.access_token,
-        refreshToken: responseToken.token.refresh_token,
-        expiresAt: responseToken.token.expires_at.getTime() - 6000,
-        scope: responseToken.token.scope,
-        tokenType: responseToken.token.token_type,
-        openId: responseToken.token.openId,
-        dateRefreshed: date.getTime(),
-        dateCreated: serviceTokenData.dateCreated,
-      }
+      newToken = <COROSAPIAuth2ServiceTokenInterface>serviceTokenData
+      newToken.expiresAt = date.getTime() - 6000;
+      newToken.dateRefreshed = date.getTime();
       break;
   }
 

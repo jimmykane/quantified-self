@@ -3,7 +3,7 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import { getTokenData } from "./service-tokens";
+import { getTokenData } from "./tokens";
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 

@@ -3,7 +3,7 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import {getTokenData} from "../service-tokens";
+import {getTokenData} from "../tokens";
 import {
     generateIDFromParts,
     getUserIDFromFirebaseToken,
@@ -13,10 +13,10 @@ import {
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { SuuntoAppWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { SERVICE_NAME } from './constants';
 
 
 const BATCH_SIZE = 450;
-const SERVICE_NAME = ServiceNames.SuuntoApp;
 
 /**
  * Add to the workout queue the workouts of a user for a selected date range

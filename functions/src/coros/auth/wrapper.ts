@@ -2,14 +2,13 @@
 
 import * as functions from 'firebase-functions'
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from "../../utils";
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import {
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State
 } from '../../OAuth2';
+import { SERVICE_NAME } from '../constants';
 
-const SERVICE_NAME = ServiceNames.COROSAPI
 
 export const getCOROSAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header

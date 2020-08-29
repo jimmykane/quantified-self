@@ -13,7 +13,7 @@ export * from "./suunto/st-workout-download-as-fit"
 export * from "./suunto/auth/wrapper"
 export * from "./garmin/auth/wrapper"
 export * from "./coros/auth/wrapper"
-export * from "./service-tokens"
+export * from "./tokens"
 export * from "./suunto/queue"
 export * from "./suunto/history-to-queue"
 export * from "./routes"
@@ -31,3 +31,5 @@ export { setAccessControlHeadersOnResponse } from './utils';
 export { setEvent } from './utils';
 export { updateToProcessed } from './queue';
 export { increaseRetryCountForQueueItem } from './queue';
+export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
+export { refreshCOROSAPIRefreshTokens } from './coros/tokens';

@@ -10,15 +10,16 @@ import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { getTokenData } from './service-tokens';
+import { getTokenData } from './tokens';
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
 
 /**
  *
  * @param serviceName
+ * @param refresh
  */
-export function getServiceConfig(serviceName: ServiceNames): ServiceConfig {
+export function getServiceConfig(serviceName: ServiceNames, refresh = false): ServiceConfig {
   switch (serviceName) {
     default:
       throw new Error(`Not implemented`)
@@ -30,7 +31,7 @@ export function getServiceConfig(serviceName: ServiceNames): ServiceConfig {
       }
     case ServiceNames.COROSAPI:
       return {
-        oauth2Client: COROSAPIAuth(),
+        oauth2Client: COROSAPIAuth(refresh),
         oAuthScopes: 'workout',
         tokenCollectionName: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME,
       }
@@ -72,11 +73,12 @@ export async function validateOAuth2State(userID: string, serviceName: ServiceNa
 
 export function convertAccessTokenResponseToServiceToken(response: AccessToken, serviceName: ServiceNames): SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface {
   const currentDate = new Date();
-  switch (serviceName){
+  switch (serviceName) {
     default:
       throw new Error('Not implemented')
     case ServiceNames.SuuntoApp:
       return <SuuntoAPIAuth2ServiceTokenInterface>{
+        serviceName: serviceName,
         accessToken: response.token.access_token,
         refreshToken: response.token.refresh_token,
         tokenType: response.token.token_type,
@@ -88,6 +90,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
       }
     case ServiceNames.COROSAPI:
       return <COROSAPIAuth2ServiceTokenInterface>{
+        serviceName: serviceName,
         accessToken: response.token.access_token,
         refreshToken: response.token.refresh_token,
         tokenType: response.token.token_type || 'bearer',
@@ -124,12 +127,12 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   await admin.firestore()
     .collection(serviceConfig.tokenCollectionName)
     .doc(userID).collection('tokens')
-    .doc(results.token.user || results.token.openId)// @todo make this dynamic and not silly like this 
+    .doc(results.token.user || results.token.openId)// @todo make this dynamic and not silly like this
     .set(convertAccessTokenResponseToServiceToken(results, serviceName))
   console.log(`User ${userID} successfully connected to ${serviceName}`)
 }
 
-export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames){
+export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
