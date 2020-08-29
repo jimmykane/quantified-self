@@ -124,7 +124,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   await admin.firestore()
     .collection(serviceConfig.tokenCollectionName)
     .doc(userID).collection('tokens')
-    .doc(results.token.user || results.token.openId)
+    .doc(results.token.user || results.token.openId)// @todo make this dynamic and not silly like this 
     .set(convertAccessTokenResponseToServiceToken(results, serviceName))
   console.log(`User ${userID} successfully connected to ${serviceName}`)
 }
