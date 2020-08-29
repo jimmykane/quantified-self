@@ -8,6 +8,7 @@ import { generateIDFromParts, setEvent } from '../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { SuuntoAPIAuth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 const TIMEOUT_IN_SECONDS = 300;
@@ -94,7 +95,7 @@ export async function processSuuntoAppActivityQueueItem(queueItem: SuuntoAppWork
     // IF refresh fails it will go and try to import the for the next token
     // If import fails for the next token it will increase count (fail ) and try from start.
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME);
+      serviceToken = <SuuntoAPIAuth2ServiceTokenInterface>(await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME));
     } catch (e) {
       console.error(e);
       console.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));

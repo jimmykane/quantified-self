@@ -41,7 +41,7 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions.region('europe-w
   }
 
   res.send({
-    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME,  req.body.redirectUri, true),
+    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME,  req.body.redirectUri),
   })
 });
 

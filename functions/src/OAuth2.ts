@@ -6,7 +6,10 @@ import { SuuntoAPIAuth } from './suunto/auth/auth';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from './coros/constants';
 import { AccessToken, AuthorizationCode } from 'simple-oauth2';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import {
+  COROSAPIAuth2ServiceTokenInterface,
+  SuuntoAPIAuth2ServiceTokenInterface
+} from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { getTokenData } from './service-tokens';
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
@@ -14,9 +17,8 @@ import * as functions from 'firebase-functions';
 /**
  *
  * @param serviceName
- * @param useStaging
  */
-export function getServiceConfig(serviceName: ServiceNames, useStaging = false): ServiceConfig {
+export function getServiceConfig(serviceName: ServiceNames): ServiceConfig {
   switch (serviceName) {
     default:
       throw new Error(`Not implemented`)
@@ -28,7 +30,7 @@ export function getServiceConfig(serviceName: ServiceNames, useStaging = false):
       }
     case ServiceNames.COROSAPI:
       return {
-        oauth2Client: COROSAPIAuth(useStaging),
+        oauth2Client: COROSAPIAuth(),
         oAuthScopes: 'workout',
         tokenCollectionName: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME,
       }
@@ -40,10 +42,9 @@ export function getServiceConfig(serviceName: ServiceNames, useStaging = false):
  * @param userID
  * @param serviceName
  * @param redirectUri
- * @param useStaging
  */
-export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: string, serviceName: ServiceNames, redirectUri: string, useStaging = false): Promise<string> {
-  const serviceConfig = getServiceConfig(serviceName, useStaging)
+export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: string, serviceName: ServiceNames, redirectUri: string): Promise<string> {
+  const serviceConfig = getServiceConfig(serviceName)
   const state = crypto.randomBytes(20).toString('hex')
   const serviceRedirectURI = serviceConfig.oauth2Client.authorizeURL({
     redirect_uri: redirectUri,
@@ -63,11 +64,40 @@ export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: str
  * @param userID
  * @param serviceName
  * @param state
- * @param useStaging
  */
-export async function validateOAuth2State(userID: string, serviceName: ServiceNames, state: string, useStaging = false): Promise<boolean> {
-  const tokensDocumentSnapshotData = (await admin.firestore().collection(getServiceConfig(serviceName, useStaging).tokenCollectionName).doc(userID).get()).data();
+export async function validateOAuth2State(userID: string, serviceName: ServiceNames, state: string): Promise<boolean> {
+  const tokensDocumentSnapshotData = (await admin.firestore().collection(getServiceConfig(serviceName).tokenCollectionName).doc(userID).get()).data();
   return tokensDocumentSnapshotData && tokensDocumentSnapshotData.state && tokensDocumentSnapshotData.state === state
+}
+
+export function convertAccessTokenResponseToServiceToken(response: AccessToken, serviceName: ServiceNames): SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface {
+  const currentDate = new Date();
+  switch (serviceName){
+    default:
+      throw new Error('Not implemented')
+    case ServiceNames.SuuntoApp:
+      return <SuuntoAPIAuth2ServiceTokenInterface>{
+        accessToken: response.token.access_token,
+        refreshToken: response.token.refresh_token,
+        tokenType: response.token.token_type,
+        expiresAt: currentDate.getTime() + (response.token.expires_in * 1000),
+        scope: response.token.scope,
+        userName: response.token.user,
+        dateCreated: currentDate.getTime(),
+        dateRefreshed: currentDate.getTime(),
+      }
+    case ServiceNames.COROSAPI:
+      return <COROSAPIAuth2ServiceTokenInterface>{
+        accessToken: response.token.access_token,
+        refreshToken: response.token.refresh_token,
+        tokenType: response.token.token_type || 'bearer',
+        expiresAt: currentDate.getTime() + (response.token.expires_in * 1000),
+        scope: response.token.scope || 'workout',
+        openId: response.token.openId,
+        dateCreated: currentDate.getTime(),
+        dateRefreshed: currentDate.getTime(),
+      }
+  }
 }
 
 /**
@@ -76,43 +106,30 @@ export async function validateOAuth2State(userID: string, serviceName: ServiceNa
  * @param serviceName
  * @param redirectUri
  * @param code
- * @param useStaging
  */
-export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string, useStaging = false) {
-  const serviceConfig = getServiceConfig(serviceName, useStaging)
+export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
+  const serviceConfig = getServiceConfig(serviceName)
   let results: AccessToken
   results = await serviceConfig.oauth2Client.getToken({
     code: code,
     scope: serviceConfig.oAuthScopes,
-    // state: state,
-    redirect_uri: redirectUri
+    redirect_uri: 'test'
   });
 
 
-  if (!results) {
-    throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName} using staging ${useStaging}`)
+  if (!results || !results.token || !results.token.access_token) {
+    throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`)
   }
-
-  const currentDate = new Date();
 
   await admin.firestore()
     .collection(serviceConfig.tokenCollectionName)
     .doc(userID).collection('tokens')
-    .doc(results.token.user)
-    .set(<Auth2ServiceTokenInterface>{
-      accessToken: results.token.access_token,
-      refreshToken: results.token.refresh_token,
-      tokenType: results.token.token_type,
-      expiresAt: currentDate.getTime() + (results.token.expires_in * 1000),
-      scope: results.token.scope,
-      userName: results.token.user,
-      dateCreated: currentDate.getTime(),
-      dateRefreshed: currentDate.getTime(),
-    })
+    .doc(results.token.user || results.token.openId)
+    .set(convertAccessTokenResponseToServiceToken(results, serviceName))
   console.log(`User ${userID} successfully connected to ${serviceName}`)
 }
 
-export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames, useStaging = false){
+export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames){
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
@@ -122,7 +139,7 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
     let serviceToken;
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false, useStaging);
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
     } catch (e) {
       console.error(`Refreshing token failed skipping deletion for this token with id ${tokenQueryDocumentSnapshot.id}`);
       continue // Go to next

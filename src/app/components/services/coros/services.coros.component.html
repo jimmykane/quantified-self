@@ -28,7 +28,7 @@
 
             <mat-list-item style="text-align: left">
               <mat-icon mat-list-icon>account_circle</mat-icon>
-              <div mat-line>{{ serviceTokens[0].userID }} </div>
+              <div mat-line>{{ serviceTokens[0].openId }} </div>
               <div mat-line>Connected at {{serviceTokens[0].dateCreated  | date:'medium'}}</div>
             </mat-list-item>
           </mat-list>
@@ -71,3 +71,4 @@
 
   </mat-tab-group>
 </mat-card>
+<app-shade [isActive]="isLoading"></app-shade>
