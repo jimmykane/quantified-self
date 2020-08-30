@@ -46,20 +46,6 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
 
   console.log(`Inserted to queue ${queueItemDocumentReference.id} for workoutID ${workoutID} and userName ${userName}`);
   res.status(200).send()
-
-  // return
-  // // All ok reply and take over internally
-  //
-  // // res.write('SUCCESS');
-  //
-  // try{
-  //   await processSuuntoAppActivityQueueItem(<SuuntoAppWorkoutQueueItemInterface>Object.assign({id: queueItemDocumentReference.id}, (await queueItemDocumentReference.get()).data()));
-  // }catch (e) {
-  //   console.error(`Could not process activity ${queueItemDocumentReference.id} due to ${e.message}`)
-  //   console.error(e)
-  // }
-  // // console.log(`Response end`)
-  // res.status(200).send()
 })
 
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({

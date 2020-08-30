@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
+  COROSAPIWorkoutQueueItemInterface,
   GarminHealthAPIActivityQueueItemInterface,
   QueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface
@@ -8,6 +9,7 @@ import {
 import { generateIDFromParts } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { processSuuntoAppActivityQueueItem } from './suunto/queue';
+import { getServiceWorkoutQueueName } from './history';
 
 export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, serviceName: ServiceNames, error: Error, incrementBy = 1) {
   queueItem.retryCount += incrementBy;
@@ -22,7 +24,7 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
 
   try {
     await  await admin.firestore()
-      .collection(serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminHealthAPIActivityQueue')
+      .collection(getServiceWorkoutQueueName(serviceName))
       .doc(queueItem.id).update(JSON.parse(JSON.stringify(queueItem)));
     console.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
   } catch (e) {
@@ -34,7 +36,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
   try {
     // @todo make switch
     await admin.firestore()
-      .collection(serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminHealthAPIActivityQueue')
+      .collection(getServiceWorkoutQueueName(serviceName))
       .doc(queueItem.id).update({
         'processed': true,
         'processedAt': (new Date()).getTime(),
@@ -49,8 +51,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = 10;
   const LIMIT = 200;
   // @todo add queue item sort date for creation
-  const collection = serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminHealthAPIActivityQueue';
-  const querySnapshot = await admin.firestore().collection(collection).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
+  const querySnapshot = await admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   console.time('ParseQueueItems');
@@ -97,8 +98,8 @@ export async function addToQueueForGarmin(queueItem: {userID: string, startTimeI
   }, ServiceNames.GarminHealthAPI)
 }
 
-async function addToQueue(queueItem: SuuntoAppWorkoutQueueItemInterface|GarminHealthAPIActivityQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
-  const queueItemDocument = admin.firestore().collection(serviceName === ServiceNames.SuuntoApp ?  'suuntoAppWorkoutQueue' : 'garminHealthAPIActivityQueue').doc(queueItem.id);
+async function addToQueue(queueItem: SuuntoAppWorkoutQueueItemInterface|GarminHealthAPIActivityQueueItemInterface|COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
+  const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   await queueItemDocument.set(queueItem);
   return queueItemDocument;
 }

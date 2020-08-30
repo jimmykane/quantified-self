@@ -13,6 +13,7 @@ import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
 
 const BATCH_SIZE = 450;
 
@@ -96,6 +97,8 @@ export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
   switch (serviceName) {
     default:
       throw new Error('Not implemented');
+    case ServiceNames.GarminHealthAPI:
+      return GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME;
     case ServiceNames.SuuntoApp:
       return SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME
     case ServiceNames.COROSAPI:
