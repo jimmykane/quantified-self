@@ -21,7 +21,7 @@ export const environment = {
     deauthorizeSuuntoApp: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
     uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRouteToSuuntoApp',
     getSuuntoFITFile: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoFITFile',
-    historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addSuuntoAppHistoryToQueue',
+    suuntoAPIHistoryImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addSuuntoAppHistoryToQueue',
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
     getGarminHealthAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminHealthAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminHealthAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetGarminHealthAPIAccessToken',
@@ -32,5 +32,6 @@ export const environment = {
     getCOROSAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getCOROSAPIAuthRequestTokenRedirectURI',
     requestAndSetCOROSAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetCOROSAPIAccessToken',
     deauthorizeCOROSAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeCOROSAPI',
+    COROSAPIHistoryImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addCOROSAPIHistoryToQueue',
   }
 };

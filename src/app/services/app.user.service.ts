@@ -385,7 +385,7 @@ export class AppUserService implements OnDestroy {
   public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
-      environment.functions.historyImportURI, {
+      environment.functions.suuntoAPIHistoryImportURI, {
         startDate: startDate,
         endDate: endDate
       },
