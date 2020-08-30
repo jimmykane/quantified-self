@@ -176,7 +176,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
     }
     case DateRanges.lastThirtyDays: {
       return {
-        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30),
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 29),
         endDate: new Date(new Date().setHours(24, 0, 0, 0))
       }
     }
