@@ -9,10 +9,12 @@ import {
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 
+
+
 /**
  * Add to the workout queue the workouts of a user for a selected date range
  */
-export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed`);
@@ -44,6 +46,7 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
     return;
   }
 
+  // First check last history import
   // First check last history import
   if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
     console.error(`User ${userID} tried todo history import while not allowed`);

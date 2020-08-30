@@ -88,6 +88,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     switch (this.serviceName) {
       case ServiceNames.SuuntoApp:
+      case ServiceNames.COROSAPI:
         if (!this.userMetaForService.processedActivitiesFromLastHistoryImportCount) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
@@ -140,9 +141,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isLoading = true;
 
     try {
-      this.serviceName === ServiceNames.SuuntoApp
-        ? await this.userService.importSuuntoAppHistory(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value)
-        : await this.userService.backfillHealthAPIActivities(this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value);
+      await this.userService.importServiceHistoryForCurrentUser(this.serviceName, this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value)
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
@@ -151,7 +150,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       // debugger;
       Sentry.captureException(e);
       this.logger.error(e);
-      this.snackBar.open(`Could import history for ${this.serviceName} due to ${e.message}`, null, {
+      this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, null, {
         duration: 2000,
       });
     } finally {

@@ -13,6 +13,12 @@ export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface{
   userName: string,
 }
 
+export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface{
+  workoutID: string,
+  openId: string,
+  fitFileURI: string,
+}
+
 export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface{
   userID: string
   startTimeInSeconds: number,

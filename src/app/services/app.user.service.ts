@@ -382,25 +382,15 @@ export class AppUserService implements OnDestroy {
     return this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
   }
 
-  public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date){
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const serviceNamesToFunctionsURI = {
+      [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
+      [ServiceNames.GarminHealthAPI]: environment.functions.backfillHealthAPIActivities,
+      [ServiceNames.COROSAPI]: environment.functions.COROSAPIHistoryImportURI,
+    }
     return this.http.post(
-      environment.functions.suuntoAPIHistoryImportURI, {
-        startDate: startDate,
-        endDate: endDate
-      },
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
-  }
-
-  public async backfillHealthAPIActivities(startDate: Date, endDate: Date) {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
-    return this.http.post(
-      environment.functions.backfillHealthAPIActivities, {
+      serviceNamesToFunctionsURI[serviceName], {
         startDate: startDate,
         endDate: endDate
       },
@@ -634,6 +624,4 @@ export class AppUserService implements OnDestroy {
 
   ngOnDestroy() {
   }
-
-
 }

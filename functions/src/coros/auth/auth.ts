@@ -1,10 +1,9 @@
 import * as functions from "firebase-functions";
 import { AuthorizationCode } from "simple-oauth2";
+import { PRODUCTION_URL, STAGING_URL, USE_STAGING } from '../constants';
 
-const STAGING_URL = 'https://opentest.coros.com';
-const PRODUCTION_URL = 'https://open.coros.com';
-const USE_STAGING = true;
-const ACCESS_TOKEN_PATH = `/oauth2/access-token`;
+
+const ACCESS_TOKEN_PATH = `/oauth2/accesstoken`;
 // @todo move this else
 const REFRESH_TOKEN_PATH = `/oauth2/refresh-token?client_id=${functions.config().corosapi.client_id}&client_secret=${functions.config().corosapi.client_secret}`
 /**
