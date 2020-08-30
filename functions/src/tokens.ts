@@ -7,15 +7,22 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { getServiceConfig } from './OAuth2';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
-import { getServiceConfig } from './OAuth2';
 
 //
 export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: ServiceNames){
   console.log(`Found ${querySnapshot.size} auth tokens to process`);
   let count = 0;
   for (const authToken of querySnapshot.docs) {
+    // If we are targeting Suunto App some tokens wont have a service name and those belong to Suunto app
+    if (serviceName === ServiceNames.SuuntoApp // Targeting suunto app
+      && authToken.data().serviceName // They have a service name
+      && authToken.data().serviceName !== ServiceNames.SuuntoApp // It's not Suunto app
+      ){
+      continue;
+    }
     try {
       await getTokenData(authToken, serviceName, true);
       count++;
