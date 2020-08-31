@@ -10,6 +10,7 @@ import { generateIDFromParts, setEvent } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { getServiceWorkoutQueueName } from './history';
 import {
+  COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import * as requestPromise from 'request-promise-native';
@@ -119,7 +120,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
 export function getWorkoutForService(
   serviceName: ServiceNames,
   workoutQueueItem: COROSAPIWorkoutQueueItemInterface|SuuntoAppWorkoutQueueItemInterface|GarminHealthAPIActivityQueueItemInterface,
-  serviceToken?: SuuntoAPIAuth2ServiceTokenInterface): Promise<any>{
+  serviceToken?: SuuntoAPIAuth2ServiceTokenInterface|COROSAPIAuth2ServiceTokenInterface): Promise<any>{
   switch (serviceName) {
     default:
       throw new Error('Not Implemented');
@@ -132,7 +133,7 @@ export function getWorkoutForService(
     case ServiceNames.SuuntoApp:
       return requestPromise.get({
         headers: {
-          'Authorization': serviceToken?.accessToken,
+          'Authorization': (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).accessToken,
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
         },
         encoding: null,
@@ -197,10 +198,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     let result;
     try {
       console.time('DownloadFit');
-      result = await getWorkoutForService(serviceName, queueItem)
-      console.timeEnd('DownloadFit');
+      result = await getWorkoutForService(serviceName, queueItem, serviceToken)
       console.log(`Downloaded FIT file for ${queueItem.id}`)
     } catch (e) {
+      console.timeEnd('DownloadFit');
       if (e.statusCode === 403) {
         console.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`))
         await increaseRetryCountForQueueItem(queueItem, serviceName, e, 20);
@@ -216,11 +217,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       await increaseRetryCountForQueueItem(queueItem, serviceName, e);
       continue;
     }
-
+    console.timeEnd('DownloadFit');
     try {
       const event = await EventImporterFIT.getFromArrayBuffer(result);
       event.name = event.startDate.toJSON(); // @todo improve
-      console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.openId} test`);
+      console.log(`Created Event from FIT file of ${queueItem.id}`);
       switch (serviceName){
         default:
           throw new Error('Not Implemented')
