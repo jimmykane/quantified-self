@@ -291,10 +291,10 @@
   resolved "https://registry.yarnpkg.com/@protobufjs/utf8/-/utf8-1.1.0.tgz#a777360b5b39a1a2e5106f8e858f2fd2d060c570"
   integrity sha1-p3c2C1s5oaLlEG+OhY8v0tBgxXA=
 
-"@sports-alliance/sports-lib@^5.1.10":
-  version "5.1.10"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.1.10.tgz#df2aad78341a5c49b70bc445db97cf30582f7f9d"
-  integrity sha512-JbTqCAIRE9Dcnqivr5SN9a21ekdoIGOjek1K/lA8DxDNPqCUhs8pjnhdysz0860bFfzVK7G0QYDzk+ifpFKdFQ==
+"@sports-alliance/sports-lib@^5.1.11":
+  version "5.1.11"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.1.11.tgz#bf48e270356e81a057a9c2c221bd7922a619282e"
+  integrity sha512-FN9Wwwy9QXXqzwCNYpQs+ZAfLsZdZZkvNkMa3ipJGWHPwbQIaE4XRQ2Y1bV7Od3TVNuMi2lCOCH3cEjCobE54w==
   dependencies:
     "@types/node" "^14.6.1"
     fast-xml-parser "^3.17.4"
@@ -2263,9 +2263,9 @@ unpipe@1.0.0, unpipe@~1.0.0:
   integrity sha1-sr9O6FFKrmFltIF4KdIbLvSZBOw=
 
 uri-js@^4.2.2:
-  version "4.2.2"
-  resolved "https://registry.yarnpkg.com/uri-js/-/uri-js-4.2.2.tgz#94c540e1ff772956e2299507c010aea6c8838eb0"
-  integrity sha512-KY9Frmirql91X2Qgjry0Wd4Y+YTdrdZheS8TFwvkbLWf/G5KNJDCh6pKL5OZctEW4+0Baa5idK2ZQuELRwPznQ==
+  version "4.4.0"
+  resolved "https://registry.yarnpkg.com/uri-js/-/uri-js-4.4.0.tgz#aa714261de793e8a82347a7bcc9ce74e86f28602"
+  integrity sha512-B0yRTzYdUCCn9n+F4+Gh4yIDtMQcaJsmYBDsTSG8g/OejKBodLQ2IHfN3bM7jUsRXndopT7OIXWdYqc1fjmV6g==
   dependencies:
     punycode "^2.1.0"
 
