@@ -6,7 +6,10 @@ import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
 import { generateIDFromParts } from './utils';
-import { COROSAPIWorkoutQueueItemInterface, QueueItemInterface } from './queue/queue-item.interface';
+import {
+  COROSAPIWorkoutQueueItemInterface,
+  SuuntoAppWorkoutQueueItemInterface
+} from './queue/queue-item.interface';
 import { getServiceConfig } from './OAuth2';
 import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, PRODUCTION_URL, STAGING_URL, USE_STAGING } from './coros/constants';
 import {
@@ -30,7 +33,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
 
     // @todo add try
-    let workoutQueueItems: QueueItemInterface[]
+    let workoutQueueItems:any;
     try {
       workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate)
     } catch (e) {
@@ -63,7 +66,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
         batch.set(
           admin.firestore()
             .collection(getServiceWorkoutQueueName(serviceName))
-            .doc(generateIDFromParts(serviceName === ServiceNames.SuuntoApp ? [serviceToken.userName, workoutQueueItem.workoutID] : [serviceToken.openId, workoutQueueItem.workoutID, workoutQueueItem.fitFileURI])), workoutQueueItem);
+            .doc(generateIDFromParts(serviceName === ServiceNames.SuuntoApp ? [serviceToken.userName, workoutQueueItem.workoutID] : [serviceToken.openId, workoutQueueItem.workoutID, workoutQueueItem.FITFileURI])), workoutQueueItem);
         processedWorkoutsCount++;
       }
       // Try to commit it
@@ -106,7 +109,7 @@ export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
   }
 }
 
-export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<QueueItemInterface[]> {
+export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface|COROSAPIWorkoutQueueItemInterface[]> {
   // @todo add errors etc and test coros errors
   let result;
   switch (serviceName) {
@@ -152,7 +155,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
             accu.push(<COROSAPIWorkoutQueueItemInterface>{
               openId: (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId,
               workoutID: triathlonWorkout.labelId,
-              fitFileURI: triathlonWorkoutItem.fitUrl,
+              FITFileURI: triathlonWorkoutItem.fitUrl,
               retryCount: 0, // So it can be re-processed
               processed: false, //So it can be re-processed
             })
@@ -165,7 +168,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
           return {
             openId: (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId,
             workoutID: workout.labelId,
-            fitFileURI: workout.fitUrl,
+            FITFileURI: workout.fitUrl,
             retryCount: 0, // So it can be re-processed
             processed: false, //So it can be re-processed
           }

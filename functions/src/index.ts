@@ -21,6 +21,7 @@ export * from "./suunto/get-suunto-fit-file"
 export * from "./garmin/queue"
 export * from "./garmin/backfill"
 export * from "./coros/history-to-queue"
+export * from "./coros/queue"
 // export * from "./re-queue"
 // export * from "./migrations"
 

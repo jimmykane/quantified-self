@@ -16,7 +16,7 @@ export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface{
 export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface{
   workoutID: string,
   openId: string,
-  fitFileURI: string,
+  FITFileURI: string,
 }
 
 export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface{

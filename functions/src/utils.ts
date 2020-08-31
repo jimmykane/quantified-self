@@ -6,6 +6,7 @@ import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/ac
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import * as Pako from 'pako';
 import {
+  COROSAPIEventMetaData,
   GarminHealthAPIEventMetaData,
   SuuntoAppEventMetaData
 } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
@@ -68,7 +69,7 @@ export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData|COROSAPIEventMetaData) {
     const writePromises: Promise<any>[] = [];
     event.setID(eventID);
     event.getActivities()
