@@ -42,6 +42,7 @@
       <agm-map-type-control [style]="0" [mapTypeIds]="mapTypeIds" [position]="2"></agm-map-type-control>
       <ng-container *ngFor="let activityMapData of activitiesMapData">
         <!-- Start Marker -->
+        <!-- @todo fix for non existen activity positions -->
         <agm-marker
           [iconUrl]="getHomeMarkerIcon(activityMapData.activity)"
           [markerClickable]="false"
@@ -89,6 +90,7 @@
           </agm-icon-sequence>
         </agm-polyline>
         <!-- End marker -->
+        <!-- @todo fix for non existen activity positions -->
         <agm-marker
           [iconUrl]="getFlagMarkerIcon(activityMapData.activity)"
           [markerClickable]="false"
