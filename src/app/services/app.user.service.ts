@@ -370,7 +370,7 @@ export class AppUserService implements OnDestroy {
     }))
   }
 
-  public shouldShowPromoForPatreon(user: User) {
+  public shouldShowPromo(user: User) {
     // Intentionally just check if only set for now
     if (!user || user.lastSeenPromo) {
       return false;

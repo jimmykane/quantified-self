@@ -181,7 +181,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async showPromoForUserOrDoNothing(user: User) {
-    if (!this.userService.shouldShowPromoForPatreon(user)) {
+    if (!this.userService.shouldShowPromo(user)) {
       return
     }
     // Show the modal

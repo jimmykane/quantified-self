@@ -75,7 +75,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
   }
 
   async gitHubStar() {
-    this.afa.logEvent('github_sponsor');
+    this.afa.logEvent('github_star');
     window.open('https://github.com/jimmykane/quantified-self/');
   }
 
