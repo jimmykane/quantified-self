@@ -2,6 +2,7 @@
   <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
   Quantified Self needs your support on
   <mat-icon class="app-icon" svgIcon="patreon-word" style="width: 4.2em" (click)="becomeAPatron()"></mat-icon>
+  <mat-icon class="app-icon" svgIcon="github_logo"  (click)="becomeAPatron()"></mat-icon>
 </h2>
 <mat-divider></mat-divider>
 <mat-dialog-content>
@@ -12,7 +13,7 @@
   </p>
 
   <p>
-    You are most welcome to <b>contribute</b> and <b>support</b> this project on Patreon.<br/>
+    You are most welcome to <b>contribute</b> and <b>support</b> this project on <b (click)="becomeAPatron()">Patreon</b> or <b (click)="gitHubSponsor()">Github</b><br/>
     For as little as <b>1€</b> per month you can support the cloud <b>costs</b>.
   </p>
   <p>
@@ -33,5 +34,5 @@
           (click)="gitHubSponsor()">
     Support this project on Github
   </button>
-  <button mat-button (click)="close($event)">Close</button>
+  <button mat-button (click)="close($event)"  class="full">Close</button>
 </mat-dialog-actions>
