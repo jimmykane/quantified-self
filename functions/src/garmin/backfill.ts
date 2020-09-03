@@ -76,29 +76,27 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
   const maxDeltaInMS = 7776000000
   const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
-  let summaryStartTimeInSeconds = startDate.getTime() / 1000;
-  let summaryEndTimeInSeconds;
   for (let i = 0; i < batchCount; i++) {
-    summaryStartTimeInSeconds = summaryStartTimeInSeconds + (i * (maxDeltaInMS / 1000));
-    summaryEndTimeInSeconds = summaryStartTimeInSeconds + ( maxDeltaInMS / 1000) > (endDate.getTime() / 1000)
-      ? endDate.getTime() / 1000
-      : summaryStartTimeInSeconds + (maxDeltaInMS / 1000)
+    const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
+    const batchEndDate = batchStartDate.getTime() + (maxDeltaInMS) >= endDate.getTime()
+      ? endDate
+      : new Date(batchStartDate.getTime() + maxDeltaInMS)
     try {
       await requestPromise.get({
         headers: oAuth.toHeader(oAuth.authorize({
-          url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`,
+          url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime()/1000)}&summaryEndTimeInSeconds=${Math.ceil(batchEndDate.getTime()/1000)}`,
           method: 'GET',
         }, {
           key: tokensDocumentSnapshotData.accessToken,
           secret: tokensDocumentSnapshotData.accessTokenSecret
         })),
-        url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${summaryStartTimeInSeconds}&summaryEndTimeInSeconds=${summaryEndTimeInSeconds}`,
+        url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime()/1000)}&summaryEndTimeInSeconds=${Math.ceil(batchEndDate.getTime()/1000)}`,
       });
     } catch (e) {
       // Only if there is an api error in terms
       if (e.statusCode === 500) {
         console.error(e);
-        res.status(500).send(`Could not import history for dates ${new Date(summaryStartTimeInSeconds * 1000)} to ${new Date(summaryEndTimeInSeconds * 1000)} due to ${e.message}`);
+        res.status(500).send(`Could not import history for dates ${batchStartDate} to ${batchEndDate}`);
         return;
       }
     }
