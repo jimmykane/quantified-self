@@ -55,8 +55,24 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
     return
   }
 
-  await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
+  // We need to break down the requests to multiple of 30 days max. 2592000000ms
+  const maxDeltaInMS = 2592000000
+  const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
+  for (let i = 0; i < batchCount; i++) {
+    const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
+    const batchEndDate = batchStartDate.getTime() + (maxDeltaInMS) >= endDate.getTime()
+    ? endDate
+    : new Date(batchStartDate.getTime() + maxDeltaInMS)
+
+    try {
+      await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
+    }catch (e) {
+      console.log(e)
+      res.status(500).send(e.message)
+      return;
+    }
+  }
   // Respond
   res.status(200);
   res.send({result: 'History items added to queue'});
