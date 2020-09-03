@@ -67,8 +67,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
       const indexMap = {
         [ServiceNames.SuuntoApp]: 0,
-        [ServiceNames.GarminHealthAPI]: 1,
-        [ServiceNames.COROSAPI]: 2
+        [ServiceNames.COROSAPI]: 1,
+        [ServiceNames.GarminHealthAPI]: 2
       }
       this.selectedTabIndex = indexMap[this.route.snapshot.queryParamMap.get('serviceName')];
     }))
