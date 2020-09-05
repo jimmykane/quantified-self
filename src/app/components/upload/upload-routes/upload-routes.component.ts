@@ -11,6 +11,8 @@ import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import * as Pako from 'pako';
+import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-upload-route',
@@ -43,18 +45,23 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
         if (!(typeof fileReader.result === 'string')) {
           reject(`Not a GPX file`)
         }
+        const idToken = await (await this.afAuth.currentUser).getIdToken(true)
         try {
-          const result = await this.http.post(environment.functions.uploadRoute,
-            fileReader.result,
+          const compressed = Pako.gzip(fileReader.result as string, {to: 'string'});
+          if (getSize(compressed) > 10485760 ){
+            throw new Error(`Cannot upload route because the size is greater than 10MB`);
+          }
+          await this.http.post(environment.functions.uploadRoute,
+            compressed,
             {
               headers:
                 new HttpHeaders({
-                  'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+                  'Authorization': `Bearer ${idToken}`
                 })
             }).toPromise();
         } catch (e) {
           Sentry.captureException(e);
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', {duration: 2000});
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', {duration: 10000});
           reject(e);
           return;
         }
