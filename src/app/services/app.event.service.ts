@@ -5,7 +5,6 @@ import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
 import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
 import { firestore } from 'firebase/app';
-import * as Pako from 'pako';
 import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -17,21 +16,13 @@ import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapte
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { AppWindowService } from './app.window.service';
-import { gzip_decode } from 'wasm-flate';
 import {
   EventMetaDataInterface,
   ServiceNames
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
-import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import {
-  CompressedJSONStreamInterface,
-  CompressionEncodings,
-  CompressionMethods
-} from '../../../../sports-lib/src/streams/compressed.json.stream.interface';
-import * as LZString from 'lz-string';
-import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
 import DocumentData = firebase.firestore.DocumentData;
+import { CompressedJSONStreamInterface, StreamEncoder } from '../helpers/stream.encoder';
 
 
 @Injectable({
@@ -215,7 +206,7 @@ export class AppEventService implements OnDestroy {
             .doc(activity.getID())
             .collection('streams')
             .doc(stream.type)
-            .set(this.getCompressedStreamFromStream(stream)))
+            .set(StreamEncoder.compressStream(stream.toJSON())))
         });
       });
     try {
@@ -434,12 +425,12 @@ export class AppEventService implements OnDestroy {
 
   private processStreamDocumentSnapshot(streamSnapshot: DocumentData): StreamInterface {
     this.logger.info(<string>streamSnapshot.data().type)
-    return EventImporterJSON.getStreamFromJSON(this.getStreamDataFromBlob(streamSnapshot.data()));
+    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(streamSnapshot.data()));
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
     this.logger.info(<string>queryDocumentSnapshot.data().type)
-    return EventImporterJSON.getStreamFromJSON(this.getStreamDataFromBlob(<CompressedJSONStreamInterface>queryDocumentSnapshot.data()));
+    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(<CompressedJSONStreamInterface>queryDocumentSnapshot.data()));
   }
 
   // From https://github.com/angular/angularfire2/issues/1400
@@ -472,65 +463,7 @@ export class AppEventService implements OnDestroy {
   //   return firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(streamData), {to: 'string'})))
   // }
 
-  private getCompressedStreamFromStream(stream: StreamInterface): CompressedJSONStreamInterface {
-    const compressedStream: CompressedJSONStreamInterface = {
-      encoding: CompressionEncodings.None,
-      type: stream.type,
-      data: JSON.stringify(stream.getData()),
-      compressionMethod: CompressionMethods.None
-    }
-    this.logger.info(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
-    if (getSize(compressedStream.data) >= 908487) {
-      compressedStream.data = Pako.gzip(compressedStream.data, {to: 'string'});
-      compressedStream.encoding =  CompressionEncodings.Binary
-      compressedStream.compressionMethod =  CompressionMethods.Pako
-      this.logger.info(`[COMPRESSED PAKO] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
-    }
-    if (getSize(compressedStream.data) >= 908487) {
-      compressedStream.data = LZString.compress(compressedStream.data);
-      compressedStream.encoding =  CompressionEncodings.Binary
-      compressedStream.compressionMethod = CompressionMethods.PakoThenLZString;
-      this.logger.info(`[COMPRESSED PAKO LZSTRING] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
-    }
-    if (getSize(compressedStream.data) >= 908487) {
-      throw new Error(`Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(compressedStream.data)}`)
-    }
-    return compressedStream;
-  }
 
-  private getStreamDataFromBlob(compressedStreamJSON: CompressedJSONStreamInterface): StreamJSONInterface {
-    const t0 = performance.now();
-    const stream = {
-      type: compressedStreamJSON.type,
-      data: null
-    };
-    switch (compressedStreamJSON.compressionMethod) {
-      default:
-        // Assume legacy = Pako + base64
-        stream.data = gzip_decode(compressedStreamJSON.data.toBase64())
-        break;
-      case CompressionMethods.None:
-        stream.data = compressedStreamJSON.data
-        break;
-      case CompressionMethods.Pako: // Pako is the default here
-        stream.data = compressedStreamJSON.encoding === CompressionEncodings.Binary
-        ? gzip_decode(btoa(compressedStreamJSON.data))
-        : gzip_decode(compressedStreamJSON.data)
-        break;
-      case CompressionMethods.PakoThenLZString:
-        const a = Pako
-        const b = LZString
-        debugger;
 
-        stream.data = LZString.decompress(stream.data);
-        stream.data = compressedStreamJSON.encoding === CompressionEncodings.Binary
-          ? Pako.ungzip(compressedStreamJSON.data, {to: 'string'})
-          : gzip_decode(compressedStreamJSON.data)
-    }
-    const t1 = performance.now();
-    this.logger.info(`Decompression with ${compressedStreamJSON.compressionMethod} took ${t1 - t0}`);
-    stream.data = JSON.parse(stream.data);
-    return stream;
-  }
 }
 
