@@ -4,12 +4,12 @@ import * as admin from "firebase-admin";
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import * as Pako from 'pako';
 import {
   COROSAPIEventMetaData,
   GarminHealthAPIEventMetaData,
   SuuntoAppEventMetaData
 } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { StreamEncoder } from './stream.encoder';
 
 
 // @todo move to Sha256 see SO question
@@ -96,10 +96,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
                         .doc(<string>activity.getID())
                         .collection('streams')
                         .doc(stream.type)
-                        .set({
-                            type: stream.type,
-                            data: Buffer.from((Pako.gzip(JSON.stringify(stream.getData()), {to: 'string'})), 'binary'),
-                        }))
+                        .set(StreamEncoder.compressStream(stream.toJSON())))
             });
         });
     writePromises.push(admin.firestore()
