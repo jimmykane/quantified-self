@@ -1,6 +1,5 @@
 import * as Pako from 'pako';
 import { Log } from 'ng2-logger/browser';
-import { gzip_decode, gzip_decode_raw } from 'wasm-flate';
 import { firestore } from 'firebase/app';
 import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
@@ -41,43 +40,21 @@ export class StreamEncoder {
   }
 
   static decompressStream(compressedStreamJSON: CompressedJSONStreamInterface): StreamJSONInterface {
-    // const blobNew =  firestore.Blob
-    // const P = Pako
-    // const size = getSizeFormated
-    // const gz = gzip_decode_raw
-    // debugger
     const t0 = performance.now();
     const stream = {
       type: compressedStreamJSON.type,
       data: null
     };
     switch (compressedStreamJSON.compressionMethod) {
-      default:
-        // Assume legacy = Pako + Firestore Blob + base64
-        stream.data = gzip_decode(compressedStreamJSON.data.toBase64())
-        break;
       case CompressionMethods.None:
         stream.data = compressedStreamJSON.data
         break;
+      default:
       case CompressionMethods.Pako: // Pako is the default here
-        const t2 = performance.now();
-        Pako.ungzip(compressedStreamJSON.data.toUint8Array(), {to: 'string'});
-        const t3 = performance.now()
-        this.logger.info(`Decompression PPP took ${t3 - t2}`);
-
-        const t4 = performance.now();
-        new TextDecoder().decode(gzip_decode_raw(compressedStreamJSON.data.toUint8Array()))
-        const t5 = performance.now()
-        this.logger.info(`Decompression with FGG took ${t5 - t4}`);
-
-
         stream.data = compressedStreamJSON.encoding === CompressionEncodings.Binary
-          ? gzip_decode(btoa(compressedStreamJSON.data))
+          ? Pako.ungzip(compressedStreamJSON.data.toBase64(), {to: 'string'})
           : Pako.ungzip(compressedStreamJSON.data.toUint8Array(), {to: 'string'});
         break;
-      // case CompressionMethods.LZUTF8:
-      //   stream.data = LZUTF8.decompress(compressedStreamJSON.data, {inputEncoding: 'StorageBinaryString'});
-      //   break;
     }
     const t1 = performance.now();
     this.logger.info(`Decompression with ${compressedStreamJSON.compressionMethod} took ${t1 - t0}`);
