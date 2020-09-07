@@ -12,7 +12,7 @@ import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import * as Pako from 'pako';
-import { StreamEncoder } from '../../../helpers/stream.encoder';
+import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-upload-route',
@@ -48,7 +48,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
         const idToken = await (await this.afAuth.currentUser).getIdToken(true)
         try {
           const compressed = Pako.gzip(fileReader.result as string, {to: 'string'});
-          if (StreamEncoder.getSize(compressed) > 10485760 ){
+          if (getSize(compressed) > 10485760 ){
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
           await this.http.post(environment.functions.uploadRoute,
