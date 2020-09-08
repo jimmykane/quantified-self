@@ -9,7 +9,13 @@ import {
   GarminHealthAPIEventMetaData,
   SuuntoAppEventMetaData
 } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
-import { StreamEncoder } from './stream.encoder';
+import * as Pako from 'pako';
+import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
+import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import {
+  CompressedJSONStreamInterface,
+  CompressionEncodings, CompressionMethods
+} from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 
 
 // @todo move to Sha256 see SO question
@@ -148,4 +154,36 @@ export async function createFirebaseAccount(serviceUserID: string, accessToken: 
   const token = await admin.auth().createCustomToken(uid);
   console.log('Created Custom token for UID "', uid, '" Token:', token);
   return token;
+}
+
+
+export class StreamEncoder {
+  /**
+   * Make sure this is in sync with the functions based one
+   * @param stream
+   */
+  static compressStream(stream: StreamJSONInterface): CompressedJSONStreamInterface {
+    const compressedStream: CompressedJSONStreamInterface = {
+      encoding: CompressionEncodings.None,
+      type: stream.type,
+      data: JSON.stringify(stream.data),
+      compressionMethod: CompressionMethods.None
+    }
+    console.log(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+    // If we can fit it go on
+    if (getSize(compressedStream.data) <= 1048487) {
+      return compressedStream
+    }
+    // Then try Pako (as the fastest)
+    compressedStream.data = Buffer.from(Pako.gzip(JSON.stringify(stream.data)));
+    compressedStream.encoding = CompressionEncodings.UInt8Array;
+    compressedStream.compressionMethod = CompressionMethods.Pako
+    console.log(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+    if (getSize(compressedStream.data) <= 1048487) {
+      return compressedStream
+    }
+    // Throw an error if smaller than a MB still
+    throw new Error(`Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(compressedStream.data)}`)
+  }
+
 }

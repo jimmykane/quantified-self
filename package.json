@@ -51,7 +51,6 @@
     "moment": "^2.27.0",
     "ng2-logger": "3.0.12",
     "rxjs": "^6.6.2",
-    "wasm-flate": "1.0.2-bundler",
     "weeknumber": "^1.1.2",
     "zone.js": "~0.10.3"
   },

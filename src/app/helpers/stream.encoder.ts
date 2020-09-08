@@ -3,6 +3,7 @@ import { Log } from 'ng2-logger/browser';
 import { firestore } from 'firebase/app';
 import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
+
 import {
   CompressedJSONStreamInterface,
   CompressionEncodings, CompressionMethods
