@@ -22,7 +22,8 @@ import {
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import DocumentData = firebase.firestore.DocumentData;
-import { CompressedJSONStreamInterface, StreamEncoder } from '../helpers/stream.encoder';
+import { StreamEncoder } from '../helpers/stream.encoder';
+import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 
 
 @Injectable({
