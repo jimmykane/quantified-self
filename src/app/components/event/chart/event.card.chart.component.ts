@@ -1286,8 +1286,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                     range.value = data[0].value;
                   }
                   range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity));
-                  range.grid.strokeWidth = 1;
-                  range.grid.strokeOpacity = 0.8;
+                  range.grid.strokeWidth = 1.1;
+                  range.grid.strokeOpacity = 1;
                   range.grid.strokeDasharray = '2,5';
 
                   range.grid.above = true;
