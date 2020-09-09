@@ -175,11 +175,11 @@ export class AppUserService implements OnDestroy {
   }
 
   static getDefaultMapLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance];
+    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
   }
 
   static getDefaultChartLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance];
+    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
   }
 
   static getDefaultDownSamplingLevel(): number {
