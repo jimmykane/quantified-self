@@ -1066,16 +1066,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private createRangeLabelsContainer(chart: am4charts.XYChart): am4core.Container {
-    const rangeLabelsContainer = chart.plotContainer.createChild(am4core.Container);
+    const rangeLabelsContainer = chart.chartContainer.createChild(am4core.Container);
     rangeLabelsContainer.id = 'rangeLabelsContainer';
+    rangeLabelsContainer.isMeasured = false;
     rangeLabelsContainer.width = am4core.percent(100);
     rangeLabelsContainer.height = am4core.percent(100);
     rangeLabelsContainer.x = 50;
-    rangeLabelsContainer.y = am4core.percent(99);
+    rangeLabelsContainer.y = am4core.percent(90);
     rangeLabelsContainer.layout = 'horizontal';
-    // rangeLabelsContainer.align = 'center';
+    // rangeLabelsContainer.align = 'right';
     // rangeLabelsContainer.verticalCenter = 'rop';
-    rangeLabelsContainer.zIndex = 99;
+    rangeLabelsContainer.zIndex = 2;
     return rangeLabelsContainer
 
   }
@@ -1083,15 +1084,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData, hidden: boolean = false): am4core.Label {
     const labelContainer = container.createChild(am4core.Container);
     labelContainer.id = this.getSeriesRangeLabelContainerID(series);
-    labelContainer.background.fillOpacity = 0.75;
+    labelContainer.background.fillOpacity = 0.65;
     labelContainer.background.fill = am4core.color('#000');
     labelContainer.padding(15, 15, 15, 15);
-    labelContainer.marginLeft = am4core.percent(0.5);
-    labelContainer.horizontalCenter = 'middle';
+    // labelContainer.marginLeft = am4core.percent(0.5);
+    // labelContainer.horizontalCenter = 'right';
     labelContainer.verticalCenter = 'bottom';
     labelContainer.background.stroke = am4core.color('#FFF');
     labelContainer.background.strokeOpacity = 0.6;
     labelContainer.background.strokeWidth = 0.65;
+    labelContainer.zIndex = 2
 
     // labelContainer.hidden = hidden;
 
