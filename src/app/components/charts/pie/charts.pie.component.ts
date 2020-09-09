@@ -16,7 +16,7 @@ import {
   ChartDataValueTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
-import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
@@ -27,7 +27,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+export class ChartsPieComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
   protected logger = Log.create('ChartsPieComponent');
 

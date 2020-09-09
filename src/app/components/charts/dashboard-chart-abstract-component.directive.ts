@@ -13,7 +13,7 @@ import * as am4core from '@amcharts/amcharts4/core';
 
 
 @Directive()
-export abstract class DashboardChartAbstract extends ChartAbstractDirective implements OnChanges, AfterViewInit {
+export abstract class DashboardChartAbstractDirective extends ChartAbstractDirective implements OnChanges, AfterViewInit {
   @Input() data: any;
   @Input() chartDataType?: string;
   @Input() chartDataValueType?: ChartDataValueTypes;

@@ -10,7 +10,7 @@ import {
 import { Log } from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import { DashboardChartAbstract } from '../dashboard-chart.abstract';
+import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -24,7 +24,7 @@ import { AxisRendererCircular, CategoryAxis, DateAxis } from '@amcharts/amcharts
   styleUrls: ['./charts.brian-devine.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsBrianDevineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
   chartDataCategoryType = ChartDataCategoryTypes.DateType;
 
@@ -155,7 +155,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstract implement
         const aggrValue = this.getAggregateData(data.daily, this.chartDataValueType);
         return `[font-size: 1.3em]${aggrValue.getDisplayType()}[/]\n[bold font-size: 1.2em]${aggrValue.getDisplayValue()}${aggrValue.getDisplayUnit()}[/]\n(${this.chartDataValueType})`
       })
-      
+
       return chart;
     })
 

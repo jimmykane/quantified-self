@@ -16,7 +16,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {ChartHelper} from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -28,7 +28,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
   styleUrls: ['./charts.timeline.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsTimelineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+export class ChartsTimelineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
   protected logger = Log.create('ChartsTimelineComponent');
 
