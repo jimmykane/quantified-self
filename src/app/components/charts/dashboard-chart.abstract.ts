@@ -186,6 +186,6 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
   }
 
   protected sortData(chartDataCategoryType: ChartDataCategoryTypes) {
-    return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA.value - itemB.value : -(itemB.time - itemA.time);
+    return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA[this.chartDataValueType] - itemB[this.chartDataValueType] : -(itemB.time - itemA.time);
   }
 }

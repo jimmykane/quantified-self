@@ -77,7 +77,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       throw new Error('Component needs events and userID');
     }
     this.lineMouseMoveSubscription = this.lineMouseMoveSubject.pipe(
-      debounceTime(250)
+      // debounceTime(250)
     ).subscribe(value => {
       this.lineMouseMove(value.event, value.activityMapData);
     });
@@ -275,7 +275,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     });
 
     this.selectedActivities.forEach((activity) => {
-      if (!activity.hasPositionData()){
+      if (!activity.hasPositionData()) {
         return
       }
       // 1. We need the lat, long stream to get also the times for using the time for cursor reference

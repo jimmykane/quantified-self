@@ -176,8 +176,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   async ngOnChanges(simpleChanges: SimpleChanges) {
     this.logger.info(`Change`);
 
-    if (this.chart && (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour || simpleChanges.disableGrouping)) {
+    if (this.chart
+      && (simpleChanges.chartTheme
+        || simpleChanges.xAxisType
+        || simpleChanges.stackYAxes
+        || simpleChanges.xAxisType
+        || simpleChanges.chartCursorBehaviour
+        || simpleChanges.disableGrouping)) {
       this.destroyChart();
+      this.activityCursorService.clear();
       this.chart = this.createChart();
     }
 
