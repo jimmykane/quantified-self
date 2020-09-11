@@ -10,10 +10,8 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppUserService } from '../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth1-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
@@ -28,8 +26,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public user: User;
   public isGuest: boolean;
   public suuntoAppTokens: Auth2ServiceTokenInterface[];
-  public garminHealthAPIToken: Auth1ServiceTokenInterface;
-  public suuntoAppMeta: UserServiceMetaInterface
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
 
@@ -74,7 +70,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
     }))
 
   }
-
 
   ngOnDestroy(): void {
     if (this.userSubscription) {

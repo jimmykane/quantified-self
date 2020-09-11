@@ -8,9 +8,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
-import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import * as am4core from '@amcharts/amcharts4/core';
-
 
 @Directive()
 export abstract class DashboardChartAbstractDirective extends ChartAbstractDirective implements OnChanges, AfterViewInit {
@@ -158,31 +156,6 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
           return sum;
         }, 0));
     }
-  }
-
-  // @todo this needs major refactor
-  protected filterOutLowValues(data: SummariesChartDataInterface[]): SummariesChartDataInterface[] {
-    const chartData = [];
-    let otherData: SummariesChartDataInterface;
-    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    const totalValue = <number>this.getAggregateData(data, ChartDataValueTypes.Total).getValue();
-    data.forEach((dataItem: SummariesChartDataInterface, index) => {
-      const percent = (dataItem.value * 100) / totalValue; // problem with 0 base value
-      if (percent < 5) {
-        if (!otherData) {
-          otherData = {type: 'Other', value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
-          return;
-        }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue();
-        otherData.count++;
-        return
-      }
-      chartData.push(dataItem);
-    });
-    if (otherData && isNumber(otherData.value)) {
-      chartData.unshift(otherData)
-    }
-    return chartData;
   }
 
   protected sortData(chartDataCategoryType: ChartDataCategoryTypes) {

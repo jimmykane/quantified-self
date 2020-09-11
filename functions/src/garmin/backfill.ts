@@ -53,7 +53,7 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminHealthAPI).get();
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-    const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (14 * 24 * 60 * 60 * 1000));   // 14 days
+    const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000));   // 3 days
     if ((nextHistoryImportAvailableDate > new Date())) {
       console.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
       res.status(403);
