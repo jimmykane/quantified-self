@@ -76,11 +76,6 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-    this.lineMouseMoveSubscription = this.lineMouseMoveSubject.pipe(
-      // debounceTime(250)
-    ).subscribe(value => {
-      this.lineMouseMove(value.event, value.activityMapData);
-    });
     this.logger.info(`Initialized`);
   }
 
@@ -248,6 +243,13 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       this.loaded();
       return;
     }
+
+    // Read the cursor
+    this.lineMouseMoveSubscription = this.lineMouseMoveSubject.pipe(
+      // debounceTime(250)
+    ).subscribe(value => {
+      this.lineMouseMove(value.event, value.activityMapData);
+    });
 
     // Set the cursor
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
