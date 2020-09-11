@@ -29,7 +29,6 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
@@ -103,26 +102,7 @@ import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.l
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppColors } from '../../../services/color/app.colors';
-import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
-import { DataAltitudeMax } from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
-import { DataAltitudeAvg } from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
-import { DataCadence } from '@sports-alliance/sports-lib/lib/data/data.cadence';
-import { DataCadenceMin } from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
-import { DataCadenceAvg } from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
-import { DataCadenceMax } from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
-import { DataSpeedMax } from '@sports-alliance/sports-lib/lib/data/data.speed-max';
-import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import { DataSpeedMin } from '@sports-alliance/sports-lib/lib/data/data.speed-min';
-import { DataPaceMax } from '@sports-alliance/sports-lib/lib/data/data.pace-max';
-import { DataPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
-import { DataPaceMin } from '@sports-alliance/sports-lib/lib/data/data.pace-min';
-import { DataSwimPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
-import { DataSwimPaceMin } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-min';
-import { DataVerticalSpeedMax } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-max';
-import { DataVerticalSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-avg';
-import { DataVerticalSpeedMin } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed-min';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 10;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
@@ -167,7 +147,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   protected logger = Log.create('EventCardChartComponent');
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
-  private activitiesCursors: ActivityCursorInterface[] = [];
 
   constructor(changeDetector: ChangeDetectorRef,
               protected zone: NgZone,
@@ -197,8 +176,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   async ngOnChanges(simpleChanges: SimpleChanges) {
     this.logger.info(`Change`);
 
-    if (this.chart && (simpleChanges.chartTheme || simpleChanges.xAxisType || simpleChanges.stackYAxes || simpleChanges.chartCursorBehaviour || simpleChanges.disableGrouping)) {
+    if (this.chart
+      && (simpleChanges.chartTheme
+        || simpleChanges.xAxisType
+        || simpleChanges.stackYAxes
+        || simpleChanges.xAxisType
+        || simpleChanges.chartCursorBehaviour
+        || simpleChanges.disableGrouping)) {
       this.destroyChart();
+      this.activityCursorService.clear();
       this.chart = this.createChart();
     }
 
@@ -283,7 +269,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
-
     chart.zoomOutButton.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z'
     const tempButton = new am4core.Button();
 
@@ -304,20 +289,29 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
       this.logger.info(`Cursor position changed ${event.target.point.x} ${event.target.point.y}`);
+      // Avoid rewriting cursor change if it's triggered from this component
+      if (event.target['_stick'] === 'hard') {
+        event.target.triggerMove(event.target.point, 'soft');
+        return;
+      }
+
+      event.target.triggerMove(event.target.point, 'soft');
       let xAxis;
       switch (this.xAxisType) {
         case XAxisTypes.Time:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
           this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
             activityID: activity.getID(),
-            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime()
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime(),
+            byChart: true,
           }));
           break;
         case XAxisTypes.Duration:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
           this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
             activityID: activity.getID(),
-            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000)
+            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
+            byChart: true,
           }));
           break;
       }
@@ -393,36 +387,36 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         const labelData = <LabelData>{
           name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
           average: {
-            value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayValue()}` : '--',
-            unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getAverage(data)).getDisplayUnit()}`
+            value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
+            unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
           },
           max: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayUnit()}`
           },
           min: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMin(data)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayUnit()}`
           },
           minToMaxDiff: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getMax(data) - EventUtilities.getMin(data)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
           }
         };
         if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
           labelData.gain = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
           };
           labelData.loss = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, EventUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
           };
         }
         if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
           labelData.slopePercentage = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (EventUtilities.getMax(data) - EventUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
+            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
+            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
           };
         }
         // Todo should group pace and derived units
@@ -756,38 +750,30 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(1000)
+      debounceTime(250)
     ).subscribe((cursors) => {
       this.logger.info(`Cursors on subscribe`);
       if (!cursors || !cursors.length || !this.chart) {
-        this.activitiesCursors = [];
         return;
       }
 
       // @todo fix scrollbar for cursor
-      cursors.forEach((cursor) => {
-        const activityCursor = this.activitiesCursors.find(ac => ac.activityID === cursor.activityID);
-
-        // Do not trigger update
-        if (activityCursor && (activityCursor.time === cursor.time)) {
-          return;
-        }
+      cursors.filter(cursor => cursor.byMap === true).forEach((cursor) => {
 
         this.chart.xAxes.values.forEach(xAxis => {
           switch (this.xAxisType) {
             case XAxisTypes.Time:
-              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'none');
+              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'hard');
               break;
             case XAxisTypes.Duration:
               const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
               if (cursorActivity) {
-                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'none');
+                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'hard');
               }
               break;
           }
         })
       });
-      this.activitiesCursors = cursors;
     });
 
 
@@ -822,7 +808,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
 
       // @todo should do the same with distance (miles) and vertical speed
-      [...new Set(EventUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
+      [...new Set(ActivityUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
         .filter((stream) => {
           switch (stream.type) {
             case  DataDistance.type:
@@ -1032,7 +1018,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         series.dummyData.stream.type === DataPower.type ? yAxis.extraMax = this.extraMaxForPower : yAxis.extraMax = 0.1;
       }
       yAxis.title.adapter.add('text', (text, target) => {
-        if (!this.stackYAxes){
+        if (!this.stackYAxes) {
           return `${series.name}`;
         }
         const map = {
@@ -1042,7 +1028,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         };
         (<AxisRendererY>target.parent).axis.series.each((axisSeries, index) => {
           // console.log(axisSeries.dummyData.stream.type)
-          if (axisSeries.hidden){
+          if (axisSeries.hidden) {
             return;
           }
           if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
@@ -1054,7 +1040,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
             map.max +=  `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
           }
-          if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length){
+          if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length) {
             map.min += `, `
             map.avg += `,  `
             map.max += `,  `
@@ -1087,16 +1073,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private createRangeLabelsContainer(chart: am4charts.XYChart): am4core.Container {
-    const rangeLabelsContainer = chart.plotContainer.createChild(am4core.Container);
+    const rangeLabelsContainer = chart.chartContainer.createChild(am4core.Container);
     rangeLabelsContainer.id = 'rangeLabelsContainer';
+    rangeLabelsContainer.isMeasured = false;
     rangeLabelsContainer.width = am4core.percent(100);
     rangeLabelsContainer.height = am4core.percent(100);
     rangeLabelsContainer.x = 50;
-    rangeLabelsContainer.y = am4core.percent(99);
+    rangeLabelsContainer.y = am4core.percent(90);
     rangeLabelsContainer.layout = 'horizontal';
-    // rangeLabelsContainer.align = 'center';
+    // rangeLabelsContainer.align = 'right';
     // rangeLabelsContainer.verticalCenter = 'rop';
-    rangeLabelsContainer.zIndex = 99;
+    rangeLabelsContainer.zIndex = 2;
     return rangeLabelsContainer
 
   }
@@ -1104,15 +1091,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData, hidden: boolean = false): am4core.Label {
     const labelContainer = container.createChild(am4core.Container);
     labelContainer.id = this.getSeriesRangeLabelContainerID(series);
-    labelContainer.background.fillOpacity = 0.75;
+    labelContainer.background.fillOpacity = 0.65;
     labelContainer.background.fill = am4core.color('#000');
     labelContainer.padding(15, 15, 15, 15);
-    labelContainer.marginLeft = am4core.percent(0.5);
-    labelContainer.horizontalCenter = 'middle';
+    // labelContainer.marginLeft = am4core.percent(0.5);
+    // labelContainer.horizontalCenter = 'right';
     labelContainer.verticalCenter = 'bottom';
     labelContainer.background.stroke = am4core.color('#FFF');
     labelContainer.background.strokeOpacity = 0.6;
     labelContainer.background.strokeWidth = 0.65;
+    labelContainer.zIndex = 2
 
     // labelContainer.hidden = hidden;
 
@@ -1305,8 +1293,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                     range.value = data[0].value;
                   }
                   range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity));
-                  range.grid.strokeWidth = 1;
-                  range.grid.strokeOpacity = 0.8;
+                  range.grid.strokeWidth = 1.1;
+                  range.grid.strokeOpacity = 1;
                   range.grid.strokeDasharray = '2,5';
 
                   range.grid.above = true;

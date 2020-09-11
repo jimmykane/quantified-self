@@ -8,6 +8,7 @@
       <app-privacy-icon [privacy]="user.privacy" align="end"></app-privacy-icon>
       {{ user.displayName || 'Guest' }}
     </mat-card-title>
+    <mat-card-subtitle>ID: {{ user.uid }}</mat-card-subtitle>
     <mat-card-subtitle *ngIf="user.description">{{ user.description }}</mat-card-subtitle>
     <mat-card-subtitle *ngIf="!user.description">
       <button mat-button color="basic" (click)="edit()">add a description</button>

@@ -12,6 +12,16 @@
     </mat-card-subtitle>
   </mat-card-header>
   <section class="container">
+    <mat-card class="map-legend mat-elevation-z0" *ngIf="agmMap && event.getActivities().length > 1">
+      <app-activity-toggle *ngFor="let activity of event.getActivities()"
+                           [activity]="activity"
+                           [event]="event"
+                           [showActions]="false"
+                           [showToggle]="false"
+                           [showStats]="false"
+                           [showDate]="false">
+      </app-activity-toggle>
+    </mat-card>
     <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
     <!-- Map -->
     <section class="placeholder" *ngIf="activitiesMapData.length === 0"></section>
@@ -32,8 +42,10 @@
       <agm-map-type-control [style]="0" [mapTypeIds]="mapTypeIds" [position]="2"></agm-map-type-control>
       <ng-container *ngFor="let activityMapData of activitiesMapData">
         <!-- Start Marker -->
+        <!-- @todo fix for non existen activity positions -->
         <agm-marker
           [iconUrl]="getHomeMarkerIcon(activityMapData.activity)"
+          [markerClickable]="false"
           [zIndex]="9999"
           [latitude]="activityMapData.positions[0].latitudeDegrees"
           [longitude]="activityMapData.positions[0].longitudeDegrees">
@@ -43,6 +55,7 @@
         <!-- marker for cursor -->
         <agm-marker
           *ngIf="activitiesCursors.get(activityMapData.activity.getID())"
+          [markerClickable]="false"
           [iconUrl]="getCursorMarkerIcon(activityMapData.activity)"
           [zIndex]="9999"
           [latitude]="activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees"
@@ -51,9 +64,9 @@
 
         <!-- Polyline for the activity -->
         <agm-polyline
-          (lineMouseMove)="lineMouseMove($event, activityMapData)"
-          (lineMouseDown)="lineMouseMove($event, activityMapData)"
-          (lineMouseOut)="lineMouseOut($event, activityMapData)"
+          (lineMouseMove)="onLineMouseMove($event, activityMapData)"
+          (lineMouseDown)="onLineMouseMove($event, activityMapData)"
+          (lineMouseOut)="onLineMouseMove($event, activityMapData)"
           [strokeColor]="activityMapData.strokeColor"
           [strokeWeight]="strokeWidth">
           <!-- Points -->
@@ -62,6 +75,7 @@
             [latitude]="position.latitudeDegrees"
             [longitude]="position.longitudeDegrees">
           </agm-polyline-point>
+
           <agm-icon-sequence
             *ngIf="showArrows"
             [fixedRotation]="false"
@@ -76,8 +90,10 @@
           </agm-icon-sequence>
         </agm-polyline>
         <!-- End marker -->
+        <!-- @todo fix for non existen activity positions -->
         <agm-marker
           [iconUrl]="getFlagMarkerIcon(activityMapData.activity)"
+          [markerClickable]="false"
           [zIndex]="9999"
           [latitude]="activityMapData.positions[activityMapData.positions.length -1].latitudeDegrees"
           [longitude]="activityMapData.positions[activityMapData.positions.length -1].longitudeDegrees">
@@ -86,6 +102,7 @@
         <!-- Laps -->
         <agm-marker
           *ngFor="let lap of activityMapData.laps; let i = index; last as isLast"
+          [markerClickable]="false"
           [iconUrl]="getMarkerIcon(activityMapData.activity)"
           [zIndex]="i+1"
           [label]="getLabel((i+1).toString())"
@@ -93,114 +110,19 @@
           [longitude]="lap.lapPosition.longitudeDegrees">
         </agm-marker>
 
+        <ng-container *ngIf="showPoints">
+          <agm-marker
+            *ngFor="let position of activityMapData.positions"
+            [iconUrl]="getCircleMarkerIcon(activityMapData.activity)"
+            [markerClickable]="false"
+            [latitude]="position.latitudeDegrees"
+            [longitude]="position.longitudeDegrees">
+          </agm-marker>
+        </ng-container>
+
       </ng-container>
-      <!-- Line -->
-
-      <!-- Clicked Point Data info window -->
-      <!--<ng-container *ngIf="showData">-->
-      <!--<agm-info-window-->
-      <!--*ngIf="clickedPoint"-->
-      <!--[latitude]="clickedPoint.getPosition().latitudeDegrees"-->
-      <!--[longitude]="clickedPoint.getPosition().longitudeDegrees" [disableAutoPan]="false"-->
-      <!--[isOpen]="true">-->
-      <!--<span class="mat-subheading-1"><mat-icon>info</mat-icon>Point Details</span>-->
-      <!--<mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Time: </span><span>{{ clickedPoint.getDate() | date: 'mediumTime' }}</span>-->
-      <!--<mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>-->
-      <!--<ng-container *ngFor="let pointData of getMapValuesAsArray(clickedPoint.getData()); last as isLast">-->
-      <!--<span class="mat-subheading-1">{{pointData.getType()}}: </span><span> {{ pointData.getDisplayValue() }} {{ pointData.getDisplayUnit() }}</span>-->
-      <!--<mat-divider [inset]="true" *ngIf="!isLast"></mat-divider>-->
-      <!--</ng-container>-->
-      <!--</agm-info-window>-->
-      <!--</ng-container>-->
-      <!-- Data Warnings -->
-      <!--<agm-marker-->
-      <!--*ngFor="let point of activityMapData.lowNumberOfSatellitesPoints"-->
-      <!--[iconUrl]="{-->
-      <!--url: '//maps.google.com/mapfiles/kml/shapes/placemark_circle_highlight.png',-->
-      <!--scaledSize: {-->
-      <!--height: 26,-->
-      <!--width: 26-->
-      <!--},-->
-      <!--anchor: {x: 13, y: 13}-->
-      <!--}"-->
-      <!--[latitude]="point.getPosition().latitudeDegrees"-->
-      <!--[longitude]="point.getPosition().longitudeDegrees">-->
-      <!--</agm-marker>-->
 
 
-      <!-- Laps and Info -->
-      <!--<ng-container *ngFor="let activityData of activitiesMapData">-->
-      <!--<agm-marker (markerClick)="openActivityStartMarkerInfoWindow(activityData.activity)"-->
-      <!--[iconUrl]="'https://chart.googleapis.com/chart?chst=d_map_pin_icon&chld=home|'+ eventColorService.getActivityColor(event, activityData.activity).slice(1)"-->
-      <!--[latitude]="activityData.activityStartPoint.getPosition().latitudeDegrees"-->
-      <!--[longitude]="activityData.activityStartPoint.getPosition().longitudeDegrees">-->
-      <!--<agm-info-window-->
-      <!--[isOpen]="openedActivityStartMarkerInfoWindow === activityData.activity"-->
-      <!--[disableAutoPan]="false"-->
-      <!--[latitude]="activityData.activityStartPoint.getPosition().latitudeDegrees"-->
-      <!--[longitude]="activityData.activityStartPoint.getPosition().longitudeDegrees">-->
-      <!--<span class="mat-title">Start {{activityData.activity.startDate.toLocaleTimeString()}}</span>-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">End {{activityData.activity.endDate.toLocaleTimeString()}}</span>-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Duration: {{ activityData.activity.getDuration().getDisplayValue() }}{{ activityData.activity.getDuration().getDisplayUnit() }}</span>-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Distance: {{ activityData.activity.getDistance().getDisplayValue() }}{{ activityData.activity.getDistance().getDisplayUnit() }}</span>-->
-      <!--</agm-info-window>-->
-      <!--</agm-marker>-->
-
-      <!--<agm-marker-->
-      <!--*ngFor="let lapData of activityData.lapsWithPosition; let i = index; last as isLast"-->
-      <!--(markerClick)="openLapMarkerInfoWindow(lapData.lap)"-->
-      <!--[iconUrl]="'https://chart.googleapis.com/chart?chst=' + ( isLast ? 'd_map_pin_icon&chld=flag|' : 'd_map_pin_letter&chld=' + (i+1) + '|') + eventColorService.getActivityColor(event, activityData.activity).slice(1)"-->
-      <!--[latitude]="lapData.lapEndPoint.getPosition().latitudeDegrees"-->
-      <!--[longitude]="lapData.lapEndPoint.getPosition().longitudeDegrees">-->
-      <!--<agm-info-window-->
-      <!--[disableAutoPan]="false"-->
-      <!--[isOpen]="openedLapMarkerInfoWindow === lapData.lap"-->
-      <!--[latitude]="lapData.lapEndPoint.getPosition().latitudeDegrees"-->
-      <!--[longitude]="lapData.lapEndPoint.getPosition().latitudeDegrees">-->
-      <!--<app-activity-header-->
-      <!--[showIcon]="true"-->
-      <!--[event]="event"-->
-      <!--[activity]="activityData.activity"-->
-      <!--[showType]="false"-->
-      <!--[showDuration]="false">-->
-      <!--</app-activity-header>-->
-      <!--<span class="mat-title">Lap {{ i +1 }} <span *ngIf="isLast">(end lap)</span></span>-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Duration: {{ lapData.lap.getDuration().getDisplayValue() }}{{ lapData.lap.getDuration().getDisplayUnit() }}</span>-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Distance: {{ lapData.lap.getDistance().getDisplayValue() }}{{ lapData.lap.getDistance().getDisplayUnit() }}</span>-->
-      <!--<ng-container *ngIf="lapData.lapEndPoint.getDataByType('Altitude')">-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Altitude: {{ lapData.lapEndPoint.getDataByType('Altitude').getDisplayValue() }}{{ lapData.lapEndPoint.getDataByType('Altitude').getDisplayUnit() }}</span>-->
-      <!--</ng-container>-->
-      <!--<ng-container *ngIf="lapData.lap.getStat('DataHeartRateAvg')">-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Avg HR: {{ lapData.lap.getStat('DataHeartRateAvg').getDisplayValue() }}{{ lapData.lap.getStat('DataHeartRateAvg').getDisplayUnit() }}</span>-->
-      <!--</ng-container>-->
-      <!--<ng-container *ngIf="lapData.lap.getStat('DataAscent')">-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Ascent: {{ lapData.lap.getStat('DataAscent').getDisplayValue() }}{{ lapData.lap.getStat('DataAscent').getDisplayUnit() }}</span>-->
-      <!--</ng-container>-->
-      <!--<ng-container *ngIf="lapData.lap.getStat('DataSpeedAvg')">-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span-->
-      <!--class="mat-subheading-1">Speed: {{((lapData.lap.getStat('DataSpeedAvg').getValue()*3600)/1000).toFixed(1) }}km/h</span>-->
-      <!--</ng-container>-->
-      <!--<ng-container *ngIf="lapData.lap.getStat('DataSpeedAvg')">-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Pace: {{ (1000/lapData.lap.getStat('DataSpeedAvg').getValue()) * 1000 | date:'mm:ss' }}m/km</span>-->
-      <!--</ng-container>-->
-      <!--<ng-container *ngIf="lapData.lap.getStat('DataVerticalSpeedAvg')">-->
-      <!--<mat-divider [inset]="true"></mat-divider>-->
-      <!--<span class="mat-subheading-1">Vertical Speed: {{(lapData.lap.getStat('DataVerticalSpeedAvg').getValue()*60).toFixed(3) }}{{ lapData.lap.getStat('DataVerticalSpeedAvg').getDisplayUnit() }}</span>-->
-      <!--</ng-container>-->
-      <!--</agm-info-window>-->
-      <!--</agm-marker>-->
-      <!--</ng-container>-->
     </agm-map>
   </section>
 </mat-card>

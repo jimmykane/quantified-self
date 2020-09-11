@@ -8,16 +8,14 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
-import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import * as am4core from '@amcharts/amcharts4/core';
 
-
 @Directive()
-export abstract class DashboardChartAbstract extends ChartAbstractDirective implements OnChanges, AfterViewInit {
+export abstract class DashboardChartAbstractDirective extends ChartAbstractDirective implements OnChanges, AfterViewInit {
   @Input() data: any;
-  @Input() chartDataType: string;
-  @Input() chartDataValueType: ChartDataValueTypes;
-  @Input() chartDataCategoryType: ChartDataCategoryTypes;
+  @Input() chartDataType?: string;
+  @Input() chartDataValueType?: ChartDataValueTypes;
+  @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
   @Input() isLoading: boolean;
 
@@ -47,7 +45,8 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
 
     if (simpleChanges.data) {
-
+      // @todo this might change even if not needed
+      // @todo not sure if "important" as the caller also does the same
       this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
       if (this.chart) {
         this.chart.data = this.data || [];
@@ -132,59 +131,34 @@ export abstract class DashboardChartAbstract extends ChartAbstractDirective impl
     }
   }
 
-  protected getAggregateData(data: any, chartDataValueType: ChartDataValueTypes): DataInterface {
+  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes): DataInterface {
     switch (chartDataValueType) {
       case ChartDataValueTypes.Average:
         let count = 0;
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
           count++;
-          sum += dataItem.value;
+          sum += dataItem[chartDataValueType];
           return sum;
         }, 0) / count);
       case ChartDataValueTypes.Maximum:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem.value ? dataItem.value : min;
+          min = min <= dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
           return min;
         }, -Infinity));
       case ChartDataValueTypes.Minimum:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem.value ? dataItem.value : min;
+          min = min > dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
           return min;
         }, Infinity));
       case ChartDataValueTypes.Total:
         return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem.value;
+          sum += dataItem[chartDataValueType];
           return sum;
         }, 0));
     }
   }
 
-  // @todo this needs major refactor
-  protected filterOutLowValues(data: SummariesChartDataInterface[]): SummariesChartDataInterface[] {
-    const chartData = [];
-    let otherData: SummariesChartDataInterface;
-    const baseValue = <number>this.getAggregateData(data, this.chartDataValueType).getValue() || 1;
-    const totalValue = <number>this.getAggregateData(data, ChartDataValueTypes.Total).getValue();
-    data.forEach((dataItem: SummariesChartDataInterface, index) => {
-      const percent = (dataItem.value * 100) / totalValue; // problem with 0 base value
-      if (percent < 5) {
-        if (!otherData) {
-          otherData = {type: 'Other', value: dataItem.value, count: 1}; // @todo -> This removes the item from the column list best todo is to create a new column series ?
-          return;
-        }
-        otherData.value = <number>this.getAggregateData([otherData, dataItem], this.chartDataValueType).getValue();
-        otherData.count++;
-        return
-      }
-      chartData.push(dataItem);
-    });
-    if (otherData && isNumber(otherData.value)) {
-      chartData.unshift(otherData)
-    }
-    return chartData;
-  }
-
   protected sortData(chartDataCategoryType: ChartDataCategoryTypes) {
-    return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA.value - itemB.value : -(itemB.time - itemA.time);
+    return (itemA: SummariesChartDataInterface, itemB: SummariesChartDataInterface) => chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? itemA[this.chartDataValueType] - itemB[this.chartDataValueType] : -(itemB.time - itemA.time);
   }
 }

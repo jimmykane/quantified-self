@@ -1,6 +1,7 @@
 import {Component, HostListener} from '@angular/core';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
+import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
 @Component({
@@ -9,6 +10,8 @@ import {Router} from '@angular/router';
   styleUrls: ['./home.component.css'],
 })
 export class HomeComponent {
+
+  public serviceNames = ServiceNames
 
   constructor(public authService: AppAuthService, public router: Router) {
 

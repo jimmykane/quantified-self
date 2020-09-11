@@ -83,8 +83,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search').value,
-      startDate: this.searchFormGroup.get('startDate').value ? new Date(this.searchFormGroup.get('startDate').value.setHours(0, 0, 0)) : null,
-      endDate: this.searchFormGroup.get('endDate').value ? new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)) : null,
+      startDate: this.searchFormGroup.get('startDate').value ? new Date(this.searchFormGroup.get('startDate').value.toDate().setHours(0, 0, 0)) : null,
+      endDate: this.searchFormGroup.get('endDate').value ? new Date(this.searchFormGroup.get('endDate').value.toDate().setHours(23, 59, 59)) : null,
       activityTypes: this.selectedActivityTypes,
       dateRange: this.selectedDateRange,
     });
@@ -98,8 +98,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
-    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate, {emmitEvent: false});
-    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate, {emmitEvent: false});
+    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
+    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
     this.selectedDateRange = event.source.value;
     this.search();
   }
@@ -176,7 +176,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): Dat
     }
     case DateRanges.lastThirtyDays: {
       return {
-        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 30),
+        startDate: new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 29),
         endDate: new Date(new Date().setHours(24, 0, 0, 0))
       }
     }

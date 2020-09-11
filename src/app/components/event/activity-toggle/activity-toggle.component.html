@@ -6,8 +6,9 @@
       [checked]="activitySelectionService.selectedActivities.isSelected(activity)">
     </mat-slide-toggle>
   </div>
-  <mat-card-title
-    [ngStyle]="event.isMerge && {color: eventColorService.getActivityColor(event.getActivities(), activity)}">
+
+  <mat-card-title (click)="onActivityClick($event, activity)"
+    [ngStyle]="event.isMerge && this.activitySelectionService.selectedActivities.isSelected(activity) && {color: eventColorService.getActivityColor(event.getActivities(), activity)}">
     <span><b>{{activity.type}}</b></span>
     <span *ngIf="event.isMerge" style="font-size: 0.8em;"> {{activity.creator.name}} {{activity.creator.swInfo}}</span>
   </mat-card-title>

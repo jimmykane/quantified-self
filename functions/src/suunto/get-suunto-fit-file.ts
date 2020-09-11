@@ -3,8 +3,9 @@
 import * as functions from 'firebase-functions'
 import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
-import { getTokenData } from "../service-tokens";
+import { getTokenData } from "../tokens";
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
+import { SERVICE_NAME } from './constants';
 
 /**
  * Downloads the original file
@@ -65,7 +66,7 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, false);
+      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
     } catch (e) {
       console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       res.status(500);

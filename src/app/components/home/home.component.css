@@ -13,12 +13,22 @@ mat-card{
   background: none!important;
 }
 
-
+.footer mat-icon{
+  vertical-align: middle;
+  margin-right: 1em;
+}
 mat-icon.amcharts{
   margin-top: 1em;
   width: 100px;
   height: 42px;
 }
+
+mat-icon.firebase{
+  margin-top: 0em;
+  width: 130px;
+  height: 60px;
+}
+
 
 section{
   padding: 0;

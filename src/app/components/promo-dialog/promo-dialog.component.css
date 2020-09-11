@@ -2,6 +2,7 @@
   vertical-align: middle;
 }
 button {
-  width: 100%;
+  min-width: 100%;
   margin-bottom: 1em;
+  margin-left: 0 !important;
 }

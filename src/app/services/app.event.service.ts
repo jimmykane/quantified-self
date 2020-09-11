@@ -5,7 +5,6 @@ import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
 import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
 import { firestore } from 'firebase/app';
-import * as Pako from 'pako';
 import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -17,13 +16,14 @@ import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapte
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { AppWindowService } from './app.window.service';
-import { gzip_decode } from 'wasm-flate';
-import DocumentData = firebase.firestore.DocumentData;
 import {
   EventMetaDataInterface,
   ServiceNames
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
+import DocumentData = firebase.firestore.DocumentData;
+import { StreamEncoder } from '../helpers/stream.encoder';
+import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 
 
 @Injectable({
@@ -198,9 +198,6 @@ export class AppEventService implements OnDestroy {
             .set(activity.toJSON()));
 
         activity.getAllExportableStreams().forEach((stream) => {
-          // this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(this.getBlobFromStreamData(stream.data))}`);
-          // this.logger.info(`Steam ${stream.type} has size of GZIP ${getSize(firestore.Blob.fromUint8Array(Pako.gzip(JSON.stringify(stream.data))))}`);
-          // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
           writePromises.push(this.afs
             .collection('users')
             .doc(user.uid)
@@ -210,10 +207,7 @@ export class AppEventService implements OnDestroy {
             .doc(activity.getID())
             .collection('streams')
             .doc(stream.type)
-            .set({
-              type: stream.type,
-              data: this.getBlobFromStreamData(stream.getData()),
-            }))
+            .set(StreamEncoder.compressStream(stream.toJSON())))
         });
       });
     try {
@@ -432,18 +426,12 @@ export class AppEventService implements OnDestroy {
 
   private processStreamDocumentSnapshot(streamSnapshot: DocumentData): StreamInterface {
     this.logger.info(<string>streamSnapshot.data().type)
-    return EventImporterJSON.getStreamFromJSON({
-      type: <string>streamSnapshot.data().type,
-      data: this.getStreamDataFromBlob(streamSnapshot.data().data),
-    });
+    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(streamSnapshot.data()));
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
     this.logger.info(<string>queryDocumentSnapshot.data().type)
-    return EventImporterJSON.getStreamFromJSON({
-      type: <string>queryDocumentSnapshot.data().type,
-      data: this.getStreamDataFromBlob(queryDocumentSnapshot.data().data),
-    });
+    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(<CompressedJSONStreamInterface>queryDocumentSnapshot.data()));
   }
 
   // From https://github.com/angular/angularfire2/issues/1400
@@ -472,16 +460,11 @@ export class AppEventService implements OnDestroy {
         ))
   }
 
-  private getBlobFromStreamData(streamData: number[]): firestore.Blob {
-    return firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(streamData), {to: 'string'})))
-  }
+  // private getBlobFromStreamData(streamData: any[]): firestore.Blob {
+  //   return firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(streamData), {to: 'string'})))
+  // }
 
-  private getStreamDataFromBlob(blob: firestore.Blob): number[] {
-    // const t0 = performance.now();
-    // JSON.parse(Pako.ungzip(atob(blob.toBase64()), {to: 'string'}));
-    // const t1 = performance.now();
-    // console.log(`Pako ${t1 - t0}`);
-    return JSON.parse(gzip_decode(blob.toBase64()));
-  }
+
+
 }
 

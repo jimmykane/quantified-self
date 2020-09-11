@@ -10,16 +10,14 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {
-  AgmMap,
-} from '@agm/core';
+import { AgmMap, } from '@agm/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { LapInterface } from '@sports-alliance/sports-lib/lib/laps/lap.interface';
 import { Log } from 'ng2-logger/browser';
 import { AppEventService } from '../../../services/app.event.service';
-import { Subscription } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
@@ -46,6 +44,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   @Input() selectedActivities: ActivityInterface[];
   @Input() theme: MapThemes;
   @Input() showLaps: boolean;
+  @Input() showPoints: boolean;
   @Input() showArrows: boolean;
   @Input() strokeWidth: number;
   @Input() lapTypes: LapTypes[] = [];
@@ -58,6 +57,9 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   /** key is the activity id **/
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
   private activitiesCursorSubscription: Subscription;
+  private lineMouseMoveSubject: Subject<{event: google.maps.PolyMouseEvent, activityMapData: MapData }> = new Subject()
+  private lineMouseMoveSubscription: Subscription;
+
   private logger = Log.create('EventCardMapAGMComponent');
 
   constructor(
@@ -74,6 +76,11 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
+    this.lineMouseMoveSubscription = this.lineMouseMoveSubject.pipe(
+      // debounceTime(250)
+    ).subscribe(value => {
+      this.lineMouseMove(value.event, value.activityMapData);
+    });
     this.logger.info(`Initialized`);
   }
 
@@ -130,6 +137,18 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     }
   }
 
+  getCircleMarkerIcon(activity: ActivityInterface) {
+    return {
+      path: 0,
+      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fillOpacity: 1,
+      strokeColor: '#FFF',
+      strokeWeight: 0.8,
+      scale: 1.2,
+      // anchor: {x: 12, y: 12}
+    }
+  }
+
   getFlagMarkerIcon(activity: ActivityInterface) {
     return {
       path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
@@ -163,8 +182,16 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     }
   }
 
-  async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
-    this.activityCursorService.clear();
+  onLineMouseMove(event, activityMapData: MapData) {
+    this.lineMouseMoveSubject.next({event: event, activityMapData: activityMapData});
+  }
+
+  private async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
+    this.activitiesCursors.set(activityMapData.activity.getID(), {
+      latitudeDegrees: event.latLng.lat(),
+      longitudeDegrees: event.latLng.lng()
+    });
+    this.changeDetectorRef.detectChanges();
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()
@@ -176,9 +203,12 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
       return;
     }
 
+    // this.activityCursorService.clear();
+
     this.activityCursorService.setCursor({
       activityID: activityMapData.activity.getID(),
       time: nearest.time,
+      byMap: true,
     });
   }
 
@@ -221,10 +251,11 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
 
     // Set the cursor
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(1000)
+      debounceTime(250)
     ).subscribe((cursors) => {
       this.logger.info(`Cursor on subscription`);
-      cursors.forEach(cursor => {
+      cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
+        console.log(cursor)
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
         if (cursorActivityMapData) {
           const position = cursorActivityMapData.positions.reduce((prev, curr) => Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
@@ -233,6 +264,10 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
               latitudeDegrees: position.latitudeDegrees,
               longitudeDegrees: position.longitudeDegrees
             });
+            this.agmMap._mapsWrapper.panTo({
+              lat: position.latitudeDegrees,
+              lng: position.longitudeDegrees
+            })
           }
         }
       });
@@ -240,7 +275,7 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
     });
 
     this.selectedActivities.forEach((activity) => {
-      if (!activity.hasPositionData()){
+      if (!activity.hasPositionData()) {
         return
       }
       // 1. We need the lat, long stream to get also the times for using the time for cursor reference
@@ -283,6 +318,9 @@ export class EventCardMapComponent extends MapAbstract implements OnChanges, OnI
   private unSubscribeFromAll() {
     if (this.activitiesCursorSubscription) {
       this.activitiesCursorSubscription.unsubscribe();
+    }
+    if (this.lineMouseMoveSubscription) {
+      this.lineMouseMoveSubscription.unsubscribe();
     }
   }
 

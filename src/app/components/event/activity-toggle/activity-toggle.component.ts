@@ -60,6 +60,13 @@ export class ActivityToggleComponent implements OnChanges, OnInit, OnDestroy {
       : this.activitySelectionService.selectedActivities.deselect(activity);
   }
 
+
+  onActivityClick(event, activity: ActivityInterface) {
+    this.activitySelectionService.selectedActivities.isSelected(activity)
+    ? this.activitySelectionService.selectedActivities.deselect(activity)
+      : this.activitySelectionService.selectedActivities.select(activity);
+  }
+
   ngOnDestroy(): void {
     if (this.selectedActivitiesSubscription) {
       this.selectedActivitiesSubscription.unsubscribe();

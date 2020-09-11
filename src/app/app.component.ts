@@ -98,16 +98,20 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/suunto.svg')
     );
     this.matIconRegistry.addSvgIcon(
+      'garmin',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/garmin.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'coros',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/coros.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
       'amcharts',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/amcharts.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'firebase',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/firebase.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'garmin',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/garmin.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'heart_rate',

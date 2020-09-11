@@ -43,12 +43,12 @@ td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:la
 
 .mat-column-Checkbox{
   justify-content: flex-start;
-  padding-left:  0 !important;
+  padding-left:  0.2em !important;
   /*padding-right:  1em !important;*/
 }
 
 .mat-column-Checkbox{
-  padding-left: 0.2em;
+  /*padding-left: 0.2em;*/
 }
 
 .mat-header-cell.mat-column-Checkbox{
@@ -98,6 +98,15 @@ mat-card{
 
 ::ng-deep .mat-paginator-container{
   justify-content: flex-start !important;
+}
+
+::ng-deep  .mat-checkbox-inner-container-no-side-margin{
+  width: 17px !important;
+  height: 17px !important;
+}
+
+::ng-deep  .mat-checkbox-frame{
+  border-radius: 1px !important;
 }
 
 

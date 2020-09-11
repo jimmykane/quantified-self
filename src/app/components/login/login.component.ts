@@ -33,7 +33,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   async tokensReceived(event) {
     this.isLoading = true;
     const loggedInUser = await this.afAuth.signInWithCustomToken(event.detail.firebaseAuthToken);
-    return this.redirectOrShowDataPrivacyDialog(loggedInUser, event.detail.serviceName, event.detail.serviceAuthResponse);
+    return this.redirectOrShowDataPrivacyDialog(loggedInUser);
   }
 
 
@@ -49,15 +49,12 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    this.isLoading = true;
     this.userSubscription = this.authService.user.subscribe((user) => {
       if (user) {
         this.router.navigate(['/dashboard']);
-        this.snackBar.open(`You are already logged in`, null, {
-          duration: 5000,
-        });
       }
     })
-    this.isLoading = true;
     try {
       const result = await this.afAuth.getRedirectResult();
       if (result.user) {
@@ -108,27 +105,11 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = false;
   }
 
-  async suuntoAppLogin() {
-    this.isLoading = true;
-    // Open the popup that will start the auth flow.
-    const wnd = window.open('assets/authPopup.html?signInWithService=true', 'name', 'height=585,width=400');
-    if (!wnd || wnd.closed || typeof wnd.closed === 'undefined') {
-      this.snackBar.open(`Popup has been block by your browser settings. Please disable popup blocking for this site to connect with the Suunto app`, null, {
-        duration: 5000,
-      });
-      Sentry.captureException(new Error(`Could not open popup for signing in with the Suunto app`));
-    }
-    wnd.onunload = () => this.isLoading = false;
-  }
-
-  private async redirectOrShowDataPrivacyDialog(loginServiceUser, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
+  private async redirectOrShowDataPrivacyDialog(loginServiceUser) {
     this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
-        if (serviceName && serviceToken) {
-          await this.userService.setSuuntoAppToken(databaseUser, serviceToken)
-        }
         this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
         await this.router.navigate(['/dashboard']);
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'}`, null, {
@@ -136,22 +117,20 @@ export class LoginComponent implements OnInit, OnDestroy {
         });
         return;
       }
-      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous', serviceName, serviceToken)
+      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous')
     } catch (e) {
       Sentry.captureException(e);
       this.isLoading = false;
     }
   }
 
-  private showUserAgreementFormDialog(user: User, signInMethod: string, serviceName?: string, serviceToken?: Auth2ServiceTokenInterface) {
+  private showUserAgreementFormDialog(user: User, signInMethod: string) {
     const dialogRef = this.dialog.open(UserAgreementFormComponent, {
       minWidth: '80vw',
       disableClose: true,
       data: {
         user: user,
         signInMethod: signInMethod,
-        serviceName: serviceName,
-        serviceToken: serviceToken,
       },
     });
 

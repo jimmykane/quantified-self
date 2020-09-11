@@ -40,6 +40,12 @@ export class PromoDialogComponent implements OnInit {
     return this.userService.setLastSeenPromoToNow(this.user);
   }
 
+  async gitHubSponsor() {
+    this.afa.logEvent('github_sponsor');
+    window.open(' https://github.com/sponsors/jimmykane?utm_source=qs');
+    return this.userService.setLastSeenPromoToNow(this.user);
+  }
+
   async close(event) {
     event.stopPropagation();
     event.preventDefault();

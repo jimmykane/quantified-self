@@ -57,8 +57,12 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
 import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { AppWindowService } from './app.window.service';
 
 
+/**
+ * @todo  break up to partners (Services) and user
+ */
 @Injectable({
   providedIn: 'root',
 })
@@ -171,11 +175,11 @@ export class AppUserService implements OnDestroy {
   }
 
   static getDefaultMapLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance];
+    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
   }
 
   static getDefaultChartLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance];
+    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
   }
 
   static getDefaultDownSamplingLevel(): number {
@@ -283,6 +287,7 @@ export class AppUserService implements OnDestroy {
     private eventService: AppEventService,
     private afAuth: AngularFireAuth,
     private http: HttpClient,
+    private windowService: AppWindowService,
   ) {
 
   }
@@ -311,14 +316,25 @@ export class AppUserService implements OnDestroy {
     return Promise.resolve(user);
   }
 
-  public async setSuuntoAppToken(user: User, token: Auth2ServiceTokenInterface) {
-    return this.afs.collection(`suuntoAppAccessTokens`).doc(user.uid).collection('tokens').doc(token.userName)
-      .set(JSON.parse(JSON.stringify(token)))
+  public getServiceToken(user: User, serviceName: ServiceNames){
+    switch (serviceName) {
+      default:
+        throw new Error(`Not implemented for service ${serviceName}`);
+      case ServiceNames.COROSAPI:
+      case ServiceNames.SuuntoApp:
+        return this.getServiceTokens(user, serviceName);
+      case ServiceNames.GarminHealthAPI:
+        return this.getGarminHealthAPITokens(user);
+    }
   }
 
-  public getSuuntoAppToken(user: User) {
+  private getServiceTokens(user: User, serviceName: ServiceNames) {
+    const serviceNamesToCollectionName = {
+      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
+      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
+    }
     return this.afs
-      .collection('suuntoAppAccessTokens')
+      .collection(serviceNamesToCollectionName[serviceName])
       .doc<Auth2ServiceTokenInterface>(user.uid)
       .collection('tokens')
       .valueChanges()
@@ -327,26 +343,13 @@ export class AppUserService implements OnDestroy {
       }));
   }
 
-   public getGarminHealthAPIToken(user: User) {
+   private getGarminHealthAPITokens(user: User) {
     return this.afs
       .collection('garminHealthAPITokens')
-      .doc(user.uid).valueChanges()
+      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consistent with the other provides that support more than one token
       .pipe(catchError(error => {
         return [];
       }));
-  }
-
-  public async getGarminHealthAPITokenAsPromise(user: User): Promise<{oauthToken: string, oauthTokenSecret: string, state: string}> {
-    return this.afs
-      .collection('garminHealthAPITokens')
-      .doc(user.uid)
-      .get({source: 'server'})
-      .pipe(catchError(error => {
-        return [];
-      }))
-      .pipe(take(1))
-      .pipe(map((doc) => doc.data()))
-      .toPromise();
   }
 
   private getAllUserMeta(user: User) {
@@ -367,7 +370,7 @@ export class AppUserService implements OnDestroy {
     }))
   }
 
-  public shouldShowPromoForPatreon(user: User) {
+  public shouldShowPromo(user: User) {
     // Intentionally just check if only set for now
     if (!user || user.lastSeenPromo) {
       return false;
@@ -379,10 +382,15 @@ export class AppUserService implements OnDestroy {
     return this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
   }
 
-  public async importSuuntoAppHistory(startDate: Date, endDate: Date) {
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date){
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const serviceNamesToFunctionsURI = {
+      [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
+      [ServiceNames.GarminHealthAPI]: environment.functions.backfillHealthAPIActivities,
+      [ServiceNames.COROSAPI]: environment.functions.COROSAPIHistoryImportURI,
+    }
     return this.http.post(
-      environment.functions.historyImportURI, {
+      serviceNamesToFunctionsURI[serviceName], {
         startDate: startDate,
         endDate: endDate
       },
@@ -394,12 +402,34 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async backfillHealthAPIActivities(startDate: Date, endDate: Date) {
+  public async deauthorizeService(serviceName: ServiceNames) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const serviceNamesToFunctionsURI = {
+      [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoApp,
+      [ServiceNames.GarminHealthAPI]: environment.functions.deauthorizeGarminHealthAPI,
+      [ServiceNames.COROSAPI]: environment.functions.deauthorizeCOROSAPI,
+    }
     return this.http.post(
-      environment.functions.backfillHealthAPIActivities, {
-        startDate: startDate,
-        endDate: endDate
+      serviceNamesToFunctionsURI[serviceName],
+      {},
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{redirect_uri: string}|{redirect_uri: string, state: string, oauthToken: string}>{
+    const serviceNamesToFunctionsURI = {
+      [ServiceNames.SuuntoApp]: environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI,
+      [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI,
+      [ServiceNames.COROSAPI]: environment.functions.getCOROSAPIAuthRequestTokenRedirectURI
+    }
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return <Promise<{redirect_uri: string}>>this.http.post(
+      serviceNamesToFunctionsURI[serviceName], {
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
       },
       {
         headers:
@@ -409,49 +439,44 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async deauthorizeSuuntoApp() {
-    return this.http.post(
-      environment.functions.deauthorizeSuuntoAppURI,
-      {},
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
-          })
-      }).toPromise();
-  }
-
-  public async deauthorizeGarminHealthAPI() {
-    return this.http.post(
-      environment.functions.deauthorizeGarminHealthAPI,
-      {},
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${await (await this.afAuth.currentUser).getIdToken(true)}`
-          })
-      }).toPromise();
-  }
-
-  // @todo this is currently not used due to https://stackoverflow.com/questions/62858565/angularfire-firestore-not-getting-fresh-written-document
-  public async getCurrentUserGarminHealthAPITokenAndRedirectURI(): Promise<{redirect_uri: string, state: string, oauthToken: string}> {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
-    return <Promise<{redirect_uri: string, state: string, oauthToken: string}>>this.http.post(
-      environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI, {},
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
-  }
-
-  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier) {
+  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier: string) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetGarminHealthAPIAccessToken, {
         state: state,
         oauthVerifier: oauthVerifier
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string) {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return this.http.post(
+      environment.functions.requestAndSetSuuntoAPIAccessToken, {
+        state: state,
+        code: code,
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
+      },
+      {
+        headers:
+          new HttpHeaders({
+            'Authorization': `Bearer ${idToken}`
+          })
+      }).toPromise();
+  }
+
+  public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string) {
+    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    return this.http.post(
+      environment.functions.requestAndSetCOROSAPIAccessToken, {
+        state: state,
+        code: code,
+        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
       },
       {
         headers:
@@ -483,24 +508,20 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const suuntoAppToken = await this.getSuuntoAppToken(user);
-    const garminHealthAPIToken = await this.getGarminHealthAPIToken(user).pipe(take(1)).toPromise();
-    if (suuntoAppToken) {
+    const serviceTokens = [
+      {[ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise()},
+      {[ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise()},
+      {[ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise()}
+    ].filter((serviceToken) => serviceToken[Object.keys(serviceToken)[0]])
+    for (const serviceToken of serviceTokens) {
       try {
-        await this.deauthorizeSuuntoApp();
+        await this.deauthorizeService(<ServiceNames>Object.keys(serviceToken)[0]);
       } catch (e) {
         Sentry.captureException(e);
         console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`)
       }
     }
-    if (garminHealthAPIToken) {
-      try {
-        await this.deauthorizeGarminHealthAPI();
-      } catch (e) {
-        Sentry.captureException(e);
-        console.error(`Could not deauthorize ${ServiceNames.GarminHealthAPI}`)
-      }
-    }
+
     try {
       return (await this.afAuth.currentUser).delete();
     } catch (e) {
@@ -569,6 +590,7 @@ export class AppUserService implements OnDestroy {
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || AppUserService.getDefaultMapTheme();
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
+    settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();
@@ -602,6 +624,4 @@ export class AppUserService implements OnDestroy {
 
   ngOnDestroy() {
   }
-
-
 }

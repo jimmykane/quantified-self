@@ -12,7 +12,7 @@ import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DashboardChartAbstract } from '../dashboard-chart.abstract';
+import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 
 import * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
@@ -27,7 +27,7 @@ import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-l
   styleUrls: ['./charts.xy.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsXYComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+export class ChartsXYComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
   @Input() vertical = true;
   @Input() type: 'columns' | 'lines' | 'pyramids';
 
@@ -83,7 +83,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.renderer.opposite = this.vertical;
-    valueAxis.extraMax = this.vertical ? 0.15 : 0.20;
+    valueAxis.extraMax = this.vertical ? 0.15 : 0.10;
     valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
@@ -115,7 +115,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
         }
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
       });
 
@@ -170,7 +170,7 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
         }
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
         return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
       });
       // bullet.filters.push(ChartHelper.getShadowFilter());
@@ -197,10 +197,10 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       if (this.vertical) {
         categoryLabel.dy = -15;
       } else {
-        categoryLabel.label.dx = 35;
+        categoryLabel.label.dx = 55;
       }
       categoryLabel.label.adapter.add('text', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext.value));
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       categoryLabel.label.background = new am4core.RoundedRectangle();
@@ -224,11 +224,11 @@ export class ChartsXYComponent extends DashboardChartAbstract implements OnChang
       });
     }
     series.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-    series.dataFields[this.getSeriesValuesFieldName()] = 'value';
+    series.dataFields[this.getSeriesValuesFieldName()] = this.chartDataValueType;
 
     if (regressionSeries) {
       regressionSeries.dataFields[this.getSeriesCategoryFieldName()] = this.getSeriesValueFieldName();
-      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = 'value';
+      regressionSeries.dataFields[this.getSeriesValuesFieldName()] = this.chartDataValueType;
     }
 
     series.name = DynamicDataLoader.getDataClassFromDataType(this.chartDataType).type;

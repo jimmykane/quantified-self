@@ -16,7 +16,7 @@ import {
   ChartDataValueTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
-import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
@@ -27,7 +27,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
   styleUrls: ['./charts.pie.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsPieComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+export class ChartsPieComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
   protected logger = Log.create('ChartsPieComponent');
 
@@ -44,7 +44,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
     chart.innerRadius = am4core.percent(45);
 
     const pieSeries = chart.series.push(new am4charts.PieSeries());
-    pieSeries.dataFields.value = 'value';
+    pieSeries.dataFields.value = this.chartDataValueType;
     pieSeries.dataFields.category =  this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
     // pieSeries.interpolationDuration = 500;f
     // pieSeries.rangeChangeDuration = 500;
@@ -60,7 +60,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
       if (!target.dataItem || !target.dataItem.values || ! target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
       return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? `` : `.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")`}}\n${target.dataItem.values.value.percent.toFixed(1)}%\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `${target.dataItem.dataContext['count']} Activities` : ``}`
     });
 
@@ -76,7 +76,7 @@ export class ChartsPieComponent extends DashboardChartAbstract implements OnChan
         return '';
       }
       try {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
         return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
         // return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       } catch (e) {

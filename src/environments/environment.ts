@@ -18,14 +18,20 @@ export const environment = {
     measurementId: 'G-6YE27NNKDT'
   },
   functions: {
-    deauthorizeSuuntoAppURI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
+    deauthorizeSuuntoApp: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
     uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRouteToSuuntoApp',
     getSuuntoFITFile: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoFITFile',
-    historyImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addSuuntoAppHistoryToQueue',
+    suuntoAPIHistoryImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addSuuntoAppHistoryToQueue',
     stWorkoutDownloadAsFit: 'http://localhost:5000/quantified-self-io/europe-west2/stWorkoutDownloadAsFit/',
     getGarminHealthAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getGarminHealthAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminHealthAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetGarminHealthAPIAccessToken',
     backfillHealthAPIActivities: 'http://localhost:5000/quantified-self-io/europe-west2/backfillHealthAPIActivities',
     deauthorizeGarminHealthAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeGarminHealthAPI',
+    getSuuntoAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getSuuntoAPIAuthRequestTokenRedirectURI',
+    requestAndSetSuuntoAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetSuuntoAPIAccessToken',
+    getCOROSAPIAuthRequestTokenRedirectURI: 'http://localhost:5000/quantified-self-io/europe-west2/getCOROSAPIAuthRequestTokenRedirectURI',
+    requestAndSetCOROSAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetCOROSAPIAccessToken',
+    deauthorizeCOROSAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeCOROSAPI',
+    COROSAPIHistoryImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addCOROSAPIHistoryToQueue',
   }
 };

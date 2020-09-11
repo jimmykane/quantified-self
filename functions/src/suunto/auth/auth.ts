@@ -1,10 +1,10 @@
 import * as functions from "firebase-functions";
-import {create} from "simple-oauth2";
+import { AuthorizationCode } from "simple-oauth2";
 
 /**
  * Creates a configured simple-oauth2 client for Suunto app.
  */
-export function suuntoApiAuth() {
+export function SuuntoAPIAuth(): AuthorizationCode {
   // Suunto app OAuth 2 setup
   const credentials = {
     client: {
@@ -16,5 +16,5 @@ export function suuntoApiAuth() {
       // tokenPath: '/oauth/token',
     },
   };
-  return create(credentials);
+  return new AuthorizationCode(credentials);
 }

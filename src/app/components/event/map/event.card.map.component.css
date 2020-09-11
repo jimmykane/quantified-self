@@ -15,3 +15,18 @@ section.placeholder{
 mat-icon{
   vertical-align: middle;
 }
+
+mat-card.map-legend{
+  padding-top: 0.4em;
+  padding-bottom: 0.4em;
+  padding-left: 0;
+  padding-right: 0;
+  position: absolute;
+  bottom: 21px;
+  right: 48px;
+  z-index: 1;
+}
+
+mat-slide-toggle{
+  margin-top: 10000px !important;
+}

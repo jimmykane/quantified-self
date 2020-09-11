@@ -12,6 +12,7 @@ import { take } from 'rxjs/operators';
 import { Log } from 'ng2-logger/browser';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 
 @Component({
@@ -90,9 +91,9 @@ export class ActivityCropFormComponent implements OnInit {
     this.isLoading = true;
 
     try {
-      EventUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
+      ActivityUtilities.cropDistance(Number(this.activityFormGroup.get('startDistance').value), Number(this.activityFormGroup.get('endDistance').value), this.activity);
       this.activity.clearStats();
-      EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
+      ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
       EventUtilities.reGenerateStatsForEvent(this.event);
       await this.eventService.writeAllEventData(this.user, this.event);
       this.snackBar.open('Activity saved', null, {

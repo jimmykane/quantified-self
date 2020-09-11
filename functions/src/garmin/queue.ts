@@ -10,11 +10,15 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { generateIDFromParts, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
-import { GarminHealthAPIActivityQueueItemInterface, } from '../queue/queue-item.interface';
+import {
+  GarminHealthAPIActivityQueueItemInterface
+} from '../queue/queue-item.interface';
 import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import * as xmldom from 'xmldom';
-import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import {
+  GarminHealthAPIEventMetaData
+} from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
@@ -53,19 +57,6 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
   }
   console.log(`Inserted to queue ${queueItemRefs.length}`);
   res.status(200).send();
-  // res.write('SUCCESS')
-  //
-  // console.log(`Processing 1 of ${queueItemRefs.length} freshly inserted to queue items. The rest are queued`);
-  //
-  // for (const queueItemRef of queueItemRefs.slice(0, 1)) {
-  //   try {
-  //     console.log(`Processing freshly inserted queue item ${queueItemRef.id}`)
-  //     await processGarminHealthAPIActivityQueueItem(<GarminHealthAPIActivityQueueItemInterface>Object.assign({id: queueItemRef.id}, (await queueItemRef.get()).data()));
-  //   } catch (e) {
-  //     console.error(e);
-  //   }
-  // }
-  // res.end();
 });
 
 

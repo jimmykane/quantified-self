@@ -4,11 +4,18 @@ import * as admin from "firebase-admin";
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import * as Pako from 'pako';
 import {
+  COROSAPIEventMetaData,
   GarminHealthAPIEventMetaData,
   SuuntoAppEventMetaData
 } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import * as Pako from 'pako';
+import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
+import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import {
+  CompressedJSONStreamInterface,
+  CompressionEncodings, CompressionMethods
+} from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 
 
 // @todo move to Sha256 see SO question
@@ -68,7 +75,7 @@ export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData|COROSAPIEventMetaData) {
     const writePromises: Promise<any>[] = [];
     event.setID(eventID);
     event.getActivities()
@@ -95,10 +102,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
                         .doc(<string>activity.getID())
                         .collection('streams')
                         .doc(stream.type)
-                        .set({
-                            type: stream.type,
-                            data: Buffer.from((Pako.gzip(JSON.stringify(stream.getData()), {to: 'string'})), 'binary'),
-                        }))
+                        .set(StreamEncoder.compressStream(stream.toJSON())))
             });
         });
     writePromises.push(admin.firestore()
@@ -118,3 +122,68 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     }
 }
 
+/**
+ * Creates a Firebase account with the given user profile and returns a custom auth token allowing
+ * signing-in this account.
+ *
+ * @returns {Promise<string>} The Firebase custom auth token in a promise.
+ */
+export async function createFirebaseAccount(serviceUserID: string, accessToken: string) {
+  // The UID we'll assign to the user.
+  const uid = generateIDFromParts(['suuntoApp', serviceUserID]);
+
+  // Save the access token to the Firestore
+  // const databaseTask  = admin.firestore().collection('suuntoAppAccessTokens').doc(`${uid}`).set({accessToken: accessToken});
+
+  // Create or update the user account.
+  try {
+    await admin.auth().updateUser(uid, {
+      displayName: serviceUserID,
+      // photoURL: photoURL,
+    })
+  } catch (e) {
+    if (e.code === 'auth/user-not-found') {
+      await admin.auth().createUser({
+        uid: uid,
+        displayName: serviceUserID,
+        // photoURL: photoURL,
+      });
+    }
+  }
+  // Create a Firebase custom auth token.
+  const token = await admin.auth().createCustomToken(uid);
+  console.log('Created Custom token for UID "', uid, '" Token:', token);
+  return token;
+}
+
+
+export class StreamEncoder {
+  /**
+   * Make sure this is in sync with the functions based one
+   * @param stream
+   */
+  static compressStream(stream: StreamJSONInterface): CompressedJSONStreamInterface {
+    const compressedStream: CompressedJSONStreamInterface = {
+      encoding: CompressionEncodings.None,
+      type: stream.type,
+      data: JSON.stringify(stream.data),
+      compressionMethod: CompressionMethods.None
+    }
+    console.log(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+    // If we can fit it go on
+    if (getSize(compressedStream.data) <= 1048487) {
+      return compressedStream
+    }
+    // Then try Pako (as the fastest)
+    compressedStream.data = Buffer.from(Pako.gzip(JSON.stringify(stream.data)));
+    compressedStream.encoding = CompressionEncodings.UInt8Array;
+    compressedStream.compressionMethod = CompressionMethods.Pako
+    console.log(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+    if (getSize(compressedStream.data) <= 1048487) {
+      return compressedStream
+    }
+    // Throw an error if smaller than a MB still
+    throw new Error(`Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(compressedStream.data)}`)
+  }
+
+}

@@ -13,6 +13,7 @@ import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confi
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 @Component({
   selector: 'app-activity-actions',
@@ -77,7 +78,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     this.activity.clearStreams();
     this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
     this.activity.clearStats();
-    EventUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
+    ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
     EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.writeAllEventData(this.user, this.event);
     this.snackBar.open('Activity and event statistics have been recalculated', null, {

@@ -16,7 +16,7 @@ import * as am4charts from '@amcharts/amcharts4/charts';
 import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {DashboardChartAbstract} from '../dashboard-chart.abstract';
+import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
 import {SummariesChartDataInterface} from '../../summaries/summaries.component';
 import {ChartHelper} from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -28,7 +28,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
   styleUrls: ['./charts.timeline.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsTimelineComponent extends DashboardChartAbstract implements OnChanges, OnDestroy {
+export class ChartsTimelineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
   protected logger = Log.create('ChartsTimelineComponent');
 
@@ -41,7 +41,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     const chart = <am4plugins_timeline.SpiralChart>super.createChart(am4plugins_timeline.SpiralChart);
     chart.levelCount = 2;
     chart.inversed = true;
-    chart.endAngle = -85;
+    chart.endAngle = -90;
     chart.yAxisInnerRadius = am4core.percent(15);
     chart.yAxisRadius = am4core.percent(120);
     chart.innerRadius = am4core.percent(60);
@@ -62,27 +62,27 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     categoryAxis.cursorTooltipEnabled = false;
 
 
-    categoryAxis.renderer.labels.template.disabled = true;
-    // const categoryAxisLabelTemplate = categoryAxis.renderer.labels.template;
-    // categoryAxisLabelTemplate.paddingLeft = 20;
-    // categoryAxisLabelTemplate.horizontalCenter = 'left';
-    // categoryAxisLabelTemplate.adapter.add('rotation', (rotation, target) => {
-    //   const position = valueAxis.valueToPosition(valueAxis.min);
-    //   return valueAxis.renderer.positionToAngle(position) + 90;
-    // });
-    // categoryAxisLabelTemplate.adapter.add('text', (text, target, key) => {
-    //   let chartDataItem;
-    //   if (target.dataItem instanceof am4charts.DateAxisDataItem && target.axis) {
-    //     chartDataItem = target.axis.chart.data.find((chartData: SummariesChartDataInterface) => chartData.time === (<am4charts.DateAxisDataItem>target.dataItem).value);
-    //   } else if (target.dataItem instanceof am4charts.CategoryAxisDataItem) {
-    //     chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
-    //   }
-    //   if (!chartDataItem) {
-    //     return `[bold font-size: 0.8em]${text}[/]`;
-    //   }
-    //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem.value);
-    //   return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
-    // });
+    categoryAxis.renderer.labels.template.disabled = false;
+    const categoryAxisLabelTemplate = categoryAxis.renderer.labels.template;
+    categoryAxisLabelTemplate.paddingLeft = 20;
+    categoryAxisLabelTemplate.horizontalCenter = 'left';
+    categoryAxisLabelTemplate.adapter.add('rotation', (rotation, target) => {
+      const position = valueAxis.valueToPosition(valueAxis.min);
+      return valueAxis.renderer.positionToAngle(position) + 80;
+    });
+    categoryAxisLabelTemplate.adapter.add('text', (text, target, key) => {
+      let chartDataItem;
+      if (target.dataItem instanceof am4charts.DateAxisDataItem && target.axis) {
+        chartDataItem = target.axis.chart.data.find((chartData: SummariesChartDataInterface) => chartData.time === (<am4charts.DateAxisDataItem>target.dataItem).value);
+      } else if (target.dataItem instanceof am4charts.CategoryAxisDataItem) {
+        chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
+      }
+      if (!chartDataItem) {
+        return `[bold font-size: 0.8em]${text}[/]`;
+      }
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem[this.chartDataValueType]);
+      return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
+    });
 
     const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 100;
@@ -114,7 +114,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
     } else if (categoryAxis instanceof am4charts.DateAxis) {
       series.dataFields.dateY = 'time';
     }
-    series.dataFields.valueX = 'value';
+    series.dataFields.valueX = this.chartDataValueType;
 
 
     series.columns.template.adapter.add('fill', (fill, target) => {
@@ -129,7 +129,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstract implements O
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext['value']);
+      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
       return `${'{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
