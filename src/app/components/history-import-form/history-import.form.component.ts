@@ -98,7 +98,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
-        this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
         break;
       case ServiceNames.GarminHealthAPI:
         this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000)) < new Date()
@@ -106,10 +105,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         break;
       default:
         Sentry.captureException(new Error(`Service name is not available ${this.serviceName} for history import`));
-        this.formGroup.disable();
-        this.isAllowedToDoHistoryImport = false;
+        // this.formGroup.disable();
+        // this.isAllowedToDoHistoryImport = false;
         break;
     }
+    this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
     // Set this to done loading
     this.isLoading = false;
   }
