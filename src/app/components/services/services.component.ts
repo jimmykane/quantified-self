@@ -29,6 +29,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
 
+  public clicks = 0
+
   private userSubscription: Subscription;
 
   constructor(private http: HttpClient, private fileService: AppFileService,
