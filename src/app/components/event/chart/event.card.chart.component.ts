@@ -16,13 +16,13 @@ import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/ac
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import { AxisRenderer, AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
+import { AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
 import { Subscription } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
 import { debounceTime } from 'rxjs/operators';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import { DataStore, DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib/lib/data/data.pace';
 import {
   ChartCursorBehaviours,
@@ -34,10 +34,7 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataSwimPace, DataSwimPaceMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import {
-  DataSwimPaceMax,
-  DataSwimPaceMaxMinutesPer100Yard
-} from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
+import { DataSwimPaceMaxMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
 import { DataGPSAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
 import { DataAccumulatedPower } from '@sports-alliance/sports-lib/lib/data/data.accumulated-power';
 import { DataTemperature } from '@sports-alliance/sports-lib/lib/data/data.temperature';
@@ -81,10 +78,7 @@ import { DataAirPower } from '@sports-alliance/sports-lib/lib/data/data.air-powe
 import { AppUserService } from '../../../services/app.user.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import {
-  ActivityCursorInterface,
-  AppActivityCursorService
-} from '../../../services/activity-cursor/app-activity-cursor.service';
+import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import {
   DataGradeAdjustedPace,
   DataGradeAdjustedPaceMinutesPerMile
@@ -104,7 +98,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
-const DOWNSAMPLE_AFTER_X_HOURS = 10;
+const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
 
 @Component({
