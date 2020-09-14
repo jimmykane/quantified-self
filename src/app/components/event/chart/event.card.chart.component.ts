@@ -99,7 +99,7 @@ import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 8;
-const DOWNSAMPLE_FACTOR_PER_HOUR = 2;
+const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
 
 @Component({
   selector: 'app-event-card-chart',
@@ -157,7 +157,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.logger.info(`ViewInit`);
     this.chart = this.createChart();
     await this.processChanges();
-    // this.chart = this.createChart();
   }
 
   async ngOnInit() {
