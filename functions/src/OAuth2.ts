@@ -133,8 +133,8 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 }
 
 export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
-
-  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
+  const serviceConfig = getServiceConfig(serviceName);
+  const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
   console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   // Deauthorize all tokens for that user
