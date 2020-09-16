@@ -5,7 +5,7 @@
         <mat-icon class="large-svg-icon" svgIcon="suunto"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
-        <app-services-suunto [user]="user"></app-services-suunto>
+        <app-services-suunto [user]="user" [isGuest]="isGuest"></app-services-suunto>
       </ng-template>
     </mat-tab>
     <mat-tab label="Garmin" [disabled]="!user || isGuest">
@@ -13,7 +13,7 @@
         <mat-icon class="large-svg-icon" svgIcon="garmin" (click)="clicks = clicks+1;"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
-        <app-services-garmin [user]="user"></app-services-garmin>
+        <app-services-garmin [user]="user" [isGuest]="isGuest"></app-services-garmin>
       </ng-template>
     </mat-tab>
 
@@ -23,7 +23,7 @@
         &nbsp;(coming soon)
       </ng-template>
       <ng-template matTabContent>
-        <app-services-coros [user]="user"></app-services-coros>
+        <app-services-coros [user]="user" [isGuest]="isGuest"></app-services-coros>
       </ng-template>
     </mat-tab>
   </mat-tab-group>

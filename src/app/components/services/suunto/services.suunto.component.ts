@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
@@ -13,7 +13,7 @@ import { ParamMap } from '@angular/router';
   templateUrl: './services.suunto.component.html',
   styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
 })
-export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective {
+export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit{
   public suuntoAppLinkFormGroup: FormGroup;
 
   public serviceName = ServiceNames.SuuntoApp;

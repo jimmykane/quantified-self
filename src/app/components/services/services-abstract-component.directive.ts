@@ -34,8 +34,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public abstract serviceName: ServiceNames;
 
   @Input() user: User;
+  @Input() isGuest: boolean;
   public isLoading = false;
-  public isGuest: boolean;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[];
   public serviceMeta: UserServiceMetaInterface
   public selectedTabIndex = 0;
@@ -57,12 +57,14 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async ngOnChanges() {
+    this.isLoading = false;
+
     // Only user can change
     if (this.serviceDataSubscription) {
       this.serviceDataSubscription.unsubscribe()
     }
     // Noop if no user
-    if (!this.user) {
+    if (!this.user || this.isGuest) {
       return;
     }
     this.isLoading = true;
