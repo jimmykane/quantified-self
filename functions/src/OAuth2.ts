@@ -148,13 +148,19 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
       continue // Go to next
     }
 
-    await requestPromise.get({
-      headers: {
-        'Authorization': `Bearer ${serviceToken.accessToken}`,
-      },
-      url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
-    });
-    console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`)
+    switch (serviceName){
+      default:
+        break;
+      case ServiceNames.SuuntoApp:
+        await requestPromise.get({
+          headers: {
+            'Authorization': `Bearer ${serviceToken.accessToken}`,
+          },
+          url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
+        });
+        console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`)
+        break;
+    }
 
     await tokenQueryDocumentSnapshot.ref.delete();
 
