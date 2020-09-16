@@ -163,6 +163,18 @@
     <section>
       <mat-slide-toggle
         [color]="'accent'"
+        formControlName="averageGradeAdjustedPace">
+          <span matTooltip="Include average grade adjusted pace in the export">
+             Average grade adjusted pace
+          </span>
+      </mat-slide-toggle>
+    </section>
+
+
+
+    <section>
+      <mat-slide-toggle
+        [color]="'accent'"
         formControlName="averageHeartRate">
           <span matTooltip="Include average heart rate in the export">
              Average heart rate
