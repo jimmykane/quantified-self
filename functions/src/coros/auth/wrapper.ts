@@ -3,6 +3,7 @@
 import * as functions from 'firebase-functions'
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from "../../utils";
 import {
+  deauthorizeServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State
@@ -89,5 +90,43 @@ export const requestAndSetCOROSAPIAccessToken = functions.region('europe-west2')
   }
   res.status(200).send();
 });
+
+
+
+/**
+ * Deauthorizes a COROS account
+ */
+export const deauthorizeCOROSAPI = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  // Directly set the CORS header
+  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
+    console.error(`Not allowed`);
+    res.status(403);
+    res.send('Unauthorized');
+    return
+  }
+
+  setAccessControlHeadersOnResponse(req, res);
+
+  if (req.method === 'OPTIONS') {
+    res.status(200);
+    res.send();
+    return;
+  }
+
+  const userID = await getUserIDFromFirebaseToken(req);
+  if (!userID){
+    res.status(403).send('Unauthorized');
+    return;
+  }
+
+  try {
+    await deauthorizeServiceForUser(userID, SERVICE_NAME);
+  }catch (e) {
+    console.error(e)
+    res.status(500).send('Deauthorization Error');
+  }
+  res.status(200).send({result: 'Deauthorized'});
+});
+
 
 
