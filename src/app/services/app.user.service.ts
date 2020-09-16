@@ -611,6 +611,7 @@ export class AppUserService implements OnDestroy {
     settings.exportToCSVSettings.averageSpeed = settings.exportToCSVSettings.averageSpeed !== false;
     settings.exportToCSVSettings.averagePace = settings.exportToCSVSettings.averagePace !== false;
     settings.exportToCSVSettings.averageSwimPace = settings.exportToCSVSettings.averageSwimPace !== false;
+    settings.exportToCSVSettings.averageGradeAdjustedPace = settings.exportToCSVSettings.averageGradeAdjustedPace !== false;
     settings.exportToCSVSettings.averageHeartRate = settings.exportToCSVSettings.averageHeartRate !== false;
     settings.exportToCSVSettings.maximumHeartRate = settings.exportToCSVSettings.maximumHeartRate !== false;
     settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
