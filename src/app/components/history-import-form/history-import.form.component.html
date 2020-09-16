@@ -85,8 +85,8 @@
           <b>I understand that</b>
           <br/>
           <span class="smaller">
-            <span *ngIf="serviceName === serviceNames.SuuntoApp">
-              History import can take up to days depending on how many activities you have.
+            <span *ngIf="serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI">
+              History import can take some hours or up to days depending on how many activities you have.
             </span>
             <span *ngIf="serviceName === serviceNames.GarminHealthAPI">
               You can do a history import every 3 days.
