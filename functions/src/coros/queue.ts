@@ -11,7 +11,9 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
   memory: '256MB'
 }).https.onRequest(async (req, res) => {
   console.log('Called')
+  console.log(req.rawHeaders)
   console.log(req.body);
+  console.log(req.body.sportDataList);
   res.status(200).send()
 })
 
