@@ -17,6 +17,7 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
+import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 
 const BATCH_SIZE = 450;
 
@@ -66,7 +67,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
         batch.set(
           admin.firestore()
             .collection(getServiceWorkoutQueueName(serviceName))
-            .doc(generateIDFromParts(serviceName === ServiceNames.SuuntoApp ? [serviceToken.userName, workoutQueueItem.workoutID] : [serviceToken.openId, workoutQueueItem.workoutID, workoutQueueItem.FITFileURI])), workoutQueueItem);
+            .doc(workoutQueueItem.id), workoutQueueItem);
         processedWorkoutsCount++;
       }
       // Try to commit it
@@ -130,6 +131,8 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
       }
       return result.payload.filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate).map((item: any) => {
         return {
+          id: generateIDFromParts([serviceToken.userName, item.workoutKey]),
+          dateCreated: new Date().getTime(),
           userName: serviceToken.userName,
           workoutID: item.workoutKey,
           retryCount: 0, // So it can be re-processed
@@ -147,33 +150,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
       if (result.message && result.message !== 'OK') {
         throw new Error(`COROS API Error with code ${result.result}`);
       }
-      // find the triathlon
-      const triathlon = result.data
-        .filter(((workoutData: any) => workoutData.triathlonItemList))
-        .reduce((accu: COROSAPIWorkoutQueueItemInterface[], triathlonWorkout: any) => {
-          triathlonWorkout.triathlonItemList.forEach((triathlonWorkoutItem: any) => {
-            accu.push(<COROSAPIWorkoutQueueItemInterface>{
-              openId: (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId,
-              workoutID: triathlonWorkout.labelId,
-              FITFileURI: triathlonWorkoutItem.fitUrl,
-              retryCount: 0, // So it can be re-processed
-              processed: false, //So it can be re-processed
-            })
-          })
-          return accu
-        }, [])
-
-      const nonTriathlon = result.data
-        .filter(((workoutData: any) => !workoutData.triathlonItemList)).map((workout: any) => {
-          return {
-            openId: (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId,
-            workoutID: workout.labelId,
-            FITFileURI: workout.fitUrl,
-            retryCount: 0, // So it can be re-processed
-            processed: false, //So it can be re-processed
-          }
-        })
-      return [...triathlon, ...nonTriathlon]
+      return convertCOROSWorkoutsToQueueItems(result.data, (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId)
   }
 }
 
