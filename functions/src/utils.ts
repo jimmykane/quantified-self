@@ -1,4 +1,3 @@
-import * as base58 from 'bs58';
 import { Request, Response } from 'firebase-functions';
 import * as admin from "firebase-admin";
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
@@ -16,11 +15,17 @@ import {
   CompressedJSONStreamInterface,
   CompressionEncodings, CompressionMethods
 } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
-
+import * as crypto from 'crypto'
+import * as base58 from 'bs58'
 
 // @todo move to Sha256 see SO question
+
 export function generateIDFromParts(parts: string[]): string{
   return base58.encode(Buffer.from(`${parts.join(':')}`));
+}
+
+export function generateIDFromPartsNew(parts: string[], algorithm = 'md5'): string{
+  return crypto.createHash(algorithm).update(parts.join(':')).digest('hex');
 }
 
 export async function getUserIDFromFirebaseToken(req: Request ): Promise<string|null> {
