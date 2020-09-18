@@ -10,6 +10,7 @@ import {AngularFirestore, AngularFirestoreDocument} from '@angular/fire/firestor
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppUserService} from '../services/app.user.service';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { LocalStorageService } from '../services/storage/app.local.storage.service';
 
 @Injectable({
   providedIn: 'root',
@@ -28,6 +29,7 @@ export class AppAuthService implements OnDestroy {
     private afa: AngularFireAnalytics,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
+    private localStorageService: LocalStorageService,
   ) {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
@@ -139,6 +141,7 @@ export class AppAuthService implements OnDestroy {
   async signOut(): Promise<void> {
     await this.afAuth.signOut();
     await this.afs.firestore.terminate();
+    this.localStorageService.clearAllStorage()
     return this.afs.firestore.clearPersistence();
   }
 

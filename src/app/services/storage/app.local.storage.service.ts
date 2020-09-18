@@ -1,5 +1,5 @@
-import {StorageServiceInterface} from './app.storage.service.interface';
-import {Logger} from 'ng2-logger/browser';
+import { StorageServiceInterface } from './app.storage.service.interface';
+import { Logger } from 'ng2-logger/browser';
 import { Injectable } from '@angular/core';
 
 
@@ -10,6 +10,8 @@ export abstract class LocalStorageService implements StorageServiceInterface {
 
   protected abstract nameSpace: string;
   protected abstract logger: Logger<{}>;
+
+  private localStorage = localStorage;
 
   constructor() {
   }
@@ -34,11 +36,11 @@ export abstract class LocalStorageService implements StorageServiceInterface {
   }
 
   getAllItems(): string[] {
-      const items = [];
-      this.getAllKeys().map((localStorageKey) => {
-        items.push(localStorage.getItem(localStorageKey));
-      });
-      return items;
+    const items = [];
+    this.getAllKeys().map((localStorageKey) => {
+      items.push(localStorage.getItem(localStorageKey));
+    });
+    return items;
   }
 
   getAllKeys(): string[] {
@@ -56,5 +58,9 @@ export abstract class LocalStorageService implements StorageServiceInterface {
     for (const key of this.getAllKeys()) {
       this.removeItem(key);
     }
+  }
+
+  clearAllStorage() {
+    this.localStorage.clear();
   }
 }
