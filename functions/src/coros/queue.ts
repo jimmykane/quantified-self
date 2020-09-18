@@ -49,12 +49,10 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
       return
     }
   }
-  res.status(200).send();
-  //
-  // res.status(200).send({
-  //   "message":"ok",
-  //   "result":"0000"
-  // })
+  res.status(200).send({
+    "message":"ok",
+    "result":"0000"
+  })
 })
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
