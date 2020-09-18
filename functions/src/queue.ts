@@ -117,6 +117,11 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
   }, ServiceNames.GarminHealthAPI)
 }
 
+export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInterface): Promise<admin.firestore.DocumentReference> {
+  console.log(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
+  return addToQueue(queueItem, ServiceNames.COROSAPI);
+}
+
 export function getWorkoutForService(
   serviceName: ServiceNames,
   workoutQueueItem: COROSAPIWorkoutQueueItemInterface|SuuntoAppWorkoutQueueItemInterface|GarminHealthAPIActivityQueueItemInterface,
@@ -255,7 +260,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   // For each ended so we can set it to processed
   return updateToProcessed(queueItem, serviceName);
 }
-
 
 async function addToQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
