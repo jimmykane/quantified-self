@@ -24,7 +24,7 @@ export function generateIDFromPartsOld(parts: string[]): string{
   return base58.encode(Buffer.from(`${parts.join(':')}`));
 }
 
-export function generateIDFromParts(parts: string[], algorithm = 'md5'): string{
+export function generateIDFromParts(parts: string[], algorithm = 'sha256'): string{
   return crypto.createHash(algorithm).update(parts.join(':')).digest('hex');
 }
 
