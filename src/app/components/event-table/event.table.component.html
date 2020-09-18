@@ -67,7 +67,7 @@
                       [checked]="selection.isSelected(row)">
         </mat-checkbox>
         <span *ngIf="column === 'Actions'">
-          <app-event-actions *ngIf="user" [user]="user" [event]="row.Event"></app-event-actions>
+          <app-event-actions *ngIf="user" [user]="user" [event]="row.Event" [showDownloadOriginal]="true"></app-event-actions>
         </span>
         <span *ngIf="column === 'Activity Types'">
           <span *ngIf="row['Merged Event']"><mat-icon>compare_arrows</mat-icon></span>

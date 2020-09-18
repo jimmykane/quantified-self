@@ -1,4 +1,4 @@
-<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();">
+<button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
@@ -36,7 +36,7 @@
     <mat-icon>file_download</mat-icon>
     <span>Download as GPX</span>
   </button>
-  <button *ngIf="serviceMetaData" mat-menu-item (click)="downloadSuuntoFIT()">
+  <button *ngIf="suuntoAppServiceMetaData" mat-menu-item (click)="downloadSuuntoFIT()">
     <mat-icon>file_download</mat-icon>
     <span>Download Suunto FIT file</span>
   </button>

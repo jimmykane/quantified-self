@@ -24,6 +24,7 @@ import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { AngularFireAuth } from '@angular/fire/auth';
 import {
+  COROSAPIEventMetaDataInterface, GarminHealthAPIEventMetaDataInterface,
   ServiceNames,
   SuuntoAppEventMetaDataInterface
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
@@ -44,7 +45,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() user: User;
   @Input() showDownloadOriginal = false;
 
-  serviceMetaData: SuuntoAppEventMetaDataInterface
+  public suuntoAppServiceMetaData: SuuntoAppEventMetaDataInterface;
+  public corosAPIServiceMetaData: COROSAPIEventMetaDataInterface;
+  public garminHealthAPIServiceMetaData: GarminHealthAPIEventMetaDataInterface;
   private deleteConfirmationSubscription;
 
   constructor(
@@ -66,11 +69,23 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (!this.user) {
       throw new Error('User is required')
     }
-    if (this.showDownloadOriginal) {
-      this.serviceMetaData = <SuuntoAppEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
-        .pipe(take(1)).toPromise());
-      this.changeDetectorRef.detectChanges();
+
+  }
+
+  async menuOpen(event) {
+    if (!this.showDownloadOriginal) {
+      return;
     }
+    if (this.suuntoAppServiceMetaData) {
+      return;
+    }
+    this.suuntoAppServiceMetaData = <SuuntoAppEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
+      .pipe(take(1)).toPromise());
+    this.corosAPIServiceMetaData = <COROSAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.COROSAPI)
+      .pipe(take(1)).toPromise());
+    this.garminHealthAPIServiceMetaData = <GarminHealthAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminHealthAPI)
+      .pipe(take(1)).toPromise());
+    this.changeDetectorRef.detectChanges();
   }
 
   async share() {
@@ -187,8 +202,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         environment.functions.getSuuntoFITFile,
         {
           firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true),
-          workoutID: this.serviceMetaData.serviceWorkoutID,
-          userName: this.serviceMetaData.serviceUserName,
+          workoutID: this.suuntoAppServiceMetaData.serviceWorkoutID,
+          userName: this.suuntoAppServiceMetaData.serviceUserName,
         },
         {
           headers:
@@ -197,7 +212,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
             }),
           responseType: 'arraybuffer',
         }).toPromise();
-        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), `${this.getFileName(this.event)}#${this.serviceMetaData.serviceWorkoutID}`, 'fit');
+        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
         this.snackBar.open('Download started', null, {
           duration: 2000,
         });
