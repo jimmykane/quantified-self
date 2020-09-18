@@ -68,7 +68,7 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
     try {
       await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
     }catch (e) {
-      console.log(e)
+      console.error(e)
       res.status(500).send(e.message)
       return;
     }
