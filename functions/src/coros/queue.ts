@@ -1,20 +1,61 @@
 import * as functions from 'firebase-functions'
-import { parseQueueItems } from '../queue';
+import { addToQueueForCOROS, parseQueueItems } from '../queue';
 import { SERVICE_NAME } from './constants';
+import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
+import { generateIDFromParts } from '../utils';
 
 
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
 
+/**
+ * We return 200 with no body if there is no sportList
+ * We return 200 with a body to respond as processed
+ */
 export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB'
 }).https.onRequest(async (req, res) => {
-  console.log('Called')
-  console.log(req.rawHeaders)
-  console.log(req.body);
-  console.log(req.body.sportDataList);
-  res.status(200).send()
+  if (!req.get('Client') || !req.get('Secret')){
+    console.info(`No client or secret ${req.method}`);
+    res.status(200).send();
+    return;
+  }
+  //
+  if (!(req.get('Client') === functions.config().corosapi.client_id
+    && req.get('Secret') === functions.config().corosapi.client_secret)){
+    console.info(`Client Cred error return just 200`); // as status check
+    res.status(200).send();
+    return;
+  }
+
+  const body = JSON.parse(JSON.stringify(req.body))
+
+  console.log(JSON.stringify(req.body));
+
+  if (!body.sportDataList || !body.sportDataList.length){
+    console.log('Bad')
+    res.status(200).send();
+    return
+  }
+
+  // Needs fix for triathlo
+  for (const workout of convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
+    try {
+      const c =  addToQueueForCOROS(workout);
+      console.log(c)
+    }catch (e) {
+      console.error(e);
+      res.status(500).send();
+      return
+    }
+  }
+  res.status(200).send();
+  //
+  // res.status(200).send({
+  //   "message":"ok",
+  //   "result":"0000"
+  // })
 })
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
