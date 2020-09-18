@@ -20,11 +20,11 @@ import * as base58 from 'bs58'
 
 // @todo move to Sha256 see SO question
 
-export function generateIDFromParts(parts: string[]): string{
+export function generateIDFromPartsOld(parts: string[]): string{
   return base58.encode(Buffer.from(`${parts.join(':')}`));
 }
 
-export function generateIDFromPartsNew(parts: string[], algorithm = 'md5'): string{
+export function generateIDFromParts(parts: string[], algorithm = 'md5'): string{
   return crypto.createHash(algorithm).update(parts.join(':')).digest('hex');
 }
 
