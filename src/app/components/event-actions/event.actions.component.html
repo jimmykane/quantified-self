@@ -40,6 +40,11 @@
     <mat-icon>file_download</mat-icon>
     <span>Download Suunto FIT file</span>
   </button>
+
+  <button *ngIf="corosAPIServiceMetaData" mat-menu-item (click)="downloadCOROSFIT()">
+    <mat-icon>file_download</mat-icon>
+    <span>Download COROS FIT file</span>
+  </button>
   <button mat-menu-item (click)="delete()">
     <mat-icon>delete</mat-icon>
     <span>Delete</span>

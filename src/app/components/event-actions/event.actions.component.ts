@@ -31,6 +31,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+import { AppWindowService } from '../../services/app.window.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -62,6 +63,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private afa: AngularFireAnalytics,
     private http: HttpClient,
     private afAuth: AngularFireAuth,
+    private windowService: AppWindowService,
     private dialog: MatDialog) {
   }
 
@@ -217,6 +219,18 @@ export class EventActionsComponent implements OnInit, OnDestroy {
           duration: 2000,
         });
         this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
+    } catch (e) {
+      this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
+        duration: 5000,
+      });
+      Sentry.captureException(e);
+    }
+  }
+
+  async downloadCOROSFIT() {
+    try {
+      this.windowService.windowRef.open(this.corosAPIServiceMetaData.serviceFITFileURI, )
+      this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.COROSAPI});
     } catch (e) {
       this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
         duration: 5000,
