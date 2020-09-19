@@ -95,7 +95,6 @@ export class EventCardStatsTableComponent implements OnChanges {
       return statsMap;
     }, new Map<string, DataInterface>());
 
-    console.log(Array.from(stats.values()))
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
