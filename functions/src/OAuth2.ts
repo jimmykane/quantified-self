@@ -189,6 +189,6 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
 export interface ServiceConfig {
   oauth2Client: AuthorizationCode,
-  oAuthScopes: 'workout', // @todo add more
+  oAuthScopes: 'workout',
   tokenCollectionName: typeof SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME | typeof COROSAPI_ACCESS_TOKENS_COLLECTION_NAME
 }

@@ -42,7 +42,6 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
 
 export async function updateToProcessed(queueItem: QueueItemInterface, serviceName: ServiceNames) {
   try {
-    // @todo make switch
     await admin.firestore()
       .collection(getServiceWorkoutQueueName(serviceName))
       .doc(queueItem.id).update({
@@ -217,7 +216,6 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         await increaseRetryCountForQueueItem(queueItem, serviceName, e, 20);
         continue;
       }
-      // @todo -> Update to max retry if 403 not found that happens quite often.
       console.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, serviceName, e);
       continue;

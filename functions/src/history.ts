@@ -33,7 +33,6 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
 
-    // @todo add try
     let workoutQueueItems:any;
     try {
       workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate)
@@ -111,7 +110,6 @@ export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
 }
 
 export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface|COROSAPIWorkoutQueueItemInterface[]> {
-  // @todo add errors etc and test coros errors
   let result;
   switch (serviceName) {
     default:
