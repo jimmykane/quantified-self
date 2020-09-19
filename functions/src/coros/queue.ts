@@ -39,7 +39,6 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
     return
   }
 
-  // Needs fix for triathlo
   for (const workout of convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
     try {
       await addToQueueForCOROS(workout);
