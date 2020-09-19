@@ -78,7 +78,7 @@ export const requestAndSetCOROSAPIAccessToken = functions.region('europe-west2')
     return;
   }
 
-  if (!validateOAuth2State(userID, SERVICE_NAME, state)){
+  if (!await validateOAuth2State(userID, SERVICE_NAME, state)){
     res.status(403).send('Unauthorized');
     return;
   }
