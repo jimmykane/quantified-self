@@ -11,8 +11,6 @@ import {DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
 import {DataVerticalSpeed} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
 import {DataSwimPace} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {ScreenBreakPoints} from '../../screen-size/sreen-size.abstract';
-import {DataTableAbstractDirective} from '../../data-table/data-table-abstract.directive';
 import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
 
@@ -51,6 +49,12 @@ export class EventCardStatsTableComponent implements OnChanges {
     // @todo refactor and extract to service
     const stats = this.selectedActivities.reduce((statsMap, activity) => {
       activity.getStatsAsArray().forEach((stat) => {
+        // Exlcude swim pace from non swims
+        if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) === -1 &&
+          ((Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
+            || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1))) {
+          return;
+        }
         // If its not derived set it
         if (!DynamicDataLoader.isUnitDerivedDataType(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType())) {
           statsMap.set(stat.getType(), stat);
@@ -61,7 +65,6 @@ export class EventCardStatsTableComponent implements OnChanges {
         if (!this.userUnitSettings) {
           return
         }
-
 
         // If the user has preference
         if (
@@ -80,12 +83,6 @@ export class EventCardStatsTableComponent implements OnChanges {
           return;
         }
 
-        if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) !== -1 &&
-          ((Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
-            || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1))) {
-          statsMap.set(stat.getType(), stat);
-          return;
-        }
         if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSpeed.type && this.userUnitSettings.speedUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1) {
           statsMap.set(stat.getType(), stat);
           return;
@@ -98,6 +95,7 @@ export class EventCardStatsTableComponent implements OnChanges {
       return statsMap;
     }, new Map<string, DataInterface>());
 
+    console.log(Array.from(stats.values()))
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
