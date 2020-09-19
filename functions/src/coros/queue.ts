@@ -34,7 +34,7 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
   console.log(JSON.stringify(req.body));
 
   if (!body.sportDataList || !body.sportDataList.length){
-    console.log('Bad')
+    console.error('No sport data list')
     res.status(200).send();
     return
   }
@@ -48,6 +48,8 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
       return
     }
   }
+  // All ok
+  console.info('Insert to Queue for COROS success responding with ok')
   res.status(200).send({
     "message":"ok",
     "result":"0000"
