@@ -24,8 +24,8 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
   }
 
   ngAfterViewInit(): void {
-    am4core.options.queue = false;
-    am4core.options.onlyShowOnViewport = false;
+    am4core.options.queue = true;
+    am4core.options.onlyShowOnViewport = true;
     this.chart = <am4charts.XYChart>this.createChart();
     this.chart.data = this.data || [];
   }
