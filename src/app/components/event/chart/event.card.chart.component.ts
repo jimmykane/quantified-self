@@ -795,7 +795,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return seriesArray;
       }
 
-      // These need to be unit based
+      // These need to be unit based and activty based?
       const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
       const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, this.userUnitSettings).indexOf(DataGradeAdjustedSpeed.type) === -1
       // const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
@@ -1409,7 +1409,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private getSeriesColor(series: am4charts.XYSeries) {
     // console.log(target.name)
     // console.log(this.getSameNameSeries(target).indexOf(target));
-    if (this.getSameNameSeries(series).length < 2) {
+    if (this.getSameNameSeries(series).length < 2 || this.selectedActivities.length === 1) {
       return AppDataColors[series.name] || this.getFillColor(series.chart, series.chart.series.indexOf(series));
     }
     return AppDataColors[`${series.name}_${this.getSameNameSeries(series).indexOf(series)}`] || this.getFillColor(series.chart, series.chart.series.indexOf(series));
