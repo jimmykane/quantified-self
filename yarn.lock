@@ -9,10 +9,10 @@
   dependencies:
     tslib "^2.0.0"
 
-"@amcharts/amcharts4@4.10.2":
-  version "4.10.2"
-  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.10.2.tgz#06b5c0b848e37d833ce5017c54b243595156e4b4"
-  integrity sha512-J78twioRqdhtAYDqUkQhRV1Lj0MZcbH9vN5T7BkWK1d5yqf8nPCtqDBnFh6YOq/Az0K5Lp4Mg14o5aSRpbbeaA==
+"@amcharts/amcharts4@4.10.3":
+  version "4.10.3"
+  resolved "https://registry.yarnpkg.com/@amcharts/amcharts4/-/amcharts4-4.10.3.tgz#f5c0465a46aa81a24412aaac20f4f23deb8166c2"
+  integrity sha512-2d8plQCySvKsCW6VRBdz1sm7vUDxpwnLYgCSCdxMNEvJj8P6DuVTfIVvMp7YmsUfE/74Ft6yRtjbJTE96nnEHw==
   dependencies:
     "@babel/runtime" "^7.6.3"
     "@types/regression" "^2.0.0"
@@ -1610,10 +1610,10 @@
     "@sentry/types" "5.24.2"
     tslib "^1.9.3"
 
-"@sports-alliance/sports-lib@^5.2.4":
-  version "5.2.4"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.2.4.tgz#0c8e0c9787a11ba45241a775a387ebd510fa6593"
-  integrity sha512-Gni/YtLeYlkloqgQx65NdzkBcmO3YHK3x0gtbY9Xio3zrqw/rXRt2oiWsxpishgT6BnQaRwuTBSEBVQ5jJAixg==
+"@sports-alliance/sports-lib@^5.2.5":
+  version "5.2.5"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.2.5.tgz#99041d5d505846a178cf932d5f8151663a04d8da"
+  integrity sha512-5K9Du5yKUR1VxYTT3rdwbznTSFG8DqV3xGGet3c2QyFfV0R6qbiP5yo6UHAvc0hUEoOtkO9ehVD4jhKttInqjw==
   dependencies:
     "@types/node" "^14.6.1"
     fast-xml-parser "^3.17.4"

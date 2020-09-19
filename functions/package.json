@@ -4,7 +4,7 @@
   "main": "lib/index.js",
   "license": "MIT",
   "dependencies": {
-    "@sports-alliance/sports-lib": "^5.2.4",
+    "@sports-alliance/sports-lib": "^5.2.5",
     "@types/bs58": "^4.0.1",
     "@types/cookie-parser": "^1.4.2",
     "@types/cors": "^2.8.7",
