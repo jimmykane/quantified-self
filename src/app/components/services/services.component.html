@@ -10,17 +10,16 @@
     </mat-tab>
     <mat-tab label="Garmin" [disabled]="!user || isGuest">
       <ng-template matTabLabel>
-        <mat-icon class="large-svg-icon" svgIcon="garmin" (click)="clicks = clicks+1;"></mat-icon>
+        <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
       </ng-template>
       <ng-template matTabContent>
         <app-services-garmin [user]="user" [isGuest]="isGuest"></app-services-garmin>
       </ng-template>
     </mat-tab>
 
-    <mat-tab label="COROS" [disabled]="!user || isGuest || clicks < 10">
+    <mat-tab label="COROS" [disabled]="!user || isGuest">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon-coros" svgIcon="coros"></mat-icon>
-        &nbsp;(coming soon)
       </ng-template>
       <ng-template matTabContent>
         <app-services-coros [user]="user" [isGuest]="isGuest"></app-services-coros>
