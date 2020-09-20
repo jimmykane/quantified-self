@@ -76,10 +76,18 @@ export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: strin
 
   const nonTriathlon = workouts
     .filter(((workoutData: any) => !workoutData.triathlonItemList)).map((workout: any) =>  getCOROSQueueItemFromWorkout(openId || workout.openId, workout.labelId, workout.fitUrl))
-  return [...triathlon, ...nonTriathlon]
+  return [...triathlon, ...nonTriathlon].filter((workout) => {
+    if (!workout.FITFileURI){
+      console.error(`No fit url skipping workout for user ${workout.openId}, id ${workout.workoutID}`)
+      return false;
+    }
+    return true;
+  })
 }
 
 export function getCOROSQueueItemFromWorkout(openId: string, labelId: string, fitUrl: string): COROSAPIWorkoutQueueItemInterface{
+  if (!fitUrl){
+  }
   return {
     id: generateIDFromParts([openId, labelId, fitUrl]),
     dateCreated: new Date().getTime(),
