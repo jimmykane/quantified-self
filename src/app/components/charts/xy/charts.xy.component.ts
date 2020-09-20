@@ -83,7 +83,7 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
 
     const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
     valueAxis.renderer.opposite = this.vertical;
-    valueAxis.extraMax = this.vertical ? 0.15 : 0.10;
+    valueAxis.extraMax = this.vertical ? 0.15 : 0.15;
     valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
@@ -191,13 +191,13 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     }
 
     // @todo base on count !
-    if (this.chartDataTimeInterval !== TimeIntervals.Daily
-      && this.chartDataTimeInterval !== TimeIntervals.Hourly) {
+    // This breaks on the count/categoy type
+    if (this.data.length < 200) {
       const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
       if (this.vertical) {
         categoryLabel.dy = -15;
       } else {
-        categoryLabel.label.dx = 55;
+        categoryLabel.label.dx = 40;
       }
       categoryLabel.label.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
