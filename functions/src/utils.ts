@@ -18,8 +18,6 @@ import {
 import * as crypto from 'crypto'
 import * as base58 from 'bs58'
 
-// @todo move to Sha256 see SO question
-
 export function generateIDFromPartsOld(parts: string[]): string{
   return base58.encode(Buffer.from(`${parts.join(':')}`));
 }
