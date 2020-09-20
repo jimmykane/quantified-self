@@ -86,8 +86,6 @@ export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: strin
 }
 
 export function getCOROSQueueItemFromWorkout(openId: string, labelId: string, fitUrl: string): COROSAPIWorkoutQueueItemInterface{
-  if (!fitUrl){
-  }
   return {
     id: generateIDFromParts([openId, labelId, fitUrl]),
     dateCreated: new Date().getTime(),
