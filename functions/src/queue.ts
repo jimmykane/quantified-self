@@ -89,6 +89,10 @@ export async function parseQueueItems(serviceName: ServiceNames) {
 }
 
 
+/**
+ * Needed to create and stamp an id
+ * @param queueItem
+ */
 export async function addToQueueForSuunto(queueItem: { userName: string, workoutID: string }): Promise<admin.firestore.DocumentReference> {
   console.log(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
   return addToQueue({
@@ -101,6 +105,10 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
   }, ServiceNames.SuuntoApp)
 }
 
+/**
+ * Needed to create and stamp an id
+ * @param queueItem
+ */
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX' }): Promise<admin.firestore.DocumentReference> {
   console.log(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToQueue({
@@ -116,6 +124,10 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
   }, ServiceNames.GarminHealthAPI)
 }
 
+/**
+ * NOT Needed to create and stamp an id COROS workouts should already have a queue item with more data sorry....
+ * @param queueItem
+ */
 export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInterface): Promise<admin.firestore.DocumentReference> {
   console.log(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
   return addToQueue(queueItem, ServiceNames.COROSAPI);
