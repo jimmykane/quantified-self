@@ -214,7 +214,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
             }),
           responseType: 'arraybuffer',
         }).toPromise();
-        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
+        this.fileService.downloadFile(new Blob([new Uint8Array(result)], {type: 'application/octet-stream'}), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
         this.snackBar.open('Download started', null, {
           duration: 2000,
         });
