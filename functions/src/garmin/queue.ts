@@ -7,7 +7,7 @@ import {
   updateToProcessed
 } from '../queue';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { generateIDFromParts, setEvent } from '../utils';
+import { generateIDFromParts, generateIDFromPartsOld, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
 import {
@@ -164,7 +164,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData);
+    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromPartsOld([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData);
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);
