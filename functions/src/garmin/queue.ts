@@ -7,7 +7,7 @@ import {
   updateToProcessed
 } from '../queue';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { generateIDFromPartsOld, setEvent } from '../utils';
+import { generateIDFromParts, generateIDFromPartsOld, setEvent } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from 'request-promise-native';
 import {
