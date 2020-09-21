@@ -6,7 +6,7 @@ import {
   QueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface
 } from './queue/queue-item.interface';
-import { generateIDFromParts, generateIDFromPartsOld, setEvent } from './utils';
+import { generateIDFromParts, setEvent } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { getServiceWorkoutQueueName } from './history';
 import {
@@ -96,7 +96,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
 export async function addToQueueForSuunto(queueItem: { userName: string, workoutID: string }): Promise<admin.firestore.DocumentReference> {
   console.log(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
   return addToQueue({
-    id: generateIDFromPartsOld([queueItem.userName, queueItem.workoutID]),
+    id: generateIDFromParts([queueItem.userName, queueItem.workoutID]),
     dateCreated: new Date().getTime(),
     userName: queueItem.userName,
     workoutID: queueItem.workoutID,
@@ -110,9 +110,9 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
  * @param queueItem
  */
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX' }): Promise<admin.firestore.DocumentReference> {
-  console.log(`Inserting to queue ${generateIDFromPartsOld([queueItem.userID, queueItem.startTimeInSeconds.toString()])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
+  console.log(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToQueue({
-    id: generateIDFromPartsOld([queueItem.userID, queueItem.startTimeInSeconds.toString()]),
+    id: generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]),
     dateCreated: new Date().getTime(),
     userID: queueItem.userID,
     startTimeInSeconds: queueItem.startTimeInSeconds,
@@ -248,7 +248,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.SuuntoApp:
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
-          await setEvent(parentID, generateIDFromPartsOld([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData);
+          await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData);
       }
       console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId}`);
       processedCount++;

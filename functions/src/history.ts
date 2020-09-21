@@ -5,7 +5,7 @@ import { getTokenData } from './tokens';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
-import { generateIDFromParts, generateIDFromPartsOld } from './utils';
+import { generateIDFromParts } from './utils';
 import {
   COROSAPIWorkoutQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface
@@ -129,7 +129,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
       }
       return result.payload.filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate).map((item: any) => {
         return {
-          id: generateIDFromPartsOld([serviceToken.userName, item.workoutKey]),
+          id: generateIDFromParts([serviceToken.userName, item.workoutKey]),
           dateCreated: new Date().getTime(),
           userName: serviceToken.userName,
           workoutID: item.workoutKey,
