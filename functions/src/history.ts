@@ -5,7 +5,7 @@ import { getTokenData } from './tokens';
 import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
-import { generateIDFromParts, generateIDFromPartsOld } from './utils';
+import { generateIDFromPartsOld } from './utils';
 import {
   COROSAPIWorkoutQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface
