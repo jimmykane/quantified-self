@@ -17,6 +17,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   public suuntoAppLinkFormGroup: FormGroup;
 
   public serviceName = ServiceNames.SuuntoApp;
+  clicks = 0;
 
   isConnectedToService(): boolean {
     return !!this.serviceTokens && !!this.serviceTokens.length

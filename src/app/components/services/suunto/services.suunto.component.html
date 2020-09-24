@@ -68,7 +68,7 @@
 
             <mat-list-item style="text-align: left"
                            *ngFor="let serviceToken of serviceTokens; let i = index;">
-              <mat-icon mat-list-icon>account_circle</mat-icon>
+              <mat-icon mat-list-icon (click)="clicks = clicks+1">account_circle</mat-icon>
               <div mat-line>{{ serviceToken.userName }} </div>
               <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
             </mat-list-item>
@@ -77,7 +77,7 @@
           <button mat-stroked-button
                   class="big"
                   mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                  *ngIf="!isConnectedToService()"
+                  *ngIf="!isConnectedToService() || clicks > 10"
                   (click)="connectWithService($event)">Connect
           </button>
 
