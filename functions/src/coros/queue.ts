@@ -7,6 +7,10 @@ import { generateIDFromParts } from '../utils';
 
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = "2GB";
+const SUCCESS_RESPONSE = {
+  "message":"ok",
+  "result":"0000"
+}
 
 /**
  * We return 200 with no body if there is no sportList
@@ -18,14 +22,14 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
 }).https.onRequest(async (req, res) => {
   if (!req.get('Client') || !req.get('Secret')){
     console.info(`No client or secret ${req.method}`);
-    res.status(200).send();
+    res.status(200).send(SUCCESS_RESPONSE);
     return;
   }
   //
   if (!(req.get('Client') === functions.config().corosapi.client_id
     && req.get('Secret') === functions.config().corosapi.client_secret)){
     console.info(`Client Cred error return just 200`); // as status check
-    res.status(200).send();
+    res.status(200).send(SUCCESS_RESPONSE);
     return;
   }
 
@@ -35,7 +39,7 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
 
   if (!body.sportDataList || !body.sportDataList.length){
     console.error('No sport data list')
-    res.status(200).send();
+    res.status(200).send(SUCCESS_RESPONSE);
     return
   }
 
@@ -50,10 +54,7 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
   }
   // All ok
   console.info('Insert to Queue for COROS success responding with ok')
-  res.status(200).send({
-    "message":"ok",
-    "result":"0000"
-  })
+  res.status(200).send(SUCCESS_RESPONSE)
 })
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
