@@ -2,11 +2,6 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges}
 import { MatTableDataSource } from '@angular/material/table';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
-import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import {LoadingAbstractDirective} from '../../loading/loading-abstract.directive';
 import {DataTableAbstractDirective} from '../../data-table/data-table-abstract.directive';
 import {ScreenBreakPoints} from '../../screen-size/sreen-size.abstract';
 import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
