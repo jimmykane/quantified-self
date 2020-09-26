@@ -15,16 +15,16 @@ import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/setti
 import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { MapAbstract } from '../map/map.abstract';
-import MarkerClusterer from '@google/markerclustererplus'
+import MarkerClusterer from '@googlemaps/markerclustererplus'
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DatePipe } from '@angular/common';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { AppEventService } from "../../services/app.event.service";
-import { take } from "rxjs/operators";
-import { ActivityInterface } from "@sports-alliance/sports-lib/lib/activities/activity.interface";
-import { DataLatitudeDegrees } from "@sports-alliance/sports-lib/lib/data/data.latitude-degrees";
-import { DataLongitudeDegrees } from "@sports-alliance/sports-lib/lib/data/data.longitude-degrees";
+import { AppEventService } from '../../services/app.event.service';
+import { take } from 'rxjs/operators';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 
 @Component({
   selector: 'app-events-map',
