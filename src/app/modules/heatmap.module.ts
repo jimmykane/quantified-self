@@ -3,6 +3,7 @@ import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import { HeatmapRoutingModule } from '../heatmap-routing.module';
+import { HeatmapComponent } from '../components/heatmap/heatmap.component';
 
 
 @NgModule({
@@ -13,7 +14,7 @@ import { HeatmapRoutingModule } from '../heatmap-routing.module';
     HeatmapRoutingModule,
   ],
   exports: [],
-  declarations: [],
+  declarations: [HeatmapComponent],
   entryComponents: [],
   providers: []
 })
