@@ -43,7 +43,7 @@ export class AppEventColorService {
     return this.getColorByNumber(activityIndex);
   }
 
-  getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string{
+  getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {
     return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
   }
 }

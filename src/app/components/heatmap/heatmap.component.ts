@@ -11,6 +11,7 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 @Component({
   selector: 'app-heatmap',
@@ -29,6 +30,7 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
     private eventService: AppEventService,
     private authService: AppAuthService,
     private router: Router,
+    private eventColorService: AppEventColorService,
     private snackBar: MatSnackBar) {
   }
 
@@ -36,8 +38,8 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
     const latngArray = []
     this.user = await this.authService.user.pipe(take(1)).toPromise();
     this.events = await this.eventService.getEventsBy(this.user).pipe(take(1)).toPromise();
-    const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
     for (const event of this.events) {
+      const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
       const newEvent = await this.eventService.getEventActivitiesAndSomeStreams(this.user,
         event.getID(),
         [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
@@ -50,6 +52,8 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
           }
         });
         // debugger
+        lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+        this.logger.info(activity.type, this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type))
         const line = L.polyline(positionalData, lineOptions);
         this.positions.push({event: newEvent, line: line})
         line.addTo(this.map);
