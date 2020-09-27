@@ -37,7 +37,7 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
   async ngOnInit() {
     const latngArray = []
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    this.events = await this.eventService.getEventsBy(this.user).pipe(take(1)).toPromise();
+    this.events = await this.eventService.getEventsBy(this.user, [],'startDate', null, 30).pipe(take(1)).toPromise();
     for (const event of this.events) {
       const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
       const newEvent = await this.eventService.getEventActivitiesAndSomeStreams(this.user,
@@ -58,9 +58,9 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
         this.positions.push({event: newEvent, line: line})
         line.addTo(this.map);
       })
+      this.center()
 
     }
-    this.center()
 
 
       // this.tracks.push(Object.assign({line, visible: true}, track));
