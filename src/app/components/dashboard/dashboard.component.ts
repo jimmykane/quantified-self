@@ -1,6 +1,6 @@
 import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
 import {AppEventService} from '../../services/app.event.service';
-import {of, Subscription} from 'rxjs';
+import { asyncScheduler, of, Subscription } from 'rxjs';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivatedRoute, Router } from '@angular/router';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -10,7 +10,7 @@ import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboa
 import {getDatesForDateRange, Search} from '../event-search/event-search.component';
 import {AppUserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { map, switchMap, take } from 'rxjs/operators';
+import { map, switchMap, take, throttleTime } from 'rxjs/operators';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
 import {Log} from 'ng2-logger/browser';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -137,6 +137,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         : this.events.length ? of(this.events) : this.eventService
           .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
+        .pipe(throttleTime(2000, asyncScheduler, { leading: true, trailing: true }))
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
           if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
@@ -185,7 +186,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return
     }
     // Show the modal
-    if (this.promoDialogRef){
+    if (this.promoDialogRef) {
       return;
     }
     this.promoDialogRef = this.dialog.open(PromoDialogComponent, {
