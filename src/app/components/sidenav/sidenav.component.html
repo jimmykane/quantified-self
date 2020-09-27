@@ -37,6 +37,14 @@
   </mat-list-item>
 
   <mat-list-item
+    *ngIf="user"
+    routerLinkActive="active"
+    routerLink="/heatmap" (click)="sideNav.close();">
+    <mat-icon svgIcon="heat-map"></mat-icon>
+    <span>Heatmap</span>
+  </mat-list-item>
+
+  <mat-list-item
     *ngIf="user && user.isCoach"
     routerLinkActive="active"
     routerLink="/coaching" (click)="sideNav.close();">

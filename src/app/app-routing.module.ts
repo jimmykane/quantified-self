@@ -26,6 +26,12 @@ const routes: Routes = [
     canLoad: [AppAuthGuard]
   },
   {
+    path: 'heatmap',
+    loadChildren: () => import('./modules/heatmap.module').then(module => module.HeatmapModule),
+    data: {title: 'Heatmap', animation: 'Heatmap'},
+    canLoad: [AppAuthGuard]
+  },
+  {
     path: 'coaching',
     loadChildren: () => import('./modules/coaching.module').then(module => module.CoachingModule),
     data: {title: 'Coaching', animation: 'Coaching'},
