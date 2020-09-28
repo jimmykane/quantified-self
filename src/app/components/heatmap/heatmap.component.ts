@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
@@ -8,47 +8,78 @@ import { take } from 'rxjs/operators';
 import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subscription } from 'rxjs';
+import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { getDatesForDateRange } from '../event-search/event-search.component';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
+import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-heatmap',
   templateUrl: './heatmap.component.html',
   styleUrls: ['./heatmap.component.css'],
 })
-export class HeatmapComponent implements AfterViewInit, OnInit {
+export class HeatmapComponent extends LoadingAbstractDirective implements AfterViewInit, OnInit {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
-  private logger = Log.create('HeatmapComponent');
-  private map;
-  private user: User;
-  private events: EventInterface[]
-  private positions: any[] = [];
   public dataSubscription: Subscription;
+  private logger = Log.create('HeatmapComponent');
+  private map: L.Map;
+  private user: User;
+  private positions: any[] = [];
 
   constructor(
+    private changeDetectorRef: ChangeDetectorRef,
     private eventService: AppEventService,
     private authService: AppAuthService,
     private router: Router,
     private eventColorService: AppEventColorService,
     private snackBar: MatSnackBar) {
+    super(changeDetectorRef)
   }
 
   async ngOnInit() {
-    const latngArray = []
+    this.loading()
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    this.dataSubscription = await this.eventService.getEventsBy(this.user, [], 'startDate', null, 30).subscribe(async (events) => {
-      this.events = events;
-      for (const event of this.events) {
-        const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-        const newEvent = await this.eventService.getEventActivitiesAndSomeStreams(this.user,
+    const dates = getDatesForDateRange(DateRanges.lastThirtyDays, DaysOfTheWeek.Monday);
+    const where = []
+    // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
+    where.push({
+      fieldPath: 'startDate',
+      opStr: <WhereFilterOp>'>=',
+      value: dates.startDate.getTime()
+    });
+    // this.searchEndDate.setHours(24, 0, 0, 0);
+    where.push({
+      fieldPath: 'startDate',
+      opStr: <WhereFilterOp>'<=', // Should remove mins from date
+      value: dates.endDate.getTime()
+    });
+    this.dataSubscription = await this.eventService.getEventsBy(this.user, where, 'startDate', null, 0).subscribe(async (events) => {
+      // @todo should look after empty
+      if (!events || !events.length) {
+        this.loaded() // @todo fix add no data
+        return;
+      }
+      const promises = [];
+      events.forEach((event) => {
+        if (!event.getStat(DataStartPosition.type)) {
+          return;
+        }
+        promises.push(this.eventService.getEventActivitiesAndSomeStreams(this.user,
           event.getID(),
           [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-          .pipe(take(1)).toPromise();
-        newEvent.getActivities().filter((activity) => activity.hasPositionData()).forEach((activity) => {
-          const positionalData = activity.getPositionData().filter((position) => position).map((position) =>  {
+          .pipe(take(1)).toPromise())
+      })
+      const fullEvents = await Promise.all(promises)
+      for (const [index, event] of fullEvents.entries()) {
+        const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+        event.getActivities().filter((activity) => activity.hasPositionData()).forEach((activity) => {
+          const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
             return {
               lat: position.latitudeDegrees,
               lng: position.longitudeDegrees
@@ -58,62 +89,45 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
           lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
           this.logger.info(activity.type, this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type))
           const line = L.polyline(positionalData, lineOptions);
-          this.positions.push({event: newEvent, line: line})
+          this.positions.push({event: event, line: line})
           line.addTo(this.map);
+          // if (index%10 ===0){
+          //   this.center(this.positions.map((p) => p.line ))
+          // }
         })
-        this.center()
       }
+      this.center(this.positions.map((p) => p.line))
+      this.loaded()
     })
-
-      // this.tracks.push(Object.assign({line, visible: true}, track));
-
-    //   if (lineOptions.detectColors) {
-    //     if (/-(Hike|Walk)\.gpx/.test(track.filename)) {
-    //       lineOptions.color = '#ffc0cb';
-    //     } else if (/-Run\.gpx/.test(track.filename)) {
-    //       lineOptions.color = '#ff0000';
-    //     } else if (/-Ride\.gpx/.test(track.filename)) {
-    //       lineOptions.color = '#00ffff';
-    //     }
-    //   }
-    //
-
-    //
   }
 
   ngAfterViewInit(): void {
     this.initMap()
   }
 
+  center(lines = []) {
+    // debugger
+    this.map.fitBounds((L.featureGroup(lines)).getBounds(), {
+      noMoveStart: false,
+      animate: true,
+      padding: [20, 20],
+    });
+
+    // this.clearScroll();
+    // this.map.addEventListener('movestart');
+  }
+
   private initMap(): void {
     this.map = L.map(this.mapDiv.nativeElement, {
-      center: [39.8282, -98.5795],
+      // center: [39.8282, -98.5795],
+      fadeAnimation: true,
+      zoomAnimation: true,
       zoom: 10,
       preferCanvas: true,
     });
     const tiles = L.tileLayer.provider('CartoDB.DarkMatter')
 
     tiles.addTo(this.map);
-  }
-
-
-  center() {
-    // If there are no tracks, then don't try to get the bounds, as there
-    // would be an error
-    if (this.positions.length === 0) {
-      return;
-    }
-
-    // debugger
-    let tracksAndImages = this.positions.map(p => p.line)
-    this.map.fitBounds((L.featureGroup(tracksAndImages)).getBounds(), {
-      noMoveStart: true,
-      animate: false,
-      padding: [20, 20],
-    });
-
-    // this.clearScroll();
-    // this.map.addEventListener('movestart');
   }
 }
 

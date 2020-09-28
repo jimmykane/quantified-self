@@ -133,7 +133,7 @@ export interface DateRangeStartDateAndEndDate {
   endDate: Date;
 }
 
-export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek): DateRangeStartDateAndEndDate {
+export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek: DaysOfTheWeek): DateRangeStartDateAndEndDate {
   const daysBack = new Date().getDay() >= startOfTheWeek ? 0 : 7;
   const firstDayOfTheWeek = (new Date().getDate() - new Date().getDay()) + startOfTheWeek; // Remove + 1 if sunday is first day of the week.
   const lastDayOfTheWeek = firstDayOfTheWeek + 6;
