@@ -12,6 +12,7 @@ import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.int
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-heatmap',
@@ -25,6 +26,7 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
   private user: User;
   private events: EventInterface[]
   private positions: any[] = [];
+  public dataSubscription: Subscription;
 
   constructor(
     private eventService: AppEventService,
@@ -37,31 +39,31 @@ export class HeatmapComponent implements AfterViewInit, OnInit {
   async ngOnInit() {
     const latngArray = []
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    this.events = await this.eventService.getEventsBy(this.user, [],'startDate', null, 30).pipe(take(1)).toPromise();
-    for (const event of this.events) {
-      const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-      const newEvent = await this.eventService.getEventActivitiesAndSomeStreams(this.user,
-        event.getID(),
-        [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-        .pipe(take(1)).toPromise();
-      newEvent.getActivities().filter((activity) => activity.hasPositionData()).forEach((activity) => {
-        const positionalData = activity.getPositionData().filter((position) => position).map((position) =>  {
-          return {
-            lat: position.latitudeDegrees,
-            lng: position.longitudeDegrees
-          }
-        });
-        // debugger
-        lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-        this.logger.info(activity.type, this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type))
-        const line = L.polyline(positionalData, lineOptions);
-        this.positions.push({event: newEvent, line: line})
-        line.addTo(this.map);
-      })
-      this.center()
-
-    }
-
+    this.dataSubscription = await this.eventService.getEventsBy(this.user, [], 'startDate', null, 30).subscribe(async (events) => {
+      this.events = events;
+      for (const event of this.events) {
+        const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+        const newEvent = await this.eventService.getEventActivitiesAndSomeStreams(this.user,
+          event.getID(),
+          [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+          .pipe(take(1)).toPromise();
+        newEvent.getActivities().filter((activity) => activity.hasPositionData()).forEach((activity) => {
+          const positionalData = activity.getPositionData().filter((position) => position).map((position) =>  {
+            return {
+              lat: position.latitudeDegrees,
+              lng: position.longitudeDegrees
+            }
+          });
+          // debugger
+          lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+          this.logger.info(activity.type, this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type))
+          const line = L.polyline(positionalData, lineOptions);
+          this.positions.push({event: newEvent, line: line})
+          line.addTo(this.map);
+        })
+        this.center()
+      }
+    })
 
       // this.tracks.push(Object.assign({line, visible: true}, track));
 
