@@ -65,7 +65,6 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
       value: dates.endDate.getTime()
     });
     this.dataSubscription = await this.eventService.getEventsBy(this.user, where, 'startDate', null, 0).subscribe(async (events) => {
-      // @todo should look after empty
       if (!events || !events.length) {
         this.loaded() // @todo fix add no data
         return;
