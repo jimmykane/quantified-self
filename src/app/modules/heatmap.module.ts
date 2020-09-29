@@ -4,6 +4,7 @@ import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import { HeatmapRoutingModule } from '../heatmap-routing.module';
 import { HeatmapComponent } from '../components/heatmap/heatmap.component';
+import { AngularFireStorageModule } from '@angular/fire/storage';
 
 
 @NgModule({
@@ -12,6 +13,7 @@ import { HeatmapComponent } from '../components/heatmap/heatmap.component';
     SharedModule,
     MaterialModule,
     HeatmapRoutingModule,
+    AngularFireStorageModule
   ],
   exports: [],
   declarations: [HeatmapComponent],

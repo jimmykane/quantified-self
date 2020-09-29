@@ -11,13 +11,14 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { getDatesForDateRange } from '../event-search/event-search.component';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { AngularFireStorage } from '@angular/fire/storage';
 
 @Component({
   selector: 'app-heatmap',
@@ -31,6 +32,8 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
   private map: L.Map;
   private user: User;
   private positions: any[] = [];
+  uploadPercent: Observable<number>;
+  downloadURL: Observable<string>;
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -39,6 +42,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
     private router: Router,
     private eventColorService: AppEventColorService,
     private zone: NgZone,
+    private storage: AngularFireStorage,
     private snackBar: MatSnackBar) {
     super(changeDetectorRef)
   }
@@ -126,6 +130,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
         zoomAnimation: true,
         zoom: 10,
         preferCanvas: true,
+        dragging: !L.Browser.mobile
       });
       const tiles = L.tileLayer.provider('CartoDB.DarkMatter')
       tiles.addTo(map);
