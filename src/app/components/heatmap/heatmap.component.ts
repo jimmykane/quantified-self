@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, NgZone, OnInit, ViewChild } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
@@ -38,6 +38,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
     private authService: AppAuthService,
     private router: Router,
     private eventColorService: AppEventColorService,
+    private zone: NgZone,
     private snackBar: MatSnackBar) {
     super(changeDetectorRef)
   }
@@ -118,16 +119,18 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
   }
 
   private initMap(): void {
-    this.map = L.map(this.mapDiv.nativeElement, {
-      // center: [39.8282, -98.5795],
-      fadeAnimation: true,
-      zoomAnimation: true,
-      zoom: 10,
-      preferCanvas: true,
-    });
-    const tiles = L.tileLayer.provider('CartoDB.DarkMatter')
-
-    tiles.addTo(this.map);
+    this.map = this.zone.runOutsideAngular(() =>{
+      const map = L.map(this.mapDiv.nativeElement, {
+        // center: [39.8282, -98.5795],
+        fadeAnimation: true,
+        zoomAnimation: true,
+        zoom: 10,
+        preferCanvas: true,
+      });
+      const tiles = L.tileLayer.provider('CartoDB.DarkMatter')
+      tiles.addTo(map);
+      return map
+    })
   }
 }
 
