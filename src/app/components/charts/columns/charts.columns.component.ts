@@ -22,13 +22,16 @@ import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-l
 
 
 @Component({
-  selector: 'app-xy-chart',
-  templateUrl: './charts.xy.component.html',
-  styleUrls: ['./charts.xy.component.css'],
+  selector: 'app-columns-chart',
+  templateUrl: './charts.columns.component.html',
+  styleUrls: ['./charts.columns.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChartsXYComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
-  protected logger = Log.create('ChartsXYComponent');
+export class ChartsColumnsComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
+  @Input() vertical = true;
+  @Input() type: 'columns' | 'pyramids';
+
+  protected logger = Log.create('ChartsColumnsComponent');
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
     super(zone, changeDetector);
@@ -39,7 +42,7 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(10, 0, 0, 10);
-    chart.paddingBottom = 20;
+    chart.paddingBottom = this.vertical ? 20 : 0;
     chart.fontSize = '0.8em';
 
     // top container for labels
@@ -57,7 +60,7 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
       return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
     });
     chartTitle.marginTop = am4core.percent(20);
-    const categoryAxis = chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
+    const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
     if (categoryAxis instanceof am4charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';
     } else if (categoryAxis instanceof am4charts.DateAxis) {
@@ -67,20 +70,20 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     categoryAxis.renderer.grid.template.location = 0;
     categoryAxis.renderer.cellStartLocation = 0.1;
     categoryAxis.renderer.cellEndLocation = 0.9;
-    categoryAxis.renderer.opposite = false
-    categoryAxis.renderer.minGridDistance = 1
-    categoryAxis.renderer.grid.template.disabled = false
+    categoryAxis.renderer.opposite = !this.vertical;
+    categoryAxis.renderer.minGridDistance = this.vertical ? 1 : 1;
+    categoryAxis.renderer.grid.template.disabled = this.vertical || (categoryAxis instanceof am4charts.CategoryAxis);
 
     categoryAxis.renderer.labels.template.adapter.add('dy', (dy, target) => {
-      if (target.dataItem && target.dataItem.index % 2) {
+      if (this.vertical && target.dataItem && target.dataItem.index % 2) {
         return dy + 20;
       }
       return dy;
     });
 
-    const valueAxis =  chart.yAxes.push(new am4charts.ValueAxis())
-    valueAxis.renderer.opposite = true
-    valueAxis.extraMax = 0.15
+    const valueAxis = this.vertical ? chart.yAxes.push(new am4charts.ValueAxis()) : chart.xAxes.push(new am4charts.ValueAxis());
+    valueAxis.renderer.opposite = this.vertical;
+    valueAxis.extraMax = this.vertical ? 0.15 : 0.15;
     valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
@@ -89,54 +92,49 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
       return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
     valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
-      return 15;
+      // console.log(target.dataItem.index);
+      return (target.dataItem.index === 2 && !this.vertical) ? 15 : 0;
     });
 
+    // valueAxis.renderer.minLabelPosition = this.vertical ? 0 : 0.005;
+    // valueAxis.renderer.minGridDistance = this.vertical ?  0 : 200;
     valueAxis.min = 0;
 
     let series;
     let regressionSeries: am4charts.XYSeries;
 
-    series = chart.series.push(new am4charts.LineSeries());
-    // series.filters.push(ChartHelper.getShadowFilter());
-
-    series.stroke = chart.colors.getIndex(9); // Init stroke
-    // series.tension = 1;
-    const bullet = series.bullets.push(new am4charts.CircleBullet());
-    bullet.circle.radius = 2;
-    bullet.fillOpacity = 0.8;
-    bullet.circle.radius = 3;
-    bullet.adapter.add('fill', (fill, target) => {
-      if (!target.dataItem) {
-        return fill;
-      }
-      if (categoryAxis instanceof am4charts.CategoryAxis) {
-        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
-      }
-      return this.getFillColor(chart, target.dataItem.index);
-    });
-
-    bullet.adapter.add('stroke', (stroke, target) => {
-      if (!target.dataItem) {
-        return stroke;
-      }
-      if (categoryAxis instanceof am4charts.CategoryAxis) {
-        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
-      }
-      return this.getFillColor(chart, target.dataItem.index);
-    });
-
-    bullet.tooltipText = 'text';
-    bullet.adapter.add('tooltipText', (text, target, key) => {
+    series = this.vertical && this.type === 'pyramids' ? chart.series.push(new am4charts.CurvedColumnSeries()) : chart.series.push(new am4charts.ColumnSeries());
+    series.columns.template.tension = this.vertical && this.type === 'pyramids' ? 1 : 0;
+    series.columns.template.strokeOpacity = this.getStrokeOpacity();
+    series.columns.template.strokeWidth = this.getStrokeWidth();
+    series.columns.template.stroke = am4core.color('#175e84');
+    series.columns.template.fillOpacity = 1;
+    series.columns.template.tooltipText = this.vertical ? '{valueY}' : '{valueX}';
+    series.columns.template.adapter.add('tooltipText', (text, target, key) => {
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
-      return `{dateX}{categoryX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
+      return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
-    // bullet.filters.push(ChartHelper.getShadowFilter());
 
-    if (this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
+    // Add distinctive colors for each column using adapter
+    series.columns.template.adapter.add('fill', (fill, target) => {
+      if (categoryAxis instanceof am4charts.CategoryAxis) {
+        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
+      }
+      return this.getFillColor(chart, target.dataItem.index);
+    });
+
+
+    // series.columns.template.filters.push(ChartHelper.getShadowFilter());
+
+    if (this.type === 'columns') {
+      this.vertical ? series.columns.template.column.cornerRadiusTopLeft = 2 : series.columns.template.column.cornerRadiusTopRight = 2;
+      this.vertical ? series.columns.template.column.cornerRadiusTopRight = 2 : series.columns.template.column.cornerRadiusBottomRight = 2;
+    }
+
+    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
       // Add the trend
       regressionSeries = chart.series.push(new am4charts.LineSeries());
       regressionSeries.strokeWidth = 1;
@@ -154,7 +152,11 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     // This breaks on the count/categoy type
     if (this.data.length < 200) {
       const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+      if (this.vertical) {
         categoryLabel.dy = -15;
+      } else {
+        categoryLabel.label.dx = 40;
+      }
       categoryLabel.label.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
@@ -192,10 +194,10 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
   }
 
   private getSeriesCategoryFieldName(): string {
-    if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
+    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
       return 'categoryX';
     }
-    if (this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
+    if (this.vertical && this.chartDataCategoryType === ChartDataCategoryTypes.DateType) {
       return 'dateX';
     }
     return this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'categoryY' : 'dateY';
@@ -206,6 +208,9 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
   }
 
   private getSeriesValuesFieldName(): string {
+    if (this.vertical) {
       return 'valueY';
+    }
+    return 'valueX';
   }
 }

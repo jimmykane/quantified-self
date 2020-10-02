@@ -22,6 +22,7 @@ import { ChartsBrianDevineComponent } from '../components/charts/brian-devine/ch
 import { ChartsTimelineComponent } from '../components/charts/timeline/charts.timeline.component';
 import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
 import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
+import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
 
 @NgModule({
   imports: [
@@ -49,6 +50,7 @@ import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
     ChartsTimelineComponent,
     ChartsPieComponent,
     ChartsXYComponent,
+    ChartsColumnsComponent,
     ChartsBrianDevineComponent,
   ],
   entryComponents: [],
