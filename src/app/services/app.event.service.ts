@@ -169,7 +169,7 @@ export class AppEventService implements OnDestroy {
         .collection('streams', ((ref) => {
           return ref.where('type', 'in', typesBatch);
         }))
-        .get()
+        .get({source: 'cache'})
         .pipe(map((documentSnapshots) => {
           return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
             streamArray.push(this.processStreamDocumentSnapshot(documentSnapshot));

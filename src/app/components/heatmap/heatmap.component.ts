@@ -17,8 +17,9 @@ import { getDatesForDateRange } from '../event-search/event-search.component';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { AngularFireStorage } from '@angular/fire/storage';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
   selector: 'app-heatmap',
@@ -28,12 +29,12 @@ import { AngularFireStorage } from '@angular/fire/storage';
 export class HeatmapComponent extends LoadingAbstractDirective implements AfterViewInit, OnInit {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
   public dataSubscription: Subscription;
+  uploadPercent: Observable<number>;
+  downloadURL: Observable<string>;
   private logger = Log.create('HeatmapComponent');
   private map: L.Map;
   private user: User;
   private positions: any[] = [];
-  uploadPercent: Observable<number>;
-  downloadURL: Observable<string>;
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -50,7 +51,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
   async ngOnInit() {
     this.loading()
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    const dates = getDatesForDateRange(DateRanges.lastThirtyDays, DaysOfTheWeek.Monday);
+    const dates = getDatesForDateRange(DateRanges.thisYear, DaysOfTheWeek.Monday);
     const where = []
     // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
     where.push({
@@ -64,44 +65,41 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    this.dataSubscription = await this.eventService.getEventsBy(this.user, where, 'startDate', null, 0).subscribe(async (events) => {
+
+    // @TODO Add where position is not "" or something since it's now supported
+
+    this.dataSubscription = await this.eventService.getEventsBy(this.user, where, 'startDate', null, 500).subscribe(async (events) => {
+      events = events.filter((event) => event.getStat(DataStartPosition.type));
       if (!events || !events.length) {
         this.loaded() // @todo fix add no data
         return;
       }
-      const promises = [];
-      events.forEach((event) => {
-        if (!event.getStat(DataStartPosition.type)) {
-          return;
-        }
-        promises.push(this.eventService.getEventActivitiesAndSomeStreams(this.user,
+      for (const event of events) {
+        this.eventService.getEventActivitiesAndSomeStreams(this.user,
           event.getID(),
           [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-          .pipe(take(1)).toPromise())
-      })
-      const fullEvents = await Promise.all(promises)
-      for (const [index, event] of fullEvents.entries()) {
-        const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-        event.getActivities().filter((activity) => activity.hasPositionData()).forEach((activity) => {
-          const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-            return {
-              lat: position.latitudeDegrees,
-              lng: position.longitudeDegrees
-            }
-          });
-          // debugger
-          lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-          this.logger.info(activity.type, this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type))
-          const line = L.polyline(positionalData, lineOptions);
-          this.positions.push({event: event, line: line})
-          line.addTo(this.map);
-          // if (index%10 ===0){
-          //   this.center(this.positions.map((p) => p.line ))
-          // }
-        })
+          .pipe(take(1)).toPromise().then((fulEvent) => {
+            const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+            fulEvent.getActivities()
+              .filter((activity) => activity.hasPositionData())
+              .forEach((activity) => {
+                const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+                  return {
+                    lat: position.latitudeDegrees,
+                    lng: position.longitudeDegrees
+                  }
+                });
+                lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+                const line = L.polyline(positionalData, lineOptions);
+                this.positions.push({event: fulEvent, line: line})
+                line.addTo(this.map);
+                if (this.isLoading){
+                  this.loaded()
+                }
+              })
+            this.center(this.positions.map((p) => p.line)) // @todo Should be more clever
+          })
       }
-      this.center(this.positions.map((p) => p.line))
-      this.loaded()
     })
   }
 
@@ -110,19 +108,20 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
   }
 
   center(lines = []) {
-    // debugger
-    this.map.fitBounds((L.featureGroup(lines)).getBounds(), {
-      noMoveStart: false,
-      animate: true,
-      padding: [20, 20],
-    });
+    this.zone.runOutsideAngular(() => {
+      this.map.fitBounds((L.featureGroup(lines)).getBounds(), {
+        noMoveStart: false,
+        animate: true,
+        padding: [20, 20],
+      });
 
+    })
     // this.clearScroll();
     // this.map.addEventListener('movestart');
   }
 
   private initMap(): void {
-    this.map = this.zone.runOutsideAngular(() =>{
+    this.map = this.zone.runOutsideAngular(() => {
       const map = L.map(this.mapDiv.nativeElement, {
         // center: [39.8282, -98.5795],
         fadeAnimation: true,
