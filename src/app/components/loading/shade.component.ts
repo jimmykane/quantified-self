@@ -10,7 +10,7 @@ import { rowsAnimation } from '../../animations/animations';
   ],
 })
 
-export class ShadeComponent{
+export class ShadeComponent {
   @Input() isActive: boolean;
   @Input() hasError: boolean;
   @Input() errorMessage: string;

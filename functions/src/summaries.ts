@@ -6,4 +6,5 @@ export const generateSummaries = functions.region('europe-west2').https.onReques
   const eventQuerySnapshots = admin.firestore().collection('users')
     .doc('u2rQqTs1tYNrwKXo2go1XLqoOl23')
     .collection('events').select().limit(300).get();
+  console.log(eventQuerySnapshots);
 });

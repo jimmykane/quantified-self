@@ -1,4 +1,13 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, NgZone, OnInit, ViewChild } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  NgZone,
+  OnInit,
+  ViewChild
+} from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
@@ -19,12 +28,12 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
   selector: 'app-heatmap',
   templateUrl: './heatmap.component.html',
   styleUrls: ['./heatmap.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class HeatmapComponent extends LoadingAbstractDirective implements AfterViewInit, OnInit {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
@@ -53,21 +62,16 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
     this.user = await this.authService.user.pipe(take(1)).toPromise();
     const dates = getDatesForDateRange(DateRanges.thisYear, DaysOfTheWeek.Monday);
     const where = []
-    // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
     where.push({
       fieldPath: 'startDate',
       opStr: <WhereFilterOp>'>=',
       value: dates.startDate.getTime()
     });
-    // this.searchEndDate.setHours(24, 0, 0, 0);
     where.push({
       fieldPath: 'startDate',
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-
-    // @TODO Add where position is not "" or something since it's now supported
-
     this.dataSubscription = await this.eventService.getEventsBy(this.user, where, 'startDate', null, 500).subscribe(async (events) => {
       events = events.filter((event) => event.getStat(DataStartPosition.type));
       if (!events || !events.length) {
@@ -78,9 +82,10 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
         this.eventService.getEventActivitiesAndSomeStreams(this.user,
           event.getID(),
           [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-          .pipe(take(1)).toPromise().then((fulEvent) => {
+          .pipe(take(1)).toPromise().then((fullEvent) => {
+            this.logger.info(`Promise completed`)
             const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-            fulEvent.getActivities()
+            fullEvent.getActivities()
               .filter((activity) => activity.hasPositionData())
               .forEach((activity) => {
                 const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
@@ -91,13 +96,13 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
                 });
                 lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
                 const line = L.polyline(positionalData, lineOptions);
-                this.positions.push({event: fulEvent, line: line})
+                this.positions.push({event: fullEvent, line: line})
                 line.addTo(this.map);
-                if (this.isLoading){
+                if (this.isLoading) {
                   this.loaded()
+                  this.center(this.positions.map((p) => p.line))
                 }
               })
-            this.center(this.positions.map((p) => p.line)) // @todo Should be more clever
           })
       }
     })
@@ -124,7 +129,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
     this.map = this.zone.runOutsideAngular(() => {
       const map = L.map(this.mapDiv.nativeElement, {
         // center: [39.8282, -98.5795],
-        fadeAnimation: true,
+        fadeAnimation: false,
         zoomAnimation: true,
         zoom: 10,
         preferCanvas: true,
