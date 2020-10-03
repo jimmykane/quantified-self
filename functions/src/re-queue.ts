@@ -1,10 +1,11 @@
+/*
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
-/**
+/!**
  * Function to reset the retry count of a queue's items for a specific date range
- */
+ *!/
 // export const resetRetryCountForGarminHealthAPIActivityQueueQueue = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
 //   // return
 //   const startDate = new Date('07-30-2020');
@@ -36,3 +37,4 @@ async function resetRetryCount(serviceName: ServiceNames, startDate: Date, endDa
   }
   console.log(`Parsed ${count} docs out of ${querySnapshot.size} and a total of writes`);
 }
+*/
