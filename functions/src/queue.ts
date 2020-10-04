@@ -256,7 +256,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     } catch (e) {
       // @todo should delete event  or separate catch
       console.error(e);
-      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId} to ${queueItem.retryCount + 1} due to ${e.message}`));
+      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, serviceName, e);
       continue;
     }
