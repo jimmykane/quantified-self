@@ -65,7 +65,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
     where.push({
       fieldPath: 'startDate',
       opStr: <WhereFilterOp>'>=',
-      value: dates.startDate.getTime()
+      value: new Date('03-01-2020').getTime()
     });
     where.push({
       fieldPath: 'startDate',
@@ -135,7 +135,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements AfterV
         preferCanvas: true,
         dragging: !L.Browser.mobile
       });
-      const tiles = L.tileLayer.provider('CartoDB.DarkMatter')
+      const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0])
       tiles.addTo(map);
       return map
     })
