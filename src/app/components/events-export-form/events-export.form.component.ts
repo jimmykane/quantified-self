@@ -15,6 +15,7 @@ import { DataFeeling } from '@sports-alliance/sports-lib/lib/data/data.feeling';
 import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
 import { DataPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
 import { DataSwimPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
+import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace-avg';
 import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
 import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
 import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
@@ -86,6 +87,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         averageSpeed: new FormControl(this.user.settings.exportToCSVSettings.averageSpeed, []),
         averagePace: new FormControl(this.user.settings.exportToCSVSettings.averagePace, []),
         averageSwimPace: new FormControl(this.user.settings.exportToCSVSettings.averageSwimPace, []),
+        averageGradeAdjustedPace: new FormControl(this.user.settings.exportToCSVSettings.avgGradeAdjustedPace, []),
         averageHeartRate: new FormControl(this.user.settings.exportToCSVSettings.averageHeartRate, []),
         maximumHeartRate: new FormControl(this.user.settings.exportToCSVSettings.maximumHeartRate, []),
         averagePower: new FormControl(this.user.settings.exportToCSVSettings.averagePower, []),
@@ -115,6 +117,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.user.settings.exportToCSVSettings.averageSpeed = this.exportFromGroup.get('averageSpeed').value;
     this.user.settings.exportToCSVSettings.averagePace = this.exportFromGroup.get('averagePace').value;
     this.user.settings.exportToCSVSettings.averageSwimPace = this.exportFromGroup.get('averageSwimPace').value;
+    this.user.settings.exportToCSVSettings.averageGradeAdjustedPace = this.exportFromGroup.get('averageGradeAdjustedPace').value;
     this.user.settings.exportToCSVSettings.averageHeartRate = this.exportFromGroup.get('averageHeartRate').value;
     this.user.settings.exportToCSVSettings.averagePower = this.exportFromGroup.get('averagePower').value;
     this.user.settings.exportToCSVSettings.maximumPower = this.exportFromGroup.get('maximumPower').value;
@@ -173,6 +176,10 @@ export class EventsExportFormComponent extends FormsAbstract {
 
     if (this.user.settings.exportToCSVSettings.averageSwimPace) {
       headers.push(`Average Swim Pace`);
+    }
+
+    if (this.user.settings.exportToCSVSettings.averageGradeAdjustedPace) {
+     headers.push(`Average Grade Adjusted Pace`);
     }
 
     if (this.user.settings.exportToCSVSettings.averageHeartRate) {
@@ -289,6 +296,23 @@ export class EventsExportFormComponent extends FormsAbstract {
             }, []).join('\n')}"`);
         }
       }
+
+      if (this.user.settings.exportToCSVSettings.averageGradeAdjustedPace) {
+        const speedAvg = event.getStat(DataSpeedAvg.type);
+        const stat = event.getStat(DataGradeAdjustedPaceAvg.type) || (speedAvg && new DataGradeAdjustedPaceAvg(<number>speedAvg.getValue(DataGradeAdjustedPaceAvg.type)));
+        if (!stat) {
+          row.push('""');
+        } else {
+          row.push(`"${DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.user.settings.unitSettings)
+            .reduce((array, data) => {
+              array.push(`${data.getDisplayValue()} ${data.getDisplayUnit()}`);
+              return array
+            }, []).join('\n')}"`);
+        }
+      } /** need to see if this works **/
+
+
+
 
       if (this.user.settings.exportToCSVSettings.averageHeartRate) {
         const stat = event.getStat(DataHeartRateAvg.type);
