@@ -24,8 +24,9 @@
               "src/sitemap.xml"
             ],
             "styles": [
-              "node_modules/material-design-icons-iconfont/dist/material-design-icons.css",
-              "src/styles.scss"
+              "./node_modules/material-design-icons-iconfont/dist/material-design-icons.css",
+              "./node_modules/leaflet/dist/leaflet.css",
+              "./src/styles.scss"
             ],
             "scripts": [
             ]
