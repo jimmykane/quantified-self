@@ -1,0 +1,12 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - init: yarn install && yarn run build
+    command: yarn run start
+
+vscode:
+  extensions:
+    - oderwat.indent-rainbow@7.4.0:fDVCkGVYd1R2lfcs1tHk+Q==
+    - CoenraadS.bracket-pair-colorizer@1.0.61:+jQByqALW0iXkhpd2yzYzQ==
+    - zhuangtongfa.material-theme@3.9.2:s3//fvkHrhik4wpL9IVRLQ==
