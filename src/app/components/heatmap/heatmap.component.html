@@ -1,0 +1,6 @@
+<mat-card>
+  <div>{{ uploadPercent | async }}</div>
+  <a [href]="downloadURL | async">{{ downloadURL | async }}</a>
+      <div #mapDiv id="map"></div>
+      <app-shade [isActive]="isLoading"></app-shade>
+</mat-card>
