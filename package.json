@@ -41,7 +41,7 @@
     "@googlemaps/markerclustererplus": "^1.0.3",
     "@sentry/browser": "^5.25.0",
     "@sports-alliance/sports-lib": "^5.3.2",
-    "@types/googlemaps": "^3.39.14",
+    "@types/googlemaps": "^3.39.13",
     "@types/pako": "^1.0.1",
     "@types/uuid": "^8.3.0",
     "fast-deep-equal": "^3.1.3",
