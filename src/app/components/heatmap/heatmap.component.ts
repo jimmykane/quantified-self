@@ -13,20 +13,19 @@ import * as L from 'leaflet';
 import 'leaflet-providers';
 import 'leaflet-easybutton';
 import { AppEventService } from '../../services/app.event.service';
-import { take } from 'rxjs/operators';
+import { subscribeOn, take } from 'rxjs/operators';
 import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { Observable, Subscription } from 'rxjs';
+import { animationFrameScheduler, Observable, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { getDatesForDateRange } from '../event-search/event-search.component';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
+import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
@@ -41,9 +40,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
   uploadPercent: Observable<number>;
   downloadURL: Observable<string>;
   private logger = Log.create('HeatmapComponent');
-  private map: L.Map;
-  private user: User;
-  private positions: any[] = [];
+  private polyLines: L.Polyline[] = [];
   private viewAllButton: L.Control.EasyButton;
   private scrolled = false;
 
@@ -61,100 +58,100 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
 
   async ngOnInit() {
     this.loading()
-    this.initMap()
-    this.getStartingLocation();
+    const map = this.initMap()
+    map.getContainer().focus = () => {} // Fix fullscreen switch
+    this.centerMapToStartingLocation(map);
+    const user = await this.authService.user.pipe(take(1)).toPromise();
+    return this.bindToData(user, map, DateRanges.lastThirtyDays)
+  }
 
-    this.user = await this.authService.user.pipe(take(1)).toPromise();
-    const dates = getDatesForDateRange(DateRanges.thisYear, DaysOfTheWeek.Monday);
+  async bindToData(user: User, map: L.Map, dateRange: DateRanges) {
+    const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
     where.push({
       fieldPath: 'startDate',
       opStr: <WhereFilterOp>'>=',
-      value: new Date('03-01-2020').getTime()
+      value: dates.startDate.getTime()
     });
     where.push({
       fieldPath: 'startDate',
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    let events = await this.eventService.getEventsBy(this.user, where, 'startDate', null, 100).pipe(take(1)).toPromise()
+    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 500).pipe(take(1)).toPromise()
     events = events.filter((event) => event.getStat(DataStartPosition.type));
     if (!events || !events.length) {
-      // this.loaded() // @todo fix add no data
       return;
     }
     for (const event of events) {
-      this.eventService.getEventActivitiesAndSomeStreams(this.user,
+      this.eventService.getEventActivitiesAndSomeStreams(user,
         event.getID(),
-        [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+        [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).pipe(subscribeOn(animationFrameScheduler))
         .pipe(take(1)).toPromise().then((fullEvent) => {
-          this.logger.info(`Promise completed`)
-          const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-          fullEvent.getActivities()
-            .filter((activity) => activity.hasPositionData())
-            .forEach((activity) => {
-              const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-                return {
-                  lat: position.latitudeDegrees,
-                  lng: position.longitudeDegrees
-                }
-              });
-              lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-              const line = L.polyline(positionalData, lineOptions);
-              this.positions.push({event: fullEvent, line: line})
-              line.addTo(this.map);
-              if (this.isLoading) {
-                this.loaded()
-                this.center(this.positions.map((p) => p.line))
+        this.logger.info(`Promise completed`)
+        const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+        fullEvent.getActivities()
+          .filter((activity) => activity.hasPositionData())
+          .forEach((activity) => {
+            const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+              return {
+                lat: position.latitudeDegrees,
+                lng: position.longitudeDegrees
               }
-            })
+            });
+            lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+            this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
+            if (this.isLoading) {
+              this.loaded()
+              this.panToLines(map, this.polyLines)
+            }
+          })
       })
     }
   }
 
-  center(lines) {
+  panToLines(map: L.Map, lines: L.Polyline[]) {
     this.zone.runOutsideAngular(() => {
-      this.map.fitBounds((L.featureGroup(lines)).getBounds(), {
+      map.fitBounds((L.featureGroup(lines)).getBounds(), {
         noMoveStart: false,
         animate: true,
         padding: [20, 20],
       });
-
     })
     if (!this.scrolled) {
-      this.clearScroll();
+      this.clearScroll(map);
     }
   }
 
-  getStartingLocation() {
+  centerMapToStartingLocation(map: L.Map) {
     navigator.geolocation.getCurrentPosition(pos => {
-      if (!this.scrolled && this.positions.length === 0) {
-        this.map.panTo([pos.coords.latitude, pos.coords.longitude], {
+      if (!this.scrolled && this.polyLines.length === 0) {
+        map.panTo([pos.coords.latitude, pos.coords.longitude], {
           noMoveStart: true,
           animate: false,
         });
         // noMoveStart doesn't seem to have an effect, see Leaflet
         // issue: https://github.com/Leaflet/Leaflet/issues/5396
-        this.clearScroll();
+        this.clearScroll(map);
       }
     });
   }
 
-  private markScrolled() {
-    this.map.removeEventListener('movestart', this.markScrolled);
+  private markScrolled(map) {
+    map.removeEventListener('movestart', () => {this.markScrolled(map)});
     this.scrolled = true;
   }
 
-  private clearScroll() {
+  private clearScroll(map) {
     this.scrolled = false;
-    this.map.addEventListener('movestart', this.markScrolled)
+    map.addEventListener('movestart', () => {this.markScrolled(map)})
   }
 
-  private initMap(): void {
-    this.map = this.zone.runOutsideAngular(() => {
+  private initMap(): L.Map {
+    return this.zone.runOutsideAngular(() => {
       const map = L.map(this.mapDiv.nativeElement, {
         center: [0, 0],
-        fadeAnimation: false,
+        fadeAnimation: true,
         zoomAnimation: true,
         zoom: 2,
         preferCanvas: false,
@@ -169,7 +166,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
           stateName: 'default',
           title: 'Zoom to all tracks',
           onClick: () => {
-            this.center(this.positions.map((p) => p.line));
+            this.panToLines(map, this.polyLines);
           },
         }],
       }).addTo(map);

@@ -7,7 +7,7 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import {getDatesForDateRange, Search} from '../event-search/event-search.component';
+import {Search} from '../event-search/event-search.component';
 import {AppUserService} from '../../services/app.user.service';
 import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
@@ -16,8 +16,8 @@ import {Log} from 'ng2-logger/browser';
 import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { ActivityFormComponent } from '../activity-form/activity.form.component';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
+import { getDatesForDateRange } from 'app/helpers/date-range-helper';
 
 @Component({
   selector: 'app-dashboard',

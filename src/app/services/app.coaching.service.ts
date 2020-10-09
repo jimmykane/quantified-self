@@ -7,9 +7,9 @@ import { AppUserService } from './app.user.service';
 import { AthletesAndEvents } from '../components/athletes/athletes.component';
 import { AppEventService } from './app.event.service';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { getDatesForDateRange } from '../components/event-search/event-search.component';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { getDatesForDateRange } from '../helpers/date-range-helper';
 
 
 @Injectable({
