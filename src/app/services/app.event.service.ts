@@ -79,6 +79,16 @@ export class AppEventService implements OnDestroy {
     return this._getEvents(user, where, orderBy, asc, limit);
   }
 
+  /**
+   * @Deprecated
+   * @param user
+   * @param where
+   * @param orderBy
+   * @param asc
+   * @param limit
+   * @param startAfter
+   * @param endBefore
+   */
   public getEventsAndActivitiesBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
       return this.getEventsStartingAfterOrEndingBefore(user, true, where, orderBy, asc, limit, startAfter, endBefore);
@@ -147,6 +157,22 @@ export class AppEventService implements OnDestroy {
       .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
+      }))
+  }
+
+  public getStream(user: User, eventID: string, activityID: string, streamType: string): Observable<StreamInterface> {
+    return this.afs
+      .collection('users')
+      .doc(user.uid)
+      .collection('events')
+      .doc(eventID)
+      .collection('activities')
+      .doc(activityID)
+      .collection('streams')
+      .doc(streamType)
+      .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+      .pipe(map((queryDocumentSnapshot) => {
+        return this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot)
       }))
   }
 
@@ -306,8 +332,21 @@ export class AppEventService implements OnDestroy {
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       if (!event) {
-        return of([]);
+        return of(null);
       }
+      // Get all the streams for all activities and subscribe to them with latest emition for all streams
+      return this.attachStreamsToEventWithActivities(user, event, streamTypes)
+    }))
+  }
+
+  /**
+   * Requires an event with activities
+   * @param user
+   * @param event
+   * @param streamTypes
+   * @private
+   */
+  public attachStreamsToEventWithActivities(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return combineLatest(
         event.getActivities().map((activity) => {
@@ -321,11 +360,9 @@ export class AppEventService implements OnDestroy {
               // Return what we actually want to return not the streams
               return event;
             }));
-        }));
-    })).pipe(map(([event]) => {
-      // debugger;
-      return event;
-    }))
+        })).pipe(map(([newEvent]) => {
+          return newEvent;
+      }));
   }
 
   private getEventsStartingAfterOrEndingBefore(user: User, getActivities: boolean, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
@@ -368,20 +405,34 @@ export class AppEventService implements OnDestroy {
       }))
   }
 
+  /**
+   * @param user
+   * @param where
+   * @param orderBy
+   * @param asc
+   * @param limit
+   * @param startAfter
+   * @param endBefore
+   * @private
+   */
   private _getEventsAndActivities(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
       .snapshotChanges().pipe(map((eventSnapshots) => {
-        return eventSnapshots.reduce((eventIDS, eventSnapshot) => {
-          eventIDS.push(eventSnapshot.payload.doc.id);
-          return eventIDS;
+        return eventSnapshots.reduce((events, eventSnapshot) => {
+          if (eventSnapshot.payload.doc.exists) {
+            events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.doc.data()).setID(eventSnapshot.payload.doc.id));
+          }
+          return events;
         }, []);
-      })).pipe(switchMap((eventIDS) => {
-        // debugger;
-        if (!eventIDS.length) {
+      })).pipe(switchMap((events) => {
+        if (!events.length) {
           return of([]);
         }
-        return combineLatest(eventIDS.map((eventID) => {
-          return this.getEventAndActivities(user, eventID);
+        return combineLatest(events.map((event) => {
+          return this.getActivities(user, event.getID()).pipe(map((activities) => {
+            event.addActivities(activities)
+            return event;
+          }));
         }))
       }));
   }
