@@ -59,7 +59,8 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
   async ngOnInit() {
     this.loading()
     const map = this.initMap()
-    map.getContainer().focus = () => {} // Fix fullscreen switch
+    map.getContainer().focus = () => {
+    } // Fix fullscreen switch
     this.centerMapToStartingLocation(map);
     const user = await this.authService.user.pipe(take(1)).toPromise();
     return this.bindToData(user, map, DateRanges.lastThirtyDays)
@@ -138,13 +139,17 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
   }
 
   private markScrolled(map) {
-    map.removeEventListener('movestart', () => {this.markScrolled(map)});
+    map.removeEventListener('movestart', () => {
+      this.markScrolled(map)
+    });
     this.scrolled = true;
   }
 
   private clearScroll(map) {
     this.scrolled = false;
-    map.addEventListener('movestart', () => {this.markScrolled(map)})
+    map.addEventListener('movestart', () => {
+      this.markScrolled(map)
+    })
   }
 
   private initMap(): L.Map {
@@ -162,7 +167,8 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
       this.viewAllButton = L.easyButton({
         type: 'animate',
         states: [{
-          icon: 'stats',
+          icon: `<img style="padding-top: 3px;width: 16px;height: 16px;"
+                    src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2218%22%20height%3D%2218%22%20viewBox%3D%220%20018%2018%22%3E%0A%20%20%3Cpath%20fill%3D%22%23666%22%20d%3D%22M0%2C0v2v4h2V2h4V0H2H0z%20M16%2C0h-4v2h4v4h2V2V0H16z%20M16%2C16h-4v2h4h2v-2v-4h-2V16z%20M2%2C12H0v4v2h2h4v-2H2V12z%22%2F%3E%0A%3C%2Fsvg%3E%0A" alt="zoom in"/>`,
           stateName: 'default',
           title: 'Zoom to all tracks',
           onClick: () => {
