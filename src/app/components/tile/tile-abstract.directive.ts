@@ -9,7 +9,7 @@ import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppUserService } from '../../services/app.user.service';
 
 @Directive()
-export class TileAbstract {
+export class TileAbstractDirective {
   @Input() isLoading: boolean;
   @Input() user: User;
   @Input() order: number;

@@ -1,14 +1,12 @@
-import {Component, Inject, OnDestroy, OnInit} from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {of, Subscription} from 'rxjs';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {AppUserService} from '../../services/app.user.service';
-import {MatDialog, MatDialogRef} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {catchError, map, switchMap} from 'rxjs/operators';
-import {UserFormComponent} from '../user-forms/user.form.component';
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { Subscription } from 'rxjs';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService } from '../../services/app.user.service';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { UserFormComponent } from '../user-forms/user.form.component';
 
 @Component({
   selector: 'app-user',
@@ -20,19 +18,24 @@ export class UserComponent implements OnInit, OnDestroy {
   public user: User;
   private userSubscription: Subscription;
 
-  constructor(private authService: AppAuthService, private route: ActivatedRoute, private userService: AppUserService, private router: Router, private snackBar: MatSnackBar, private dialog: MatDialog,) {
+  constructor(private authService: AppAuthService,
+              private route: ActivatedRoute,
+              private userService: AppUserService,
+              private router: Router,
+              private snackBar: MatSnackBar,
+              private dialog: MatDialog) {
   }
 
   ngOnInit(): void {
-   this.userSubscription = this.authService.user.subscribe((user) => {
-     if (!user) {
-       this.router.navigate(['login']).then(() => {
-         this.snackBar.open('You were signed out out')
-       });
-     }
-     // First get our current user
-     this.user = user;
-   })
+    this.userSubscription = this.authService.user.subscribe((user) => {
+      if (!user) {
+        this.router.navigate(['login']).then(() => {
+          this.snackBar.open('You were signed out out')
+        });
+      }
+      // First get our current user
+      this.user = user;
+    })
   }
 
   edit() {

@@ -3,7 +3,7 @@ import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/setti
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { LoadingAbstractDirective } from '../../loading/loading-abstract.directive';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { TileAbstract } from '../tile.abstract';
+import { TileAbstractDirective } from '../tile-abstract.directive';
 
 @Component({
   selector: 'app-tile-map',
@@ -12,7 +12,7 @@ import { TileAbstract } from '../tile.abstract';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class TileMapComponent extends TileAbstract {
+export class TileMapComponent extends TileAbstractDirective {
   @Input() mapType: MapTypes;
   @Input() mapTheme: MapThemes;
   @Input() showActions: boolean;

@@ -6,7 +6,10 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { AppEventService } from './app.event.service';
 import { catchError, map, take } from 'rxjs/operators';
-import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import {
+  AppThemes,
+  UserAppSettingsInterface
+} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {
   ChartCursorBehaviours,
   ChartThemes,
@@ -17,9 +20,13 @@ import {
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
 import {
-  DaysOfTheWeek, GradeAdjustedPaceUnits, GradeAdjustedSpeedUnits,
-  PaceUnits, PaceUnitsToGradeAdjustedPaceUnits,
-  SpeedUnits, SpeedUnitsToGradeAdjustedSpeedUnits,
+  DaysOfTheWeek,
+  GradeAdjustedPaceUnits,
+  GradeAdjustedSpeedUnits,
+  PaceUnits,
+  PaceUnitsToGradeAdjustedPaceUnits,
+  SpeedUnits,
+  SpeedUnitsToGradeAdjustedSpeedUnits,
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
@@ -37,8 +44,12 @@ import {
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
-  ChartTypes, TileChartSettingsInterface, TileMapSettingsInterface,
-  TileSettingsInterface, TileTypes, TimeIntervals,
+  ChartTypes,
+  TileChartSettingsInterface,
+  TileMapSettingsInterface,
+  TileSettingsInterface,
+  TileTypes,
+  TimeIntervals,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
@@ -114,7 +125,7 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
+      size: {columns: 1, rows: 1},
     };
   }
 
@@ -127,7 +138,7 @@ export class AppUserService implements OnDestroy {
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
-      size: { columns: 1, rows: 1 },
+      size: {columns: 1, rows: 1},
     };
   }
 
@@ -140,7 +151,7 @@ export class AppUserService implements OnDestroy {
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
-      size: { columns: 1, rows: 1 },
+      size: {columns: 1, rows: 1},
     }, <TileChartSettingsInterface>{
       name: 'Duration',
       order: 1,
@@ -150,7 +161,7 @@ export class AppUserService implements OnDestroy {
       dataType: DataDuration.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
+      size: {columns: 1, rows: 1},
     }, <TileChartSettingsInterface>{
       name: 'Distance',
       order: 2,
@@ -160,7 +171,7 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
+      size: {columns: 1, rows: 1},
     }, <TileChartSettingsInterface>{
       name: 'Ascent',
       order: 3,
@@ -170,7 +181,7 @@ export class AppUserService implements OnDestroy {
       dataType: DataAscent.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
+      size: {columns: 1, rows: 1},
     }]
   }
 
@@ -248,7 +259,7 @@ export class AppUserService implements OnDestroy {
     unitSettings.gradeAdjustedSpeedUnits = AppUserService.getDefaultGradeAdjustedSpeedUnits();
     unitSettings.paceUnits = AppUserService.getDefaultPaceUnits();
     unitSettings.gradeAdjustedPaceUnits = AppUserService.getDefaultGradeAdjustedPaceUnits();
-    unitSettings.swimPaceUnits =  AppUserService.getDefaultSwimPaceUnits();
+    unitSettings.swimPaceUnits = AppUserService.getDefaultSwimPaceUnits();
     unitSettings.verticalSpeedUnits = AppUserService.getDefaultVerticalSpeedUnits();
     unitSettings.startOfTheWeek = AppUserService.getDefaultStartOfTheWeek();
     return unitSettings;
@@ -316,7 +327,7 @@ export class AppUserService implements OnDestroy {
     return Promise.resolve(user);
   }
 
-  public getServiceToken(user: User, serviceName: ServiceNames){
+  public getServiceToken(user: User, serviceName: ServiceNames) {
     switch (serviceName) {
       default:
         throw new Error(`Not implemented for service ${serviceName}`);
@@ -326,42 +337,6 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.GarminHealthAPI:
         return this.getGarminHealthAPITokens(user);
     }
-  }
-
-  private getServiceTokens(user: User, serviceName: ServiceNames) {
-    const serviceNamesToCollectionName = {
-      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
-      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
-    }
-    return this.afs
-      .collection(serviceNamesToCollectionName[serviceName])
-      .doc<Auth2ServiceTokenInterface>(user.uid)
-      .collection('tokens')
-      .valueChanges()
-      .pipe(catchError(error => {
-        return [];
-      }));
-  }
-
-   private getGarminHealthAPITokens(user: User) {
-    return this.afs
-      .collection('garminHealthAPITokens')
-      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consistent with the other provides that support more than one token
-      .pipe(catchError(error => {
-        return [];
-      }));
-  }
-
-  private getAllUserMeta(user: User) {
-    return this.afs
-      .collection('users')
-      .doc(user.uid).collection('meta');
-  }
-
-  private getAccountPrivileges(user: User) {
-    return this.afs
-      .collection('userAccountPrivileges')
-      .doc(user.uid);
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
@@ -382,7 +357,7 @@ export class AppUserService implements OnDestroy {
     return this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
   }
 
-  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date){
+  async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
@@ -420,14 +395,14 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{redirect_uri: string}|{redirect_uri: string, state: string, oauthToken: string}>{
+  public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }> {
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI,
       [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI,
       [ServiceNames.COROSAPI]: environment.functions.getCOROSAPIAuthRequestTokenRedirectURI
     }
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
-    return <Promise<{redirect_uri: string}>>this.http.post(
+    return <Promise<{ redirect_uri: string }>>this.http.post(
       serviceNamesToFunctionsURI[serviceName], {
         redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
       },
@@ -539,6 +514,45 @@ export class AppUserService implements OnDestroy {
     }, [])
   }
 
+  ngOnDestroy() {
+  }
+
+  private getServiceTokens(user: User, serviceName: ServiceNames) {
+    const serviceNamesToCollectionName = {
+      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
+      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
+    }
+    return this.afs
+      .collection(serviceNamesToCollectionName[serviceName])
+      .doc<Auth2ServiceTokenInterface>(user.uid)
+      .collection('tokens')
+      .valueChanges()
+      .pipe(catchError(error => {
+        return [];
+      }));
+  }
+
+  private getGarminHealthAPITokens(user: User) {
+    return this.afs
+      .collection('garminHealthAPITokens')
+      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consistent with the other provides that support more than one token
+      .pipe(catchError(error => {
+        return [];
+      }));
+  }
+
+  private getAllUserMeta(user: User) {
+    return this.afs
+      .collection('users')
+      .doc(user.uid).collection('meta');
+  }
+
+  private getAccountPrivileges(user: User) {
+    return this.afs
+      .collection('userAccountPrivileges')
+      .doc(user.uid);
+  }
+
   private fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     // App
@@ -621,8 +635,5 @@ export class AppUserService implements OnDestroy {
 
     // @warning !!!!!! Enums with 0 as start value default to the override
     return settings;
-  }
-
-  ngOnDestroy() {
   }
 }

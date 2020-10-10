@@ -1,23 +1,23 @@
-import {ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit} from '@angular/core';
-import {AppEventService} from '../../services/app.event.service';
+import { ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit } from '@angular/core';
+import { AppEventService } from '../../services/app.event.service';
 import { asyncScheduler, of, Subscription } from 'rxjs';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivatedRoute, Router } from '@angular/router';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {DateRanges} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import {Search} from '../event-search/event-search.component';
-import {AppUserService} from '../../services/app.user.service';
-import {DaysOfTheWeek} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { Search } from '../event-search/event-search.component';
+import { AppUserService } from '../../services/app.user.service';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
-import {Log} from 'ng2-logger/browser';
-import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { Log } from 'ng2-logger/browser';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 import { getDatesForDateRange } from 'app/helpers/date-range-helper';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-dashboard',
@@ -63,7 +63,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     if (userID) {
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
-      } catch (e){
+      } catch (e) {
         return this.router.navigate(['dashboard']).then(() => {
           this.snackBar.open('Page not found');
         });
@@ -137,7 +137,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         : this.events.length ? of(this.events) : this.eventService
           .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
-        .pipe(throttleTime(2000, asyncScheduler, { leading: true, trailing: true }))
+        .pipe(throttleTime(2000, asyncScheduler, {leading: true, trailing: true}))
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
           if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {

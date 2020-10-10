@@ -351,7 +351,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       if (!isNumber(summariesChartDataInterface[valueType]) || (summariesChartDataInterface[valueType] === 0 && valueType === ChartDataValueTypes.Total)) {
         return valueByTypeMap;
       }
-      if (!isNumber(summariesChartDataInterface[key])){
+      if (!isNumber(summariesChartDataInterface[key])) {
         delete summariesChartDataInterface[key];
         delete summariesChartDataInterface[`${key}-Count`];
       }
@@ -366,16 +366,20 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           if (!valueByCategory[`${key}-Count`]) {
             return;
           }
-          valueByCategory.set(type, {...item, ...{
-            count: item.count,
-            [key]: item[key] / item[`${key}-Count`]
-          }})
+          valueByCategory.set(type, {
+            ...item, ...{
+              count: item.count,
+              [key]: item[key] / item[`${key}-Count`]
+            }
+          })
         })
-        valueByCategory.set(type, {...item, ...{
-          // [key]: item[valueType] / item.count,
-          [valueType]: item[valueType] / item.count,
-          count: item.count
-        }});
+        valueByCategory.set(type, {
+          ...item, ...{
+            // [key]: item[valueType] / item.count,
+            [valueType]: item[valueType] / item.count,
+            count: item.count
+          }
+        });
       });
     }
     const map = this.convertToCategories(valueByCategory)

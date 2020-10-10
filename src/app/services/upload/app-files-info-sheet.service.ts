@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { FileInterface } from '../../components/upload/file.interface';
-import {  Subscription } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { MatBottomSheet, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { Overlay } from '@angular/cdk/overlay';
 import { UploadInfoComponent } from '../../components/upload/upload-info/upload-info.component';
@@ -28,9 +28,15 @@ export class AppFilesInfoSheetService implements OnDestroy {
     });
   }
 
-  private openOrDismissBottomSheet(files: FileInterface[]){
-    if (!files.length){
-      if (this.bottomSheetRef){
+  ngOnDestroy(): void {
+    if (this.fileStatusSubsription) {
+      this.fileStatusSubsription.unsubscribe();
+    }
+  }
+
+  private openOrDismissBottomSheet(files: FileInterface[]) {
+    if (!files.length) {
+      if (this.bottomSheetRef) {
         this.bottomSheetRef.dismiss();
         this.bottomSheetRef = null;
       }
@@ -48,7 +54,7 @@ export class AppFilesInfoSheetService implements OnDestroy {
       return;
     }
     // If we are not processing close and if there are errors also show the dialog
-    if (files.filter(file => file.status === UPLOAD_STATUS.PROCESSING).length === 0 && this.bottomSheetRef){
+    if (files.filter(file => file.status === UPLOAD_STATUS.PROCESSING).length === 0 && this.bottomSheetRef) {
       const errors = files.filter(activityMetaData => activityMetaData.status === UPLOAD_STATUS.ERROR);
       // // If there is an error show a modal
       if (errors.length) {
@@ -58,12 +64,6 @@ export class AppFilesInfoSheetService implements OnDestroy {
           data: {files: files},
         });
       }
-    }
-  }
-
-  ngOnDestroy(): void {
-    if (this.fileStatusSubsription){
-      this.fileStatusSubsription.unsubscribe();
     }
   }
 }

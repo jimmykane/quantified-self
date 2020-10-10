@@ -14,7 +14,7 @@ import { AgmMap } from '@agm/core';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
-import { MapAbstract } from '../map/map.abstract';
+import { MapAbstractDirective } from '../map/map-abstract.directive';
 import MarkerClusterer from '@googlemaps/markerclustererplus'
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
@@ -34,7 +34,7 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
   providers: [DatePipe],
 })
 
-export class EventsMapComponent extends MapAbstract implements OnChanges, AfterViewInit {
+export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit {
   @ViewChild(AgmMap) agmMap;
   @Input() events: EventInterface[];
   @Input() theme: MapThemes;

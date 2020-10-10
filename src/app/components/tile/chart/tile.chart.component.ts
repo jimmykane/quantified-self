@@ -5,7 +5,7 @@ import {
   ChartTypes, TimeIntervals
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import { TileAbstract } from '../tile.abstract';
+import { TileAbstractDirective } from '../tile-abstract.directive';
 
 @Component({
   selector: 'app-tile-chart',
@@ -14,7 +14,7 @@ import { TileAbstract } from '../tile.abstract';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class TileChartComponent extends TileAbstract {
+export class TileChartComponent extends TileAbstractDirective {
   @Input() isLoading: boolean;
   @Input() chartType: ChartTypes;
   @Input() dataType: string;

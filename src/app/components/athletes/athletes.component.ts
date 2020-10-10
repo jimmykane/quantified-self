@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -49,7 +49,7 @@ export class AthletesComponent implements OnInit, OnDestroy {
       return this.coachingService.getCoachedAthletesForUser(this.user)
     })).subscribe(async (users) => {
       this.athletesAndEvents = [];
-      for (const user of users){
+      for (const user of users) {
         this.athletesAndEvents.push({
           athlete: user,
           events: await this.coachingService.getUserEventsForDateRange(user, DateRanges.thisWeek, this.user.settings.unitSettings.startOfTheWeek).pipe(take(1)).toPromise()
@@ -60,12 +60,17 @@ export class AthletesComponent implements OnInit, OnDestroy {
   }
 
 
-
   @HostListener('window:resize', ['$event'])
   @HostListener('window:orientationchange', ['$event'])
   resizeOROrientationChange(event?) {
     this.numberOfCols = this.getNumberOfColumns();
     this.rowHeight = this.getRowHeight();
+  }
+
+  ngOnDestroy(): void {
+    if (this.userAndAthletesSubscription) {
+      this.userAndAthletesSubscription.unsubscribe();
+    }
   }
 
   // @todo refactor
@@ -82,12 +87,6 @@ export class AthletesComponent implements OnInit, OnDestroy {
       return 2;
     }
     return 4;
-  }
-
-  ngOnDestroy(): void {
-    if (this.userAndAthletesSubscription) {
-      this.userAndAthletesSubscription.unsubscribe();
-    }
   }
 }
 
