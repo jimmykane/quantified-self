@@ -41,7 +41,7 @@ export class AppEventService implements OnDestroy {
   public getEventAndActivities(user: User, eventID: string): Observable<EventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
-    return combineLatest(
+    return combineLatest([
       this.afs
         .collection('users')
         .doc(user.uid)
@@ -50,7 +50,7 @@ export class AppEventService implements OnDestroy {
           return eventSnapshot.payload.exists ? EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
         })),
       this.getActivities(user, eventID),
-    ).pipe(catchError((error) => {
+    ]).pipe(catchError((error) => {
       if (error && error.code && error.code === 'permission-denied') {
         return of([null, null])
       }
