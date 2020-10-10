@@ -1,20 +1,13 @@
-import {
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  ElementRef,
-  NgZone,
-  OnInit,
-  ViewChild
-} from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, NgZone, OnInit, ViewChild } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
+import { LatLng } from 'leaflet';
 import 'leaflet-providers';
 import 'leaflet-easybutton';
 import leafletImage from 'leaflet-image'
 import { AppEventService } from '../../services/app.event.service';
-import { subscribeOn, take } from 'rxjs/operators';
+import { take } from 'rxjs/operators';
 import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -23,29 +16,31 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Observable, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { AppFileService } from '../../services/app.file.service';
-import { LatLng } from 'leaflet';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-heatmap',
   templateUrl: './heatmap.component.html',
   styleUrls: ['./heatmap.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  // changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class HeatmapComponent extends LoadingAbstractDirective implements OnInit {
+export class HeatmapComponent implements OnInit {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
   public dataSubscription: Subscription;
-  uploadPercent: Observable<number>;
   downloadURL: Observable<string>;
+  public progress = 0;
+  public buffer = 0;
   private logger = Log.create('HeatmapComponent');
   private polyLines: L.Polyline[] = [];
   private viewAllButton: L.Control.EasyButton;
   private scrolled = false;
+  private totalCount = 0;
+  private count = 0;
+
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -57,11 +52,9 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
     private fileService: AppFileService,
     private storage: AngularFireStorage,
     private snackBar: MatSnackBar) {
-    super(changeDetectorRef)
   }
 
   async ngOnInit() {
-    this.loading()
     const map = this.initMap()
     map.getContainer().focus = () => {
     } // Fix fullscreen switch
@@ -71,6 +64,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
   }
 
   async bindToData(user: User, map: L.Map, dateRange: DateRanges) {
+    this.buffer = 33;
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
     where.push({
@@ -83,36 +77,42 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 500).pipe(take(1)).toPromise()
+    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 100).pipe(take(1)).toPromise()
+    this.buffer = 66;
     events = events.filter((event) => event.getStat(DataStartPosition.type));
     if (!events || !events.length) {
       return;
     }
+    this.totalCount = events.length
     for (const event of events) {
       this.eventService.getEventActivitiesAndSomeStreams(user,
         event.getID(),
         [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-        .pipe(take(1)).toPromise().then((fullEvent) => {
-        this.logger.info(`Promise completed`)
-        const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-        fullEvent.getActivities()
-          .filter((activity) => activity.hasPositionData())
-          .forEach((activity) => {
-            const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-              return {
-                lat: position.latitudeDegrees,
-                lng: position.longitudeDegrees
-              }
-            });
-            lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-            this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
-            if (this.isLoading) {
-              this.loaded()
-              this.panToLines(map, this.polyLines)
-            }
-          })
-      })
+        .pipe(take(1)).toPromise()
+        .then((fullEvent) => {
+          this.logger.info(`Promise completed`)
+          const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+          fullEvent.getActivities()
+            .filter((activity) => activity.hasPositionData())
+            .forEach((activity) => {
+              const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+                return {
+                  lat: position.latitudeDegrees,
+                  lng: position.longitudeDegrees
+                }
+              });
+              lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+              this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
+              // if (this.isLoading) {
+              // this.loaded()
+              // this.panToLines(map, this.polyLines)
+              // }
+            })
+          this.count++;
+          this.progress = Math.round((this.count / this.totalCount) * 100)
+        })
     }
+    this.buffer = 100;
   }
 
   panToLines(map: L.Map, lines: L.Polyline[]) {
@@ -152,7 +152,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
           // link.href = URL.createObjectURL(blob);
           this.fileService.downloadFile(blob, 'should add dateranges', 'png')
         });
-      // }
+        // }
       } else if (format === 'svg') {
         const scale = 2;
         const bounds = map.getPixelBounds();
@@ -264,7 +264,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
           stateName: 'default',
           title: 'Export as png',
           onClick: () => {
-              this.screenshot(map, 'svg');
+            this.screenshot(map, 'svg');
           }
         }]
       }).addTo(map);

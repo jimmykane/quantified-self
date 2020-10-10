@@ -1,6 +1,12 @@
 <mat-card>
-  <div>{{ uploadPercent | async }}</div>
+  <section>
+    <mat-progress-bar
+      [color]="'primary'"
+      [mode]="'buffer'"
+      [value]="progress"
+      [bufferValue]="buffer">
+    </mat-progress-bar>
+  </section>
   <a [href]="downloadURL | async">{{ downloadURL | async }}</a>
-      <div #mapDiv id="map"></div>
-      <app-shade [isActive]="isLoading"></app-shade>
+  <div #mapDiv id="map"></div>
 </mat-card>
