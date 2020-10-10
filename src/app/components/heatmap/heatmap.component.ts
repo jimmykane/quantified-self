@@ -12,6 +12,7 @@ import { Router } from '@angular/router';
 import * as L from 'leaflet';
 import 'leaflet-providers';
 import 'leaflet-easybutton';
+import leafletImage from 'leaflet-image'
 import { AppEventService } from '../../services/app.event.service';
 import { subscribeOn, take } from 'rxjs/operators';
 import { Log } from 'ng2-logger/browser';
@@ -20,13 +21,15 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { animationFrameScheduler, Observable, Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { AppFileService } from '../../services/app.file.service';
+import { LatLng } from 'leaflet';
 
 @Component({
   selector: 'app-heatmap',
@@ -51,6 +54,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
     private router: Router,
     private eventColorService: AppEventColorService,
     private zone: NgZone,
+    private fileService: AppFileService,
     private storage: AngularFireStorage,
     private snackBar: MatSnackBar) {
     super(changeDetectorRef)
@@ -59,10 +63,11 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
   async ngOnInit() {
     this.loading()
     const map = this.initMap()
-    map.getContainer().focus = () => {} // Fix fullscreen switch
+    map.getContainer().focus = () => {
+    } // Fix fullscreen switch
     this.centerMapToStartingLocation(map);
     const user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.bindToData(user, map, DateRanges.lastThirtyDays)
+    return this.bindToData(user, map, DateRanges.thisYear)
   }
 
   async bindToData(user: User, map: L.Map, dateRange: DateRanges) {
@@ -86,7 +91,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
     for (const event of events) {
       this.eventService.getEventActivitiesAndSomeStreams(user,
         event.getID(),
-        [DataLatitudeDegrees.type, DataLongitudeDegrees.type]).pipe(subscribeOn(animationFrameScheduler))
+        [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .pipe(take(1)).toPromise().then((fullEvent) => {
         this.logger.info(`Promise completed`)
         const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
@@ -137,14 +142,94 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
     });
   }
 
+  screenshot(map, format) {
+    leafletImage(map, (err, canvas) => {
+      if (err) {
+        return window.alert(err);
+      }
+      if (format === 'png') {
+        canvas.toBlob(blob => {
+          // link.href = URL.createObjectURL(blob);
+          this.fileService.downloadFile(blob, 'should add dateranges', 'png')
+        });
+      // }
+      } else if (format === 'svg') {
+        const scale = 2;
+        const bounds = map.getPixelBounds();
+        bounds.min = bounds.min.multiplyBy(scale);
+        bounds.max = bounds.max.multiplyBy(scale);
+        const left = bounds.min.x;
+        const top = bounds.min.y;
+        const width = bounds.getSize().x;
+        const height = bounds.getSize().y;
+
+        const svg = L.SVG.create('svg');
+        const root = L.SVG.create('g');
+
+        svg.setAttribute('viewBox', `${left} ${top} ${width} ${height}`);
+
+        this.polyLines.forEach(polylines => {
+          // Project each point from LatLng, scale it up, round to
+          // nearest 1/10 (by multiplying by 10, rounding and
+          // dividing), and reducing by removing duplicates (when two
+          // consecutive points have rounded to the same value)
+          const pts = (<LatLng[]>polylines.getLatLngs()).map((ll) =>
+            map.project(ll)
+              .multiplyBy(scale * 10)
+              .round()
+              .divideBy(10)
+          ).reduce((acc, next) => {
+            if (acc.length === 0 ||
+              acc[acc.length - 1].x !== next.x ||
+              acc[acc.length - 1].y !== next.y) {
+              acc.push(next);
+            }
+            return acc;
+          }, []);
+
+          // If none of the points on the track are on the screen,
+          // don't export the track
+          if (!pts.some(pt => bounds.contains(pt))) {
+            return;
+          }
+          const path = L.SVG.pointsToPath([pts], false);
+          const el = L.SVG.create('path');
+
+          el.setAttribute('stroke', polylines.options.color);
+          el.setAttribute('stroke-opacity', polylines.options.opacity.toString());
+          el.setAttribute('stroke-width', (scale * polylines.options.weight).toString());
+          el.setAttribute('stroke-linecap', 'round');
+          el.setAttribute('stroke-linejoin', 'round');
+          el.setAttribute('fill', 'none');
+
+          el.setAttribute('d', path);
+
+          root.appendChild(el);
+        });
+
+        svg.appendChild(root);
+
+        const xml = (new XMLSerializer()).serializeToString(svg);
+
+        const blob = new Blob([xml], {type: 'application/octet-stream'});
+        this.fileService.downloadFile(blob, 'should add dateranges svg', 'svg')
+
+      }
+    });
+  }
+
   private markScrolled(map) {
-    map.removeEventListener('movestart', () => {this.markScrolled(map)});
+    map.removeEventListener('movestart', () => {
+      this.markScrolled(map)
+    });
     this.scrolled = true;
   }
 
   private clearScroll(map) {
     this.scrolled = false;
-    map.addEventListener('movestart', () => {this.markScrolled(map)})
+    map.addEventListener('movestart', () => {
+      this.markScrolled(map)
+    })
   }
 
   private initMap(): L.Map {
@@ -154,21 +239,34 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
         fadeAnimation: true,
         zoomAnimation: true,
         zoom: 2,
-        preferCanvas: false,
-        dragging: !L.Browser.mobile
+        preferCanvas: true,
+        // dragging: !L.Browser.mobile
       });
       const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0])
       tiles.addTo(map);
       this.viewAllButton = L.easyButton({
         type: 'animate',
         states: [{
-          icon: 'stats',
+          icon: `<img style="padding-top: 3px;width: 16px;height: 16px;"
+                    src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2218%22%20height%3D%2218%22%20viewBox%3D%220%20018%2018%22%3E%0A%20%20%3Cpath%20fill%3D%22%23666%22%20d%3D%22M0%2C0v2v4h2V2h4V0H2H0z%20M16%2C0h-4v2h4v4h2V2V0H16z%20M16%2C16h-4v2h4h2v-2v-4h-2V16z%20M2%2C12H0v4v2h2h4v-2H2V12z%22%2F%3E%0A%3C%2Fsvg%3E%0A" alt="zoom in"/>`,
           stateName: 'default',
           title: 'Zoom to all tracks',
           onClick: () => {
             this.panToLines(map, this.polyLines);
           },
         }],
+      }).addTo(map);
+
+      L.easyButton({
+        type: 'animate',
+        states: [{
+          icon: 'fa-camera fa-lg',
+          stateName: 'default',
+          title: 'Export as png',
+          onClick: () => {
+              this.screenshot(map, 'svg');
+          }
+        }]
       }).addTo(map);
       return map
     })
@@ -177,7 +275,7 @@ export class HeatmapComponent extends LoadingAbstractDirective implements OnInit
 
 // Los Angeles is the center of the universe
 const DEFAULT_OPTIONS = {
-  theme: 'CartoDB.DarkMatter',
+  theme: 'CartoDB.DarkMatter', // Should be based on app theme b&w
   lineOptions: {
     color: '#0CB1E8',
     weight: 1,

@@ -1,14 +1,13 @@
-import {async, ComponentFixture, TestBed} from '@angular/core/testing';
+import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import {UploadInfoComponent} from './upload-info.component';
+import { UploadInfoComponent } from './upload-info.component';
 import { MatCard } from '@angular/material/card';
 import { MatRipple } from '@angular/material/core';
 import { MatIcon } from '@angular/material/icon';
 import { MatList, MatListItem } from '@angular/material/list';
 import { MatProgressBar } from '@angular/material/progress-bar';
-
-import {FilesStatusListComponent} from '../../files-status-list/files-status-list.component';
-import {UPLOAD_STATUS} from "../upload-status/upload.status";
+import { FilesStatusListComponent } from '../../files-status-list/files-status-list.component';
+import { UPLOAD_STATUS } from '../upload-status/upload.status';
 
 describe('UploadInfoComponent', () => {
   let component: UploadInfoComponent;

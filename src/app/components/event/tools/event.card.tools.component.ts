@@ -82,7 +82,6 @@ export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
           HR: value / 60,
         })
       });
-      debugger;
     }
     return;
     // this.selectedActivities.forEach((activity: ActivityInterface) => {

@@ -21,9 +21,9 @@ import {
   ServiceNames
 } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
-import DocumentData = firebase.firestore.DocumentData;
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import DocumentData = firebase.firestore.DocumentData;
 
 
 @Injectable({
@@ -329,16 +329,6 @@ export class AppEventService implements OnDestroy {
   public ngOnDestroy() {
   }
 
-  private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
-    return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
-      if (!event) {
-        return of(null);
-      }
-      // Get all the streams for all activities and subscribe to them with latest emition for all streams
-      return this.attachStreamsToEventWithActivities(user, event, streamTypes)
-    }))
-  }
-
   /**
    * Requires an event with activities
    * @param user
@@ -347,22 +337,32 @@ export class AppEventService implements OnDestroy {
    * @private
    */
   public attachStreamsToEventWithActivities(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
+    // Get all the streams for all activities and subscribe to them with latest emition for all streams
+    return combineLatest(
+      event.getActivities().map((activity) => {
+        return (streamTypes ? this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes) : this.getAllStreams(user, event.getID(), activity.getID()))
+          .pipe(map((streams) => {
+            streams = streams || [];
+            // debugger;
+            // This time we dont want to just get the streams but we want to attach them to the parent obj
+            activity.clearStreams();
+            activity.addStreams(streams);
+            // Return what we actually want to return not the streams
+            return event;
+          }));
+      })).pipe(map(([newEvent]) => {
+      return newEvent;
+    }));
+  }
+
+  private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
+    return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
+      if (!event) {
+        return of(null);
+      }
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
-      return combineLatest(
-        event.getActivities().map((activity) => {
-          return (streamTypes ? this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes) : this.getAllStreams(user, event.getID(), activity.getID()))
-            .pipe(map((streams) => {
-              streams = streams || [];
-              // debugger;
-              // This time we dont want to just get the streams but we want to attach them to the parent obj
-              activity.clearStreams();
-              activity.addStreams(streams);
-              // Return what we actually want to return not the streams
-              return event;
-            }));
-        })).pipe(map(([newEvent]) => {
-          return newEvent;
-      }));
+      return this.attachStreamsToEventWithActivities(user, event, streamTypes)
+    }))
   }
 
   private getEventsStartingAfterOrEndingBefore(user: User, getActivities: boolean, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
@@ -514,7 +514,6 @@ export class AppEventService implements OnDestroy {
   // private getBlobFromStreamData(streamData: any[]): firestore.Blob {
   //   return firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(streamData), {to: 'string'})))
   // }
-
 
 
 }

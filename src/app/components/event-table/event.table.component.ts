@@ -181,7 +181,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
   }
 
-  async deleteSelection(event) {
+  async deleteSelection() {
     this.loading();
     const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
     this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {

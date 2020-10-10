@@ -1,5 +1,5 @@
-import { Component, OnInit, Input, Inject, OnDestroy, ChangeDetectorRef } from '@angular/core';
-import {UPLOAD_STATUS} from '../upload-status/upload.status';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { Subscription } from 'rxjs';
@@ -52,7 +52,7 @@ export class UploadInfoComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.fileStatusSubsription){
+    if (this.fileStatusSubsription) {
       this.fileStatusSubsription.unsubscribe()
     }
   }

@@ -32,7 +32,7 @@ import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc'
 import {DataFeeling} from '@sports-alliance/sports-lib/lib/data/data.feeling';
 import {DataRPE} from '@sports-alliance/sports-lib/lib/data/data.rpe';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
-import { TileActionsAbstract } from '../tile.actions.abstract';
+import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 import { EnumeratorHelpers } from '../../../../helpers/enumerator-helpers';
 
@@ -43,7 +43,7 @@ import { EnumeratorHelpers } from '../../../../helpers/enumerator-helpers';
   styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
   providers: [],
 })
-export class TileChartActionsComponent extends TileActionsAbstract implements OnInit {
+export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
   @Input() chartType: ChartTypes;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;

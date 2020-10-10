@@ -279,9 +279,9 @@ export class UserSettingsComponent implements OnChanges {
 
     this.isSaving = true;
     try {
-      const userChartSettings = Array.from(this.userSettingsFormGroup.get('dataTypesToUse').value).reduce((userChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
-        userChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};
-        return userChartSettings
+      const userChartSettings = Array.from(this.userSettingsFormGroup.get('dataTypesToUse').value).reduce((newUserChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
+        newUserChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};
+        return newUserChartSettings
       }, {
         dataTypeSettings: {},
         theme: this.userSettingsFormGroup.get('chartTheme').value,

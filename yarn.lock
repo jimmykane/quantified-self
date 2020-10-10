@@ -3708,6 +3708,11 @@ d3-interpolate@1:
   resolved "https://registry.yarnpkg.com/d3-quadtree/-/d3-quadtree-2.0.0.tgz#edbad045cef88701f6fee3aee8e93fb332d30f9d"
   integrity sha512-b0Ed2t1UUalJpc3qXzKi+cPGxeXRr4KU9YSlocN74aTzp6R/Ud43t79yLLqxHRWZfsvWXmbDWPpoENK1K539xw==
 
+d3-queue@2.0.3:
+  version "2.0.3"
+  resolved "https://registry.yarnpkg.com/d3-queue/-/d3-queue-2.0.3.tgz#07fbda3acae5358a9c5299aaf880adf0953ed2c2"
+  integrity sha1-B/vaOsrlNYqcUpmq+ICt8JU+0sI=
+
 d3-selection@^1.0.2, d3-selection@^1.1.0:
   version "1.4.2"
   resolved "https://registry.yarnpkg.com/d3-selection/-/d3-selection-1.4.2.tgz#dcaa49522c0dbf32d6c1858afc26b6094555bc5c"
@@ -6327,6 +6332,13 @@ leaflet-easybutton@^2.4.0:
   integrity sha512-O+qsQq4zTF6ds8VClnytobTH/MKalctlPpiA8L+bNKHP14J3lgJpvEd/jSpq9mHTI6qOzRAvbQX6wS6qNwThvg==
   dependencies:
     leaflet "^1.0.1"
+
+leaflet-image@^0.4.0:
+  version "0.4.0"
+  resolved "https://registry.yarnpkg.com/leaflet-image/-/leaflet-image-0.4.0.tgz#e84f22ff6288f09b9b0e2f51a4850a9f07968cc1"
+  integrity sha1-6E8i/2KI8JubDi9RpIUKnweWjME=
+  dependencies:
+    d3-queue "2.0.3"
 
 leaflet-providers@^1.10.2:
   version "1.10.2"

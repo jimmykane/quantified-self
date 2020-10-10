@@ -1,14 +1,14 @@
 import {
   TileSettingsInterface, TileTypes,
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { TileAbstract } from '../tile.abstract';
+import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { Input, Directive } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 
 @Directive()
-export class TileActionsAbstract extends TileAbstract {
+export class TileActionsAbstractDirective extends TileAbstractDirective {
   @Input() isLoading: boolean;
   @Input() user: User;
   @Input() order: number;
@@ -29,14 +29,14 @@ export class TileActionsAbstract extends TileAbstract {
 
   async changeTileColumnSize(event) {
     this.afa.logEvent('dashboard_tile_action', {method: 'changeTileSize'});
-    const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
+    const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.columns = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   async changeTileRowSize(event) {
     this.afa.logEvent('dashboard_tile_action', {method: 'changeTileSize'});
-    const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
+    const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.rows = event.value;
     return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }

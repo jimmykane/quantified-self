@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "6.8.11",
+  "version": "6.8.15",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -47,6 +47,7 @@
     "firebase": "^7.22.1",
     "leaflet": "^1.7.1",
     "leaflet-easybutton": "^2.4.0",
+    "leaflet-image": "^0.4.0",
     "leaflet-providers": "^1.10.2",
     "lz-string": "^1.4.4",
     "material-design-icons-iconfont": "^6.1.0",

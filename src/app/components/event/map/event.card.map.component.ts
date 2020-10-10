@@ -25,7 +25,7 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { GeoLibAdapter } from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
 import { debounceTime } from 'rxjs/operators';
-import { MapAbstract } from '../../map/map.abstract';
+import { MapAbstractDirective } from '../../map/map-abstract.directive';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 
@@ -36,7 +36,7 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 
-export class EventCardMapComponent extends MapAbstract implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   @ViewChild(AgmMap) agmMap;
   @Input() event: EventInterface;
   @Input() targetUserID: string;

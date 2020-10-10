@@ -5,7 +5,6 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { environment } from '../../../../environments/environment';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
-import { ParamMap } from '@angular/router';
 
 
 @Component({
@@ -13,7 +12,7 @@ import { ParamMap } from '@angular/router';
   templateUrl: './services.suunto.component.html',
   styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
 })
-export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit{
+export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit {
   public suuntoAppLinkFormGroup: FormGroup;
 
   public serviceName = ServiceNames.SuuntoApp;
@@ -23,7 +22,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return !!this.serviceTokens && !!this.serviceTokens.length
   }
 
-  buildRedirectURIFromServiceToken(token: {redirect_uri: string}): string {
+  buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
     return token.redirect_uri
   }
 

@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { AppUserService } from '../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
-import { TileActionsAbstract } from '../tile.actions.abstract';
+import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import { TileMapSettingsInterface } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 
@@ -11,7 +11,7 @@ import { TileMapSettingsInterface } from '@sports-alliance/sports-lib/lib/tiles/
   styleUrls: ['../tile.actions.abstract.css', './tile.map.actions.component.css'],
   providers: [],
 })
-export class TileMapActionsComponent extends TileActionsAbstract implements OnInit, OnChanges {
+export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
   @Input() mapType: MapTypes;
   @Input() mapTheme: MapThemes;
   @Input() showHeatMap: boolean;
