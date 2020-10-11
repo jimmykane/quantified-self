@@ -11,8 +11,6 @@ import { take } from 'rxjs/operators';
 import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Observable, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
@@ -21,6 +19,8 @@ import { AngularFireStorage } from '@angular/fire/storage';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 
 @Component({
   selector: 'app-heatmap',
@@ -84,35 +84,51 @@ export class HeatmapComponent implements OnInit {
       return;
     }
     this.totalCount = events.length
-    for (const event of events) {
-      this.eventService.getEventActivitiesAndSomeStreams(user,
-        event.getID(),
-        [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-        .pipe(take(1)).toPromise()
-        .then((fullEvent) => {
-          this.logger.info(`Promise completed`)
-          const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-          fullEvent.getActivities()
-            .filter((activity) => activity.hasPositionData())
-            .forEach((activity) => {
-              const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-                return {
-                  lat: position.latitudeDegrees,
-                  lng: position.longitudeDegrees
-                }
-              });
-              lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-              this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
-              // if (this.isLoading) {
-              // this.loaded()
-              // this.panToLines(map, this.polyLines)
-              // }
-            })
-          this.count++;
-          this.progress = Math.round((this.count / this.totalCount) * 100)
-        })
-    }
+
+
+    console.log(`found ${events.length}`)
+    const chuckArraySize = 20;
+    const chunckedEvents = events.reduce((all, one, i) => {
+      const ch = Math.floor(i / chuckArraySize);
+      all[ch] = [].concat((all[ch] || []), one);
+      return all
+    }, [])
+
     this.buffer = 100;
+
+    for (const eventsChunk  of chunckedEvents) {
+      // debugger
+      await Promise.all(eventsChunk.map((event) => {
+        return this.eventService.getEventActivitiesAndSomeStreams(user,
+            event.getID(),
+            [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
+            .pipe(take(1)).toPromise()
+            .then((fullEvent) => {
+              this.logger.info(`Promise completed`)
+              const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+              fullEvent.getActivities()
+                .filter((activity) => activity.hasPositionData())
+                .forEach((activity) => {
+                  const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+                    return {
+                      lat: position.latitudeDegrees,
+                      lng: position.longitudeDegrees
+                    }
+                  });
+                  lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+                  this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
+                  // if (this.isLoading) {
+                  // this.loaded()
+                  // this.panToLines(map, this.polyLines)
+                  // }
+                })
+              this.count++;
+              this.progress = Math.round((this.count / this.totalCount) * 100)
+            })
+      }))
+      this.panToLines(map, this.polyLines)
+    }
+    
   }
 
   panToLines(map: L.Map, lines: L.Polyline[]) {
