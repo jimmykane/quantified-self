@@ -1,15 +1,15 @@
 {
   "projects": {
-    "default": "quantified-self-io"
+    "default": "quantified-self-dopanik"
   },
   "targets": {
-    "quantified-self-io": {
+    "quantified-self-dopanik": {
       "hosting": {
         "production": [
-          "quantified-self-io"
+          "quantified-self-dopanik"
         ],
         "beta": [
-          "quantified-self-io-beta"
+          "quantified-self-dopanik-beta"
         ]
       }
     }
