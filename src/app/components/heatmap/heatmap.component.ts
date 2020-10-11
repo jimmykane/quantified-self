@@ -1,4 +1,12 @@
-import { ChangeDetectorRef, Component, ElementRef, NgZone, OnInit, ViewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  ElementRef,
+  NgZone,
+  OnInit,
+  ViewChild
+} from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
@@ -18,22 +26,22 @@ import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.sta
 import { AngularFireStorage } from '@angular/fire/storage';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-heatmap',
   templateUrl: './heatmap.component.html',
   styleUrls: ['./heatmap.component.css'],
-  // changeDetection: ChangeDetectionStrategy.OnPush
+  // changeDetection: ChangeDetectionStrategy.OnPush // @todo consider this for performance
 })
 export class HeatmapComponent implements OnInit {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
   public dataSubscription: Subscription;
   downloadURL: Observable<string>;
   public progress = 0;
-  public buffer = 0;
+  public bufferProgress = 0;
   private logger = Log.create('HeatmapComponent');
   private polyLines: L.Polyline[] = [];
   private viewAllButton: L.Control.EasyButton;
@@ -60,11 +68,11 @@ export class HeatmapComponent implements OnInit {
     } // Fix fullscreen switch
     this.centerMapToStartingLocation(map);
     const user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.bindToData(user, map, DateRanges.thisYear)
+    return this.createHeatMapForUserByDateRange(user, map, DateRanges.thisYear)
   }
 
-  async bindToData(user: User, map: L.Map, dateRange: DateRanges) {
-    this.buffer = 33;
+  async createHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
+    this.bufferProgress = 33;
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
     where.push({
@@ -77,58 +85,53 @@ export class HeatmapComponent implements OnInit {
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 100).pipe(take(1)).toPromise()
-    this.buffer = 66;
+    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 500).pipe(take(1)).toPromise()
+    this.bufferProgress = 66;
+
     events = events.filter((event) => event.getStat(DataStartPosition.type));
     if (!events || !events.length) {
       return;
     }
     this.totalCount = events.length
 
-
-    console.log(`found ${events.length}`)
-    const chuckArraySize = 20;
+    const chuckArraySize = 15;
     const chunckedEvents = events.reduce((all, one, i) => {
       const ch = Math.floor(i / chuckArraySize);
       all[ch] = [].concat((all[ch] || []), one);
       return all
     }, [])
 
-    this.buffer = 100;
+    this.bufferProgress = 100;
 
-    for (const eventsChunk  of chunckedEvents) {
-      // debugger
-      await Promise.all(eventsChunk.map((event) => {
-        return this.eventService.getEventActivitiesAndSomeStreams(user,
-            event.getID(),
-            [DataLatitudeDegrees.type, DataLongitudeDegrees.type])
-            .pipe(take(1)).toPromise()
-            .then((fullEvent) => {
-              this.logger.info(`Promise completed`)
-              const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-              fullEvent.getActivities()
-                .filter((activity) => activity.hasPositionData())
-                .forEach((activity) => {
-                  const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-                    return {
-                      lat: position.latitudeDegrees,
-                      lng: position.longitudeDegrees
-                    }
-                  });
-                  lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-                  this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
-                  // if (this.isLoading) {
-                  // this.loaded()
-                  // this.panToLines(map, this.polyLines)
-                  // }
-                })
-              this.count++;
-              this.progress = Math.round((this.count / this.totalCount) * 100)
+
+    for (const eventsChunk of chunckedEvents) {
+      await Promise.all(eventsChunk.map(async (event) => {
+        event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
+        return this.eventService.attachStreamsToEventWithActivities(user, event, [
+          DataLatitudeDegrees.type,
+          DataLongitudeDegrees.type,
+        ]).pipe(take(1)).toPromise().then((fullEvent) => {
+          this.logger.info(`Promise completed`)
+          const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+          fullEvent.getActivities()
+            .filter((activity) => activity.hasPositionData())
+            .forEach((activity) => {
+              const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+                return {
+                  lat: position.latitudeDegrees,
+                  lng: position.longitudeDegrees
+                }
+              });
+              lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+              this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
             })
+          this.count++;
+          this.progress = Math.round((this.count / this.totalCount) * 100)
+        })
       }))
       this.panToLines(map, this.polyLines)
     }
-    
+
   }
 
   panToLines(map: L.Map, lines: L.Polyline[]) {
@@ -255,7 +258,7 @@ export class HeatmapComponent implements OnInit {
         fadeAnimation: true,
         zoomAnimation: true,
         zoom: 2,
-        preferCanvas: true,
+        preferCanvas: false,
         // dragging: !L.Browser.mobile
       });
       const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0])

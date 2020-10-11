@@ -331,6 +331,7 @@ export class AppEventService implements OnDestroy {
 
   /**
    * Requires an event with activities
+   * @todo this should be internal
    * @param user
    * @param event
    * @param streamTypes
