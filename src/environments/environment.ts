@@ -8,14 +8,14 @@ export const environment = {
   beta: false,
   localhost: true,
   firebase: {
-     apiKey: "AIzaSyB9LTcP36lqTWltgB3p0fM5q8oBA6EIRy0",
-    authDomain: "quantified-self-dopanik.firebaseapp.com",
-    databaseURL: "https://quantified-self-dopanik.firebaseio.com",
-    projectId: "quantified-self-dopanik",
-    storageBucket: "quantified-self-dopanik.appspot.com",
-    messagingSenderId: "87812803840",
-    appId: "1:87812803840:web:9b511827655a32457eb7e5",
-    measurementId: "G-089WTZ1FKV"
+    apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
+    authDomain: 'quantified-self-io.firebaseapp.com',
+    databaseURL: 'https://quantified-self-io.firebaseio.com',
+    projectId: 'quantified-self-io',
+    storageBucket: 'quantified-self-io.appspot.com',
+    messagingSenderId: '242713487388',
+    appId: '1:242713487388:web:df287e1940b40a90',
+    measurementId: 'G-6YE27NNKDT'
   },
   functions: {
     deauthorizeSuuntoApp: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
