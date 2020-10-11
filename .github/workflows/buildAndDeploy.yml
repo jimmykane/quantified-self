@@ -3,7 +3,8 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [ feature/#212-github-actions ]
+    tags:
+      - v[0-9].[0-9].*
 
 jobs:
   build:
