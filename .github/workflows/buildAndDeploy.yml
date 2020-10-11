@@ -35,8 +35,6 @@ jobs:
           npm run build-production
 
       - name: Deploy to Firebase
-        uses: lowply/deploy-firebase@v0.0.4
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          FIREBASE_PROJECT: quantified-self-dopanik
-          TARGET_BRANCH: feature/#212-github-actions
+        run: |
+          npm install -g firebase-tools
+          firebase deploy --token "${{ secrets.FIREBASE_TOKEN }}" --only hosting:production
