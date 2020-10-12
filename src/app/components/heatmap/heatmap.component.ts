@@ -29,6 +29,7 @@ import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib/lib/constants/constants';
 
 @Component({
   selector: 'app-heatmap',
@@ -68,7 +69,7 @@ export class HeatmapComponent implements OnInit {
     } // Fix fullscreen switch
     this.centerMapToStartingLocation(map);
     const user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.createHeatMapForUserByDateRange(user, map, DateRanges.thisYear)
+    return this.createHeatMapForUserByDateRange(user, map, DateRanges.lastThirtyDays)
   }
 
   async createHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
@@ -118,8 +119,8 @@ export class HeatmapComponent implements OnInit {
             .forEach((activity) => {
               const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
                 return {
-                  lat: position.latitudeDegrees,
-                  lng: position.longitudeDegrees
+                  lat: Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES),
+                  lng: Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)
                 }
               });
               lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
