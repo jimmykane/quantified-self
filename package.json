@@ -47,6 +47,7 @@
     "firebase": "^7.23.0",
     "leaflet": "^1.7.1",
     "leaflet-easybutton": "^2.4.0",
+    "leaflet-fullscreen": "^1.0.2",
     "leaflet-image": "^0.4.0",
     "leaflet-providers": "^1.10.2",
     "lz-string": "^1.4.4",

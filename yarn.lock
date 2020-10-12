@@ -6333,6 +6333,11 @@ leaflet-easybutton@^2.4.0:
   dependencies:
     leaflet "^1.0.1"
 
+leaflet-fullscreen@^1.0.2:
+  version "1.0.2"
+  resolved "https://registry.yarnpkg.com/leaflet-fullscreen/-/leaflet-fullscreen-1.0.2.tgz#09c61c4bac45f63b2ee126afd87e5cd97650fc1b"
+  integrity sha1-CcYcS6xF9jsu4Sav2H5c2XZQ/Bs=
+
 leaflet-image@^0.4.0:
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/leaflet-image/-/leaflet-image-0.4.0.tgz#e84f22ff6288f09b9b0e2f51a4850a9f07968cc1"
