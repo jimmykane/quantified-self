@@ -13,6 +13,7 @@ import * as L from 'leaflet';
 import { LatLng } from 'leaflet';
 import 'leaflet-providers';
 import 'leaflet-easybutton';
+import 'leaflet-fullscreen';
 import leafletImage from 'leaflet-image'
 import { AppEventService } from '../../services/app.event.service';
 import { take } from 'rxjs/operators';
@@ -69,7 +70,7 @@ export class HeatmapComponent implements OnInit {
     } // Fix fullscreen switch
     this.centerMapToStartingLocation(map);
     const user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.createHeatMapForUserByDateRange(user, map, DateRanges.lastThirtyDays)
+    return this.createHeatMapForUserByDateRange(user, map, DateRanges.thisYear)
   }
 
   async createHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
@@ -86,7 +87,7 @@ export class HeatmapComponent implements OnInit {
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 500).pipe(take(1)).toPromise()
+    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 100).pipe(take(1)).toPromise()
     this.bufferProgress = 66;
 
     events = events.filter((event) => event.getStat(DataStartPosition.type));
@@ -254,12 +255,18 @@ export class HeatmapComponent implements OnInit {
 
   private initMap(): L.Map {
     return this.zone.runOutsideAngular(() => {
-      const map = L.map(this.mapDiv.nativeElement, {
+
+      const map = L.map(this.mapDiv.nativeElement, <L.MapOptions>{
         center: [0, 0],
         fadeAnimation: true,
         zoomAnimation: true,
         zoom: 2,
         preferCanvas: false,
+        fullscreenControl: true,
+        // OR
+        // fullscreenControl: {
+        //   pseudoFullscreen: false // if true, fullscreen to page width and height
+        // }
         // dragging: !L.Browser.mobile
       });
       const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0])
