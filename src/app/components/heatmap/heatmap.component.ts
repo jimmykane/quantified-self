@@ -21,7 +21,7 @@ import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, Subject, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
@@ -31,6 +31,8 @@ import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.l
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib/lib/constants/constants';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { HeatmapProgressComponent } from './progress/heatmap.progress';
 
 @Component({
   selector: 'app-heatmap',
@@ -42,8 +44,6 @@ export class HeatmapComponent implements OnInit {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
   public dataSubscription: Subscription;
   downloadURL: Observable<string>;
-  public progress = 0;
-  public bufferProgress = 0;
   private logger = Log.create('HeatmapComponent');
   private polyLines: L.Polyline[] = [];
   private viewAllButton: L.Control.EasyButton;
@@ -51,6 +51,8 @@ export class HeatmapComponent implements OnInit {
   private totalCount = 0;
   private count = 0;
 
+  private bufferProgress =  new Subject<number>();
+  private totalProgress =  new Subject<number>();
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -61,6 +63,7 @@ export class HeatmapComponent implements OnInit {
     private zone: NgZone,
     private fileService: AppFileService,
     private storage: AngularFireStorage,
+    private bottomSheet: MatBottomSheet,
     private snackBar: MatSnackBar) {
   }
 
@@ -69,12 +72,15 @@ export class HeatmapComponent implements OnInit {
     map.getContainer().focus = () => {
     } // Fix fullscreen switch
     this.centerMapToStartingLocation(map);
+    this.bottomSheet.open(HeatmapProgressComponent, {data: { totalProgress: this.totalProgress, bufferProgress: this.bufferProgress }});
+    this.updateBufferProgress(0);
+    this.updateTotalProgress(0);
     const user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.createHeatMapForUserByDateRange(user, map, DateRanges.thisYear)
+    return this.createHeatMapForUserByDateRange(user, map, DateRanges.lastWeek)
   }
 
   async createHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
-    this.bufferProgress = 33;
+    this.updateBufferProgress(33);
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
     where.push({
@@ -88,7 +94,7 @@ export class HeatmapComponent implements OnInit {
       value: dates.endDate.getTime()
     });
     let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 100).pipe(take(1)).toPromise()
-    this.bufferProgress = 66;
+    this.updateBufferProgress(66);
 
     events = events.filter((event) => event.getStat(DataStartPosition.type));
     if (!events || !events.length) {
@@ -103,8 +109,7 @@ export class HeatmapComponent implements OnInit {
       return all
     }, [])
 
-    this.bufferProgress = 100;
-
+    this.updateBufferProgress(100);
 
     for (const eventsChunk of chunckedEvents) {
       await Promise.all(eventsChunk.map(async (event) => {
@@ -128,7 +133,7 @@ export class HeatmapComponent implements OnInit {
               this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
             })
           this.count++;
-          this.progress = Math.round((this.count / this.totalCount) * 100)
+          this.updateTotalProgress(Math.round((this.count / this.totalCount) * 100))
         })
       }))
       this.panToLines(map, this.polyLines)
@@ -260,7 +265,7 @@ export class HeatmapComponent implements OnInit {
         center: [0, 0],
         fadeAnimation: true,
         zoomAnimation: true,
-        zoom: 2,
+        zoom: 3,
         preferCanvas: false,
         fullscreenControl: true,
         // OR
@@ -297,6 +302,13 @@ export class HeatmapComponent implements OnInit {
       }).addTo(map);
       return map
     })
+  }
+
+  private updateBufferProgress(value: number) {
+    this.bufferProgress.next(value)
+  }
+  private updateTotalProgress(value: number) {
+    this.totalProgress.next(value)
   }
 }
 

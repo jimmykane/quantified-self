@@ -1,12 +1,3 @@
 <mat-card>
-  <section>
-    <mat-progress-bar
-      [color]="'primary'"
-      [mode]="'buffer'"
-      [value]="progress"
-      [bufferValue]="bufferProgress">
-    </mat-progress-bar>
-  </section>
-  <a [href]="downloadURL | async">{{ downloadURL | async }}</a>
   <div #mapDiv id="map"></div>
 </mat-card>

@@ -3,13 +3,7 @@ mat-card{
   height: calc(100vh - 60px);
   /*height: 100vh;*/
 }
-section{
-  align-items: center;
-  display: flex;
-  padding: 1em;
-  /* display: block; */
-  min-height: 5%;
-}
+
 #map{
-  height: 90%;
+  height: 100%;
 }
