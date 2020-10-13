@@ -124,7 +124,6 @@ export class HeatmapComponent implements OnInit, OnDestroy {
       value: dates.endDate.getTime()
     });
 
-    // Todo this needs investigation / subscribe call to get latest results from server. Take (1)
     this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', null, 500).subscribe(async (events) => {
       this.clearProgressAndOpenBottomSheet();
       this.updateBufferProgress(66);
