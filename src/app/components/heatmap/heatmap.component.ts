@@ -168,6 +168,7 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   }
 
   private clearMapLines(lines: L.Polyline[]) {
+    this.polyLines = [];
     lines.forEach(line => line.remove());
   }
 
