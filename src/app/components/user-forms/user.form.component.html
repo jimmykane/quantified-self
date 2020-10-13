@@ -1,6 +1,6 @@
 <mat-dialog-content>
 
-  <form *ngIf="userFormGroup" [formGroup]="userFormGroup" (submit)="onSubmit()">
+  <form *ngIf="userFormGroup" [formGroup]="userFormGroup" (submit)="onSubmit($event)">
 
     <app-shade [isActive]="isDeleting || isLoading" [hasError]="errorDeleting" [errorMessage]="errorDeleting"></app-shade>
 
@@ -55,7 +55,7 @@
     <div *ngIf="!showDelete">
       <button mat-stroked-button (click)="close($event)">Cancel</button>
 
-      <button mat-flat-button color="primary" (click)="onSubmit()">Save</button>
+      <button mat-flat-button color="primary" (click)="onSubmit($event)">Save</button>
     </div>
 
     <div class="account-delete" *ngIf="showDelete && !isDeleting">
