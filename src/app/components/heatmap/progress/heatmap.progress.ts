@@ -11,8 +11,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 })
 export class HeatmapProgressComponent implements OnInit, OnDestroy {
 
-  totalProgress: number;
-  bufferProgress: number;
+  totalProgress = 0;
+  bufferProgress = 0;
 
   private totalProgressSubscription: Subscription
   private bufferProgressSubscription: Subscription
@@ -23,9 +23,10 @@ export class HeatmapProgressComponent implements OnInit, OnDestroy {
               private snackBar: MatSnackBar,
               private changeDetectorRef: ChangeDetectorRef) {
     this.totalProgressSubscription = data.totalProgress.subscribe((value) => {
+      console.log(value)
       this.totalProgress = value
       this.changeDetectorRef.detectChanges()
-      if (this.totalProgress === 100) {
+      if (this.totalProgress >= 100) {
         this.bottomSheetRef.dismiss();
         this.snackBar.open(`Heatmap generated successfully`, null, {
           duration: 2000,

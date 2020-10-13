@@ -1,12 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  ElementRef,
-  NgZone,
-  OnInit,
-  ViewChild
-} from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
@@ -21,7 +13,7 @@ import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { Observable, Subject, Subscription } from 'rxjs';
+import { Subject } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
@@ -29,10 +21,11 @@ import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib/lib/constants/constants';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { HeatmapProgressComponent } from './progress/heatmap.progress';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { Overlay } from '@angular/cdk/overlay';
 
 @Component({
   selector: 'app-heatmap',
@@ -40,19 +33,30 @@ import { HeatmapProgressComponent } from './progress/heatmap.progress';
   styleUrls: ['./heatmap.component.css'],
   // changeDetection: ChangeDetectionStrategy.OnPush // @todo consider this for performance
 })
-export class HeatmapComponent implements OnInit {
+export class HeatmapComponent implements OnInit, OnDestroy {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
-  public dataSubscription: Subscription;
-  downloadURL: Observable<string>;
+
+  public dateRangesToShow: DateRanges[] = [
+    DateRanges.thisWeek,
+    DateRanges.lastWeek,
+    DateRanges.lastSevenDays,
+    DateRanges.lastThirtyDays,
+    DateRanges.thisMonth,
+    DateRanges.lastMonth,
+    DateRanges.thisYear,
+  ]
+
+  public selectedDateRange = DateRanges.lastWeek
+  public user: User;
+
   private logger = Log.create('HeatmapComponent');
+  private map: L.Map;
   private polyLines: L.Polyline[] = [];
   private viewAllButton: L.Control.EasyButton;
   private scrolled = false;
-  private totalCount = 0;
-  private count = 0;
 
-  private bufferProgress =  new Subject<number>();
-  private totalProgress =  new Subject<number>();
+  private bufferProgress = new Subject<number>();
+  private totalProgress = new Subject<number>();
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -64,22 +68,47 @@ export class HeatmapComponent implements OnInit {
     private fileService: AppFileService,
     private storage: AngularFireStorage,
     private bottomSheet: MatBottomSheet,
+    protected overlay: Overlay,
     private snackBar: MatSnackBar) {
   }
 
   async ngOnInit() {
-    const map = this.initMap()
-    map.getContainer().focus = () => {
+    this.map = this.initMap()
+    this.map.getContainer().focus = () => {
     } // Fix fullscreen switch
-    this.centerMapToStartingLocation(map);
-    this.bottomSheet.open(HeatmapProgressComponent, {data: { totalProgress: this.totalProgress, bufferProgress: this.bufferProgress }});
-    this.updateBufferProgress(0);
-    this.updateTotalProgress(0);
-    const user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.createHeatMapForUserByDateRange(user, map, DateRanges.lastWeek)
+    this.centerMapToStartingLocation(this.map);
+    this.user = await this.authService.user.pipe(take(1)).toPromise();
+    return this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
 
-  async createHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
+  public async search(event) {
+    this.selectedDateRange = event.dateRange
+    this.clearMapLines(this.polyLines);
+    this.centerMapToStartingLocation(this.map)
+    return this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+  }
+
+  public ngOnDestroy() {
+    this.bottomSheet.dismiss();
+  }
+
+  private clearProgressAndOpenBottomSheet() {
+    this.updateBufferProgress(0);
+    this.updateTotalProgress(0);
+    this.bottomSheet.open(HeatmapProgressComponent, {
+      data: {
+        totalProgress: this.totalProgress,
+        bufferProgress: this.bufferProgress,
+      },
+      disableClose: true,
+      hasBackdrop: false,
+      closeOnNavigation: true,
+      scrollStrategy: this.overlay.scrollStrategies.reposition(),
+    });
+  }
+
+  private async loadHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
+    this.clearProgressAndOpenBottomSheet();
     this.updateBufferProgress(33);
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
@@ -100,7 +129,6 @@ export class HeatmapComponent implements OnInit {
     if (!events || !events.length) {
       return;
     }
-    this.totalCount = events.length
 
     const chuckArraySize = 15;
     const chunckedEvents = events.reduce((all, one, i) => {
@@ -111,6 +139,7 @@ export class HeatmapComponent implements OnInit {
 
     this.updateBufferProgress(100);
 
+    let count = 0;
     for (const eventsChunk of chunckedEvents) {
       await Promise.all(eventsChunk.map(async (event) => {
         event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
@@ -132,16 +161,19 @@ export class HeatmapComponent implements OnInit {
               lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
               this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
             })
-          this.count++;
-          this.updateTotalProgress(Math.round((this.count / this.totalCount) * 100))
+          count++;
+          this.updateTotalProgress(Math.ceil((count / events.length) * 100))
         })
       }))
       this.panToLines(map, this.polyLines)
     }
-
   }
 
-  panToLines(map: L.Map, lines: L.Polyline[]) {
+  private clearMapLines(lines: L.Polyline[]) {
+    lines.forEach(line => line.remove());
+  }
+
+  private panToLines(map: L.Map, lines: L.Polyline[]) {
     this.zone.runOutsideAngular(() => {
       map.fitBounds((L.featureGroup(lines)).getBounds(), {
         noMoveStart: false,
@@ -154,7 +186,7 @@ export class HeatmapComponent implements OnInit {
     }
   }
 
-  centerMapToStartingLocation(map: L.Map) {
+  private centerMapToStartingLocation(map: L.Map) {
     navigator.geolocation.getCurrentPosition(pos => {
       if (!this.scrolled && this.polyLines.length === 0) {
         map.panTo([pos.coords.latitude, pos.coords.longitude], {
@@ -168,7 +200,7 @@ export class HeatmapComponent implements OnInit {
     });
   }
 
-  screenshot(map, format) {
+  private screenshot(map, format) {
     leafletImage(map, (err, canvas) => {
       if (err) {
         return window.alert(err);
@@ -274,7 +306,7 @@ export class HeatmapComponent implements OnInit {
         // }
         // dragging: !L.Browser.mobile
       });
-      const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0])
+      const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0], {detectRetina: true})
       tiles.addTo(map);
       this.viewAllButton = L.easyButton({
         type: 'animate',
@@ -307,6 +339,7 @@ export class HeatmapComponent implements OnInit {
   private updateBufferProgress(value: number) {
     this.bufferProgress.next(value)
   }
+
   private updateTotalProgress(value: number) {
     this.totalProgress.next(value)
   }

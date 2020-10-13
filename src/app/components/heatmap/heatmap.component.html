@@ -1,3 +1,23 @@
 <mat-card>
+  <app-event-search *ngIf="user"
+                    [isLoading]="false"
+                    [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek"
+                    [showDatePicker]="true"
+                    [showActivityTypePicker]="false"
+                    [dateRangesToShow]="dateRangesToShow"
+                    [selectedDateRange]="selectedDateRange"
+                    (searchChange)="search($event)"
+                    >
+  </app-event-search>
+
+<!--  <app-event-search-->
+<!--    [isLoading]="totalProgress !== 100"-->
+<!--    [selectedDateRange]="user.settings.dashboardSettings.dateRange"-->
+<!--    [selectedStartDate]="searchStartDate"-->
+<!--    [selectedEndDate]="searchEndDate"-->
+<!--    [startOfTheWeek]="startOfTheWeek"-->
+<!--    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"-->
+<!--    (searchChange)="search($event)">-->
+<!--  </app-event-search>-->
   <div #mapDiv id="map"></div>
 </mat-card>

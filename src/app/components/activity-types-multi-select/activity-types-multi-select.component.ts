@@ -50,6 +50,7 @@ export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    this.selectedActivityTypes = this.selectedActivityTypes || [];
     this.filteredActivityTypes = this.activityTypesControl.valueChanges.pipe(
       startWith<string | ActivityTypeSelectionModel[]>(''),
       map(value => typeof value === 'string' ? value : this.lastFilter),

@@ -31,6 +31,20 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() startOfTheWeek: DaysOfTheWeek;
   @Input() selectedActivityTypes: ActivityTypes[];
   @Input() isLoading: boolean;
+  @Input() showDatePicker = true;
+  @Input() showActivityTypePicker = true;
+  @Input() dateRangesToShow: DateRanges[] = [
+    DateRanges.thisWeek,
+    DateRanges.lastWeek,
+    DateRanges.lastSevenDays,
+    DateRanges.lastThirtyDays,
+    DateRanges.thisMonth,
+    DateRanges.lastMonth,
+    DateRanges.thisYear,
+    DateRanges.lastYear,
+    DateRanges.all,
+    DateRanges.custom
+  ]
 
   @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 

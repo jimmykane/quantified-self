@@ -7,3 +7,7 @@ section {
 .avatar{
   background-size: cover;
 }
+app-event-search{
+  margin-bottom: 1em;
+  display: block;
+}
