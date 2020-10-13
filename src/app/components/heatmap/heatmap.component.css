@@ -4,8 +4,12 @@ mat-card{
   /*height: 100vh;*/
 }
 app-event-search{
+  height: 9%;
   /*margin-bottom: 1em;*/
   display: block;
+  padding: 0.5em;
+  padding-top: 0;
+  /*margin-left: 0.5em;*/
 }
 #map{
   height: 90%;

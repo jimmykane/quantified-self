@@ -3,7 +3,7 @@
   <app-shade [isActive]="isLoading"></app-shade>
 
   <section [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'block' : 'none' }">
-    <mat-form-field [ngStyle]="{display: showDatePicker ? 'block' : 'none' }" *ngIf="searchFormGroup" style=" margin-right: 1em;" class="big">
+    <mat-form-field [ngStyle]="{display: showDatePicker ? 'inline-block' : 'none' }" *ngIf="searchFormGroup" style=" margin-right: 1em;" class="big">
       <mat-date-range-input [formGroup]="searchFormGroup"  [rangePicker]="picker" placeholder="From 00:00:00" (click)="setCustomDateRange($event)">
         <input matStartDate [formControl]="searchFormGroup.controls.startDate">
         <input matEndDate [formControl]="searchFormGroup.controls.endDate" >
@@ -26,7 +26,7 @@
 <!--      a range up to 3 months-->
 <!--    </mat-error>-->
   </section>
-  <section>
+  <section class="button-groups">
     <mat-button-toggle-group [value]="selectedDateRange"
                              (change)="dateToggleChange($event)">
       <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1" [value]="dateRanges.thisWeek" aria-label="This week">

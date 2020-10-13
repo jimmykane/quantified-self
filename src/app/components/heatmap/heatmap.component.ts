@@ -38,15 +38,13 @@ export class HeatmapComponent implements OnInit, OnDestroy {
 
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
-    DateRanges.lastWeek,
-    DateRanges.lastSevenDays,
-    DateRanges.lastThirtyDays,
     DateRanges.thisMonth,
-    DateRanges.lastMonth,
+    DateRanges.lastThirtyDays,
     DateRanges.thisYear,
+    // DateRanges.lastMonth,
   ]
 
-  public selectedDateRange = DateRanges.lastWeek
+  public selectedDateRange = DateRanges.lastThirtyDays
   public user: User;
 
   private logger = Log.create('HeatmapComponent');
@@ -78,14 +76,14 @@ export class HeatmapComponent implements OnInit, OnDestroy {
     } // Fix fullscreen switch
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    return this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+    await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
 
   public async search(event) {
     this.selectedDateRange = event.dateRange
     this.clearMapLines(this.polyLines);
     this.centerMapToStartingLocation(this.map)
-    return this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+    await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
 
   public ngOnDestroy() {
@@ -122,7 +120,7 @@ export class HeatmapComponent implements OnInit, OnDestroy {
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 100).pipe(take(1)).toPromise()
+    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 500).pipe(take(1)).toPromise()
     this.updateBufferProgress(66);
 
     events = events.filter((event) => event.getStat(DataStartPosition.type));
@@ -200,82 +198,6 @@ export class HeatmapComponent implements OnInit, OnDestroy {
     });
   }
 
-  private screenshot(map, format) {
-    leafletImage(map, (err, canvas) => {
-      if (err) {
-        return window.alert(err);
-      }
-      if (format === 'png') {
-        canvas.toBlob(blob => {
-          // link.href = URL.createObjectURL(blob);
-          this.fileService.downloadFile(blob, 'should add dateranges', 'png')
-        });
-        // }
-      } else if (format === 'svg') {
-        const scale = 2;
-        const bounds = map.getPixelBounds();
-        bounds.min = bounds.min.multiplyBy(scale);
-        bounds.max = bounds.max.multiplyBy(scale);
-        const left = bounds.min.x;
-        const top = bounds.min.y;
-        const width = bounds.getSize().x;
-        const height = bounds.getSize().y;
-
-        const svg = L.SVG.create('svg');
-        const root = L.SVG.create('g');
-
-        svg.setAttribute('viewBox', `${left} ${top} ${width} ${height}`);
-
-        this.polyLines.forEach(polylines => {
-          // Project each point from LatLng, scale it up, round to
-          // nearest 1/10 (by multiplying by 10, rounding and
-          // dividing), and reducing by removing duplicates (when two
-          // consecutive points have rounded to the same value)
-          const pts = (<LatLng[]>polylines.getLatLngs()).map((ll) =>
-            map.project(ll)
-              .multiplyBy(scale * 10)
-              .round()
-              .divideBy(10)
-          ).reduce((acc, next) => {
-            if (acc.length === 0 ||
-              acc[acc.length - 1].x !== next.x ||
-              acc[acc.length - 1].y !== next.y) {
-              acc.push(next);
-            }
-            return acc;
-          }, []);
-
-          // If none of the points on the track are on the screen,
-          // don't export the track
-          if (!pts.some(pt => bounds.contains(pt))) {
-            return;
-          }
-          const path = L.SVG.pointsToPath([pts], false);
-          const el = L.SVG.create('path');
-
-          el.setAttribute('stroke', polylines.options.color);
-          el.setAttribute('stroke-opacity', polylines.options.opacity.toString());
-          el.setAttribute('stroke-width', (scale * polylines.options.weight).toString());
-          el.setAttribute('stroke-linecap', 'round');
-          el.setAttribute('stroke-linejoin', 'round');
-          el.setAttribute('fill', 'none');
-
-          el.setAttribute('d', path);
-
-          root.appendChild(el);
-        });
-
-        svg.appendChild(root);
-
-        const xml = (new XMLSerializer()).serializeToString(svg);
-
-        const blob = new Blob([xml], {type: 'application/octet-stream'});
-        this.fileService.downloadFile(blob, 'should add dateranges svg', 'svg')
-
-      }
-    });
-  }
-
   private markScrolled(map) {
     map.removeEventListener('movestart', () => {
       this.markScrolled(map)
@@ -292,7 +214,6 @@ export class HeatmapComponent implements OnInit, OnDestroy {
 
   private initMap(): L.Map {
     return this.zone.runOutsideAngular(() => {
-
       const map = L.map(this.mapDiv.nativeElement, <L.MapOptions>{
         center: [0, 0],
         fadeAnimation: true,
@@ -328,7 +249,7 @@ export class HeatmapComponent implements OnInit, OnDestroy {
           stateName: 'default',
           title: 'Export as png',
           onClick: () => {
-            this.screenshot(map, 'svg');
+            screenshot(map, 'svg');
           }
         }]
       }).addTo(map);
@@ -381,3 +302,79 @@ const AVAILABLE_THEMES = [
   'Stamen.Watercolor',
   'No map',
 ];
+
+
+export function screenshot(map, format) {
+  leafletImage(map, (err, canvas) => {
+    if (err) {
+      return window.alert(err);
+    }
+    if (format === 'png') {
+      canvas.toBlob(blob => {
+        // link.href = URL.createObjectURL(blob);
+        this.fileService.downloadFile(blob, 'should add dateranges', 'png')
+      });
+      // }
+    } else if (format === 'svg') {
+      const scale = 2;
+      const bounds = map.getPixelBounds();
+      bounds.min = bounds.min.multiplyBy(scale);
+      bounds.max = bounds.max.multiplyBy(scale);
+      const left = bounds.min.x;
+      const top = bounds.min.y;
+      const width = bounds.getSize().x;
+      const height = bounds.getSize().y;
+
+      const svg = L.SVG.create('svg');
+      const root = L.SVG.create('g');
+
+      svg.setAttribute('viewBox', `${left} ${top} ${width} ${height}`);
+
+      this.polyLines.forEach(polylines => {
+        // Project each point from LatLng, scale it up, round to
+        // nearest 1/10 (by multiplying by 10, rounding and
+        // dividing), and reducing by removing duplicates (when two
+        // consecutive points have rounded to the same value)
+        const pts = (<LatLng[]>polylines.getLatLngs()).map((ll) =>
+          map.project(ll)
+            .multiplyBy(scale * 10)
+            .round()
+            .divideBy(10)
+        ).reduce((acc, next) => {
+          if (acc.length === 0 ||
+            acc[acc.length - 1].x !== next.x ||
+            acc[acc.length - 1].y !== next.y) {
+            acc.push(next);
+          }
+          return acc;
+        }, []);
+
+        // If none of the points on the track are on the screen,
+        // don't export the track
+        if (!pts.some(pt => bounds.contains(pt))) {
+          return;
+        }
+        const path = L.SVG.pointsToPath([pts], false);
+        const el = L.SVG.create('path');
+
+        el.setAttribute('stroke', polylines.options.color);
+        el.setAttribute('stroke-opacity', polylines.options.opacity.toString());
+        el.setAttribute('stroke-width', (scale * polylines.options.weight).toString());
+        el.setAttribute('stroke-linecap', 'round');
+        el.setAttribute('stroke-linejoin', 'round');
+        el.setAttribute('fill', 'none');
+
+        el.setAttribute('d', path);
+
+        root.appendChild(el);
+      });
+
+      svg.appendChild(root);
+
+      const xml = (new XMLSerializer()).serializeToString(svg);
+
+      const blob = new Blob([xml], {type: 'application/octet-stream'});
+      this.fileService.downloadFile(blob, 'should add dateranges svg', 'svg')
+    }
+  });
+}
