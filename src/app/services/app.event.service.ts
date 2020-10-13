@@ -45,9 +45,11 @@ export class AppEventService implements OnDestroy {
       this.afs
         .collection('users')
         .doc(user.uid)
-        .collection('events').doc(eventID).snapshotChanges().pipe(
+        .collection('events')
+        .doc(eventID)
+        .valueChanges().pipe(
         map(eventSnapshot => {
-          return eventSnapshot.payload.exists ? EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.data()).setID(eventID) : null;
+          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventID);
         })),
       this.getActivities(user, eventID),
     ]).pipe(catchError((error) => {
@@ -120,10 +122,10 @@ export class AppEventService implements OnDestroy {
       .collection('users')
       .doc(user.uid)
       .collection('events').doc(eventID).collection('activities')
-      .snapshotChanges().pipe(
+      .valueChanges({ idField: 'id' }).pipe(
         map(activitySnapshots => {
           return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
-            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot.payload.doc.data()).setID(activitySnapshot.payload.doc.id));
+            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot).setID(activitySnapshot.id));
             return activitiesArray;
           }, []);
         }),
@@ -138,9 +140,9 @@ export class AppEventService implements OnDestroy {
       .doc(eventID)
       .collection('metaData')
       .doc(serviceName)
-      .snapshotChanges().pipe(
+      .valueChanges().pipe(
         map(metaDataSnapshot => {
-          return <EventMetaDataInterface>metaDataSnapshot.payload.data();
+          return <EventMetaDataInterface>metaDataSnapshot;
         }),
       )
   }
@@ -399,9 +401,9 @@ export class AppEventService implements OnDestroy {
 
   private _getEvents(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
-      .snapshotChanges().pipe(map((eventSnapshots) => {
+      .valueChanges({ idField: 'id' }).pipe(map((eventSnapshots) => {
         return eventSnapshots.map((eventSnapshot) => {
-          return eventSnapshot.payload.doc.exists ? EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.doc.data()).setID(eventSnapshot.payload.doc.id) : null;
+          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventSnapshot.id);
         })
       }))
   }
@@ -418,11 +420,9 @@ export class AppEventService implements OnDestroy {
    */
   private _getEventsAndActivities(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
     return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
-      .snapshotChanges().pipe(map((eventSnapshots) => {
+      .valueChanges({ idField: 'id' }).pipe(map((eventSnapshots) => {
         return eventSnapshots.reduce((events, eventSnapshot) => {
-          if (eventSnapshot.payload.doc.exists) {
-            events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot.payload.doc.data()).setID(eventSnapshot.payload.doc.id));
-          }
+          events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventSnapshot.payload.id));
           return events;
         }, []);
       })).pipe(switchMap((events) => {
