@@ -375,7 +375,7 @@ export class AppEventService implements OnDestroy {
         .collection('users')
         .doc(user.uid)
         .collection('events')
-        .doc(startAfter.getID()).get()
+        .doc(startAfter.getID()).get() // @todo fix it wont work it fires once
         .pipe(take(1)))
     }
     if (endBefore) {
@@ -383,7 +383,7 @@ export class AppEventService implements OnDestroy {
         .collection('users')
         .doc(user.uid)
         .collection('events')
-        .doc(endBefore.getID()).get()
+        .doc(endBefore.getID()).get() // @todo fix it wont work it fires once
         .pipe(take(1)))
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
