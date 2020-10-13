@@ -2,8 +2,8 @@
 
   <app-shade [isActive]="isLoading"></app-shade>
 
-  <section *ngIf="showDatePicker || showActivityTypePicker">
-    <mat-form-field *ngIf="searchFormGroup && showDatePicker" style=" margin-right: 1em;" class="big">
+  <section [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'block' : 'none' }">
+    <mat-form-field [ngStyle]="{display: showDatePicker ? 'block' : 'none' }" *ngIf="searchFormGroup" style=" margin-right: 1em;" class="big">
       <mat-date-range-input [formGroup]="searchFormGroup"  [rangePicker]="picker" placeholder="From 00:00:00" (click)="setCustomDateRange($event)">
         <input matStartDate [formControl]="searchFormGroup.controls.startDate">
         <input matEndDate [formControl]="searchFormGroup.controls.endDate" >
