@@ -15,7 +15,7 @@
     "build-prod-and-deploy-beta": "npm run clean && npm run build-production && npm run firebase-hosting-beta",
     "build-and-deploy-prod": "npm run clean && npm run build-production && npm run firebase-hosting-production",
     "test": "ng test --watch=false",
-    "test-coverage": "ng test --code-coverage",
+    "test-coverage": "ng test --watch=false --code-coverage",
     "lint": "ng lint",
     "e2e": "ng e2e",
     "postinstall": "ngcc --properties es2015 browser module main --first-only --create-ivy-entry-points"
