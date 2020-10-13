@@ -13,7 +13,7 @@ import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
 import { AngularFireStorage } from '@angular/fire/storage';
@@ -26,6 +26,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { HeatmapProgressComponent } from './progress/heatmap.progress';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { Overlay } from '@angular/cdk/overlay';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
   selector: 'app-heatmap',
@@ -52,6 +53,8 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   private polyLines: L.Polyline[] = [];
   private viewAllButton: L.Control.EasyButton;
   private scrolled = false;
+
+  private eventsSubscription: Subscription;
 
   private bufferProgress = new Subject<number>();
   private totalProgress = new Subject<number>();
@@ -120,51 +123,54 @@ export class HeatmapComponent implements OnInit, OnDestroy {
       opStr: <WhereFilterOp>'<=', // Should remove mins from date
       value: dates.endDate.getTime()
     });
-    let events = await this.eventService.getEventsBy(user, where, 'startDate', null, 500).pipe(take(1)).toPromise()
-    this.updateBufferProgress(66);
 
-    events = events.filter((event) => event.getStat(DataStartPosition.type));
-    if (!events || !events.length) {
-      return;
-    }
+    // Todo this needs investigation / subscribe call to get latest results from server. Take (1)
+    this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', null, 500).subscribe(async (events) => {
+      this.clearProgressAndOpenBottomSheet();
+      this.updateBufferProgress(66);
+      events = events.filter((event) => event.getStat(DataStartPosition.type));
+      if (!events || !events.length) {
+        return;
+      }
 
-    const chuckArraySize = 15;
-    const chunckedEvents = events.reduce((all, one, i) => {
-      const ch = Math.floor(i / chuckArraySize);
-      all[ch] = [].concat((all[ch] || []), one);
-      return all
-    }, [])
+      const chuckArraySize = 15;
+      const chunckedEvents = events.reduce((all, one, i) => {
+        const ch = Math.floor(i / chuckArraySize);
+        all[ch] = [].concat((all[ch] || []), one);
+        return all
+      }, [])
 
-    this.updateBufferProgress(100);
+      this.updateBufferProgress(100);
 
-    let count = 0;
-    for (const eventsChunk of chunckedEvents) {
-      await Promise.all(eventsChunk.map(async (event) => {
-        event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
-        return this.eventService.attachStreamsToEventWithActivities(user, event, [
-          DataLatitudeDegrees.type,
-          DataLongitudeDegrees.type,
-        ]).pipe(take(1)).toPromise().then((fullEvent) => {
-          this.logger.info(`Promise completed`)
-          const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-          fullEvent.getActivities()
-            .filter((activity) => activity.hasPositionData())
-            .forEach((activity) => {
-              const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-                return {
-                  lat: Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES),
-                  lng: Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)
-                }
-              });
-              lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-              this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
-            })
-          count++;
-          this.updateTotalProgress(Math.ceil((count / events.length) * 100))
-        })
-      }))
-      this.panToLines(map, this.polyLines)
-    }
+      let count = 0;
+      for (const eventsChunk of chunckedEvents) {
+        await Promise.all(eventsChunk.map(async (event) => {
+          event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
+          return this.eventService.attachStreamsToEventWithActivities(user, event, [
+            DataLatitudeDegrees.type,
+            DataLongitudeDegrees.type,
+          ]).pipe(take(1)).toPromise().then((fullEvent) => {
+            this.logger.info(`Promise completed`)
+            const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+            fullEvent.getActivities()
+              .filter((activity) => activity.hasPositionData())
+              .forEach((activity) => {
+                const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+                  return {
+                    lat: Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES),
+                    lng: Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)
+                  }
+                });
+                lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+                this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
+              })
+            count++;
+            this.updateTotalProgress(Math.ceil((count / events.length) * 100))
+          })
+        }))
+        this.panToLines(map, this.polyLines)
+      }
+    });
   }
 
   private clearMapLines(lines: L.Polyline[]) {
