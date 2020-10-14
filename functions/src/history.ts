@@ -14,12 +14,21 @@ import {
   SuuntoAppWorkoutQueueItemInterface
 } from './queue/queue-item.interface';
 import { getServiceConfig } from './OAuth2';
-import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME, PRODUCTION_URL, STAGING_URL, USE_STAGING } from './coros/constants';
+import {
+  COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
+  COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
+  PRODUCTION_URL,
+  STAGING_URL,
+  USE_STAGING
+} from './coros/constants';
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
+import {
+  GARMIN_HEALTHAPI_BACKFILL_WORKOUT_QUEUE_COLLECTION_NAME,
+  GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME
+} from './garmin/constants';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 
 const BATCH_SIZE = 450;
@@ -104,11 +113,11 @@ export function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceName
     default:
       throw new Error('Not implemented');
     case ServiceNames.GarminHealthAPI:
-      return GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME;
+      return GARMIN_HEALTHAPI_BACKFILL_WORKOUT_QUEUE_COLLECTION_NAME;
     case ServiceNames.SuuntoApp:
       return SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME
     case ServiceNames.COROSAPI:
-      return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME
+      return COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME
   }
 }
 

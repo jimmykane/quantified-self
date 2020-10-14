@@ -54,12 +54,12 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
   }
 }
 
-export async function parseQueueItems(serviceName: ServiceNames, fromHistory = false) {
+export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueue = false) {
   const RETRY_COUNT = 10;
   const LIMIT = 200;
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore()
-    .collection(fromHistory ?  getServiceHistoryImportWorkoutQueueName(serviceName) :  getServiceWorkoutQueueName(serviceName))
+    .collection(fromHistoryQueue ?  getServiceHistoryImportWorkoutQueueName(serviceName) :  getServiceWorkoutQueueName(serviceName))
     .where('processed', '==', false)
     .where("retryCount", "<", RETRY_COUNT)
     .limit(LIMIT).get(); // Max 10 retries

@@ -67,8 +67,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /garminHealthAPIBackfillActivityQueue/{userID} {
+      allow read, write: if false;
+    }
+
     match /COROSAPIWorkoutQueue/{userID} {
-          allow read, write: if false;
+      allow read, write: if false;
+    }
+
+    match /COROSAPIHistoryImportWorkoutQueue/{userID} {
+      allow read, write: if false;
     }
 
     match /suuntoAppWorkoutQueue/{userID} {

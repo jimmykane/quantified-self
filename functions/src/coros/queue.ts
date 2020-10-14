@@ -65,6 +65,14 @@ export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWit
   await parseQueueItems(SERVICE_NAME);
 });
 
+export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY,
+  maxInstances: 1,
+}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
+  await parseQueueItems(SERVICE_NAME, true);
+});
+
 export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: string): COROSAPIWorkoutQueueItemInterface[] {
   // find the triathlon
   const triathlon = workouts
