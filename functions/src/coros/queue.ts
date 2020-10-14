@@ -59,7 +59,8 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY
+  memory: MEMORY,
+  maxInstances: 1,
 }).pubsub.schedule('every 10 minutes').onRun(async (context) => {
   await parseQueueItems(SERVICE_NAME);
 });
