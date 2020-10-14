@@ -8,7 +8,7 @@ import {
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { getServiceWorkoutQueueName } from './history';
+import { getServiceHistoryImportWorkoutQueueName, getServiceWorkoutQueueName } from './history';
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface
@@ -54,11 +54,15 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
   }
 }
 
-export async function parseQueueItems(serviceName: ServiceNames) {
+export async function parseQueueItems(serviceName: ServiceNames, fromHistory = false) {
   const RETRY_COUNT = 10;
   const LIMIT = 200;
   // @todo add queue item sort date for creation
-  const querySnapshot = await admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
+  const querySnapshot = await admin.firestore()
+    .collection(fromHistory ?  getServiceHistoryImportWorkoutQueueName(serviceName) :  getServiceWorkoutQueueName(serviceName))
+    .where('processed', '==', false)
+    .where("retryCount", "<", RETRY_COUNT)
+    .limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   console.time('ParseQueueItems');

@@ -75,6 +75,10 @@ service cloud.firestore {
        allow read, write: if false;
     }
 
+    match /suuntoAppHistoryImportActivityQueue/{userID} {
+         allow read, write: if false;
+    }
+
 
     // @todo perhaps restrict to user ID
     match /userAccountPrivileges/{document=**} {

@@ -2,7 +2,10 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 import * as admin from 'firebase-admin';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { getTokenData } from './tokens';
-import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
+import {
+  SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
+  SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME
+} from './suunto/constants';
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
 import { generateIDFromParts } from './utils';
@@ -62,10 +65,10 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
       const batch = admin.firestore().batch();
       let processedWorkoutsCount = 0;
       for (const workoutQueueItem of batchToProcess) {
-        // Maybe do a get or insert it at another queue
+        // Maybe do a get or insert it at another queue (Done for Suunto app so far)
         batch.set(
           admin.firestore()
-            .collection(getServiceWorkoutQueueName(serviceName))
+            .collection(getServiceHistoryImportWorkoutQueueName(serviceName))
             .doc(workoutQueueItem.id), workoutQueueItem);
         processedWorkoutsCount++;
       }
@@ -94,6 +97,19 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   }
 
   console.log(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
+}
+
+export function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceNames): string {
+  switch (serviceName) {
+    default:
+      throw new Error('Not implemented');
+    case ServiceNames.GarminHealthAPI:
+      return GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME;
+    case ServiceNames.SuuntoApp:
+      return SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME
+    case ServiceNames.COROSAPI:
+      return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME
+  }
 }
 
 export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
