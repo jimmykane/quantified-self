@@ -10,7 +10,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import * as Pako from 'pako';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
-import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {
   CompressedJSONStreamInterface,
   CompressionEncodings, CompressionMethods
@@ -172,7 +172,7 @@ export class StreamEncoder {
       data: JSON.stringify(stream.data),
       compressionMethod: CompressionMethods.None
     }
-    console.log(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+    // console.log(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
     // If we can fit it go on
     if (getSize(compressedStream.data) <= 1048487) {
       return compressedStream
@@ -181,7 +181,7 @@ export class StreamEncoder {
     compressedStream.data = Buffer.from(Pako.gzip(JSON.stringify(stream.data)));
     compressedStream.encoding = CompressionEncodings.UInt8Array;
     compressedStream.compressionMethod = CompressionMethods.Pako
-    console.log(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+    // console.log(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
     if (getSize(compressedStream.data) <= 1048487) {
       return compressedStream
     }
