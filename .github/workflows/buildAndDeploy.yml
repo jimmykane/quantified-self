@@ -1,0 +1,41 @@
+
+name: Build and Deploy
+
+on:
+  push:
+    tags:
+      - v[0-9].[0-9].*
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [12.18.4]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache node modules
+        uses: actions/cache@v1
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Node ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: npm test and npm run build
+        run: |
+          yarn install
+          #npm run test
+          npm run build-production
+
+      - name: Deploy to Firebase
+        run: |
+          npm install -g firebase-tools
+          firebase deploy --token "${{ secrets.FIREBASE_TOKEN }}" --only hosting:production
