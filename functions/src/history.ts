@@ -9,10 +9,7 @@ import {
 import * as requestPromise from 'request-promise-native';
 import * as functions from 'firebase-functions';
 import { generateIDFromParts } from './utils';
-import {
-  COROSAPIWorkoutQueueItemInterface,
-  SuuntoAppWorkoutQueueItemInterface
-} from './queue/queue-item.interface';
+import { COROSAPIWorkoutQueueItemInterface, SuuntoAppWorkoutQueueItemInterface } from './queue/queue-item.interface';
 import { getServiceConfig } from './OAuth2';
 import {
   COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -25,10 +22,7 @@ import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import {
-  GARMIN_HEALTHAPI_BACKFILL_WORKOUT_QUEUE_COLLECTION_NAME,
-  GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME
-} from './garmin/constants';
+import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 
 const BATCH_SIZE = 450;
@@ -45,7 +39,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
 
-    let workoutQueueItems:any;
+    let workoutQueueItems: any;
     try {
       workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate)
     } catch (e) {
@@ -112,8 +106,6 @@ export function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceName
   switch (serviceName) {
     default:
       throw new Error('Not implemented');
-    case ServiceNames.GarminHealthAPI:
-      return GARMIN_HEALTHAPI_BACKFILL_WORKOUT_QUEUE_COLLECTION_NAME;
     case ServiceNames.SuuntoApp:
       return SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME
     case ServiceNames.COROSAPI:
@@ -134,7 +126,7 @@ export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
   }
 }
 
-export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface|COROSAPIWorkoutQueueItemInterface[]> {
+export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
   let result;
   switch (serviceName) {
     default:

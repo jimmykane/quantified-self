@@ -68,14 +68,6 @@ export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2'
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 
-export const parseGarminHealthAPIBackfillActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 6 minutes').onRun(async (context) => {
-  await parseQueueItems(ServiceNames.GarminHealthAPI, true);
-});
-
 export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface) {
 
   console.log(`Processing queue item ${queueItem.id} and userID ${queueItem.userID} at retry count ${queueItem.retryCount}`);
