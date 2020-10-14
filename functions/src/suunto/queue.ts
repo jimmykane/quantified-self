@@ -42,6 +42,6 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
   maxInstances: 1,
-}).pubsub.schedule('every 7 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 6 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
