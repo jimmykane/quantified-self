@@ -254,7 +254,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData);
       }
       console.timeEnd('InsertEvent');
-      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId}`);
+      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId || serviceToken.userName}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
     } catch (e) {
