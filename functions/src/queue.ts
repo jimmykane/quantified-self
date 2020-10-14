@@ -56,7 +56,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
 
 export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = 10;
-  const LIMIT = 200;
+  const LIMIT = 300;
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
