@@ -56,7 +56,7 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
 
 export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = 10;
-  const LIMIT = 300;
+  const LIMIT = 200;
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).where('processed', '==', false).where("retryCount", "<", RETRY_COUNT).limit(LIMIT).get(); // Max 10 retries
   console.log(`Found ${querySnapshot.size} queue items to process`);
@@ -234,9 +234,12 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     }
     console.timeEnd('DownloadFit');
     try {
+      console.time('CreateEvent');
       const event = await EventImporterFIT.getFromArrayBuffer(result);
+      console.timeEnd('CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
       console.log(`Created Event from FIT file of ${queueItem.id}`);
+      console.time('InsertEvent');
       switch (serviceName){
         default:
           throw new Error('Not Implemented')
@@ -250,6 +253,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
           await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData);
       }
+      console.timeEnd('InsertEvent');
       console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId}`);
       processedCount++;
       console.log(`Parsed ${processedCount}/${tokenQuerySnapshots.size} for ${queueItem.id}`);
