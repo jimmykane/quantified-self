@@ -71,7 +71,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
         // Maybe do a get or insert it at another queue (Done for Suunto app so far)
         batch.set(
           admin.firestore()
-            .collection(getServiceHistoryImportWorkoutQueueName(serviceName))
+            .collection(getServiceWorkoutQueueName(serviceName, true))
             .doc(workoutQueueItem.id), workoutQueueItem);
         processedWorkoutsCount++;
       }
@@ -102,7 +102,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   console.log(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
 }
 
-export function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceNames): string {
+function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceNames): string {
   switch (serviceName) {
     default:
       throw new Error('Not implemented');
@@ -113,7 +113,10 @@ export function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceName
   }
 }
 
-export function getServiceWorkoutQueueName(serviceName: ServiceNames): string {
+export function getServiceWorkoutQueueName(serviceName: ServiceNames, historyQueue = false): string {
+  if (historyQueue){
+    return getServiceHistoryImportWorkoutQueueName(serviceName);
+  }
   switch (serviceName) {
     default:
       throw new Error('Not implemented');

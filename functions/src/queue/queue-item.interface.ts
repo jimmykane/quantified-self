@@ -1,5 +1,9 @@
+import * as admin from 'firebase-admin';
+import DocumentReference = admin.firestore.DocumentReference;
+
 export interface QueueItemInterface {
   id: string,
+  ref?: DocumentReference
   dateCreated: number,
   processed: false,
   retryCount: number,
