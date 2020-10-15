@@ -141,7 +141,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const chuckArraySize = 15;
+      const chuckArraySize = 20;
       const chunckedEvents = events.reduce((all, one, i) => {
         const ch = Math.floor(i / chuckArraySize);
         all[ch] = [].concat((all[ch] || []), one);
@@ -152,9 +152,10 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       let count = 0;
       for (const eventsChunk of chunckedEvents) {
-        if (this.promiseTime !== promiseTime){
+        if (this.promiseTime !== promiseTime) {
           return
         }
+        const batchLines = [];
         await Promise.all(eventsChunk.map(async (event) => {
           event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
           return this.eventService.attachStreamsToEventWithActivities(user, event, [
@@ -176,14 +177,19 @@ export class TracksComponent implements OnInit, OnDestroy {
                     }
                   });
                   lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-                  this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
+                  const line = L.polyline(positionalData, lineOptions).addTo(map)
+                  this.polyLines.push(line);
+                  batchLines.push(line)
                 })
               count++;
               this.updateTotalProgress(Math.ceil((count / events.length) * 100))
             })
         }))
-        this.panToLines(map, this.polyLines)
+        if (count < events.length) {
+          this.panToLines(map, batchLines)
+        }
       }
+      this.panToLines(map, this.polyLines)
     });
   }
 
