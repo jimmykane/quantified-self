@@ -138,7 +138,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         return;
       }
 
-      const chuckArraySize = 20;
+      const chuckArraySize = 15;
       const chunckedEvents = events.reduce((all, one, i) => {
         const ch = Math.floor(i / chuckArraySize);
         all[ch] = [].concat((all[ch] || []), one);
