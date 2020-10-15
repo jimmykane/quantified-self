@@ -42,7 +42,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.thisMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
-    // DateRanges.lastMonth,
+    // DateRanges.lastYear,
   ]
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
@@ -119,7 +119,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();
-    this.updateBufferProgress(33);
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
     where.push({
@@ -134,8 +133,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
 
     this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', null, 500).subscribe(async (events) => {
-      this.clearProgressAndOpenBottomSheet();
-      this.updateBufferProgress(66);
       events = events.filter((event) => event.getStat(DataStartPosition.type));
       if (!events || !events.length) {
         return;
