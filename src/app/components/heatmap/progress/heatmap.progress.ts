@@ -23,7 +23,6 @@ export class HeatmapProgressComponent implements OnInit, OnDestroy {
               private snackBar: MatSnackBar,
               private changeDetectorRef: ChangeDetectorRef) {
     this.totalProgressSubscription = data.totalProgress.subscribe((value) => {
-      console.log(value)
       this.totalProgress = value
       this.changeDetectorRef.detectChanges()
       if (this.totalProgress >= 100) {

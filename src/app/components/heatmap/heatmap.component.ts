@@ -26,6 +26,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { HeatmapProgressComponent } from './progress/heatmap.progress';
 import { Overlay } from '@angular/cdk/overlay';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
   selector: 'app-heatmap',
@@ -36,6 +37,7 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 export class HeatmapComponent implements OnInit, OnDestroy {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
 
+  public selectedDateRange = DateRanges.lastThirtyDays
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
     DateRanges.thisMonth,
@@ -43,20 +45,21 @@ export class HeatmapComponent implements OnInit, OnDestroy {
     DateRanges.thisYear,
     // DateRanges.lastMonth,
   ]
+  bufferProgress = new Subject<number>();
+  totalProgress = new Subject<number>();
 
-  public selectedDateRange = DateRanges.lastThirtyDays
   public user: User;
 
   private logger = Log.create('HeatmapComponent');
+
   private map: L.Map;
   private polyLines: L.Polyline[] = [];
-  private viewAllButton: L.Control.EasyButton;
+  // private viewAllButton: L.Control.EasyButton;
   private scrolled = false;
 
   private eventsSubscription: Subscription;
 
-  private bufferProgress = new Subject<number>();
-  private totalProgress = new Subject<number>();
+  private promiseTime: number;
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -82,7 +85,7 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   public async search(event) {
     this.unsubscribeFromAll();
     this.selectedDateRange = event.dateRange
-    this.clearMapLines(this.polyLines);
+    this.clearAllPolylines(this.polyLines);
     this.centerMapToStartingLocation(this.map)
     await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
@@ -114,6 +117,8 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   }
 
   private async loadHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
+    const promiseTime = new Date().getTime();
+    this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();
     this.updateBufferProgress(33);
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
@@ -148,6 +153,9 @@ export class HeatmapComponent implements OnInit, OnDestroy {
 
       let count = 0;
       for (const eventsChunk of chunckedEvents) {
+        if (this.promiseTime !== promiseTime){
+          return
+        }
         await Promise.all(eventsChunk.map(async (event) => {
           event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
           return this.eventService.attachStreamsToEventWithActivities(user, event, [
@@ -155,6 +163,9 @@ export class HeatmapComponent implements OnInit, OnDestroy {
             DataLongitudeDegrees.type,
           ]).pipe(take(1)).toPromise()
             .then((fullEvent) => {
+              if (this.promiseTime !== promiseTime){
+                return
+              }
               const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
               fullEvent.getActivities()
                 .filter((activity) => activity.hasPositionData())
@@ -177,8 +188,9 @@ export class HeatmapComponent implements OnInit, OnDestroy {
     });
   }
 
-  private clearMapLines(lines: L.Polyline[]) {
-    lines.forEach(line => line.remove());
+  private clearAllPolylines() {
+    this.polyLines.forEach(line => line.remove());
+    this.polyLines = [];
   }
 
   private panToLines(map: L.Map, lines: L.Polyline[]) {
@@ -243,30 +255,30 @@ export class HeatmapComponent implements OnInit, OnDestroy {
 
       const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0], {detectRetina: true})
       tiles.addTo(map);
-      this.viewAllButton = L.easyButton({
-        type: 'animate',
-        states: [{
-          icon: `<img style="padding-top: 3px;width: 16px;height: 16px;"
-                    src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2218%22%20height%3D%2218%22%20viewBox%3D%220%20018%2018%22%3E%0A%20%20%3Cpath%20fill%3D%22%23666%22%20d%3D%22M0%2C0v2v4h2V2h4V0H2H0z%20M16%2C0h-4v2h4v4h2V2V0H16z%20M16%2C16h-4v2h4h2v-2v-4h-2V16z%20M2%2C12H0v4v2h2h4v-2H2V12z%22%2F%3E%0A%3C%2Fsvg%3E%0A" alt="zoom in"/>`,
-          stateName: 'default',
-          title: 'Zoom to all tracks',
-          onClick: () => {
-            this.panToLines(map, this.polyLines);
-          },
-        }],
-      }).addTo(map);
-
-      L.easyButton({
-        type: 'animate',
-        states: [{
-          icon: 'fa-camera fa-lg',
-          stateName: 'default',
-          title: 'Export as png',
-          onClick: () => {
-            screenshot(map, 'svg');
-          }
-        }]
-      }).addTo(map);
+      // L.easyButton({
+      //   type: 'animate',
+      //   states: [{
+      //     icon: `<img style="padding-top: 3px;width: 16px;height: 16px;"
+      //               src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2218%22%20height%3D%2218%22%20viewBox%3D%220%20018%2018%22%3E%0A%20%20%3Cpath%20fill%3D%22%23666%22%20d%3D%22M0%2C0v2v4h2V2h4V0H2H0z%20M16%2C0h-4v2h4v4h2V2V0H16z%20M16%2C16h-4v2h4h2v-2v-4h-2V16z%20M2%2C12H0v4v2h2h4v-2H2V12z%22%2F%3E%0A%3C%2Fsvg%3E%0A" alt="zoom in"/>`,
+      //     stateName: 'default',
+      //     title: 'Zoom to all tracks',
+      //     onClick: () => {
+      //       this.panToLines(map, this.polyLines);
+      //     },
+      //   }],
+      // }).addTo(map);
+      //
+      // L.easyButton({
+      //   type: 'animate',
+      //   states: [{
+      //     icon: 'fa-camera fa-lg',
+      //     stateName: 'default',
+      //     title: 'Export as png',
+      //     onClick: () => {
+      //       screenshot(map, 'svg');
+      //     }
+      //   }]
+      // }).addTo(map);
       return map
     })
   }

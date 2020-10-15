@@ -1,6 +1,6 @@
 <mat-card class="mat-elevation-z0">
   <app-event-search *ngIf="user"
-                    [isLoading]="(totalProgress|async) < 100"
+
                     [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek"
                     [showDatePicker]="false"
                     [showActivityTypePicker]="false"
