@@ -4,12 +4,12 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bott
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 @Component({
-  selector: 'app-heatmap-progress-info',
-  templateUrl: './heatmap.progress.html',
-  styleUrls: ['./heatmap.progress.css'],
+  selector: 'app-my-tracks-progress-info',
+  templateUrl: './tracks.progress.html',
+  styleUrls: ['./tracks.progress.css'],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
-export class HeatmapProgressComponent implements OnInit, OnDestroy {
+export class MyTracksProgressComponent implements OnInit, OnDestroy {
 
   totalProgress = 0;
   bufferProgress = 0;
@@ -19,7 +19,7 @@ export class HeatmapProgressComponent implements OnInit, OnDestroy {
 
 
   constructor(@Inject(MAT_BOTTOM_SHEET_DATA) public data: any,
-              private bottomSheetRef: MatBottomSheetRef<HeatmapProgressComponent>,
+              private bottomSheetRef: MatBottomSheetRef<MyTracksProgressComponent>,
               private snackBar: MatSnackBar,
               private changeDetectorRef: ChangeDetectorRef) {
     this.totalProgressSubscription = data.totalProgress.subscribe((value) => {

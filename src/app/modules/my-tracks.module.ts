@@ -2,10 +2,10 @@ import {NgModule} from '@angular/core';
 import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
-import { HeatmapRoutingModule } from '../heatmap-routing.module';
-import { HeatmapComponent } from '../components/heatmap/heatmap.component';
+import { MyTracksRoutingModule } from '../my-tracks-routing.module';
+import { TracksComponent } from '../components/tracks/tracks.component';
 import { AngularFireStorageModule } from '@angular/fire/storage';
-import { HeatmapProgressComponent } from '../components/heatmap/progress/heatmap.progress';
+import { MyTracksProgressComponent } from '../components/tracks/progress/tracks.progress';
 
 
 @NgModule({
@@ -13,14 +13,14 @@ import { HeatmapProgressComponent } from '../components/heatmap/progress/heatmap
     CommonModule,
     SharedModule,
     MaterialModule,
-    HeatmapRoutingModule,
+    MyTracksRoutingModule,
     AngularFireStorageModule
   ],
   exports: [],
-  declarations: [HeatmapComponent, HeatmapProgressComponent],
+  declarations: [TracksComponent, MyTracksProgressComponent],
   entryComponents: [],
   providers: []
 })
 
-export class HeatmapModule {
+export class MyTracksModule {
 }

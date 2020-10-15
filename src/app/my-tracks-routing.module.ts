@@ -1,12 +1,12 @@
 import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
-import { HeatmapComponent } from './components/heatmap/heatmap.component';
+import { TracksComponent } from './components/tracks/tracks.component';
 
 
 const routes: Routes = [
   {
     path: '',
-    component: HeatmapComponent
+    component: TracksComponent
   }
 ];
 
@@ -14,4 +14,4 @@ const routes: Routes = [
   imports: [RouterModule.forChild(routes)],
   exports: [RouterModule]
 })
-export class HeatmapRoutingModule { }
+export class MyTracksRoutingModule { }

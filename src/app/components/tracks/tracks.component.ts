@@ -23,18 +23,17 @@ import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.l
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
 import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib/lib/constants/constants';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { HeatmapProgressComponent } from './progress/heatmap.progress';
+import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
-  selector: 'app-heatmap',
-  templateUrl: './heatmap.component.html',
-  styleUrls: ['./heatmap.component.css'],
+  selector: 'app-tracks',
+  templateUrl: './tracks.component.html',
+  styleUrls: ['./tracks.component.css'],
   // changeDetection: ChangeDetectionStrategy.OnPush // @todo consider this for performance
 })
-export class HeatmapComponent implements OnInit, OnDestroy {
+export class TracksComponent implements OnInit, OnDestroy {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
 
   public selectedDateRange = DateRanges.lastThirtyDays
@@ -85,7 +84,7 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   public async search(event) {
     this.unsubscribeFromAll();
     this.selectedDateRange = event.dateRange
-    this.clearAllPolylines(this.polyLines);
+    this.clearAllPolylines();
     this.centerMapToStartingLocation(this.map)
     await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
@@ -104,7 +103,7 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   private clearProgressAndOpenBottomSheet() {
     this.updateBufferProgress(0);
     this.updateTotalProgress(0);
-    this.bottomSheet.open(HeatmapProgressComponent, {
+    this.bottomSheet.open(MyTracksProgressComponent, {
       data: {
         totalProgress: this.totalProgress,
         bufferProgress: this.bufferProgress,

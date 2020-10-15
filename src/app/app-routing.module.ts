@@ -26,7 +26,7 @@ const routes: Routes = [
   },
   {
     path: 'heatmap',
-    loadChildren: () => import('./modules/heatmap.module').then(module => module.HeatmapModule),
+    loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
     data: {title: 'Heatmap', animation: 'Heatmap'},
     canLoad: [AppAuthGuard]
   },
