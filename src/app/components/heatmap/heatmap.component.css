@@ -10,7 +10,15 @@ app-event-search{
   padding: 0.5em;
   padding-top: 0;
   /*margin-left: 0.5em;*/
+  z-index: 1000;
+  position: absolute;
+  top: 0;
+  /* left: 50%; */
+  margin: auto;
+  /* right: 50%; */
+  left: 50%;
+  transform: translate(-50%, 0);
 }
 #map{
-  height: 90%;
+  height: 100%;
 }

@@ -24,9 +24,8 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
 import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib/lib/constants/constants';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { HeatmapProgressComponent } from './progress/heatmap.progress';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { Overlay } from '@angular/cdk/overlay';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-heatmap',
@@ -75,14 +74,13 @@ export class HeatmapComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.map = this.initMap()
-    this.map.getContainer().focus = () => {
-    } // Fix fullscreen switch
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user.pipe(take(1)).toPromise();
     await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
 
   public async search(event) {
+    this.unsubscribeFromAll();
     this.selectedDateRange = event.dateRange
     this.clearMapLines(this.polyLines);
     this.centerMapToStartingLocation(this.map)
@@ -90,7 +88,14 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   }
 
   public ngOnDestroy() {
+    this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
+  }
+
+  private unsubscribeFromAll() {
+    if (this.eventsSubscription) {
+      this.eventsSubscription.unsubscribe()
+    }
   }
 
   private clearProgressAndOpenBottomSheet() {
@@ -148,24 +153,24 @@ export class HeatmapComponent implements OnInit, OnDestroy {
           return this.eventService.attachStreamsToEventWithActivities(user, event, [
             DataLatitudeDegrees.type,
             DataLongitudeDegrees.type,
-          ]).pipe(take(1)).toPromise().then((fullEvent) => {
-            this.logger.info(`Promise completed`)
-            const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-            fullEvent.getActivities()
-              .filter((activity) => activity.hasPositionData())
-              .forEach((activity) => {
-                const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-                  return {
-                    lat: Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES),
-                    lng: Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)
-                  }
-                });
-                lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-                this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
-              })
-            count++;
-            this.updateTotalProgress(Math.ceil((count / events.length) * 100))
-          })
+          ]).pipe(take(1)).toPromise()
+            .then((fullEvent) => {
+              const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
+              fullEvent.getActivities()
+                .filter((activity) => activity.hasPositionData())
+                .forEach((activity) => {
+                  const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
+                    return {
+                      lat: Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES),
+                      lng: Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)
+                    }
+                  });
+                  lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
+                  this.polyLines.push(L.polyline(positionalData, lineOptions).addTo(map));
+                })
+              count++;
+              this.updateTotalProgress(Math.ceil((count / events.length) * 100))
+            })
         }))
         this.panToLines(map, this.polyLines)
       }
@@ -173,7 +178,6 @@ export class HeatmapComponent implements OnInit, OnDestroy {
   }
 
   private clearMapLines(lines: L.Polyline[]) {
-    this.polyLines = [];
     lines.forEach(line => line.remove());
   }
 
@@ -233,6 +237,10 @@ export class HeatmapComponent implements OnInit, OnDestroy {
         // }
         // dragging: !L.Browser.mobile
       });
+
+      map.getContainer().focus = () => {
+      } // Fix fullscreen switch
+
       const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0], {detectRetina: true})
       tiles.addTo(map);
       this.viewAllButton = L.easyButton({
