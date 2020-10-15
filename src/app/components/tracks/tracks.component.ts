@@ -49,7 +49,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public user: User;
 
-  private logger = Log.create('HeatmapComponent');
+  private logger = Log.create('TracksComponent');
 
   private map: L.Map;
   private polyLines: L.Polyline[] = [];
@@ -78,7 +78,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.map = this.initMap()
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
 
   public async search(event) {
@@ -86,7 +86,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.selectedDateRange = event.dateRange
     this.clearAllPolylines();
     this.centerMapToStartingLocation(this.map)
-    await this.loadHeatMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
   }
 
   public ngOnDestroy() {
@@ -115,7 +115,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
   }
 
-  private async loadHeatMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
+  private async loadTracksMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();

@@ -2,7 +2,7 @@ import { NgModule } from '@angular/core';
 import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
-import {DashboardRoutingModule} from '../dashboard-routing.module';
+import {DashboardRoutingModule} from '../dashboard.routing.module';
 import {DashboardComponent} from '../components/dashboard/dashboard.component';
 import {SummariesComponent} from '../components/summaries/summaries.component';
 import {EventsExportFormComponent} from '../components/events-export-form/events-export.form.component';

@@ -3,7 +3,7 @@ import {MaterialModule} from './material.module';
 import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import {PoliciesComponent} from '../components/policies/policies.component';
-import {PoliciesRoutingModule} from '../policies-routing.module';
+import {PoliciesRoutingModule} from '../policies.routing.module';
 
 @NgModule({
   imports: [

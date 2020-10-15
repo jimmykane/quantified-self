@@ -39,9 +39,9 @@
   <mat-list-item
     *ngIf="user"
     routerLinkActive="active"
-    routerLink="/heatmap" (click)="sideNav.close();">
+    routerLink="/mytracks" (click)="sideNav.close();">
     <mat-icon svgIcon="heat-map"></mat-icon>
-    <span>My Tracks</span>
+    <span>My Tracks <span class="mat-small">(Beta)</span></span>
   </mat-list-item>
 
   <mat-list-item

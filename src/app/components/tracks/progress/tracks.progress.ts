@@ -27,7 +27,7 @@ export class MyTracksProgressComponent implements OnInit, OnDestroy {
       this.changeDetectorRef.detectChanges()
       if (this.totalProgress >= 100) {
         this.bottomSheetRef.dismiss();
-        this.snackBar.open(`Heatmap generated successfully`, null, {
+        this.snackBar.open(`MyTracks loaded`, null, {
           duration: 2000,
         });
       }
