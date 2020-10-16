@@ -114,6 +114,34 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/firebase.svg')
     );
     this.matIconRegistry.addSvgIcon(
+      'patreon',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/patreon.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'patreon-word',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/patreon-word.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'google_logo_light',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/google_logo_light.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'facebook_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/facebook_logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'twitter_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/twitter_logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'github_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/github_logo.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
+      'jetbrains_logo',
+      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/jetbrains.svg')
+    );
+    this.matIconRegistry.addSvgIcon(
       'heart_rate',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
     );
@@ -140,22 +168,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.matIconRegistry.addSvgIcon(
       'swimmer',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/swimmer.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'google_logo_light',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/google_logo_light.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'facebook_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/facebook_logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'twitter_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/twitter_logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'github_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/github_logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'tte',
@@ -232,14 +244,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.matIconRegistry.addSvgIcon(
       'lap-type-interval',
       this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/interval.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'patreon',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/patreon.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'patreon-word',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/patreon-word.svg')
     );
   }
 
