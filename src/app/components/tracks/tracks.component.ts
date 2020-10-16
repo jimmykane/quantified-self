@@ -208,7 +208,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       map.fitBounds((L.featureGroup(lines)).getBounds(), {
         noMoveStart: false,
         animate: true,
-        padding: [20, 20],
+        padding: [20, 20, 20, 20],
       });
     })
     if (!this.scrolled) {
