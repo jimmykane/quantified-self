@@ -27,7 +27,7 @@ export class MyTracksProgressComponent implements OnInit, OnDestroy {
       this.changeDetectorRef.detectChanges()
       if (this.totalProgress >= 100) {
         this.bottomSheetRef.dismiss();
-        this.snackBar.open(`MyTracks loaded`, null, {
+        this.snackBar.open(`Done creating your tracks`, null, {
           duration: 2000,
         });
       }

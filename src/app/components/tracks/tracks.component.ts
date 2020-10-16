@@ -26,6 +26,8 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AppUserService } from '../../services/app.user.service';
 
 @Component({
   selector: 'app-tracks',
@@ -36,7 +38,6 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 export class TracksComponent implements OnInit, OnDestroy {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
 
-  public selectedDateRange = DateRanges.lastThirtyDays
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
     DateRanges.thisMonth,
@@ -70,7 +71,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     private fileService: AppFileService,
     private storage: AngularFireStorage,
     private bottomSheet: MatBottomSheet,
-    protected overlay: Overlay,
+    private overlay: Overlay,
+    private afa: AngularFireAnalytics,
+    private userService: AppUserService,
     private snackBar: MatSnackBar) {
   }
 
@@ -78,15 +81,17 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.map = this.initMap()
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user.pipe(take(1)).toPromise();
-    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
   }
 
   public async search(event) {
     this.unsubscribeFromAll();
-    this.selectedDateRange = event.dateRange
+    this.user.settings.myTracksSettings.dateRange = event.dateRange;
+    await this.userService.updateUserProperties(this.user, {settings: this.user.settings});
     this.clearAllPolylines();
     this.centerMapToStartingLocation(this.map)
-    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.selectedDateRange)
+    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
+    this.afa.logEvent('my_tracks_search', {method: DateRanges[event.dateRange]});
   }
 
   public ngOnDestroy() {
@@ -160,7 +165,7 @@ export class TracksComponent implements OnInit, OnDestroy {
             DataLongitudeDegrees.type,
           ]).pipe(take(1)).toPromise()
             .then((fullEvent) => {
-              if (this.promiseTime !== promiseTime){
+              if (this.promiseTime !== promiseTime) {
                 return
               }
               const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);

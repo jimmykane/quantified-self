@@ -69,6 +69,7 @@ import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { AppWindowService } from './app.window.service';
+import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.my-tracks.settings.interface';
 
 
 /**
@@ -287,6 +288,10 @@ export class AppUserService implements OnDestroy {
       active: 'startDate',
       direction: 'desc'
     }
+  }
+
+  static getDefaultMyTracksDateRange(): DateRanges {
+    return DateRanges.lastThirtyDays
   }
 
   static getDefaultActivityTypesToRemoveAscentFromSummaries(): ActivityTypes[] {
@@ -609,6 +614,12 @@ export class AppUserService implements OnDestroy {
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();
     settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserService.getDefaultMapStrokeWidth();
+    // MyTracks
+    settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
+    settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
+      ? settings.myTracksSettings.dateRange
+      : AppUserService.getDefaultMyTracksDateRange();
+
     // Export to CSV
     settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
     settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
