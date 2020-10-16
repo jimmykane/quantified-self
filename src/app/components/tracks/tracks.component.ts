@@ -25,9 +25,9 @@ import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-allianc
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppUserService } from '../../services/app.user.service';
+import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
   selector: 'app-tracks',
@@ -204,11 +204,14 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private panToLines(map: L.Map, lines: L.Polyline[]) {
+    if (!lines || !lines.length) {
+      return;
+    }
     this.zone.runOutsideAngular(() => {
       map.fitBounds((L.featureGroup(lines)).getBounds(), {
         noMoveStart: false,
         animate: true,
-        padding: [20, 20, 20, 20],
+        padding: [25, 25],
       });
     })
     if (!this.scrolled) {
