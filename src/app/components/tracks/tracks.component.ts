@@ -152,6 +152,9 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       this.updateBufferProgress(100);
 
+      if (this.promiseTime !== promiseTime) {
+        return
+      }
       let count = 0;
       for (const eventsChunk of chunckedEvents) {
         if (this.promiseTime !== promiseTime) {
