@@ -1,8 +1,16 @@
 <mat-card class="mat-elevation-z0">
-  <mat-progress-bar
-    [color]="'primary'"
-    [mode]="'buffer'"
-    [value]="totalProgress"
-    [bufferValue]="bufferProgress">
-  </mat-progress-bar>
+  <mat-card-title *ngIf="totalProgress < 100 && bufferProgress < 100">
+    Getting activities
+  </mat-card-title>
+  <mat-card-title *ngIf="totalProgress < 100 && bufferProgress >= 100">
+    Loading tracks
+  </mat-card-title>
+  <mat-card-content>
+    <mat-progress-bar
+      [color]="'primary'"
+      [mode]="'buffer'"
+      [value]="totalProgress"
+      [bufferValue]="bufferProgress">
+    </mat-progress-bar>
+  </mat-card-content>
 </mat-card>

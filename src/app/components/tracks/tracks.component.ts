@@ -242,7 +242,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         center: [0, 0],
         fadeAnimation: true,
         zoomAnimation: true,
-        zoom: 3,
+        zoom: 3.5,
         preferCanvas: false,
         fullscreenControl: true,
         // OR
