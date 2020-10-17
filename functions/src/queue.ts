@@ -34,7 +34,9 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
   });
 
   try {
-    await queueItem.ref.update(JSON.parse(JSON.stringify(queueItem)));
+    const ref = queueItem.ref;
+    queueItem.ref = undefined;
+    await ref.update(JSON.parse(JSON.stringify(queueItem)));
     console.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
   } catch (e) {
     console.error(new Error(`Could not update retry count on ${queueItem.id}`))
@@ -46,7 +48,9 @@ export async function updateToProcessed(queueItem: QueueItemInterface, serviceNa
     throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`)
   }
   try {
-    await queueItem.ref.update({
+    const ref = queueItem.ref;
+    queueItem.ref = undefined;
+    await ref.update({
       'processed': true,
       'processedAt': (new Date()).getTime(),
     })
