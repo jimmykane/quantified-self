@@ -208,15 +208,13 @@ export class TracksComponent implements OnInit, OnDestroy {
       return;
     }
     this.zone.runOutsideAngular(() => {
+      // Perhaps use panto with the lat,lng
       map.fitBounds((L.featureGroup(lines)).getBounds(), {
         noMoveStart: false,
         animate: true,
         padding: [25, 25],
       });
     })
-    if (!this.scrolled) {
-      this.clearScroll(map);
-    }
   }
 
   private centerMapToStartingLocation(map: L.Map) {
