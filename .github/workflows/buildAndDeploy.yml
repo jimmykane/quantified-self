@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    needs: run_tests
     strategy:
       matrix:
         node-version: [12.18.4]
