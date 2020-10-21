@@ -43,7 +43,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.thisMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
-    // DateRanges.lastYear,
+    DateRanges.all,
   ]
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
@@ -126,18 +126,22 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
     const where = []
-    where.push({
-      fieldPath: 'startDate',
-      opStr: <WhereFilterOp>'>=',
-      value: dates.startDate.getTime()
-    });
-    where.push({
-      fieldPath: 'startDate',
-      opStr: <WhereFilterOp>'<=', // Should remove mins from date
-      value: dates.endDate.getTime()
-    });
+    if (dates.startDate) {
+      where.push({
+        fieldPath: 'startDate',
+        opStr: <WhereFilterOp>'>=',
+        value: dates.startDate.getTime()
+      });
+    }
+    if (dates.endDate) {
+      where.push({
+        fieldPath: 'startDate',
+        opStr: <WhereFilterOp>'<=', // Should remove mins from date
+        value: dates.endDate.getTime()
+      })
+    }
 
-    this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', null, 500).subscribe(async (events) => {
+    this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0).subscribe(async (events) => {
       events = events.filter((event) => event.getStat(DataStartPosition.type));
       if (!events || !events.length) {
         return;

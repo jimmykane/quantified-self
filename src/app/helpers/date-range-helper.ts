@@ -77,12 +77,6 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek: Days
         endDate: new Date(new Date(new Date().getFullYear(), 0, 0).setHours(23, 59, 59))
       }
     }
-    case DateRanges.custom: {
-      return {
-        startDate: null,
-        endDate: null
-      }
-    }
     default: {
       return {
         startDate: null,

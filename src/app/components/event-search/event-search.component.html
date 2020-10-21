@@ -41,11 +41,11 @@
     </mat-button-toggle-group>
     <mat-button-toggle-group [value]="selectedDateRange"
                              (change)="dateToggleChange($event)">
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastThirtyDays) !== -1" [value]="dateRanges.lastThirtyDays" aria-label="Last 30 days">
-        Last 30 days
-      </mat-button-toggle>
       <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.thisMonth) !== -1" [value]="dateRanges.thisMonth" aria-label="This month">
         This month
+      </mat-button-toggle>
+      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastThirtyDays) !== -1" [value]="dateRanges.lastThirtyDays" aria-label="Last 30 days">
+        Last 30 days
       </mat-button-toggle>
       <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastMonth) !== -1" [value]="dateRanges.lastMonth" aria-label="Last month">
         Last month
@@ -60,6 +60,9 @@
       <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastYear) !== -1" [value]="dateRanges.lastYear" aria-label="Last year">
         {{currentYear - 1}}
       </mat-button-toggle>
+    </mat-button-toggle-group>
+    <mat-button-toggle-group [value]="selectedDateRange"
+                             (change)="dateToggleChange($event)">
       <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.all) !== -1" [value]="dateRanges.all" aria-label="All">
         All
       </mat-button-toggle>
