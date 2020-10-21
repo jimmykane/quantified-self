@@ -1,5 +1,5 @@
 
-name: Build and Deploy
+name: BETA Build and Deploy
 
 on:
   push:

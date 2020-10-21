@@ -1,5 +1,5 @@
 
-name: [PRODUCTION] Build and Deploy
+name: PRODUCTION Build and Deploy
 
 on:
   release:
