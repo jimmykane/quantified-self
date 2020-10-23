@@ -27,6 +27,9 @@ import {DataTemperatureMin} from '@sports-alliance/sports-lib/lib/data/data.temp
 import {DataCadenceMax} from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
 import {DataCadenceAvg} from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
 import {DataCadenceMin} from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
+import * as SpeedMax from '@sports-alliance/sports-lib/lib/data/data.speed-max';
+import * as SpeedAvg from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import * as SpeedMin from '@sports-alliance/sports-lib/lib/data/data.speed-min';
 import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import {DataPeakEPOC} from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import {DataFeeling} from '@sports-alliance/sports-lib/lib/data/data.feeling';
@@ -35,6 +38,7 @@ import {AngularFireAnalytics} from '@angular/fire/analytics';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 import { EnumeratorHelpers } from '../../../../helpers/enumerator-helpers';
+import {SpeedUnitsToGradeAdjustedSpeedUnits} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 
 
 @Component({
@@ -166,6 +170,18 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
     if (!this.user) {
       throw new Error('Component needs user');
     }
+
+    var speedUnits = [];
+    this.user.settings.unitSettings.speedUnits.forEach(key => {
+      const unit = SpeedUnitsToGradeAdjustedSpeedUnits[key];
+      speedUnits.push(SpeedAvg['DataSpeedAvg' + unit].type);
+      speedUnits.push(SpeedMin['DataSpeedMin' + unit].type);
+      speedUnits.push(SpeedMax['DataSpeedMax' + unit].type);
+    });
+    this.dataGroups.push({
+      name: 'Speed',
+      data: speedUnits
+    });
   }
 
 
