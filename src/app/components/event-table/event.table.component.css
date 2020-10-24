@@ -3,8 +3,6 @@ mat-cell, .mat-header-cell {
   min-width: 6vw;
 }
 
-
-
 .mat-cell{
   font-size: 0.85em ;
   padding-left: 0.5em;
@@ -112,6 +110,8 @@ mat-card{
 
 table {
   width: 100%;
+  display: block;
+  overflow-x: scroll;
 }
 
 tr.mat-row:hover {

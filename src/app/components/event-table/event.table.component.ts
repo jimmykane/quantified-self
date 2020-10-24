@@ -238,33 +238,33 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // });
     // this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
 
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
-      return columns;
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
-      columns = columns.filter(column => ['Description', 'Energy'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
-    }
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
+    //   return columns;
+    // }
+    //
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
+    //   columns = columns.filter(column => ['Description', 'Energy'].indexOf(column) === -1)
+    // }
+    //
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
+    //   columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max'].indexOf(column) === -1)
+    // }
+    //
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
+    //   columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent'].indexOf(column) === -1)
+    // }
+    //
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
+    //   columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names'].indexOf(column) === -1)
+    // }
+    //
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
+    //   columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
+    // }
+    //
+    // if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
+    //   columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+    // }
 
     return columns
   }

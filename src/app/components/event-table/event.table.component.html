@@ -40,7 +40,7 @@
     <ng-container
       *ngFor="let column of getColumnsToDisplayDependingOnScreenSize(); first as isFirst; last as isLast; index as i;"
       [matColumnDef]="column">
-      <ng-container *ngIf="isFirst && showActions">
+      <ng-container *ngIf="isFirst && showActions" sticky>
         <th mat-header-cell *matHeaderCellDef>
           <mat-checkbox
             (change)="$event ? masterToggle() : null"
@@ -49,7 +49,7 @@
           </mat-checkbox>
         </th>
       </ng-container>
-      <ng-container *ngIf="isLast && showActions">
+      <ng-container *ngIf="isLast && showActions" stickyEnd>
         <th mat-header-cell *matHeaderCellDef>
           <app-event-table-actions
             [selectedDataTypes]="selectedColumns"

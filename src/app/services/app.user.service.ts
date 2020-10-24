@@ -329,7 +329,7 @@ export class AppUserService implements OnDestroy {
       DataHeartRateAvg.type,
       DataSpeedAvg.type,
       DataPowerAvg.type,
-      DataPowerMax.type,
+      // DataPowerMax.type,
       DataVO2Max.type,
       DataTotalTrainingEffect.type,
       DataRecoveryTime.type,
