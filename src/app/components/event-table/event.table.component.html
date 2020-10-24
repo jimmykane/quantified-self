@@ -51,14 +51,15 @@
       </ng-container>
       <ng-container *ngIf="isLast && showActions">
         <th mat-header-cell *matHeaderCellDef>
+          <app-event-table-actions
+            [selectedDataTypes]="selectedColumns"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
         </th>
       </ng-container>
       <ng-container *ngIf="(!(isFirst && showActions) && !(isLast && showActions))">
-
         <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
           <app-data-type-icon [dataType]="column"></app-data-type-icon>
         </th>
-
       </ng-container>
       <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault()">
         <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation();"

@@ -66,6 +66,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
 
+  selectedColumns = AppUserService.getDefaultSelectedTableColumns();
+
   public show = true
 
   private deleteConfirmationSubscription: Subscription;
@@ -97,6 +99,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
+      this.selectedColumns = this.user.settings.dashboardSettings.tableSettings.selectedColumns
       this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
     }
   }
@@ -218,34 +221,22 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // push all the rest
     let columns = [
       'Checkbox',
-      'Start Date',
-      'Description',
-      'Activity Types',
-      'Duration',
-      'Distance',
-      'Ascent',
-      'Descent',
-      'Energy',
-      'Average Heart Rate',
-      'Average Speed',
-      'Average Power',
-      'VO2 Max',
-      'Device Names',
+      ...this.selectedColumns,
       'Actions'
-    ];
+    ]
 
     if (!this.showActions) {
-      columns = columns.filter(column =>  column !== 'Checkbox' && column !== 'Actions');
+      columns = columns.filter(column => column !== 'Checkbox' && column !== 'Actions');
     }
 
-    // Filter now on data
-    const t0 = performance.now();
-    columns = columns.filter(column => {
-      return this.data.data.find(row => {
-        return column === 'Checkbox' || column === 'Actions' || isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
-      });
-    });
-    this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
+    // // Filter now on data
+    // const t0 = performance.now();
+    // columns = columns.filter(column => {
+    //   return this.data.data.find(row => {
+    //     return column === 'Checkbox' || column === 'Actions' || isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+    //   });
+    // });
+    // this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
 
     if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
       return columns;
@@ -307,6 +298,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   onKeyUp(event) {
     this.searchSubject.next(event.target.value);
+  }
+
+  async selectedColumnsChange(event: string[]) {
+    this.selectedColumns = event
+    this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
+    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
   ngOnDestroy() {

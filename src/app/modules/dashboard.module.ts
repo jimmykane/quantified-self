@@ -19,6 +19,7 @@ import { ChartsTimelineComponent } from '../components/charts/timeline/charts.ti
 import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
 import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
 import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
+import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
 
 @NgModule({
   imports: [
@@ -38,6 +39,7 @@ import { ChartsColumnsComponent } from '../components/charts/columns/charts.colu
     TileMapActionsComponent,
     EventsExportFormComponent,
     EventTableComponent,
+    EventTableActionsComponent,
     EventsMapComponent,
     TileChartComponent,
     TileMapComponent,
