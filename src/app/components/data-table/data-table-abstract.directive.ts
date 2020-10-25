@@ -1,39 +1,35 @@
-import {
-  ChangeDetectorRef, Directive,
-} from '@angular/core';
-import {ScreenSizeAbstractDirective} from '../screen-size/sreen-size.abstract';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib/lib/data/data.rpe';
-import {DataFeeling, Feelings} from '@sports-alliance/sports-lib/lib/data/data.feeling';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
-import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
-import {DataEnergy} from '@sports-alliance/sports-lib/lib/data/data.energy';
-import {DataPowerAvg} from '@sports-alliance/sports-lib/lib/data/data.power-avg';
-import {DataSpeedAvg} from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {DataDuration} from '@sports-alliance/sports-lib/lib/data/data.duration';
-import {DataVO2Max} from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import { ChangeDetectorRef, Directive, } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { DataRPE, RPEBorgCR10SCale } from '@sports-alliance/sports-lib/lib/data/data.rpe';
+import { DataFeeling, Feelings } from '@sports-alliance/sports-lib/lib/data/data.feeling';
+import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
+import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
+import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
+import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
+import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
-import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.peak-training-effect';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
 @Directive()
-export abstract class DataTableAbstractDirective extends ScreenSizeAbstractDirective {
+export abstract class DataTableAbstractDirective extends LoadingAbstractDirective {
 
   constructor(changeDetector: ChangeDetectorRef) {
     super(changeDetector);
   }
 
-  abstract getColumnsToDisplayDependingOnScreenSize();
+  abstract getColumnsToDisplay(): string[];
 
   isColumnHeaderSortable(columnName): boolean {
     return ['Start Date', 'Distance', 'Activity Types', 'Description', 'Average Power', 'Average Speed', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'VO2 Max', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
@@ -72,7 +68,7 @@ export abstract class DataTableAbstractDirective extends ScreenSizeAbstractDirec
     statRowElement[DataHeartRateAvg.type] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
     statRowElement[DataRPE.type] = rpe ? <RPEBorgCR10SCale>rpe.getValue() : undefined;
     statRowElement[DataFeeling.type] = feeling ? <Feelings>feeling.getValue() : undefined;
-    statRowElement[DataSpeedAvg.type] =  activityTypes.reduce((accu, activityType) => {
+    statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
       return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
     }, []).reduce((accu, dataType) => {
       const stat = stats.find(iStat => iStat.getType() === dataType);
@@ -100,6 +96,10 @@ export abstract class DataTableAbstractDirective extends ScreenSizeAbstractDirec
 
     return statRowElement;
   }
+
+  abstract isSticky(column: string);
+
+  abstract isStickyEnd(column: string);
 }
 
 export interface StatRowElement {

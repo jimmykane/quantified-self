@@ -1,6 +1,6 @@
 mat-cell, .mat-header-cell {
   overflow: visible;
-  min-width: 10vw;
+  min-width: 68px;
 }
 
 .mat-cell{
@@ -109,10 +109,10 @@ mat-card{
 }
 
 
-.table-container {
+table {
   display: block;
   width: 100%;
-  overflow: auto;
+  overflow: scroll;
 }
 
 tr.mat-row:hover {

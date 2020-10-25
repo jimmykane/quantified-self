@@ -34,64 +34,63 @@
 
   <mat-divider [inset]="true"></mat-divider>
 
-  <section class="table-container">
-    <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
-           [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
-      <ng-container
-        *ngFor="let column of getColumnsToDisplayDependingOnScreenSize(); first as isFirst; last as isLast; index as i;"
-        [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
-        <ng-container *ngIf="isFirst && showActions">
-          <th mat-header-cell *matHeaderCellDef>
-            <mat-checkbox
-              (change)="$event ? masterToggle() : null"
-              [checked]="selection.hasValue() && isAllSelected()"
-              [indeterminate]="selection.hasValue() && !isAllSelected()">
-            </mat-checkbox>
-          </th>
-        </ng-container>
-        <ng-container *ngIf="isLast && showActions">
-          <th mat-header-cell *matHeaderCellDef>
-            <app-event-table-actions
-              [selectedDataTypes]="selectedColumns"
-              (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
-          </th>
-        </ng-container>
-        <ng-container *ngIf="(!(isFirst && showActions) && !(isLast && showActions))">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
-          </th>
-        </ng-container>
-        <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault()">
-          <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation();"
-                        (change)="$event ? checkBoxClick(row) : null"
-                        [ngStyle]="{'background-color': row['Color']}"
-                        [checked]="selection.isSelected(row)">
+  <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
+         [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
+    <ng-container
+      *ngFor="let column of getColumnsToDisplay(); first as isFirst; last as isLast; index as i;"
+      [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
+      <ng-container *ngIf="isFirst && showActions">
+        <th mat-header-cell *matHeaderCellDef>
+          <mat-checkbox
+            (change)="$event ? masterToggle() : null"
+            [checked]="selection.hasValue() && isAllSelected()"
+            [indeterminate]="selection.hasValue() && !isAllSelected()">
           </mat-checkbox>
-          <span *ngIf="column === 'Actions'">
+        </th>
+      </ng-container>
+      <ng-container *ngIf="isLast && showActions">
+        <th mat-header-cell *matHeaderCellDef>
+          <app-event-table-actions
+            [selectedDataTypes]="selectedColumns"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        </th>
+      </ng-container>
+      <ng-container *ngIf="(!(isFirst && showActions) && !(isLast && showActions))">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
+          <app-data-type-icon [dataType]="column"></app-data-type-icon>
+        </th>
+      </ng-container>
+      <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault()">
+        <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation();"
+                      (change)="$event ? checkBoxClick(row) : null"
+                      [ngStyle]="{'background-color': row['Color']}"
+                      [checked]="selection.isSelected(row)">
+        </mat-checkbox>
+        <span *ngIf="column === 'Actions'">
           <app-event-actions *ngIf="user" [user]="user" [event]="row.Event"
                              [showDownloadOriginal]="true"></app-event-actions>
         </span>
-          <span *ngIf="column === 'Activity Types'">
+        <span *ngIf="column === 'Activity Types'">
           <span *ngIf="row['Merged Event']"><mat-icon>compare_arrows</mat-icon></span>
-            {{ row[column] }}
-        </span>
-          <span
-            *ngIf="column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy'">
           {{ row[column] }}
         </span>
-        </td>
-      </ng-container>
+        <span
+          *ngIf="column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy'">
+          {{ row[column] }}
+        </span>
+      </td>
+    </ng-container>
 
 
-      <tr mat-header-row
-          *matHeaderRowDef="getColumnsToDisplayDependingOnScreenSize();"></tr>
-      <tr mat-row *matRowDef="let row; columns: getColumnsToDisplayDependingOnScreenSize();" [@rowsAnimation]=""
-          [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-          [class.merged]="row['Merged Event']"
-          class="normal-row">
-      </tr>
-    </table>
-  </section>
+    <tr mat-header-row
+        *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
+    <tr mat-row *matRowDef="let row; columns: getColumnsToDisplay();" [@rowsAnimation]=""
+        [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+        [class.merged]="row['Merged Event']"
+        class="normal-row">
+    </tr>
+  </table>
+
   <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
                  [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
                  [pageSizeOptions]="[10, 25, 50, 100, 250,  500, 1000, 2500, 5000]"></mat-paginator>

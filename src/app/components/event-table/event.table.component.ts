@@ -215,7 +215,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   // Todo cache this please
-  getColumnsToDisplayDependingOnScreenSize() {
+  getColumnsToDisplay() {
     // push all the rest
     let columns = [
       'Checkbox',

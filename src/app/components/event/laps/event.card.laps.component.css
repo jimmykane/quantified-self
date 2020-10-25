@@ -1,3 +1,11 @@
-mat-table{
+table{
+  display: block;
+  width: 100%;
+  overflow: scroll;
   padding-bottom: 1em;
+}
+
+mat-cell, .mat-header-cell {
+  overflow: visible;
+  min-width: 68px;
 }

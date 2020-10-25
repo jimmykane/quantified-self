@@ -13,7 +13,7 @@ export class EventTableActionsComponent implements OnInit {
   @Input() selectedDataTypes: string[];
   @Output() selectedDataTypesChange: EventEmitter<string[]> = new EventEmitter<string[]>();
   dataTypes = [
-    ...AppUserService.getDefaultSelectedTableColumns(),
+    ...AppUserService.getDefaultSelectedTableColumns().filter(a => a !== 'Start Date'),
   ]
 
   ngOnInit() {
