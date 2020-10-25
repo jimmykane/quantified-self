@@ -32,7 +32,24 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
   abstract getColumnsToDisplay(): string[];
 
   isColumnHeaderSortable(columnName): boolean {
-    return ['Start Date', 'Distance', 'Activity Types', 'Description', 'Average Power', 'Average Speed', 'Duration', 'Ascent', 'Descent', 'Average Heart Rate', 'VO2 Max', 'Energy', 'Device Names'].indexOf(columnName) !== -1;
+    return [
+      'Start Date',
+      'Distance',
+      'Activity Types',
+      'Description',
+      'Average Power',
+      'Average Speed',
+      'Duration',
+      'Ascent',
+      'Descent',
+      'Average Heart Rate',
+      'VO2 Max',
+      'Energy',
+      'Device Names',
+      DataPeakEPOC.type,
+      DataRecoveryTime.type,
+      DataTotalTrainingEffect.type,
+    ].indexOf(columnName) !== -1;
   }
 
   getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface): StatRowElement {
