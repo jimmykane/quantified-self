@@ -2,8 +2,8 @@
         (click)="$event.preventDefault(); $event.stopPropagation();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu" >
-  <mat-selection-list [multiple]="true" (selectionChange)="selectionChange($event)">
+<mat-menu #menu="matMenu"  (closed)="menuClosed()">
+  <mat-selection-list [multiple]="true" (selectionChange)="selectionChange($event)" (click)="$event.preventDefault(); $event.stopPropagation();">
     <mat-list-option *ngFor="let dataType of dataTypes" [selected]="selectedDataTypes.indexOf(dataType) !== -1" [value]="dataType">
       {{dataType}}
     </mat-list-option>

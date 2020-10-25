@@ -20,7 +20,11 @@ export class EventTableActionsComponent implements OnInit {
   }
 
   selectionChange(event: MatSelectionListChange) {
-    this.selectedDataTypesChange.emit(event.source.selectedOptions.selected.map(option => option.value))
+    this.selectedDataTypes = event.source.selectedOptions.selected.map(option => option.value);
+  }
+
+  menuClosed() {
+    this.selectedDataTypesChange.emit(this.selectedDataTypes)
   }
 }
 
