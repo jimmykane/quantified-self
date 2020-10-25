@@ -1,6 +1,6 @@
 mat-cell, .mat-header-cell {
   overflow: visible;
-  min-width: 6vw;
+  min-width: 10vw;
 }
 
 .mat-cell{
@@ -56,6 +56,7 @@ td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:la
 .mat-column-Actions {
   justify-content: flex-end;
   padding-right: 2em !important;
+  padding-left: 0.2em;
   /*padding-left:  1em !important;*/
 }
 
@@ -108,10 +109,10 @@ mat-card{
 }
 
 
-table {
-  width: 100%;
+.table-container {
   display: block;
-  overflow-x: scroll;
+  width: 100%;
+  overflow: auto;
 }
 
 tr.mat-row:hover {

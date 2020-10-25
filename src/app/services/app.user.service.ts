@@ -97,16 +97,6 @@ export class AppUserService implements OnDestroy {
 
   protected logger = Log.create('UserService');
 
-  constructor(
-    private afs: AngularFirestore,
-    private eventService: AppEventService,
-    private afAuth: AngularFireAuth,
-    private http: HttpClient,
-    private windowService: AppWindowService,
-  ) {
-
-  }
-
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
   }
@@ -344,6 +334,16 @@ export class AppUserService implements OnDestroy {
 
   static getDefaultActivityTypesToRemoveAscentFromSummaries(): ActivityTypes[] {
     return [ActivityTypes.AlpineSki, ActivityTypes.Snowboard]
+  }
+
+  constructor(
+    private afs: AngularFirestore,
+    private eventService: AppEventService,
+    private afAuth: AngularFireAuth,
+    private http: HttpClient,
+    private windowService: AppWindowService,
+  ) {
+
   }
 
   public getUserByID(userID: string): Observable<User> {

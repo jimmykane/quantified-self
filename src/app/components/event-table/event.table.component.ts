@@ -30,9 +30,7 @@ import { Log } from 'ng2-logger/browser';
 import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { AppUserService } from '../../services/app.user.service';
-import { ScreenBreakPoints } from '../screen-size/sreen-size.abstract';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
@@ -308,6 +306,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   ngOnDestroy() {
     this.unsubscribeFromAll();
+  }
+
+  isSticky(column: string) {
+    return column === 'Checkbox'
+  }
+
+  isStickyEnd(column: string) {
+    return column === 'Actions'
   }
 
   private processChanges() {
