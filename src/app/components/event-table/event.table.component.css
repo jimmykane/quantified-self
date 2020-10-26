@@ -108,11 +108,14 @@ mat-card{
   border-radius: 1px !important;
 }
 
+.table-container{
+  overflow: auto;
+  width: 100%;
+  max-width: 100%
+}
 
 table {
-  display: block;
   width: 100%;
-  overflow: scroll;
 }
 
 tr.mat-row:hover {

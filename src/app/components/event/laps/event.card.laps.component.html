@@ -22,20 +22,22 @@
               [activity]="activity">
             </app-activity-toggle>
             <mat-divider *ngIf="selectedActivities.length > 1" [inset]="true"></mat-divider>
-            <table mat-table [dataSource]="getData(activity, availableLapType)">
-              <ng-container *ngFor="let column of getColumnsToDisplayByActivityLapTypes(activity, availableLapType)"
-                            [matColumnDef]="column"
-                            [sticky]="isSticky(column)">
-                <mat-header-cell *matHeaderCellDef>
-                  <app-data-type-icon [dataType]="column"></app-data-type-icon>
-                </mat-header-cell>
-                <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
-              </ng-container>
-              <mat-header-row
-                *matHeaderRowDef="getColumnsToDisplayByActivityLapTypes(activity, availableLapType)"></mat-header-row>
-              <mat-row
-                *matRowDef="let row; columns: getColumnsToDisplayByActivityLapTypes(activity, availableLapType);"></mat-row>
-            </table>
+            <section class="table-container">
+              <table mat-table [dataSource]="getData(activity, availableLapType)">
+                <ng-container *ngFor="let column of getColumnsToDisplayByActivityLapTypes(activity, availableLapType)"
+                              [matColumnDef]="column"
+                              [sticky]="isSticky(column)">
+                  <mat-header-cell *matHeaderCellDef>
+                    <app-data-type-icon [dataType]="column"></app-data-type-icon>
+                  </mat-header-cell>
+                  <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+                </ng-container>
+                <mat-header-row
+                  *matHeaderRowDef="getColumnsToDisplayByActivityLapTypes(activity, availableLapType)"></mat-header-row>
+                <mat-row
+                  *matRowDef="let row; columns: getColumnsToDisplayByActivityLapTypes(activity, availableLapType);"></mat-row>
+              </table>
+            </section>
           </section>
         </ng-container>
       </ng-template>

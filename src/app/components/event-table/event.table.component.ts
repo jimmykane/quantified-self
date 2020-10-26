@@ -219,6 +219,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // push all the rest
     let columns = [
       'Checkbox',
+      'Start Date',
       ...this.selectedColumns.sort(function (a, b) {
         return AppUserService.getDefaultSelectedTableColumns().indexOf(a) - AppUserService.getDefaultSelectedTableColumns().indexOf(b);
       }),

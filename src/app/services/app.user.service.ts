@@ -308,7 +308,6 @@ export class AppUserService implements OnDestroy {
 
   static getDefaultSelectedTableColumns(): string[] {
     return [
-      'Start Date',
       DataDescription.type,
       DataActivityTypes.type,
       DataDuration.type,
