@@ -312,9 +312,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         }, [])
       });
 
-      this.loaded();
-      this.resizeMapToBounds();
     })
+    this.loaded();
+    this.resizeMapToBounds();
   }
 
   private unSubscribeFromAll() {
