@@ -1,26 +1,27 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy, ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
   Component,
   Input,
   NgZone,
   OnChanges,
   OnDestroy,
-  OnInit, SimpleChanges,
+  SimpleChanges,
 } from '@angular/core';
-import {Log} from 'ng2-logger/browser'
+import { Log } from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {ChartAbstractDirective} from '../../charts/chart-abstract.directive';
-import {IntensityZonesInterface} from '@sports-alliance/sports-lib/lib/intensity-zones/intensity-zones.interface';
-import {IntensityZones} from '@sports-alliance/sports-lib/lib/intensity-zones/intensity-zones';
-import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import {DataPower} from '@sports-alliance/sports-lib/lib/data/data.power';
-import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
-import {AppColors} from '../../../services/color/app.colors';
-import {MatIconRegistry} from '@angular/material/icon';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
+import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
+import { DataPower } from '@sports-alliance/sports-lib/lib/data/data.power';
+import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
+import { AppColors } from '../../../services/color/app.colors';
+import { MatIconRegistry } from '@angular/material/icon';
+import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 
 
 @Component({
@@ -31,12 +32,6 @@ import {MatIconRegistry} from '@angular/material/icon';
 })
 export class EventIntensityZonesComponent extends ChartAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[];
-
-  intensityZones: IntensityZonesInterface[] = [
-    new IntensityZones(DataHeartRate.type),
-    new IntensityZones(DataPower.type),
-    new IntensityZones(DataSpeed.type),
-  ];
 
   protected chart: am4charts.XYChart;
   protected logger = Log.create('EventIntensityZonesComponent');
@@ -51,16 +46,14 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
         this.destroyChart();
         this.chart = this.createChart();
       }
-      this.updateIntensityZones();
-      this.updateChart();
+      this.updateChart(this.getData(this.activities));
     }
   }
 
 
   ngAfterViewInit(): void {
     this.chart = this.createChart();
-    this.updateIntensityZones();
-    this.updateChart();
+    this.updateChart(this.getData(this.activities));
   }
 
   protected createChart(): am4charts.XYChart {
@@ -114,64 +107,10 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     return chart;
   }
 
-  private updateIntensityZones() {
-    this.intensityZones.forEach(intensityZones => {
-      intensityZones.zone1Duration = null;
-      intensityZones.zone2Duration = null;
-      intensityZones.zone3Duration = null;
-      intensityZones.zone4Duration = null;
-      intensityZones.zone5Duration = null;
-      intensityZones.zone2LowerLimit = null;
-      intensityZones.zone3LowerLimit = null;
-      intensityZones.zone4LowerLimit = null;
-      intensityZones.zone5LowerLimit = null;
-      this.activities.forEach(activity => {
-        const activityIntensityZone = activity.intensityZones.find(iz => iz.type === intensityZones.type);
-        if (!activityIntensityZone) {
-          return
-        }
-
-        intensityZones.zone1Duration = intensityZones.zone1Duration || 0;
-        intensityZones.zone2Duration = intensityZones.zone2Duration || 0;
-        intensityZones.zone3Duration = intensityZones.zone3Duration || 0;
-        intensityZones.zone4Duration = intensityZones.zone4Duration || 0;
-        intensityZones.zone5Duration = intensityZones.zone5Duration || 0;
-        intensityZones.zone1Duration += activityIntensityZone.zone1Duration;
-        intensityZones.zone2Duration += activityIntensityZone.zone2Duration;
-        intensityZones.zone3Duration += activityIntensityZone.zone3Duration;
-        intensityZones.zone4Duration += activityIntensityZone.zone4Duration;
-        intensityZones.zone5Duration += activityIntensityZone.zone5Duration;
-
-        intensityZones.zone2LowerLimit = intensityZones.zone2LowerLimit || activityIntensityZone.zone2LowerLimit;
-        intensityZones.zone3LowerLimit = intensityZones.zone3LowerLimit || activityIntensityZone.zone3LowerLimit;
-        intensityZones.zone4LowerLimit = intensityZones.zone4LowerLimit || activityIntensityZone.zone4LowerLimit;
-        intensityZones.zone5LowerLimit = intensityZones.zone5LowerLimit || activityIntensityZone.zone5LowerLimit;
-      });
-    });
-  }
-
-  private updateChart() {
+  private updateChart(data: any) {
     this.chart.series.clear();
     this.createChartSeries();
-    this.chart.data = this.intensityZones.reduce((data, intensityZones) => {
-      data.push({
-        zone: `Zone 1`,
-        [intensityZones.type]: intensityZones.zone1Duration,
-      }, {
-        zone: `Zone 2`,
-        [intensityZones.type]: intensityZones.zone2Duration,
-      }, {
-        zone: `Zone 3`,
-        [intensityZones.type]: intensityZones.zone3Duration,
-      }, {
-        zone: `Zone 4`,
-        [intensityZones.type]: intensityZones.zone4Duration,
-      }, {
-        zone: `Zone 5`,
-        [intensityZones.type]: intensityZones.zone5Duration,
-      });
-      return data;
-    }, []);
+    this.chart.data = data
   }
 
   private getColorForZone(zone: string): am4core.Color {
@@ -191,21 +130,14 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
   }
 
   private createChartSeries() {
-    this.intensityZones.forEach(intensityZone => {
-      if (!intensityZone.zone1Duration
-        && !intensityZone.zone2Duration
-        && !intensityZone.zone3Duration
-        && !intensityZone.zone4Duration
-        && !intensityZone.zone5Duration) {
-        return;
-      }
+    DynamicDataLoader.zoneStatsTypeMap.forEach(statsTypeMap => {
       const series = this.chart.series.push(new am4charts.ColumnSeries());
       // series.clustered = false;
-      series.dataFields.valueX = intensityZone.type;
+      series.dataFields.valueX = statsTypeMap.type;
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
-      series.legendSettings.labelText = `${intensityZone.type}`;
-      series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${intensityZone.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
+      series.legendSettings.labelText = `${statsTypeMap.type}`;
+      series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = am4core.percent(80);
       series.columns.template.column.cornerRadiusBottomRight = 8;
@@ -232,7 +164,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
 
-      switch (intensityZone.type) {
+      switch (statsTypeMap.type) {
         case DataHeartRate.type:
           series.fill = am4core.color(AppColors.Red);
           break;
@@ -243,7 +175,37 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
           series.fill = am4core.color(AppColors.Blue);
           break;
       }
-      // series.cursorTooltipEnabled = false;
     });
+  }
+
+  private getData(activities: ActivityInterface[]): any {
+    const statsTypeMap = ActivityUtilities.getIntensityZonesStatsAggregated(activities).reduce((map, stat) => {
+      map[stat.getType()] = stat.getValue()
+      return map;
+    }, {})
+    return DynamicDataLoader.zoneStatsTypeMap.reduce((data, statsToTypeMapEntry) => {
+      data.push({
+        zone: `Zone 1`,
+        type: statsToTypeMapEntry.type,
+        [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[0]],
+      }, {
+        zone: `Zone 2`,
+        type: statsToTypeMapEntry.type,
+        [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[1]],
+      }, {
+        zone: `Zone 3`,
+        type: statsToTypeMapEntry.type,
+        [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[2]],
+      }, {
+        zone: `Zone 4`,
+        type: statsToTypeMapEntry.type,
+        [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[3]],
+      }, {
+        zone: `Zone 5`,
+        type: statsToTypeMapEntry.type,
+        [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[4]],
+      });
+      return data;
+    }, []);
   }
 }

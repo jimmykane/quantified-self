@@ -213,6 +213,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
                 }
               });
               break;
+            case ChartTypes.IntensityZones:
+              chartsAndData.push({
+                ...chartTile, ...{
+                  timeInterval: TimeIntervals.Auto, // Defaults to Auto
+                  data: {}
+                }
+              });
+              break;
             default:
               chartsAndData.push({
                 ...chartTile, ...{
@@ -285,7 +293,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
 
-  // @todo replace key "value" with the name of the dataType (eg avg,max,min, etc)
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): SummariesChartDataInterface[] {
     if (this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`]) {
       return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`];
