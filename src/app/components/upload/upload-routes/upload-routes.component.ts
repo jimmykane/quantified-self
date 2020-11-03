@@ -2,7 +2,6 @@ import { Component } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import { Log } from 'ng2-logger/browser';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { environment } from '../../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
@@ -29,7 +28,7 @@ export class UploadRoutesComponent extends UploadAbstractDirective {
     private http: HttpClient,
     private afAuth: AngularFireAuth,
     private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, filesStatusService, Log.create('UploadRouteComponent'));
+    super(snackBar, dialog, filesStatusService);
   }
 
   /**

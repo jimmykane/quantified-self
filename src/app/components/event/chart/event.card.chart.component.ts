@@ -10,7 +10,6 @@ import {
   OnInit,
   SimpleChanges,
 } from '@angular/core';
-import { Log } from 'ng2-logger/browser'
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
@@ -138,7 +137,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
   public isLoading: boolean;
   protected chart: am4charts.XYChart;
-  protected logger = Log.create('EventCardChartComponent');
+
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
 
@@ -154,20 +153,20 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   async ngAfterViewInit() {
-    this.logger.info(`ViewInit`);
+
     this.chart = this.createChart();
     await this.processChanges();
   }
 
   async ngOnInit() {
-    this.logger.info(`Init`);
+
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and users');
     }
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
-    this.logger.info(`Change`);
+
 
     if (this.chart
       && (simpleChanges.chartTheme
@@ -281,7 +280,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
-      this.logger.info(`Cursor position changed ${event.target.point.x} ${event.target.point.y}`);
+
       // Avoid rewriting cursor change if it's triggered from this component
       if (event.target['_stick'] === 'hard') {
         event.target.triggerMove(event.target.point, 'soft');
@@ -446,57 +445,57 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Attach events
     chart.events.on('validated', (ev) => {
-      this.logger.info('validated');
+
     });
 
     chart.events.on('globalscalechanged', (ev) => {
-      this.logger.info('globalscalechanged');
+
     });
 
     chart.events.on('dataitemsvalidated', (ev) => {
-      this.logger.info('dataitemsvalidated');
+
     });
 
 
     chart.events.on('datavalidated', (ev) => {
-      this.logger.info('datavalidated');
+
     });
 
     chart.events.on('datarangechanged', (ev) => {
-      this.logger.info('datarangechanged');
+
     });
 
     chart.events.on('ready', (ev) => {
-      this.logger.info('ready');
+
     });
 
 
     chart.events.on('shown', (ev) => {
-      this.logger.info('shown');
+
     });
 
     chart.events.on('transformed', (ev) => {
-      this.logger.info('transformed');
+
     });
 
     chart.events.on('maxsizechanged', (ev) => {
-      this.logger.info('maxsizechanged');
+
       ev.target.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px'; // @todo test
     });
 
     chart.events.on('visibilitychanged', (ev) => {
-      this.logger.info('visibilitychanged');
+
     });
 
     chart.events.on('hidden', (ev) => {
-      this.logger.info('hidden');
+
     });
     chart.events.on('shown', (ev) => {
-      this.logger.info('shown');
+
     });
 
     chart.events.on('inited', (ev) => {
-      this.logger.info('inited');
+
     });
 
     return chart;
@@ -590,7 +589,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
     // });
     series.events.on('shown', () => {
-      this.logger.info(`On series shown`);
+
       series.hidden = false;
       this.showSeriesYAxis(series);
       // console.log(series.name + ' shown stat: ' + series.hidden )
@@ -608,7 +607,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
     // Hidden
     series.events.on('hidden', () => {
-      this.logger.info(`On series hidden`);
+
       series.hidden = true;
       if (!this.getVisibleSeriesWithSameYAxis(series).length) {
         this.hideSeriesYAxis(series)
@@ -745,7 +744,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
       debounceTime(250)
     ).subscribe((cursors) => {
-      this.logger.info(`Cursors on subscribe`);
+
       if (!cursors || !cursors.length || !this.chart) {
         return;
       }
@@ -831,7 +830,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       return seriesArray;
     }, [])
 
-    this.logger.info(`Rendering chart data per series`);
+
     if (this.showGrid) {
       this.addGrid();
     } else {
@@ -914,13 +913,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Attach events
     series.events.on('validated', (ev) => {
-      // this.logger.info(`Series ${ev.target.id} validated`);
+      //
       ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px';
       // this.loaded();
     });
 
     series.events.on('ready', (ev) => {
-      this.logger.info('Series ready');
+
     });
 
     series.data = this.convertStreamDataToSeriesData(activity, stream);
@@ -1170,9 +1169,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
-    this.logger.info(`Stream data for ${stream.type} ${stream.getData().length}`);
+
     let data = [];
-    // this.logger.info(`Stream data for ${stream.type} length before sampling ${stream.data.length}`);
+    //
     if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
       const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
       distanceStream.getData().reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
@@ -1193,11 +1192,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // filter if needed (this operation costs)
     const samplingRate = this.getSamplingRateInSeconds(this.selectedActivities);
-    this.logger.info(`Sampling rate is ${samplingRate}`);
+
     if (samplingRate !== 1) {
       data = data.filter((streamData, index) => (index % samplingRate) === 0);
     }
-    this.logger.info(`Stream data for ${stream.type} after sampling and filtering ${data.length}`);
+
     return data;
   }
 
@@ -1417,7 +1416,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private unSubscribeFromAll() {
     this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
-    this.logger.info(`Unsubscribed from ${this.getSubscriptions().length} subscriptions`);
+
   }
 
   private addXAxis(chart: am4charts.XYChart, xAxisType: XAxisTypes): am4charts.ValueAxis | am4charts.DateAxis {
@@ -1456,7 +1455,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // This is with no retina etc
           // We use no retina for performance for now
           const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]);
-          this.logger.info(`Grouping data on ${screenPixes}`);
+
           xAxis.groupData = true;
           // xAxis.groupCount = 60 * 60 * GROUP_ON_X_HOURS;
           xAxis.groupCount = screenPixes
@@ -1495,7 +1494,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       // legend.fontSize = '1em';
 
       chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
-      this.logger.info(`Created legend with id ${chart.legend.parent.uid}`);
+
       chart.legend.parent.width = am4core.percent(100);
       chart.legend.parent.height = am4core.percent(100);
 

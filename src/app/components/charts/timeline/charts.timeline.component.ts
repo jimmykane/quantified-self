@@ -10,7 +10,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {Log} from 'ng2-logger/browser'
+
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
@@ -30,7 +30,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
 })
 export class ChartsTimelineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
-  protected logger = Log.create('ChartsTimelineComponent');
+
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
     super(zone, changeDetector);

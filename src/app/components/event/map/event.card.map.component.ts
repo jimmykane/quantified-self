@@ -15,7 +15,6 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { LapInterface } from '@sports-alliance/sports-lib/lib/laps/lap.interface';
-import { Log } from 'ng2-logger/browser';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -60,7 +59,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private lineMouseMoveSubject: Subject<{event: google.maps.PolyMouseEvent, activityMapData: MapData }> = new Subject()
   private lineMouseMoveSubscription: Subscription;
 
-  private logger = Log.create('EventCardMapAGMComponent');
+
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -76,7 +75,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-    this.logger.info(`Initialized`);
+
   }
 
   ngAfterViewInit(): void {
@@ -233,7 +232,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private bindToNewData() {
-    this.logger.info(`Binding to new data`);
+
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
@@ -255,7 +254,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
       debounceTime(250)
     ).subscribe((cursors) => {
-      this.logger.info(`Cursor on subscription`);
+
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
         console.log(cursor)
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);

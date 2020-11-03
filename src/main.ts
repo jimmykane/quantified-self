@@ -2,14 +2,12 @@ import {enableProdMode} from '@angular/core';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 
 import {environment} from './environments/environment';
-import {Log} from 'ng2-logger/browser';
 import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 
 import 'firebase/analytics';
 
 if (environment.production) {
   enableProdMode();
-  Log.setProductionMode();
 }
 
 // Set the theme before app is running

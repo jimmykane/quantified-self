@@ -9,7 +9,7 @@ import {
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {Log} from 'ng2-logger/browser';
+
 import {AppUserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
@@ -28,7 +28,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() serviceName: ServiceNames;
   @Input() userMetaForService: UserServiceMetaInterface;
 
-  protected logger = Log.create('HistoryImportFormComponent');
+
   public formGroup: FormGroup;
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
@@ -149,7 +149,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
-      this.logger.error(e);
+
       this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, null, {
         duration: 2000,
       });

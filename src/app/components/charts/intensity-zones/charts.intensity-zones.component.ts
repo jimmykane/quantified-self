@@ -6,7 +6,7 @@ import {
   OnChanges,
   OnDestroy,
 } from '@angular/core';
-import {Log} from 'ng2-logger/browser'
+
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
@@ -34,7 +34,7 @@ import { XYChart } from '@amcharts/amcharts4/charts';
 })
 export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
-  protected logger = Log.create('ChartsPieComponent');
+
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
     super(zone, changeDetector);

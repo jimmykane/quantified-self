@@ -9,7 +9,6 @@ import {
   OnDestroy,
   SimpleChanges,
 } from '@angular/core';
-import { Log } from 'ng2-logger/browser'
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
@@ -34,7 +33,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
   @Input() activities: ActivityInterface[];
 
   protected chart: am4charts.XYChart;
-  protected logger = Log.create('EventIntensityZonesComponent');
+
 
   constructor(protected zone: NgZone,
               changeDetector: ChangeDetectorRef,

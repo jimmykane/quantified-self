@@ -26,7 +26,6 @@ import { debounceTime, take } from 'rxjs/operators';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Subject, Subscription } from 'rxjs';
 import * as Sentry from '@sentry/browser';
-import { Log } from 'ng2-logger/browser';
 import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
@@ -71,7 +70,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
 
-  private logger = Log.create('EventTableComponent');
+
   private searchSubject: Subject<string> = new Subject();
 
   constructor(private snackBar: MatSnackBar,
@@ -283,7 +282,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private processChanges() {
-    this.logger.info(`Processing changes`);
+
     this.selection.clear();
     // this.data = new MatTableDataSource<any>(data);
     this.data.data = this.events.reduce((EventRowElementsArray, event) => {
@@ -315,7 +314,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return EventRowElementsArray;
     }, []);
     this.loaded();
-    this.logger.info(`Changes processed`);
+
   }
 
   private unsubscribeFromAll() {

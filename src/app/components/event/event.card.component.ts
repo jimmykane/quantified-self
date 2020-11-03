@@ -6,7 +6,6 @@ import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/ac
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Log } from 'ng2-logger/browser';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import {
@@ -74,7 +73,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
 
   private subscriptions: Subscription[] = [];
 
-  private logger = Log.create('EventCardComponent');
+
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -160,7 +159,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
         this.chartDataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
       }
       this.event = event;
-      // this.logger.info(event);
+      //
       // @todo perhaps if the event is the same do not update
       this.activitySelectionService.selectedActivities.clear();
 

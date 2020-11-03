@@ -1,7 +1,6 @@
 import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Directive } from '@angular/core';
 import * as Sentry from '@sentry/browser';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {Log} from 'ng2-logger/browser';
 import {Subscription} from 'rxjs';
 import {DataPaceMinutesPerMile, DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
 import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
@@ -42,7 +41,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
 
 
   protected chart: am4charts.PieChart | am4charts.XYChart | am4charts.RadarChart;
-  protected logger = Log.create('ChartAbstract');
+
   protected subscriptions: Subscription[] = [];
 
   protected themes = {
@@ -70,12 +69,12 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
   }
 
   protected createChart(chartType?: typeof am4charts.Chart, data?: any): am4charts.Chart {
-    this.logger.info(`Creating chart`);
+
     return this.zone.runOutsideAngular(() => {
       this.setChartThemes(this.chartTheme, this.useAnimations);
       const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
       chart.preloader.disabled = true;
-      this.logger.info(`Created outsize of zone chart with id ${chart.uid}`);
+
       // chart.pixelPerfect = true;
       // chart.colors.step = 2;
       // chart.padding(0,0,0,0)
@@ -119,11 +118,11 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
         if (this.chart) {
           this.chart.dispose();
           // delete this.chart
-          this.logger.info(`Chart destroyed`);
+
         }
       });
     } catch (e) {
-      this.logger.error('Could not destroy chart');
+
       // Log to Sentry
       Sentry.captureException(e);
     }

@@ -14,7 +14,6 @@ import {
   UserChartSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {Log} from 'ng2-logger/browser';
 import {AppThemes, UserAppSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import {
@@ -46,7 +45,7 @@ export class UserSettingsComponent implements OnChanges {
   public errorSaving;
   public xAxisTypes = XAxisTypes;
 
-  private logger = Log.create('UserSettingsComponent');
+
 
   public dataGroups = [
     {
@@ -348,7 +347,7 @@ export class UserSettingsComponent implements OnChanges {
       });
       this.afa.logEvent('user_settings_update');
     } catch (e) {
-      this.logger.error(e);
+
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });

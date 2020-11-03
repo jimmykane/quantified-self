@@ -9,7 +9,6 @@ import 'leaflet-fullscreen';
 import leafletImage from 'leaflet-image'
 import { AppEventService } from '../../services/app.event.service';
 import { take } from 'rxjs/operators';
-import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -50,7 +49,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public user: User;
 
-  private logger = Log.create('TracksComponent');
+
 
   private map: L.Map;
   private polyLines: L.Polyline[] = [];

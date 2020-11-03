@@ -8,7 +8,7 @@ import {
   OnChanges,
   OnDestroy,
 } from '@angular/core';
-import { Log } from 'ng2-logger/browser'
+
 import * as am4charts from '@amcharts/amcharts4/charts';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
@@ -26,7 +26,7 @@ import { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
 })
 export class HomeLiveChartComponent extends ChartAbstractDirective implements OnDestroy, AfterViewInit {
 
-  protected logger = Log.create('HomeLiveChartComponent');
+
   protected liveDataSubscription: Subscription;
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
@@ -90,7 +90,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     gradient.addColor(chart.colors.getIndex(0), 0.2);
     gradient.addColor(chart.colors.getIndex(0), 0);
     series.fill = gradient;
-    this.logger.info(`Chart created `)
+
 
     return chart;
   }

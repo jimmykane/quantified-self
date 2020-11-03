@@ -9,7 +9,6 @@ import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/ac
 import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { take } from 'rxjs/operators';
-import { Log } from 'ng2-logger/browser';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
@@ -30,7 +29,7 @@ export class ActivityCropFormComponent implements OnInit {
   public activityTypesArray = ActivityTypesHelper.getActivityTypesAsUniqueArray();
   public activityFormGroup: FormGroup;
   public isLoading: boolean;
-  protected logger = Log.create('ActivityFormComponent');
+
 
   constructor(
     public dialogRef: MatDialogRef<ActivityCropFormComponent>,
@@ -102,7 +101,7 @@ export class ActivityCropFormComponent implements OnInit {
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
-      this.logger.error(e);
+
       this.snackBar.open('Could not save activity', null, {
         duration: 2000,
       });

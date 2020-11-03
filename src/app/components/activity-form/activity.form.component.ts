@@ -14,7 +14,7 @@ import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
 import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {Log} from 'ng2-logger/browser';
+
 import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
 import {DataDeviceNames} from '@sports-alliance/sports-lib/lib/data/data.device-names';
 import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
@@ -33,7 +33,7 @@ import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
 
 
 export class ActivityFormComponent implements OnInit {
-  protected logger = Log.create('ActivityFormComponent');
+
 
   public activity: ActivityInterface;
   public event: EventInterface;
@@ -219,7 +219,7 @@ export class ActivityFormComponent implements OnInit {
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
-      this.logger.error(e);
+
       this.snackBar.open('Could not save activity', null, {
         duration: 2000,
       });

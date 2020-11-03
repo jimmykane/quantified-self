@@ -1,5 +1,4 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { Log } from 'ng2-logger/browser';
 import { AngularFirestore, AngularFirestoreDocument } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -95,7 +94,7 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.reco
 })
 export class AppUserService implements OnDestroy {
 
-  protected logger = Log.create('UserService');
+
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;

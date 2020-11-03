@@ -6982,11 +6982,6 @@ next-tick@~1.0.0:
   resolved "https://registry.yarnpkg.com/next-tick/-/next-tick-1.0.0.tgz#ca86d1fe8828169b0120208e3dc8424b9db8342c"
   integrity sha1-yobR/ogoFpsBICCOPchCS524NCw=
 
-ng2-logger@3.0.14:
-  version "3.0.14"
-  resolved "https://registry.yarnpkg.com/ng2-logger/-/ng2-logger-3.0.14.tgz#228802bc8ec721f38e7411bd49f87078ddc73f39"
-  integrity sha512-hWS1xM8a4eHe083APHip+KZN3yAI8t5BtTNe5j4T3hZNErnq2Jt1wDO41/5b7m2U8ubAQ77UEY5BfkKIWAcJQA==
-
 nice-try@^1.0.4:
   version "1.0.5"
   resolved "https://registry.yarnpkg.com/nice-try/-/nice-try-1.0.5.tgz#a3378a7696ce7d223e88fc9b764bd7ef1089e366"

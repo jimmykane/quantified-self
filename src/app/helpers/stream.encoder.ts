@@ -1,5 +1,4 @@
 import * as Pako from 'pako';
-import { Log } from 'ng2-logger/browser';
 import { firestore } from 'firebase/app';
 import { getSize, getSizeFormated } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
@@ -10,7 +9,6 @@ import {
 } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 
 export class StreamEncoder {
-  private static logger = Log.create('StreamEncoder');
 
   /**
    * Make sure this is in sync with the functions based one
@@ -23,7 +21,7 @@ export class StreamEncoder {
       data: JSON.stringify(stream.data),
       compressionMethod: CompressionMethods.None
     }
-    this.logger.info(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+
     // If we can fit it go on
     if (getSize(compressedStream.data) <= 1048487) {
       return compressedStream
@@ -32,7 +30,7 @@ export class StreamEncoder {
     compressedStream.data = firestore.Blob.fromUint8Array(Pako.gzip(JSON.stringify(stream.data)));
     compressedStream.encoding = CompressionEncodings.UInt8Array
     compressedStream.compressionMethod = CompressionMethods.Pako
-    this.logger.info(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
+
     if (getSize(compressedStream.data) <= 1048487) {
       return compressedStream
     }
@@ -58,7 +56,7 @@ export class StreamEncoder {
         break;
     }
     const t1 = performance.now();
-    this.logger.info(`Decompression with ${compressedStreamJSON.compressionMethod} took ${t1 - t0}`);
+
     stream.data = JSON.parse(stream.data);
     return stream;
   }

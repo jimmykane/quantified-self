@@ -8,7 +8,7 @@ import {
   OnChanges,
   OnDestroy,
 } from '@angular/core';
-import { Log } from 'ng2-logger/browser'
+
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 import { AxisRendererCircular, CategoryAxis, DateAxis } from '@amcharts/amcharts4/charts';
@@ -37,7 +37,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
   useAnimations = true;
 
   protected chart: am4charts.RadarChart;
-  protected logger = Log.create('ChartsBrianDevineComponent');
+
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
     super(zone, changeDetector);
