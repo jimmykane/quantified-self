@@ -4,6 +4,8 @@ import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/acti
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {AppActivityTypeGroupColors} from './app.activity-type-group.colors';
+import * as am4core from '@amcharts/amcharts4/core';
+import { AppColors } from './app.colors';
 
 @Injectable({
   providedIn: 'root',
@@ -45,5 +47,21 @@ export class AppEventColorService {
 
   getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {
     return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
+  }
+
+  getColorForZone(zone: string): am4core.Color {
+    switch (zone) {
+      case `Zone 5`:
+        return am4core.color(AppColors.Red);
+      case `Zone 4`:
+        return am4core.color(AppColors.Orange);
+      case `Zone 3`:
+        return am4core.color(AppColors.Yellow);
+      case `Zone 2`:
+        return am4core.color(AppColors.Green);
+      case `Zone 1`:
+      default:
+        return am4core.color(AppColors.Blue);
+    }
   }
 }

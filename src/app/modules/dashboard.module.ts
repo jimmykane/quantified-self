@@ -16,10 +16,11 @@ import { TileChartActionsComponent } from '../components/tile/actions/chart/tile
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
 import { ChartsBrianDevineComponent } from '../components/charts/brian-devine/charts.brian-devine.component';
 import { ChartsTimelineComponent } from '../components/charts/timeline/charts.timeline.component';
-import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
+import { ChartsIntensityZonesComponent } from '../components/charts/intensity-zones/charts.intensity-zones.component';
 import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
 import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
 import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
+import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
 
 @NgModule({
   imports: [
@@ -45,6 +46,7 @@ import { EventTableActionsComponent } from '../components/event-table/actions/ev
     TileMapComponent,
     ChartsTimelineComponent,
     ChartsPieComponent,
+    ChartsIntensityZonesComponent,
     ChartsXYComponent,
     ChartsColumnsComponent,
     ChartsBrianDevineComponent,
