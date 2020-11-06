@@ -118,8 +118,9 @@ table {
   width: 100%;
 }
 
-tr.mat-row:hover {
+tr.mat-row:hover td:not(.mat-table-sticky){
   background: rgba(239, 239, 239, 0.4);
+  cursor: pointer;
 }
 
 

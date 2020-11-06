@@ -24,6 +24,7 @@ import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-r
 import { DataPower } from '@sports-alliance/sports-lib/lib/data/data.power';
 import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
 import { XYChart } from '@amcharts/amcharts4/charts';
+import { percent } from '@amcharts/amcharts4/core';
 
 
 @Component({
@@ -51,9 +52,9 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
     legend.parent = chart.plotContainer;
     legend.background.fill = am4core.color('#000');
     legend.background.fillOpacity = 0.00;
-    legend.width = 100;
-    legend.align = 'right';
-    legend.valign = 'bottom';
+    legend.width = percent(100)
+    legend.align = 'center';
+    legend.valign = 'top';
 
     // Y Axis
     const valueAxis = chart.yAxes.push(new am4charts.DurationAxis());
