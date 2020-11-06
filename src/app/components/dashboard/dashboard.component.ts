@@ -16,6 +16,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 import { getDatesForDateRange } from 'app/helpers/date-range-helper';
+import firebase from 'firebase/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({

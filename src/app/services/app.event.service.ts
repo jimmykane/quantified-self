@@ -4,7 +4,6 @@ import { EventImporterJSON } from '@sports-alliance/sports-lib/lib/events/adapte
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
 import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
-import { firestore } from 'firebase/app';
 import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -22,7 +21,9 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import firebase from 'firebase/app'
 import DocumentData = firebase.firestore.DocumentData;
+import firestore = firebase.firestore
 
 
 @Injectable({

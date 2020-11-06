@@ -1,7 +1,7 @@
 import {Injectable, OnDestroy} from '@angular/core';
 
-import {auth} from 'firebase/app';
-
+import firebase from 'firebase/app';
+import auth = firebase.auth;
 import {Observable, of, Subscription} from 'rxjs';
 import {map, switchMap, take} from 'rxjs/operators';
 import {MatSnackBar} from '@angular/material/snack-bar';

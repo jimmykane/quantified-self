@@ -26,6 +26,7 @@ import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppUserService } from '../../services/app.user.service';
+import firebase from 'firebase/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
