@@ -21,6 +21,7 @@ import { AppColors } from '../../../services/color/app.colors';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { convertIntensityZonesStatsToChartData } from '../../../helpers/intensity-zones-chart-data-helper';
+import { AppDataColors } from '../../../services/color/app.data.colors';
 
 
 @Component({
@@ -47,14 +48,14 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
         this.destroyChart();
         this.chart = this.createChart();
       }
-      this.updateChart(this.getData(this.activities));
+      this.updateChart(EventIntensityZonesComponent.getData(this.activities));
     }
   }
 
 
   ngAfterViewInit(): void {
     this.chart = this.createChart();
-    this.updateChart(this.getData(this.activities));
+    this.updateChart(EventIntensityZonesComponent.getData(this.activities));
   }
 
   protected createChart(): am4charts.XYChart {
@@ -148,22 +149,11 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       });
       // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
-
-      switch (statsTypeMap.type) {
-        case DataHeartRate.type:
-          series.fill = am4core.color(AppColors.Red);
-          break;
-        case DataPower.type:
-          series.fill = am4core.color(AppColors.Orange);
-          break;
-        case DataSpeed.type:
-          series.fill = am4core.color(AppColors.Blue);
-          break;
-      }
+      series.fill = am4core.color(AppDataColors[statsTypeMap.type]);
     });
   }
 
-  private getData(activities: ActivityInterface[]): any[] {
+  private static getData(activities: ActivityInterface[]): any[] {
     return convertIntensityZonesStatsToChartData(activities)
   }
 }

@@ -1,41 +1,22 @@
-import {
-  ChangeDetectionStrategy,
-  ChangeDetectorRef,
-  Component,
-  NgZone,
-  OnChanges,
-  OnDestroy,
-} from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, NgZone, OnChanges, OnDestroy } from '@angular/core';
 
 import * as am4core from '@amcharts/amcharts4/core';
-import * as am4charts from '@amcharts/amcharts4/charts';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import * as Sentry from '@sentry/browser';
-import {
-  ChartDataCategoryTypes,
-  ChartDataValueTypes
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
-import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
-import {AppEventColorService} from '../../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { AppColors } from '../../../services/color/app.colors';
-import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import { DataPower } from '@sports-alliance/sports-lib/lib/data/data.power';
-import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
-import { XYChart } from '@amcharts/amcharts4/charts';
 import { percent } from '@amcharts/amcharts4/core';
+import * as am4charts from '@amcharts/amcharts4/charts';
+import { XYChart } from '@amcharts/amcharts4/charts';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppDataColors } from '../../../services/color/app.data.colors';
 
 
 @Component({
   selector: 'app-intensity-zones-chart',
   templateUrl: './charts.intensity-zones.component.html',
   styleUrls: ['./charts.intensity-zones.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
-
-
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
     super(zone, changeDetector);
@@ -52,7 +33,7 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
     legend.parent = chart.plotContainer;
     legend.background.fill = am4core.color('#000');
     legend.background.fillOpacity = 0.00;
-    legend.width = percent(100)
+    legend.width = percent(100);
     legend.align = 'center';
     legend.valign = 'top';
 
@@ -76,17 +57,18 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
     // categoryAxis.renderer.labels.template.fontWeight = 'bold';
     categoryAxis.renderer.cellStartLocation = 0.05;
     categoryAxis.renderer.cellEndLocation = 0.95;
-    categoryAxis.renderer.grid.template.fillOpacity = 1;
-    categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
+    categoryAxis.renderer.grid.template.disabled = true
+    // categoryAxis.renderer.grid.template.fillOpacity = 1;
+    // categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
 
-    // categoryAxis.renderer.axisFills.template.disabled = false;
-    // categoryAxis.renderer.axisFills.template.fillOpacity = 0.4;
-    // categoryAxis.fillRule = (dataItem) => {
-    //   dataItem.axisFill.visible = true;
-    // };
-    // categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
-    //   return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
-    // });
+    categoryAxis.renderer.axisFills.template.disabled = false;
+    categoryAxis.renderer.axisFills.template.fillOpacity = 0.1;
+    categoryAxis.fillRule = (dataItem) => {
+      dataItem.axisFill.visible = true;
+    };
+    categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
+      return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
+    });
     this.createChartSeries(chart);
     return chart;
   }
@@ -125,18 +107,7 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
       });
       // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
-
-      switch (statsTypeMap.type) {
-        case DataHeartRate.type:
-          series.fill = am4core.color(AppColors.Red);
-          break;
-        case DataPower.type:
-          series.fill = am4core.color(AppColors.Orange);
-          break;
-        case DataSpeed.type:
-          series.fill = am4core.color(AppColors.Blue);
-          break;
-      }
+      series.fill = am4core.color(AppDataColors[statsTypeMap.type]);
     });
   }
 }

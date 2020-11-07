@@ -1,4 +1,5 @@
 export enum AppColors {
+  StrongOrange = '#ff8c00',
   Orange = '#FFAA00',
   LightOrange = '#ffb74d',
   Yellow = '#FFDD33',
@@ -10,6 +11,7 @@ export enum AppColors {
   PurpleBlue = '#889bc8',
   Red = '#FF3333',
   LightRed = '#f44336',
+  LightestRed = '#ff5c49',
   LightGreen = '#bcf15b',
   DeepBlue = '#00688b',
   LightGray = '#F0F0F0',

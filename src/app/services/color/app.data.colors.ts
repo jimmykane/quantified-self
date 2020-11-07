@@ -13,7 +13,7 @@ export enum AppDataColors {
   'Grade Adjusted Pace' = AppColors.PurpleBlue,
   'Pace_0' = AppColors.Blue,
   'Pace_1' = AppColors.Orange,
-  'Heart Rate' = AppColors.Red,
+  'Heart Rate' = AppColors.LightestRed,
   'Heart Rate_0' = AppColors.Red,
   'Heart Rate_1' = AppColors.Purple,
   'Speed' = AppColors.Blue,

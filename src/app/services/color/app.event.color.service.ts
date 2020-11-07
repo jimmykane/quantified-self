@@ -52,9 +52,9 @@ export class AppEventColorService {
   getColorForZone(zone: string): am4core.Color {
     switch (zone) {
       case `Zone 5`:
-        return am4core.color(AppColors.Red);
+        return am4core.color(AppColors.LightestRed);
       case `Zone 4`:
-        return am4core.color(AppColors.Orange);
+        return am4core.color(AppColors.StrongOrange);
       case `Zone 3`:
         return am4core.color(AppColors.Yellow);
       case `Zone 2`:
