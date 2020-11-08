@@ -35,6 +35,10 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
 
   protected chart: am4charts.XYChart;
 
+  private static getData(activities: ActivityInterface[]): any[] {
+    return convertIntensityZonesStatsToChartData(activities)
+  }
+
 
   constructor(protected zone: NgZone,
               changeDetector: ChangeDetectorRef,
@@ -151,9 +155,5 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
 
       series.fill = am4core.color(AppDataColors[statsTypeMap.type]);
     });
-  }
-
-  private static getData(activities: ActivityInterface[]): any[] {
-    return convertIntensityZonesStatsToChartData(activities)
   }
 }

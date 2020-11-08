@@ -1,18 +1,19 @@
-import {Injectable, OnDestroy} from '@angular/core';
-import firebase from 'firebase';
-import auth = firebase.auth;
-import {Observable, of, Subscription} from 'rxjs';
-import {map, switchMap, take} from 'rxjs/operators';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {AngularFireAuth} from '@angular/fire/auth';
-import {AngularFirestore} from '@angular/fire/firestore';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../services/app.user.service';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import { Injectable, OnDestroy } from '@angular/core';
+import { Observable, of, Subscription } from 'rxjs';
+import { map, switchMap, take } from 'rxjs/operators';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AngularFireAuth } from '@angular/fire/auth';
+import { AngularFirestore } from '@angular/fire/firestore';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppUserService } from '../services/app.user.service';
+import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
+import firebase from 'firebase/app';
+import 'firebase/auth';
+
 
 @Injectable({
-  providedIn: 'root',
+  providedIn: 'root'
 })
 export class AppAuthService implements OnDestroy {
   user: Observable<User | null>;
@@ -28,7 +29,7 @@ export class AppAuthService implements OnDestroy {
     private afa: AngularFireAnalytics,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
-    private localStorageService: LocalStorageService,
+    private localStorageService: LocalStorageService
   ) {
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
@@ -49,7 +50,7 @@ export class AppAuthService implements OnDestroy {
           this.authState = false;
           return of(null);
         }
-      }),
+      })
     );
   }
 
@@ -62,27 +63,27 @@ export class AppAuthService implements OnDestroy {
   }
 
   googleLoginWithRedirect() {
-    const provider = new auth.GoogleAuthProvider();
+    const provider = new firebase.auth.GoogleAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   githubLoginWithRedirect() {
-    const provider = new auth.GithubAuthProvider();
+    const provider = new firebase.auth.GithubAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   facebookLoginWithRedirect() {
-    const provider = new auth.FacebookAuthProvider();
+    const provider = new firebase.auth.FacebookAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   twitterLoginWithRedirect() {
-    const provider = new auth.TwitterAuthProvider();
+    const provider = new firebase.auth.TwitterAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   gitHubLoginWithRedirect() {
-    const provider = new auth.GithubAuthProvider();
+    const provider = new firebase.auth.GithubAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
@@ -132,7 +133,7 @@ export class AppAuthService implements OnDestroy {
     return fbAuth
       .sendPasswordResetEmail(email)
       .then(() => this.snackBar.open(`Password update email sent`, null, {
-        duration: 2000,
+        duration: 2000
       }))
       .catch(error => this.handleError(error));
   }
@@ -140,8 +141,12 @@ export class AppAuthService implements OnDestroy {
   async signOut(): Promise<void> {
     await this.afAuth.signOut();
     await this.afs.firestore.terminate();
-    this.localStorageService.clearAllStorage()
+    this.localStorageService.clearAllStorage();
     return this.afs.firestore.clearPersistence();
+  }
+
+  ngOnDestroy(): void {
+    this.userSubscription.unsubscribe();
   }
 
   private async getOrInsertUser(user: User) {
@@ -157,11 +162,7 @@ export class AppAuthService implements OnDestroy {
   private handleError(error: Error) {
     console.error(error);
     this.snackBar.open(`Could not login due to error ${error.message}`, null, {
-      duration: 2000,
+      duration: 2000
     });
-  }
-
-  ngOnDestroy(): void {
-    this.userSubscription.unsubscribe();
   }
 }
