@@ -129,7 +129,7 @@ export class AppAuthService implements OnDestroy {
 
   // Sends email allowing user to reset password
   resetPassword(email: string) {
-    const fbAuth = auth();
+    const fbAuth = firebase.auth();
     return fbAuth
       .sendPasswordResetEmail(email)
       .then(() => this.snackBar.open(`Password update email sent`, null, {
