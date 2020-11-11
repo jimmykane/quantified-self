@@ -25,7 +25,7 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
   protected createChart(): am4charts.XYChart {
     const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
     chart.hiddenState.properties.opacity = 0;
-    chart.padding(12, 0, 0, 0);
+    chart.padding(0, 0, 0, 0);
 
     // Legend
     const legend = new am4charts.Legend();
@@ -83,7 +83,8 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
       series.legendSettings.labelText = `${statsTypeMap.type}`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryX}[/]\n ${statsTypeMap.type}: [bold]{valueY.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueY.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
-      series.columns.template.height = am4core.percent(80);
+      series.columns.template.height = am4core.percent(90);
+      series.columns.template.width = am4core.percent(40);
       series.columns.template.column.cornerRadiusTopRight = 8;
       series.columns.template.column.cornerRadiusTopLeft = 8;
 
