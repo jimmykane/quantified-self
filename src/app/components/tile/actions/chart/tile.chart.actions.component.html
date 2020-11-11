@@ -30,7 +30,7 @@
       </mat-select>
     </mat-form-field>
   </section>
-  <section mat-menu-item>
+  <section mat-menu-item *ngIf="chartType !== chartTypes.IntensityZones">
     <mat-form-field>
       <mat-label>What data to look at</mat-label>
       <mat-select placeholder="Type" [value]="chartDataType" (selectionChange)="changeChartDataType($event)">
@@ -43,12 +43,12 @@
       </mat-select>
     </mat-form-field>
   </section>
-  <section mat-menu-item>
+  <section mat-menu-item *ngIf="chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones">
     <mat-form-field>
       <mat-label>How to look at the data</mat-label>
       <mat-select placeholder="Type calculation" [value]="chartDataValueType"
                   (selectionChange)="changeChartDataValueType($event)">
-        <section *ngIf="chartType !== chartTypes.Pie">
+        <section>
           <mat-option *ngFor="let chartValueType of chartValueTypes | keyvalue"
                       [value]="chartValueType.value">
             {{chartValueType.value}}
@@ -57,7 +57,7 @@
       </mat-select>
     </mat-form-field>
   </section>
-  <section mat-menu-item>
+  <section mat-menu-item *ngIf='chartType !== chartTypes.IntensityZones'>
     <mat-form-field>
       <mat-label>Base data on</mat-label>
       <mat-select placeholder="Category type" [value]="chartDataCategoryType"
@@ -72,7 +72,7 @@
     </mat-form-field>
   </section>
 
-  <section mat-menu-item *ngIf="chartDataCategoryType === chartCategoryTypes.DateType">
+  <section mat-menu-item *ngIf="chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones">
     <mat-form-field>
       <mat-label>Time interval</mat-label>
       <mat-select placeholder="Time interval" [value]="chartTimeInterval"
