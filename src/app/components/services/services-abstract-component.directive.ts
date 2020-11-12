@@ -104,7 +104,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         });
       } finally {
         this.isLoading = false;
-        await this.router.navigate(['services'], {queryParams: { serviceName: serviceName }, preserveQueryParams: false});
+        await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: 'preserve' });
       }
     });
   }
