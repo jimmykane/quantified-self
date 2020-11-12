@@ -98,17 +98,19 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     // categoryAxis.renderer.labels.template.fontWeight = 'bold';
     categoryAxis.renderer.cellStartLocation = 0.05;
     categoryAxis.renderer.cellEndLocation = 0.95;
-    categoryAxis.renderer.grid.template.fillOpacity = 1;
-    categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
+    categoryAxis.renderer.grid.template.disabled = true
 
-    // categoryAxis.renderer.axisFills.template.disabled = false;
-    // categoryAxis.renderer.axisFills.template.fillOpacity = 0.4;
-    // categoryAxis.fillRule = (dataItem) => {
-    //   dataItem.axisFill.visible = true;
-    // };
-    // categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
-    //   return target.dataItem && target.dataItem.dataContext ? this.getColorForZone(target.dataItem.dataContext['zone']) : null;
-    // });
+    // categoryAxis.renderer.grid.template.fillOpacity = 1;
+    // categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
+
+    categoryAxis.renderer.axisFills.template.disabled = false;
+    categoryAxis.renderer.axisFills.template.fillOpacity = 0.1;
+    categoryAxis.fillRule = (dataItem) => {
+      dataItem.axisFill.visible = true;
+    };
+    categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
+      return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
+    });
 
     return chart;
   }
