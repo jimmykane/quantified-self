@@ -3,7 +3,7 @@
   <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
              [errorMessage]="'Nothing to show'"></app-shade>
   <section class="container">
-    <section style="width: 100%">
+    <section>
       <mat-form-field appearance="standard">
         <mat-label>Search</mat-label>
         <input matInput (keyup)="onKeyUp($event)" placeholder="Date, name, type, etc..." autocomplete="off">
@@ -61,7 +61,7 @@
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </th>
         </ng-container>
-        <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault()">
+        <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault();$event.stopPropagation();checkBoxClick(row);">
           <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation();"
                         (change)="$event ? checkBoxClick(row) : null"
                         [ngStyle]="{'background-color': row['Color']}"
@@ -96,5 +96,5 @@
 
   <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
                  [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
-                 [pageSizeOptions]="[10, 25, 50, 100, 250,  500, 1000, 2500, 5000]"></mat-paginator>
+                 [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
 </mat-card>
