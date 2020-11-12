@@ -347,7 +347,7 @@ export class AppUserService implements OnDestroy {
   public getUserByID(userID: string): Observable<User> {
     return this.afs
       .collection('users')
-      .doc<User>(userID)
+      .doc(userID)
       .valueChanges().pipe(map((user: User) => {
         if (!user) {
           return null
@@ -519,7 +519,7 @@ export class AppUserService implements OnDestroy {
       if (!doc.exists) {
         return false;
       }
-      return doc.data().isBranded;
+      return doc.data()['isBranded'];
     })).toPromise();
   }
 
@@ -565,7 +565,7 @@ export class AppUserService implements OnDestroy {
     }
     return this.afs
       .collection(serviceNamesToCollectionName[serviceName])
-      .doc<Auth2ServiceTokenInterface>(user.uid)
+      .doc(user.uid)
       .collection('tokens')
       .valueChanges()
       .pipe(catchError(error => {
