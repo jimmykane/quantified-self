@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "6.11.2",
+  "version": "6.11.3",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -29,7 +29,7 @@
     "@angular/common": "11.0.0",
     "@angular/compiler": "11.0.0",
     "@angular/core": "11.0.0",
-    "@angular/fire": "6.1.0-rc.1",
+    "@angular/fire": "6.1.0-rc.2",
     "@angular/forms": "11.0.0",
     "@angular/material": "^11.0.0",
     "@angular/material-moment-adapter": "^11.0.0",
