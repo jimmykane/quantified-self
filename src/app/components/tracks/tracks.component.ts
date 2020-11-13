@@ -120,6 +120,14 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
   }
 
+  private clearProgressAndCloseBottomSheet() {
+    this.updateBufferProgress(0);
+    this.updateTotalProgress(0);
+    if (this.bottomSheet) {
+      this.bottomSheet.dismiss()
+    }
+  }
+
   private async loadTracksMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
@@ -144,7 +152,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0).subscribe(async (events) => {
       events = events.filter((event) => event.getStat(DataStartPosition.type));
       if (!events || !events.length) {
-        return;
+        return this.clearProgressAndCloseBottomSheet()
       }
 
       const chuckArraySize = 15;
