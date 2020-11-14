@@ -1586,10 +1586,10 @@
     "@sentry/types" "5.27.4"
     tslib "^1.9.3"
 
-"@sports-alliance/sports-lib@^5.4.9":
-  version "5.4.9"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.4.9.tgz#b93f7c42627b5269aacb0996bed327417e9b98b3"
-  integrity sha512-2Llpud1CH5s2VF3HcAZE+W/xYcwOnunspPHp3SlCsb9TK7iQdz/VCrlCTpMG3IG2So54HJ8oOp1FCR1qy6OfVQ==
+"@sports-alliance/sports-lib@^5.4.10":
+  version "5.4.10"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.4.10.tgz#8e47592a190f77054f0454be845f0dd07e4943f0"
+  integrity sha512-Ntocs0EWPFg4cXfGWVBgl6HHf+yqRMQdUITNaUAfz6NU6wffuX5PRv4NqUKGPhATbwkIQYNgwsjQCfXpOTX6lQ==
   dependencies:
     "@types/node" "^14.6.1"
     fast-xml-parser "^3.17.4"
