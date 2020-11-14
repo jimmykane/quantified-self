@@ -61,8 +61,8 @@
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </th>
         </ng-container>
-        <td mat-cell matRipple *matCellDef="let row" (click)="$event.preventDefault();$event.stopPropagation();checkBoxClick(row);">
-          <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.stopPropagation();"
+        <td mat-cell matRipple *matCellDef="let row" (click)="(column === 'Checkbox' ? ($event.preventDefault() || $event.stopPropagation() || checkBoxClick(row)) : false)">
+          <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.preventDefault();$event.stopPropagation();checkBoxClick(row);"
                         (change)="$event ? checkBoxClick(row) : null"
                         [ngStyle]="{'background-color': row['Color']}"
                         [checked]="selection.isSelected(row)">
