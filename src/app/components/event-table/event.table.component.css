@@ -33,6 +33,10 @@ mat-cell, .mat-header-cell {
   max-width: 10vw;
 }
 
+.mat-column-Description{
+  min-width: 10vw;
+}
+
 
 td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:last-of-type{
   padding-right: 0;
