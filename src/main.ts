@@ -6,7 +6,7 @@ import * as Sentry from '@sentry/angular';
 import { Integrations } from '@sentry/tracing';
 
 declare function require(moduleName: string): any;
-const appPackage = require('../../package.json');
+const appPackage = require('../package.json');
 
 Sentry.init({
   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
