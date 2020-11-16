@@ -1,7 +1,4 @@
 <mat-card class="mat-elevation-z0">
-
-  <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
-             [errorMessage]="'Nothing to show'"></app-shade>
   <section class="container">
     <section>
       <mat-form-field appearance="standard">
@@ -97,4 +94,7 @@
   <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
                  [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
                  [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
+
+  <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
+             [errorMessage]="'Nothing to show'"></app-shade>
 </mat-card>
