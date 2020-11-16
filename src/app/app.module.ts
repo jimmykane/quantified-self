@@ -42,14 +42,20 @@ declare function require(moduleName: string): any;
 
 const appPackage = require('../../package.json');
 
-Sentry.init({
-  dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
-  environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
-  release: appPackage.version,
-  integrations: [new Sentry.Integrations.TryCatch({
-    XMLHttpRequest: false,
-  })],
-});
+// Sentry.init({
+//   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
+//   environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
+//   release: appPackage.version,
+//   integrations: [
+//     // new Sentry.Integrations.TryCatch({
+//     //   XMLHttpRequest: false
+//     // }),
+//     new Integrations.BrowserTracing({
+//       tracingOrigins: ["localhost", "https://yourserver.io/api"],
+//       routingInstrumentation: Sentry.routingInstrumentation,
+//     }),
+//   ],
+// });
 
 
 @NgModule({

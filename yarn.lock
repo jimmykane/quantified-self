@@ -1534,7 +1534,18 @@
     semver "7.3.2"
     semver-intersect "1.4.0"
 
-"@sentry/browser@^5.27.4":
+"@sentry/angular@^5.27.4":
+  version "5.27.4"
+  resolved "https://registry.yarnpkg.com/@sentry/angular/-/angular-5.27.4.tgz#7e2f6d14c3505f17018f311fcaedcb8244e54fa2"
+  integrity sha512-78xR1OxNtM1kiqVTrG9iPBBNONvZpaL6Pj8sMuLWXT/68C1zJTaaF0ljNFFhDB22b1//cJXwIPeHe3Ax8jV7IA==
+  dependencies:
+    "@sentry/browser" "5.27.4"
+    "@sentry/types" "5.27.4"
+    "@sentry/utils" "5.27.4"
+    rxjs "^6.6.0"
+    tslib "^1.9.3"
+
+"@sentry/browser@5.27.4":
   version "5.27.4"
   resolved "https://registry.yarnpkg.com/@sentry/browser/-/browser-5.27.4.tgz#241dedc7d82d3ed2769bfc8e4fb193d10e6a1d4d"
   integrity sha512-L8Fsnkl3PIak4zJ1pcGDmV92XTQjS2/H6EBgp1rhuOF4OE3L59K8RR73C9w+wVtsIi7nyfYg/FIe8lvG++3Mow==
@@ -1571,6 +1582,17 @@
   dependencies:
     "@sentry/hub" "5.27.4"
     "@sentry/types" "5.27.4"
+    tslib "^1.9.3"
+
+"@sentry/tracing@^5.27.4":
+  version "5.27.4"
+  resolved "https://registry.yarnpkg.com/@sentry/tracing/-/tracing-5.27.4.tgz#0f6b0ebfa90b9f5bf5bac1fcf0f196010dbdddac"
+  integrity sha512-f3nG8ozCdcbFOzsnBCZ8w+/WfoNiAd0Ctr643L0rsFbaSzPWxbPMe3LNVrWwFVo6mHacG3/2HYmJ3CYMiWyTKQ==
+  dependencies:
+    "@sentry/hub" "5.27.4"
+    "@sentry/minimal" "5.27.4"
+    "@sentry/types" "5.27.4"
+    "@sentry/utils" "5.27.4"
     tslib "^1.9.3"
 
 "@sentry/types@5.27.4":
