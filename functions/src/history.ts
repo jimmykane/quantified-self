@@ -148,7 +148,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
         throw new Error(result.error);
       }
       return result.payload
-        .filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate)
+        // .filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate)
         .filter((item: any) => !!item.workoutKey)
         .map((item: any) => {
         return {
