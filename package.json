@@ -29,7 +29,7 @@
     "@angular/common": "11.0.1",
     "@angular/compiler": "11.0.1",
     "@angular/core": "11.0.1",
-    "@angular/fire": "6.1.1",
+    "@angular/fire": "6.1.0-rc.3",
     "@angular/forms": "11.0.1",
     "@angular/material": "^11.0.0",
     "@angular/material-moment-adapter": "^11.0.0",
