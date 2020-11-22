@@ -55,6 +55,25 @@
       </ng-template>
     </mat-tab>
 
+    <mat-tab label="History import"
+             [disabled]="!isConnectedToService()">
+      <ng-template matTabLabel>
+        <mat-icon matTooltip="History import">history</mat-icon>
+      </ng-template>
+
+      <ng-template matTabContent>
+        <mat-card class="mat-elevation-z0">
+          <mat-card-header>
+            <mat-card-subtitle>
+              Import your Suunto app activity history
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+          <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"></app-history-import-form>
+        </mat-card>
+      </ng-template>
+    </mat-tab>
+
     <mat-tab label="Download">
       <ng-template matTabLabel>
         <mat-icon matTooltip="Download">cloud_download</mat-icon>
@@ -105,25 +124,6 @@
           </mat-card-header>
           <mat-divider></mat-divider>
           <app-upload-activity-to-service [user]="user"></app-upload-activity-to-service>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
-
-    <mat-tab label="History import"
-             [disabled]="!isConnectedToService()">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="History import">history</mat-icon>
-      </ng-template>
-
-      <ng-template matTabContent>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              Import your Suunto app activity history
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"></app-history-import-form>
         </mat-card>
       </ng-template>
     </mat-tab>
