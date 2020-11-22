@@ -4,7 +4,6 @@ import {SharedModule} from './shared.module';
 import {CommonModule} from '@angular/common';
 import { MyTracksRoutingModule } from '../my-tracks.routing.module';
 import { TracksComponent } from '../components/tracks/tracks.component';
-import { AngularFireStorageModule } from '@angular/fire/storage';
 import { MyTracksProgressComponent } from '../components/tracks/progress/tracks.progress';
 
 
@@ -14,7 +13,6 @@ import { MyTracksProgressComponent } from '../components/tracks/progress/tracks.
     SharedModule,
     MaterialModule,
     MyTracksRoutingModule,
-    AngularFireStorageModule
   ],
   exports: [],
   declarations: [TracksComponent, MyTracksProgressComponent],

@@ -69,7 +69,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     private eventColorService: AppEventColorService,
     private zone: NgZone,
     private fileService: AppFileService,
-    private storage: AngularFireStorage,
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private afa: AngularFireAnalytics,

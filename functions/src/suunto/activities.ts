@@ -5,14 +5,13 @@ import * as admin from "firebase-admin";
 import * as requestPromise from "request-promise-native";
 import { getTokenData } from "../tokens";
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
-import * as Pako from 'pako';
 import { SERVICE_NAME } from './constants';
 
 
 /**
- * Uploads a route to the Suunto app
+ * Uploads an activity to Suunto app
  */
-export const importRouteToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const importActivityToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error(`Not allowed`);
@@ -55,45 +54,53 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
       res.send(e.name);
       return;
     }
+
+    // First init the upload
     let result: any;
     try {
       result = await requestPromise.post({
         headers: {
           'Authorization': serviceToken.accessToken,
-          'Content-Type': 'application/gpx+xml',
+          'Content-Type': 'application/json',
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
-          // json: true,
+          json: true,
         },
-        body: Pako.ungzip(req.body, {to: 'string'}),
-        url: `https://cloudapi.suunto.com/v2/route/import`,
+        body: JSON.stringify({
+          description: "Some description",
+          comment: "Some Notes",
+          notifyUser: true
+        }),
+        url: `https://cloudapi.suunto.com/v2/upload/`,
       });
       result = JSON.parse(result);
-      // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
     } catch (e) {
-      console.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      console.error(`Could init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.name);
       return;
     }
 
+    try {
+      result = await requestPromise.put({
+        headers: {
+          "x-ms-blob-type": "BlockBlob",
+          // json: true,
+        },
+        body: req.body,
+        url: result.url,
+      });
+    } catch (e) {
+      console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      res.status(500);
+      res.send(e.message);
+      return;
+    }
+
     if (result.error) {
-      console.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
+      console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
       res.status(500);
       res.send(result.error);
       return;
-    }
-    try {
-      const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME).get();
-      const data = userServiceMetaDocumentSnapshot.data();
-      let uploadedRoutesCount = 0
-      if (data){
-        uploadedRoutesCount = data.uploadedRoutesCount || uploadedRoutesCount;
-      }
-      await userServiceMetaDocumentSnapshot.ref.update({
-        uploadedRoutesCount: uploadedRoutesCount + 1
-      })
-    }catch (e) {
-      console.error(`Could not update uploadedRoutes count`);
     }
   }
   res.status(200)
