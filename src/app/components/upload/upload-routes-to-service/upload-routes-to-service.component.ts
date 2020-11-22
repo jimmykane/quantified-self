@@ -47,7 +47,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
         }
         const idToken = await (await this.afAuth.currentUser).getIdToken(true)
         try {
-          const compressed = Pako.gzip(fileReader.result as string, {to: 'string'});
+          const compressed = btoa(Pako.gzip(fileReader.result as string, {to: 'string'}));
           if (getSize(compressed) > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }

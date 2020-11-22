@@ -64,7 +64,7 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
           // json: true,
         },
-        body: Pako.ungzip(req.body, {to: 'string'}),
+        body: Pako.ungzip(Buffer.from(req.body, 'base64'), {to: 'string'}),
         url: `https://cloudapi.suunto.com/v2/route/import`,
       });
       result = JSON.parse(result);
