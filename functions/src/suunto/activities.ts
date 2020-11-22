@@ -66,8 +66,8 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
           json: true,
         },
         body: JSON.stringify({
-          description: "Some description",
-          comment: "Some Notes",
+          // description: "#qs",
+          // comment: "",
           notifyUser: true
         }),
         url: `https://cloudapi.suunto.com/v2/upload/`,
