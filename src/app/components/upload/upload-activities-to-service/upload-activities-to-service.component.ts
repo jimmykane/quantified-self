@@ -37,7 +37,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
    * @param file
    */
   async processAndUploadFile(file: FileInterface) {
-    this.afa.logEvent('upload_route_to_service', { service: ServiceNames.SuuntoApp });
+    this.afa.logEvent('upload_activity_to_service', { service: ServiceNames.SuuntoApp });
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
