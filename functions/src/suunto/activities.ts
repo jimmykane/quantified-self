@@ -86,8 +86,10 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
           "x-ms-blob-type": "BlockBlob",
           // json: true,
         },
-        body: req.body,
         url: result.url,
+        formData: {
+          file: req.rawBody
+        }
       });
     } catch (e) {
       console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
