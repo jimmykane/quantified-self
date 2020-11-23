@@ -7,7 +7,7 @@ import {
   OnChanges,
   OnDestroy,
 } from '@angular/core';
-import { Log } from 'ng2-logger/browser'
+
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
 
@@ -28,7 +28,7 @@ import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-l
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChartsXYComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
-  protected logger = Log.create('ChartsXYComponent');
+
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
     super(zone, changeDetector);

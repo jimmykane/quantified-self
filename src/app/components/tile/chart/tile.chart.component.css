@@ -3,6 +3,11 @@ app-pie-chart{
   height: 100%;
 }
 
+app-intensity-zones-chart{
+  width: 100%;
+  height: 100%;
+}
+
 app-xy-chart{
   width: 80%;
   height: 100%;

@@ -1,9 +1,7 @@
 mat-cell, .mat-header-cell {
   overflow: visible;
-  min-width: 6vw;
+  min-width: 68px;
 }
-
-
 
 .mat-cell{
   font-size: 0.85em ;
@@ -35,6 +33,10 @@ mat-cell, .mat-header-cell {
   max-width: 10vw;
 }
 
+.mat-column-Description{
+  min-width: 10vw;
+}
+
 
 td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:last-of-type{
   padding-right: 0;
@@ -58,6 +60,7 @@ td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:la
 .mat-column-Actions {
   justify-content: flex-end;
   padding-right: 2em !important;
+  padding-left: 0.2em;
   /*padding-left:  1em !important;*/
 }
 
@@ -109,13 +112,19 @@ mat-card{
   border-radius: 1px !important;
 }
 
+.table-container{
+  overflow: auto;
+  width: 100%;
+  max-width: 100%
+}
 
 table {
   width: 100%;
 }
 
-tr.mat-row:hover {
+tr.mat-row:hover td:not(.mat-table-sticky){
   background: rgba(239, 239, 239, 0.4);
+  cursor: pointer;
 }
 
 

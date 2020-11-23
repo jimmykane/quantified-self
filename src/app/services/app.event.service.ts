@@ -4,12 +4,10 @@ import { EventImporterJSON } from '@sports-alliance/sports-lib/lib/events/adapte
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
 import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
-import { firestore } from 'firebase/app';
 import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import { Log } from 'ng2-logger/browser';
 import * as Sentry from '@sentry/browser';
 import { fromPromise } from 'rxjs/internal-compatibility';
 import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
@@ -23,7 +21,9 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import firebase from 'firebase/app'
 import DocumentData = firebase.firestore.DocumentData;
+import firestore = firebase.firestore
 
 
 @Injectable({
@@ -31,7 +31,7 @@ import DocumentData = firebase.firestore.DocumentData;
 })
 export class AppEventService implements OnDestroy {
 
-  protected logger = Log.create('EventService');
+
 
   constructor(
     private windowService: AppWindowService,
@@ -57,7 +57,7 @@ export class AppEventService implements OnDestroy {
         return of([null, null])
       }
       Sentry.captureException(error);
-      this.logger.error(error);
+
       return of([null, null]) // @todo fix this
     })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
       if (!event) {
@@ -69,7 +69,7 @@ export class AppEventService implements OnDestroy {
     })).pipe(catchError((error) => {
       // debugger;
       Sentry.captureException(error);
-      this.logger.error(error);
+
       return of(null); // @todo is this the best we can do?
     }))
   }
@@ -242,7 +242,7 @@ export class AppEventService implements OnDestroy {
       await Promise.all(writePromises);
       return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
     } catch (e) {
-      this.logger.error(e);
+
       // Try to delete the parent entity and all subdata
       await this.deleteAllEventData(user, event.getID());
       throw new Error('Could not parse event');
@@ -277,7 +277,7 @@ export class AppEventService implements OnDestroy {
       .doc(user.uid)
       .collection('events')
       .doc(eventID).delete();
-    this.logger.info(`Deleted event ${eventID}`);
+
     await Promise.all(activityDeletePromises);
     return true;
   }
@@ -292,7 +292,7 @@ export class AppEventService implements OnDestroy {
       .doc(eventID)
       .collection('activities')
       .doc(activityID).delete();
-    this.logger.info(`Deleted activity ${activityID} for event ${eventID}`);
+
     return true;
   }
 
@@ -304,7 +304,7 @@ export class AppEventService implements OnDestroy {
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([
       this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
     ]);
-    this.logger.info(`Deleted ${numberOfStreamsDeleted} streams for event: ${eventID} and activity ${activityID}`);
+
     return numberOfStreamsDeleted
   }
 
@@ -477,12 +477,12 @@ export class AppEventService implements OnDestroy {
   }
 
   private processStreamDocumentSnapshot(streamSnapshot: DocumentData): StreamInterface {
-    this.logger.info(<string>streamSnapshot.data().type)
+
     return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(streamSnapshot.data()));
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
-    this.logger.info(<string>queryDocumentSnapshot.data().type)
+
     return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(<CompressedJSONStreamInterface>queryDocumentSnapshot.data()));
   }
 

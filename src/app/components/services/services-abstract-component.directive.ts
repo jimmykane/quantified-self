@@ -40,6 +40,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public serviceMeta: UserServiceMetaInterface
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
+  public isConnecting = false;
 
 
   protected serviceDataSubscription: Subscription;
@@ -87,10 +88,11 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.isLoading = false;
         return;
       }
-      if (!shouldConnect) {
+      if (!shouldConnect || this.isConnecting) {
         this.isLoading = false;
         return;
       }
+      this.isConnecting = true;
       try {
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
         this.afa.logEvent('connected_to_service', {serviceName: this.serviceName});
@@ -104,7 +106,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         });
       } finally {
         this.isLoading = false;
-        await this.router.navigate(['services'], {queryParams: { serviceName: serviceName }, preserveQueryParams: false});
+        this.isConnecting = false;
+        await this.router.navigate(['services'], { queryParams: { serviceName: serviceName }, queryParamsHandling: '' });
       }
     });
   }

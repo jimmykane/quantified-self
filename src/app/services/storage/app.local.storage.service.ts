@@ -1,5 +1,4 @@
 import { StorageServiceInterface } from './app.storage.service.interface';
-import { Logger } from 'ng2-logger/browser';
 import { Injectable } from '@angular/core';
 
 
@@ -9,7 +8,6 @@ import { Injectable } from '@angular/core';
 export abstract class LocalStorageService implements StorageServiceInterface {
 
   protected abstract nameSpace: string;
-  protected abstract logger: Logger<{}>;
 
   private localStorage = localStorage;
 

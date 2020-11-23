@@ -12,11 +12,11 @@ import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
-import { Log } from 'ng2-logger/browser';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 import { getDatesForDateRange } from 'app/helpers/date-range-helper';
+import firebase from 'firebase/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
@@ -41,7 +41,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   private shouldSearch: boolean;
   private promoDialogRef: MatDialogRef<PromoDialogComponent>
 
-  private logger = Log.create('DashboardComponent');
+
 
 
   constructor(public authService: AppAuthService,
@@ -56,7 +56,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
-    this.logger.info(`On Init`);
+
     this.shouldSearch = true;
     // @todo make this an obsrvbl
     const userID = this.route.snapshot.paramMap.get('userID');
@@ -70,7 +70,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
     }
     this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
-      this.logger.info(`User subscription`);
+
       this.isLoading = true;
       // Get the user
       if (!user) {
@@ -141,20 +141,20 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
           if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
-            this.logger.info(`Took ${performance.now() - t0}ms to filter`);
+
             return eventsArray;
           }
           const result = eventsArray.filter(event => {
             return event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0)
           });
-          this.logger.info(`Took ${performance.now() - t0}ms to filter ${eventsArray.length}`);
+
           return result;
         }))
         .pipe(map((events) => {
           return {events: events, user: user}
         }))
     })).subscribe((eventsAndUser) => {
-      this.logger.info(`Events and user subscription`);
+
       this.shouldSearch = false;
       this.events = eventsAndUser.events || [];
       this.user = eventsAndUser.user;
@@ -178,7 +178,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   ngOnChanges() {
-    this.logger.info(`On Changes`);
+
   }
 
   async showPromoForUserOrDoNothing(user: User) {

@@ -3,7 +3,6 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { FileInterface } from './file.interface';
 import { UPLOAD_STATUS } from './upload-status/upload.status';
 import * as Sentry from '@sentry/browser';
-import { Logger } from 'ng2-logger';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppFilesStatusService } from '../../services/upload/app-files-status.service';
@@ -13,14 +12,12 @@ import { AppFilesStatusService } from '../../services/upload/app-files-status.se
 export abstract class UploadAbstractDirective implements OnInit {
 
   @Input() user: User;
-  protected logger: Logger<any>;
 
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService,
-    logger) {
-    this.logger = logger;
+    protected filesStatusService: AppFilesStatusService) {
+
   }
 
 
@@ -59,7 +56,7 @@ export abstract class UploadAbstractDirective implements OnInit {
         files[index].status = UPLOAD_STATUS.PROCESSED;
       } catch (e) {
         files[index].status = UPLOAD_STATUS.ERROR;
-        this.logger.error(e);
+
         Sentry.captureException(e);
       } finally {
         this.filesStatusService.addOrUpdate(files[index]);

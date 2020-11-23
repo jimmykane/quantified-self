@@ -26,13 +26,10 @@ import { debounceTime, take } from 'rxjs/operators';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Subject, Subscription } from 'rxjs';
 import * as Sentry from '@sentry/browser';
-import { Log } from 'ng2-logger/browser';
 import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { AppUserService } from '../../services/app.user.service';
-import { ScreenBreakPoints } from '../screen-size/sreen-size.abstract';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
@@ -66,12 +63,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
 
+  selectedColumns = AppUserService.getDefaultSelectedTableColumns();
+
   public show = true
 
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
 
-  private logger = Log.create('EventTableComponent');
+
   private searchSubject: Subject<string> = new Subject();
 
   constructor(private snackBar: MatSnackBar,
@@ -97,6 +96,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
+      this.selectedColumns = this.user.settings.dashboardSettings.tableSettings.selectedColumns
       this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
     }
   }
@@ -214,65 +214,19 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   // Todo cache this please
-  getColumnsToDisplayDependingOnScreenSize() {
+  getColumnsToDisplay() {
     // push all the rest
     let columns = [
       'Checkbox',
       'Start Date',
-      'Description',
-      'Activity Types',
-      'Duration',
-      'Distance',
-      'Ascent',
-      'Descent',
-      'Energy',
-      'Average Heart Rate',
-      'Average Speed',
-      'Average Power',
-      'VO2 Max',
-      'Device Names',
+      ...this.selectedColumns.sort(function (a, b) {
+        return AppUserService.getDefaultSelectedTableColumns().indexOf(a) - AppUserService.getDefaultSelectedTableColumns().indexOf(b);
+      }),
       'Actions'
-    ];
+    ]
 
     if (!this.showActions) {
-      columns = columns.filter(column =>  column !== 'Checkbox' && column !== 'Actions');
-    }
-
-    // Filter now on data
-    const t0 = performance.now();
-    columns = columns.filter(column => {
-      return this.data.data.find(row => {
-        return column === 'Checkbox' || column === 'Actions' || isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
-      });
-    });
-    this.logger.info(`Took ${performance.now() - t0}ms to find empty`);
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
-      return columns;
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
-      columns = columns.filter(column => ['Description', 'Energy'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Descent', 'Device Names', 'Ascent'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Description', 'Energy', 'Average Power', 'VO2 Max', 'Average Speed', 'Average Heart Rate', 'Descent', 'Device Names', 'Ascent', 'Descent'].indexOf(column) === -1)
+      columns = columns.filter(column => column !== 'Checkbox' && column !== 'Actions');
     }
 
     return columns
@@ -309,12 +263,26 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.searchSubject.next(event.target.value);
   }
 
+  async selectedColumnsChange(event: string[]) {
+    this.selectedColumns = event
+    this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
+    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+  }
+
   ngOnDestroy() {
     this.unsubscribeFromAll();
   }
 
+  isSticky(column: string) {
+    return column === 'Checkbox'
+  }
+
+  isStickyEnd(column: string) {
+    return column === 'Actions'
+  }
+
   private processChanges() {
-    this.logger.info(`Processing changes`);
+
     this.selection.clear();
     // this.data = new MatTableDataSource<any>(data);
     this.data.data = this.events.reduce((EventRowElementsArray, event) => {
@@ -346,7 +314,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return EventRowElementsArray;
     }, []);
     this.loaded();
-    this.logger.info(`Changes processed`);
+
   }
 
   private unsubscribeFromAll() {

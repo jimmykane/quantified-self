@@ -9,43 +9,8 @@
   </mat-card-header>
 
   <mat-tab-group [dynamicHeight]="true">
-    <mat-tab label="Download">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Download">cloud_download</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              Download or import a FIT file from a Suunto app link
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()"
-                autocomplete="off">
-            <mat-form-field>
-              <label>
-                <input matInput placeholder="Link" formControlName="input">
-              </label>
-              <mat-hint>Paste a Suunto app link that is public</mat-hint>
-              <mat-error *ngIf="hasError('input')">
-                This cannot be empty
-              </mat-error>
-            </mat-form-field>
-            <section>
-              <button class="big" mat-flat-button color="primary" (click)="onSubmit()">
-                Download
-              </button>
-              <button *ngIf="user" class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
-                Import
-              </button>
-            </section>
-          </form>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
 
-    <mat-tab label="Sync" [disabled]="!user || isGuest">
+    <mat-tab label="Sync" *ngIf='user && !isGuest' [disabled]="!user || isGuest">
       <ng-template matTabLabel>
         <mat-icon matTooltip="Sync settings">sync</mat-icon>
       </ng-template>
@@ -109,9 +74,63 @@
       </ng-template>
     </mat-tab>
 
+    <mat-tab label="Download">
+      <ng-template matTabLabel>
+        <mat-icon matTooltip="Download">cloud_download</mat-icon>
+      </ng-template>
+      <ng-template matTabContent>
+        <mat-card class="mat-elevation-z0">
+          <mat-card-header>
+            <mat-card-subtitle>
+              Download or import a FIT file from a Suunto app link
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+          <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()"
+                autocomplete="off">
+            <mat-form-field>
+              <label>
+                <input matInput placeholder="Link" formControlName="input">
+              </label>
+              <mat-hint>Paste a Suunto app link that is public</mat-hint>
+              <mat-error *ngIf="hasError('input')">
+                This cannot be empty
+              </mat-error>
+            </mat-form-field>
+            <section>
+              <button class="big" mat-flat-button color="primary" (click)="onSubmit()">
+                Download
+              </button>
+              <button *ngIf="user" class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
+                Import
+              </button>
+            </section>
+          </form>
+        </mat-card>
+      </ng-template>
+    </mat-tab>
+
+    <mat-tab label="FIT Upload" [disabled]="isGuest || !isConnectedToService()">
+      <ng-template matTabLabel>
+        <mat-icon matTooltip="Upload a FIT file to your Suunto app">cloud_upload</mat-icon>
+      </ng-template>
+      <ng-template matTabContent>
+        <mat-card class="mat-elevation-z0">
+          <mat-card-header>
+            <mat-card-subtitle>
+              You can upload a FIT file to your Suunto app as an activity<br/>
+              You will receive a notification at your Suunto app.
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+          <app-upload-activity-to-service [user]="user"></app-upload-activity-to-service>
+        </mat-card>
+      </ng-template>
+    </mat-tab>
+
     <mat-tab label="GPX Upload" [disabled]="isGuest || !isConnectedToService()">
       <ng-template matTabLabel>
-        <mat-icon matTooltip="GPX Upload" svgIcon="route"></mat-icon>
+        <mat-icon matTooltip="Upload a route to your Suunto app" svgIcon="route"></mat-icon>
       </ng-template>
 
       <ng-template matTabContent>
@@ -130,10 +149,11 @@
             </mat-card-subtitle>
           </mat-card-header>
           <mat-divider></mat-divider>
-          <app-upload-route [user]="user"></app-upload-route>
+          <app-upload-route-to-service [user]="user"></app-upload-route-to-service>
         </mat-card>
       </ng-template>
     </mat-tab>
+
   </mat-tab-group>
 </mat-card>
 <app-shade [isActive]="isLoading"></app-shade>

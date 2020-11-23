@@ -11,14 +11,12 @@ import {
 import { Observable } from 'rxjs';
 import { AppAuthService } from './app.auth.service';
 import { map, take, tap } from 'rxjs/operators';
-import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AppAuthGuard implements CanActivate, CanLoad {
-  private logger = Log.create('AppAuthGuard');
 
   constructor(private authService: AppAuthService, private router: Router, private snackBar: MatSnackBar) {
   }

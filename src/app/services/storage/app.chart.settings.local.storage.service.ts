@@ -1,6 +1,5 @@
 import {Injectable} from '@angular/core';
 import {LocalStorageService} from './app.local.storage.service';
-import {Log} from 'ng2-logger/browser';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 
@@ -9,7 +8,7 @@ import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.inter
 })
 export class AppChartSettingsLocalStorageService extends LocalStorageService {
   protected nameSpace = 'chart.settings.service.';
-  protected logger = Log.create('ChartSettingsLocalStorageService');
+
 
   // @todo perhaps make static
   public getSeriesIDsToShow(event: EventInterface): string[] {

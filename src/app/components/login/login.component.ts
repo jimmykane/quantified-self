@@ -8,7 +8,7 @@ import {take} from 'rxjs/operators';
 import {AppUserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
-import {Log} from 'ng2-logger/browser';
+
 import {AngularFireAuth} from '@angular/fire/auth';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
 import {AngularFireAnalytics} from '@angular/fire/analytics';
@@ -27,7 +27,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
 
   private userSubscription; Subscription
-  private logger = Log.create('LoginComponent');
+
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
@@ -62,7 +62,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
     } catch (e) {
       Sentry.captureException(e);
-      this.logger.error(e);
+
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
       });
@@ -97,7 +97,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
     } catch (e) {
       Sentry.captureException(e);
-      this.logger.error(e);
+
       this.snackBar.open(`Could not log in due to ${e}`, null, {
         duration: 2000,
       });

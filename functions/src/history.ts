@@ -141,13 +141,16 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
           json: true,
         },
-        url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000`,
+        url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000&filter-by-modification-time=false`,
       });
       result = JSON.parse(result)
       if (result.error) {
         throw new Error(result.error);
       }
-      return result.payload.filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate).map((item: any) => {
+      return result.payload
+        // .filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate)
+        .filter((item: any) => !!item.workoutKey)
+        .map((item: any) => {
         return {
           id: generateIDFromParts([serviceToken.userName, item.workoutKey]),
           dateCreated: new Date().getTime(),

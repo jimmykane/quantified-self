@@ -37,6 +37,7 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import * as equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import * as weeknumber from 'weeknumber'
+import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
 
 @Component({
   selector: 'app-summaries',
@@ -213,6 +214,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
                 }
               });
               break;
+            case ChartTypes.IntensityZones:
+              chartsAndData.push({
+                ...chartTile, ...{
+                  timeInterval: TimeIntervals.Auto, // Defaults to Auto
+                  data: this.getIntensityZonesChartData(events)
+                }
+              });
+              break;
             default:
               chartsAndData.push({
                 ...chartTile, ...{
@@ -284,8 +293,6 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }, 0);
   }
 
-
-  // @todo replace key "value" with the name of the dataType (eg avg,max,min, etc)
   private getChartData(events: EventInterface[], dataType: string, valueType: ChartDataValueTypes, categoryType: ChartDataCategoryTypes, timeInterval: TimeIntervals): SummariesChartDataInterface[] {
     if (this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`]) {
       return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`];
@@ -384,6 +391,14 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     const map = this.convertToCategories(valueByCategory)
     return this.getChartDataCache[`${dataType}:${valueType}:${categoryType}:${timeInterval}`] = map;
+  }
+
+  private getIntensityZonesChartData(events: EventInterface[]) {
+    if (this.getChartDataCache[ChartTypes.IntensityZones]) {
+      return this.getChartDataCache[ChartTypes.IntensityZones];
+    }
+    this.getChartDataCache[ChartTypes.IntensityZones] = convertIntensityZonesStatsToChartData(events)
+    return this.getChartDataCache[ChartTypes.IntensityZones];
   }
 
   /**

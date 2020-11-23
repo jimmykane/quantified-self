@@ -19,14 +19,6 @@
                  [chartDataCategoryType]="dataCategoryType"
                  [chartDataTimeInterval]="dataTimeInterval">
   </app-pie-chart>
-  <app-brian-devine-chart *ngIf="chartType === chartTypes.BrianDevine"
-                 [isLoading]="isLoading"
-                 [data]="data"
-                 [chartTheme]="chartTheme"
-                 [chartDataType]="dataType"
-                 [chartDataValueType]="dataValueType"
-                 [chartDataTimeInterval]="dataTimeInterval">
-  </app-brian-devine-chart>
   <app-xy-chart
     *ngIf="chartType === chartTypes.LinesHorizontal
         || chartType === chartTypes.LinesVertical"
@@ -64,4 +56,22 @@
     [chartDataCategoryType]="dataCategoryType"
     [chartDataTimeInterval]="dataTimeInterval">
   </app-timeline-chart>
+  <app-brian-devine-chart *ngIf="chartType === chartTypes.BrianDevine"
+                          [isLoading]="isLoading"
+                          [data]="data"
+                          [chartTheme]="chartTheme"
+                          [chartDataType]="dataType"
+                          [chartDataValueType]="dataValueType"
+                          [chartDataTimeInterval]="dataTimeInterval">
+  </app-brian-devine-chart>
+  <app-intensity-zones-chart
+    *ngIf="chartType === chartTypes.IntensityZones"
+    [isLoading]="isLoading"
+    [data]="data"
+    [chartTheme]="chartTheme"
+    [chartDataType]="dataType"
+    [chartDataValueType]="dataValueType"
+    [chartDataCategoryType]="dataCategoryType"
+    [chartDataTimeInterval]="dataTimeInterval">
+  </app-intensity-zones-chart>
 </section>

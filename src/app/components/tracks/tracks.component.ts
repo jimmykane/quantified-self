@@ -9,7 +9,6 @@ import 'leaflet-fullscreen';
 import leafletImage from 'leaflet-image'
 import { AppEventService } from '../../services/app.event.service';
 import { take } from 'rxjs/operators';
-import { Log } from 'ng2-logger/browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -27,6 +26,7 @@ import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppUserService } from '../../services/app.user.service';
+import firebase from 'firebase/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
@@ -50,7 +50,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public user: User;
 
-  private logger = Log.create('TracksComponent');
+
 
   private map: L.Map;
   private polyLines: L.Polyline[] = [];
@@ -69,7 +69,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     private eventColorService: AppEventColorService,
     private zone: NgZone,
     private fileService: AppFileService,
-    private storage: AngularFireStorage,
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private afa: AngularFireAnalytics,
@@ -120,6 +119,14 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
   }
 
+  private clearProgressAndCloseBottomSheet() {
+    this.updateBufferProgress(0);
+    this.updateTotalProgress(0);
+    if (this.bottomSheet) {
+      this.bottomSheet.dismiss()
+    }
+  }
+
   private async loadTracksMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
@@ -144,7 +151,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0).subscribe(async (events) => {
       events = events.filter((event) => event.getStat(DataStartPosition.type));
       if (!events || !events.length) {
-        return;
+        return this.clearProgressAndCloseBottomSheet()
       }
 
       const chuckArraySize = 15;

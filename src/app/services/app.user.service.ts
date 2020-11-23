@@ -1,5 +1,4 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { Log } from 'ng2-logger/browser';
 import { AngularFirestore, AngularFirestoreDocument } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -70,6 +69,21 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/serv
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import { AppWindowService } from './app.window.service';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.my-tracks.settings.interface';
+import { DataDescription } from '@sports-alliance/sports-lib/lib/data/data.description';
+import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
+import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
+import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
+import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
+import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import { DataDeviceNames } from '@sports-alliance/sports-lib/lib/data/data.device-names';
+import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
+import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.peak-training-effect';
+import { DataEPOC } from '@sports-alliance/sports-lib/lib/data/data.epoc';
+import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
+import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 
 
 /**
@@ -80,7 +94,7 @@ import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib/lib/u
 })
 export class AppUserService implements OnDestroy {
 
-  protected logger = Log.create('UserService');
+
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -286,8 +300,30 @@ export class AppUserService implements OnDestroy {
     return {
       eventsPerPage: 10,
       active: 'startDate',
-      direction: 'desc'
+      direction: 'desc',
+      selectedColumns: this.getDefaultSelectedTableColumns()
     }
+  }
+
+  static getDefaultSelectedTableColumns(): string[] {
+    return [
+      DataDescription.type,
+      DataActivityTypes.type,
+      DataDuration.type,
+      DataDistance.type,
+      DataAscent.type,
+      DataDescent.type,
+      DataEnergy.type,
+      DataHeartRateAvg.type,
+      DataSpeedAvg.type,
+      DataPowerAvg.type,
+      // DataPowerMax.type,
+      DataVO2Max.type,
+      DataTotalTrainingEffect.type,
+      DataRecoveryTime.type,
+      DataPeakEPOC.type,
+      DataDeviceNames.type,
+    ]
   }
 
   static getDefaultMyTracksDateRange(): DateRanges {
@@ -311,7 +347,7 @@ export class AppUserService implements OnDestroy {
   public getUserByID(userID: string): Observable<User> {
     return this.afs
       .collection('users')
-      .doc<User>(userID)
+      .doc(userID)
       .valueChanges().pipe(map((user: User) => {
         if (!user) {
           return null
@@ -483,7 +519,7 @@ export class AppUserService implements OnDestroy {
       if (!doc.exists) {
         return false;
       }
-      return doc.data().isBranded;
+      return doc.data()['isBranded'];
     })).toPromise();
   }
 
@@ -529,7 +565,7 @@ export class AppUserService implements OnDestroy {
     }
     return this.afs
       .collection(serviceNamesToCollectionName[serviceName])
-      .doc<Auth2ServiceTokenInterface>(user.uid)
+      .doc(user.uid)
       .collection('tokens')
       .valueChanges()
       .pipe(catchError(error => {
@@ -602,6 +638,8 @@ export class AppUserService implements OnDestroy {
     settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserService.getDefaultUserDashboardTiles();
     // Patch missing defaults
     settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserService.getDefaultTableSettings();
+    settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserService.getDefaultSelectedTableColumns()
+
     // Summaries
     settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
     settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserService.getDefaultActivityTypesToRemoveAscentFromSummaries();

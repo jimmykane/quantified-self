@@ -195,5 +195,6 @@ export enum ChartTypes {
   LinesHorizontal = 'Lines Horizontal',
   LinesVertical = 'Lines Vertical',
   Spiral = 'Spiral',
+  IntensityZones = 'Intensity Zones',
   // BrianDevine = 'Brian Devine'
 }

@@ -1,13 +1,13 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges} from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {DataTableAbstractDirective} from '../../data-table/data-table-abstract.directive';
-import {ScreenBreakPoints} from '../../screen-size/sreen-size.abstract';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {AppEventColorService} from '../../../services/color/app.event.color.service';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
 import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
+import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
   selector: 'app-event-card-laps',
@@ -37,19 +37,17 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
       statRowElement['#'] = index + 1;
       statRowElement['Type'] = lap.type;
-      const maxHR =  lap.getStat(DataHeartRateMax.type);
+      const maxHR = lap.getStat(DataHeartRateMax.type);
       statRowElement['Duration'] = lap.getDuration().getDisplayValue(false, true, true);
 
-      statRowElement['Maximum Heart Rate'] = maxHR ?  `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '';
+      statRowElement['Maximum Heart Rate'] = maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '';
       lapDataArray.push(statRowElement);
       return lapDataArray;
     }, []));
   }
 
-  getColumnsToDisplayDependingOnScreenSize() {
-
-    // push all the rest
-    let columns = [
+  getColumnsToDisplay() {
+    return [
       '#',
       'Duration',
       'Distance',
@@ -60,36 +58,22 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       'Maximum Heart Rate',
       'Average Speed',
       'Average Power',
-    ];
+    ]
+  }
 
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Highest) {
-      return columns;
-    }
+  getColumnsToDisplayByActivityLapTypes(activity: ActivityInterface, availableLapType: LapTypes) {
+    return this.getColumnsToDisplay().filter(column => {
+      return this.getData(activity, availableLapType).data.find(row => {
+        return isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+      });
+    });
+  }
 
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryHigh) {
-      columns = columns.filter(column => ['Energy'].indexOf(column) === -1)
-    }
+  isSticky(column: string) {
+    return column === '#'
+  }
 
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.High) {
-      columns = columns.filter(column => ['Energy', 'Average Power'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Moderate) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Maximum Heart Rate'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Low) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Maximum Heart Rate'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.VeryLow) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Descent', 'Ascent', 'Maximum Heart Rate'].indexOf(column) === -1)
-    }
-
-    if (this.getScreenWidthBreakPoint() === ScreenBreakPoints.Lowest) {
-      columns = columns.filter(column => ['Energy', 'Average Power', 'Average Speed', 'Descent', 'Ascent', 'Maximum Heart Rate'].indexOf(column) === -1)
-    }
-
-    return columns
+  isStickyEnd(column: string) {
+    return false;
   }
 }

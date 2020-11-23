@@ -8,7 +8,6 @@ import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib/lib/events/
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
-import { Log } from 'ng2-logger/browser';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
@@ -31,7 +30,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected overlay: Overlay,
     private eventService: AppEventService,
     private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, filesStatusService, Log.create('UploadActivitiesComponent'))
+    super(snackBar, dialog, filesStatusService)
   }
 
   processAndUploadFile(file): Promise<EventInterface> {
@@ -46,7 +45,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
             try {
               newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
             } catch (e) {
-              this.logger.info(`Could not read via JSON trying via SML JSON`);
+
               newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
             }
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'sml') {

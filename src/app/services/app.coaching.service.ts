@@ -8,6 +8,7 @@ import { AppEventService } from './app.event.service';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { getDatesForDateRange } from '../helpers/date-range-helper';
+import firebase from 'firebase/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 
