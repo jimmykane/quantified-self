@@ -171,7 +171,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
       throw new Error('Component needs user');
     }
 
-    var speedUnits = [];
+    const speedUnits = [];
     this.user.settings.unitSettings.speedUnits.forEach(key => {
       const unit = SpeedUnitsToGradeAdjustedSpeedUnits[key];
       speedUnits.push(SpeedAvg['DataSpeedAvg' + unit].type);
@@ -183,8 +183,6 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
       data: speedUnits
     });
   }
-
-
 }
 
 export enum ChartTypes {
