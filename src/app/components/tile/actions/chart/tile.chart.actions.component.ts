@@ -170,17 +170,22 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
       throw new Error('Component needs user');
     }
 
-    const speedUnits = [];
-    this.user.settings.unitSettings.speedUnits.forEach(key => {
-      const unit = SpeedUnitsToGradeAdjustedSpeedUnits[key];
-      speedUnits.push(SpeedAvg['DataSpeedAvg' + unit].type);
-      speedUnits.push(SpeedMin['DataSpeedMin' + unit].type);
-      speedUnits.push(SpeedMax['DataSpeedMax' + unit].type);
-    });
-    this.dataGroups.push({
-      name: 'Speed',
-      data: speedUnits
-    });
+    // See https://sentry.io/organizations/dimitrios-kanellopoulos/issues/2051985404/?project=1194244&referrer=slack
+    try {
+      const speedUnits = [];
+      this.user.settings.unitSettings.speedUnits.forEach(key => {
+        const unit = SpeedUnitsToGradeAdjustedSpeedUnits[key];
+        speedUnits.push(SpeedAvg['DataSpeedAvg' + unit].type);
+        speedUnits.push(SpeedMin['DataSpeedMin' + unit].type);
+        speedUnits.push(SpeedMax['DataSpeedMax' + unit].type);
+      });
+      this.dataGroups.push({
+        name: 'Speed',
+        data: speedUnits
+      });
+    } catch (e) {
+      // Noop
+    }
   }
 }
 
