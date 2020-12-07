@@ -6,7 +6,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 /!**
  * Function to reset the retry count of a queue's items for a specific date range
  *!/
-// export const resetRetryCountForGarminHealthAPIActivityQueueQueue = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 10 minutes').onRun(async (context) => {
+// export const resetRetryCountForGarminHealthAPIActivityQueueQueue = functions.region('europe-west2').runWith({timeoutSeconds: 180}).pubsub.schedule('every 15 minutes').onRun(async (context) => {
 //   // return
 //   const startDate = new Date('07-30-2020');
 //   const endDate = new Date();
