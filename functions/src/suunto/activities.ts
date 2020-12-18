@@ -80,16 +80,25 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       return;
     }
 
+    const url = result.url
     try {
       result = await requestPromise.put({
         headers: {
           "x-ms-blob-type": "BlockBlob",
           // json: true,
         },
-        url: result.url,
+        url,
         formData: {
           file: req.rawBody
         }
+      });
+      result = await requestPromise.put({
+        headers: {
+          "x-ms-blob-type": "BlockBlob",
+          // json: true,
+        },
+        url,
+        body: req.rawBody
       });
     } catch (e) {
       console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
