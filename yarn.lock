@@ -1630,14 +1630,14 @@
     "@sentry/types" "5.27.6"
     tslib "^1.9.3"
 
-"@sports-alliance/sports-lib@^5.4.12":
-  version "5.4.12"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.4.12.tgz#f32224d581f71f880c9e132d99d828a38a462d48"
-  integrity sha512-x7evZHBRTqEX5mL4SR4b2Wy+qOwFiqab/2Re5hujfZO6eRiUfHrGq4lrEnSiCf7XFxtMDqRoeqHc3emXHWGV/A==
+"@sports-alliance/sports-lib@^5.4.17":
+  version "5.4.17"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.4.17.tgz#4d06f22bcb6750888ba08bc1b8dc890b04904db0"
+  integrity sha512-114H8Pln4QWci7aQtC4F3x24VseR7AouplcPgFS7tH/B1YkP1Um+bkggDi+K26Se2MHSM+4g07/4ctaiPT4WrA==
   dependencies:
     "@types/node" "^14.6.1"
     fast-xml-parser "^3.17.4"
-    fit-file-parser "^1.8.4"
+    fit-file-parser "^1.9.0"
     geolib "^3.3.1"
     gpx-builder "^3.6.0"
     kalmanjs "^1.1.0"
@@ -4635,10 +4635,10 @@ first-input-delay@^0.1.3:
   resolved "https://registry.yarnpkg.com/first-input-delay/-/first-input-delay-0.1.3.tgz#5506fb95a9537ba9706096b9c159bfd3f38f6f62"
   integrity sha512-hZ1mI+BWYIBr8jlp2bDPnRvnmSICBxpZRwdc0nhiQn2uyMxSKZEBbkO8V0/s26AMeX8p/AD4g09+liRrhXvKKQ==
 
-fit-file-parser@^1.8.4:
-  version "1.8.4"
-  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.8.4.tgz#dbebf115e22db3f84b2b8b42147329ab7d23fde5"
-  integrity sha512-+8yBIO4WKwQh0KrMJ02KsHod0+mILqm6+GkiqpQZtYMCRgw/NcdZYQAPfWfP0knPLCy0lC6Jg5gMbRrYAiHnKQ==
+fit-file-parser@^1.9.0:
+  version "1.9.0"
+  resolved "https://registry.yarnpkg.com/fit-file-parser/-/fit-file-parser-1.9.0.tgz#f1c782e5d0b48d9cfc62e820a18c6bc955fd2b4e"
+  integrity sha512-QCnKcR/v3gFkS5Gy/FRLrCQwuUy7fiihvQ89dvGdDxtmbOEE3+cJtSeXOUYRKwnst1fDteALHYGoZBWp870F1g==
   dependencies:
     buffer "^5.1.0"
 
