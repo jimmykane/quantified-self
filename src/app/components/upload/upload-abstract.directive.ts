@@ -27,7 +27,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
   }
 
-  async abstract processAndUploadFile(file: FileInterface);
+  abstract processAndUploadFile(file: FileInterface);
 
   /**
    * This can be called multiple times as the user drops more files etc

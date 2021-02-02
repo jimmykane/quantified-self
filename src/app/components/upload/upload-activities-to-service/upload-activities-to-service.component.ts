@@ -66,7 +66,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           reject(e);
           return;
         }
-        resolve();
+        resolve(true);
       };
 
       // Read it depending on the extension

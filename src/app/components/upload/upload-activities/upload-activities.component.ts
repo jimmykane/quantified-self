@@ -57,7 +57,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           } else if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
           } else {
-            resolve();
+            reject(new Error('No compatible parser found'))
             return;
           }
           newEvent.name = file.filename;

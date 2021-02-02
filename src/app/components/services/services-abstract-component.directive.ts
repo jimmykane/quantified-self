@@ -158,5 +158,5 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   abstract buildRedirectURIFromServiceToken(redirectUri: {redirect_uri: string}|{redirect_uri: string, state: string, oauthToken: string}): string
 
-  abstract async requestAndSetToken(params: ParamMap)
+  abstract requestAndSetToken(params: ParamMap)
 }

@@ -65,7 +65,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
           reject(e);
           return;
         }
-        resolve();
+        resolve(true);
       }
 
       // Read it depending on the extension
