@@ -41,7 +41,7 @@
     "@googlemaps/markerclustererplus": "^1.0.3",
     "@sentry/angular": "^6.0.4",
     "@sentry/tracing": "^6.0.4",
-    "@sports-alliance/sports-lib": "^5.4.17",
+    "@sports-alliance/sports-lib": "^5.4.18",
     "@types/pako": "^1.0.1",
     "fast-deep-equal": "^3.1.3",
     "firebase": "^8.2.5",

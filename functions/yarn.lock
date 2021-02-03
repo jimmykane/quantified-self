@@ -280,10 +280,10 @@
   resolved "https://registry.yarnpkg.com/@sideway/pinpoint/-/pinpoint-2.0.0.tgz#cff8ffadc372ad29fd3f78277aeb29e632cc70df"
   integrity sha512-RNiOoTPkptFtSVzQevY/yWtZwf/RxyVnPy/OcA9HBM3MlGDnBEYL5B41H0MTn0Uec8Hi+2qUtTfG2WWZBmMejQ==
 
-"@sports-alliance/sports-lib@^5.4.17":
-  version "5.4.17"
-  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.4.17.tgz#4d06f22bcb6750888ba08bc1b8dc890b04904db0"
-  integrity sha512-114H8Pln4QWci7aQtC4F3x24VseR7AouplcPgFS7tH/B1YkP1Um+bkggDi+K26Se2MHSM+4g07/4ctaiPT4WrA==
+"@sports-alliance/sports-lib@^5.4.18":
+  version "5.4.18"
+  resolved "https://registry.yarnpkg.com/@sports-alliance/sports-lib/-/sports-lib-5.4.18.tgz#75c950b79ac4501274350e3f7ef1e27684dad3a1"
+  integrity sha512-A1sSt+nRseczzeGkd+bj7rdObVy/i1l16JQxmfgkfVXyTfNDbCVQRehnglLO1j0qvV6FxUNBpjpq3AHLaKQUmg==
   dependencies:
     "@types/node" "^14.6.1"
     fast-xml-parser "^3.17.4"
