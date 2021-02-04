@@ -12,7 +12,7 @@ import { AngularFireModule } from '@angular/fire';
 import { AngularFirestoreModule } from '@angular/fire/firestore';
 import { AngularFireAuthModule } from '@angular/fire/auth';
 import { AngularFireFunctionsModule, REGION } from '@angular/fire/functions';
-import * as Sentry from '@sentry/browser';
+
 import {
   AngularFirePerformanceModule,
   AUTOMATICALLY_TRACE_CORE_NG_METRICS,
@@ -37,25 +37,6 @@ import { UploadActivitiesComponent } from './components/upload/upload-activities
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
 import { AppUpdateService } from './services/app.update.service';
 import { SentryErrorHandler } from './errors/sentry-error-handler';
-
-declare function require(moduleName: string): any;
-
-const appPackage = require('../../package.json');
-
-// Sentry.init({
-//   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@sentry.io/1194244',
-//   environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
-//   release: appPackage.version,
-//   integrations: [
-//     // new Sentry.Integrations.TryCatch({
-//     //   XMLHttpRequest: false
-//     // }),
-//     new Integrations.BrowserTracing({
-//       tracingOrigins: ["localhost", "https://yourserver.io/api"],
-//       routingInstrumentation: Sentry.routingInstrumentation,
-//     }),
-//   ],
-// });
 
 
 @NgModule({
@@ -101,7 +82,7 @@ const appPackage = require('../../package.json');
     {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
     {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production || environment.beta)},
     {provide: COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: APP_VERSION, useValue: appPackage.version},
+    {provide: APP_VERSION, useValue: environment.appVersion},
     {provide: APP_NAME, useValue: 'quantified-self.io'},
     {provide: DEBUG_MODE, useValue: (environment.localhost || environment.beta)},
   ],

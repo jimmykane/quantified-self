@@ -1,4 +1,7 @@
+declare function require(moduleName: string): any;
+const appVersion = require('../../package.json').version;
 export const environment = {
+  appVersion: appVersion,
   production: true,
   beta: false,
   localhost: false,

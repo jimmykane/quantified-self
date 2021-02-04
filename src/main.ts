@@ -5,13 +5,11 @@ import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app
 import * as Sentry from '@sentry/angular';
 import { Integrations } from '@sentry/tracing';
 
-declare function require(moduleName: string): any;
-const appPackage = require('../package.json');
 
 Sentry.init({
   dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
   environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
-  release: appPackage.version,
+  release: environment.appVersion,
   integrations: [
     new Integrations.BrowserTracing({
       tracingOrigins: ['localhost', 'https://quantified-self.io/', 'https://beta.quantified-self.io/'],

@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
+import { Router} from '@angular/router';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {AppSideNavService} from '../../services/side-nav/app-side-nav.service';
@@ -11,12 +11,7 @@ import { AngularFireAnalytics } from '@angular/fire/analytics';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
-import { ActivityFormComponent } from '../activity-form/activity.form.component';
-
-declare function require(moduleName: string): any;
-
-const {version: appVersion} = require('../../../../package.json');
-
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-sidenav',
@@ -26,7 +21,7 @@ const {version: appVersion} = require('../../../../package.json');
 export class SideNavComponent implements OnInit, OnDestroy {
 
   public events: EventInterface[] = [];
-  public appVersion = appVersion;
+  public appVersion = environment.appVersion;
 
   public user: User;
 
