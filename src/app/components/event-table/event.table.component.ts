@@ -37,6 +37,8 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
+import firebase from 'firebase';
+import OrderByDirection = firebase.firestore.OrderByDirection;
 
 
 @Component({
@@ -121,7 +123,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
         this.user.settings.dashboardSettings.tableSettings.active = sort.active;
-        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction;
+        this.user.settings.dashboardSettings.tableSettings.direction = sort.direction as OrderByDirection;
         await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
       }
     });
