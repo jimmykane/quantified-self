@@ -1,13 +1,13 @@
 <section class="component-container">
   <app-shade [isActive]="!isInitialized"></app-shade>
-  <ng-container *ngIf="(targetUser) && isInitialized">
-<!--  <ng-container *ngIf="(targetUser || user) && isInitialized">-->
+<!--  <ng-container *ngIf="(targetUser) && isInitialized">-->
+  <ng-container *ngIf="(targetUser || user) && isInitialized">
     <mat-card-header>
       <div mat-card-avatar class="avatar"
-           [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName) ) +')'">
+           [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName || 'Guest'))  +')'">
       </div>
       <mat-card-title>
-        {{(targetUser || user).displayName}}
+        {{(targetUser || user).displayName || "Guest"}}
       </mat-card-title>
       <mat-card-subtitle *ngIf="(targetUser || user).description">{{ (targetUser || user).description }}</mat-card-subtitle>
       <mat-card-subtitle *ngIf="!(targetUser || user).description">
