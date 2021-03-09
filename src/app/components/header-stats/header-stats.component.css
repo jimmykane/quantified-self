@@ -57,14 +57,14 @@ mat-card-subtitle {
 
 
 section {
-  display: flex;
-  flex-wrap: wrap;
-  flex-direction: row;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 160px);
+  justify-content: space-around;
 }
 
-
-section::after {
-  content: '';
-  width: 25%;
-  flex: auto;
+@media only screen and (min-width: 768px) {
+  section {
+    grid-gap: 1rem 6rem;
+  }
 }
