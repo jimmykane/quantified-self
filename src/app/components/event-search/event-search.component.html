@@ -10,7 +10,7 @@
       </mat-date-range-input>
       <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
       <mat-date-range-picker #picker></mat-date-range-picker>
-      <mat-hint *ngIf="!searchFormGroup.controls.startDate.hasError('matStartDateInvalid') && !searchFormGroup.controls.endDate.hasError('matEndDateInvalid') && selectedDateRange === dateRanges.custom">Press enter to search</mat-hint>
+      <mat-hint *ngIf="!searchFormGroup.controls.startDate.hasError('matStartDateInvalid') && !searchFormGroup.controls.endDate.hasError('matEndDateInvalid') && selectedDateRange === dateRanges.custom">Select a date range</mat-hint>
       <mat-error *ngIf="searchFormGroup.controls.startDate.hasError('matStartDateInvalid') || searchFormGroup.controls.endDate.hasError('matEndDateInvalid')">Invalid date range</mat-error>
 
 
