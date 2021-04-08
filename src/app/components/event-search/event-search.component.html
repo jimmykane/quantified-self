@@ -1,14 +1,14 @@
-<form *ngIf="searchFormGroup" [formGroup]="searchFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)" autocomplete="off" >
+<form *ngIf="searchFormGroup" [formGroup]="searchFormGroup" autocomplete="off" >
 
   <app-shade [isActive]="isLoading"></app-shade>
 
   <section [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'block' : 'none' }">
     <mat-form-field [ngStyle]="{display: showDatePicker ? 'inline-block' : 'none' }" *ngIf="searchFormGroup" style=" margin-right: 1em;" class="big">
-      <mat-date-range-input [formGroup]="searchFormGroup"  [rangePicker]="picker" placeholder="From 00:00:00" (click)="setCustomDateRange($event)">
-        <input matStartDate [formControl]="searchFormGroup.controls.startDate">
-        <input matEndDate [formControl]="searchFormGroup.controls.endDate" >
+      <mat-date-range-input [formGroup]="searchFormGroup"  [rangePicker]="picker" placeholder="From 00:00:00" (click)="setCustomDateRange($event);">
+        <input matStartDate [formControl]="searchFormGroup.controls.startDate" (dateChange)="onDateChange($event, true)">
+        <input matEndDate [formControl]="searchFormGroup.controls.endDate" (dateChange)="onDateChange($event, false)">
       </mat-date-range-input>
-      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+      <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
       <mat-date-range-picker #picker></mat-date-range-picker>
       <mat-hint *ngIf="!searchFormGroup.controls.startDate.hasError('matStartDateInvalid') && !searchFormGroup.controls.endDate.hasError('matEndDateInvalid') && selectedDateRange === dateRanges.custom">Press enter to search</mat-hint>
       <mat-error *ngIf="searchFormGroup.controls.startDate.hasError('matStartDateInvalid') || searchFormGroup.controls.endDate.hasError('matEndDateInvalid')">Invalid date range</mat-error>

@@ -16,6 +16,8 @@ import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
+import { MatDatepickerInputEvent } from '@angular/material/datepicker';
+import * as moment from 'moment';
 
 @Component({
   selector: 'app-event-search',
@@ -44,7 +46,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     DateRanges.lastYear,
     DateRanges.all,
     DateRanges.custom
-  ]
+  ];
 
   @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 
@@ -69,7 +71,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       ]),
       endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
-      ]),
+      ])
     });
   }
 
@@ -77,10 +79,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!this.searchFormGroup) {
       return;
     }
-    const startDate = this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate
+    const startDate = this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate;
     const endDate = this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate;
-    this.searchFormGroup.get('startDate').setValue(startDate)
-    this.searchFormGroup.get('endDate').setValue(endDate)
+    this.searchFormGroup.get('startDate').setValue(startDate);
+    this.searchFormGroup.get('endDate').setValue(endDate);
   }
 
 
@@ -88,7 +90,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!field) {
       return !this.searchFormGroup.valid;
     }
-    return !(this.searchFormGroup.get(field).valid && this.searchFormGroup.get(field).touched);
+    return (!this.searchFormGroup.get(field).valid && this.searchFormGroup.get(field).touched);
   }
 
   async search() {
@@ -96,13 +98,26 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       this.validateAllFormFields(this.searchFormGroup);
       return;
     }
-    debugger
+
+    let startDate: Date = this.searchFormGroup.get('startDate').value;
+    let endDate: Date = this.searchFormGroup.get('endDate').value;
+    if (this.searchFormGroup.get('startDate').value instanceof moment) {
+      startDate = this.searchFormGroup.get('startDate').value.toDate();
+    }
+
+    if (this.searchFormGroup.get('endDate').value instanceof moment) {
+      endDate = this.searchFormGroup.get('endDate').value.toDate();
+    }
+
+    this.selectedStartDate = startDate ? new Date(startDate.setHours(0, 0, 0)) : null;
+    this.selectedEndDate = endDate ? new Date(endDate.setHours(23, 59, 59)) : null;
+
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search').value,
-      startDate: this.searchFormGroup.get('startDate').value ? new Date(this.searchFormGroup.get('startDate').value.setHours(0, 0, 0)) : null,
-      endDate: this.searchFormGroup.get('endDate').value ? new Date(this.searchFormGroup.get('endDate').value.setHours(23, 59, 59)) : null,
+      startDate: this.selectedStartDate,
+      endDate: this.selectedEndDate,
       activityTypes: this.selectedActivityTypes,
-      dateRange: this.selectedDateRange,
+      dateRange: this.selectedDateRange
     });
   }
 
@@ -117,26 +132,36 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
     this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
     this.selectedDateRange = event.source.value;
-    this.search();
+    return this.search();
   }
 
-  onDateChange(event) {
+  async onDateChange(event: MatDatepickerInputEvent<any>, isStartDate: Boolean) {
+    if (!event.value) {
+      return;
+    }
+    if (!this.searchFormGroup.get('startDate').value || !this.searchFormGroup.get('endDate').value) {
+      return;
+    }
+    this.selectedDateRange = this.dateRanges.custom;
+    if (!isStartDate) {
+      return this.search();
+    }
   }
 
   setCustomDateRange(event) {
     this.selectedDateRange = this.dateRanges.custom;
   }
 
-  onActivityTypesChange(activityTypes) {
+  async onActivityTypesChange(activityTypes) {
     this.selectedActivityTypes = activityTypes;
-    this.search()
+    return this.search();
   }
 
   validateAllFormFields(formGroup: FormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof FormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof FormGroup) {
         this.validateAllFormFields(control);
       }
@@ -148,7 +173,7 @@ export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): Va
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
   if (endDate.value < startDate.value) {
-    return {'endDateSmallerThanStartDate': true};
+    return { 'endDateSmallerThanStartDate': true };
   }
   return null;
 };
@@ -157,7 +182,7 @@ export const maxDateDistanceValidator: ValidatorFn = (control: FormGroup): Valid
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
   if (endDate.value - startDate.value > new Date(365 * 5 * 24 * 3600 * 1000).getTime()) { // @todo improve this
-    return {'dateRange': true};
+    return { 'dateRange': true };
   }
   return null;
 };

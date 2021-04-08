@@ -73,7 +73,7 @@ export class UserAgreementFormComponent implements OnInit {
   }
 
   hasError(field: string) {
-    return !(this.userFormGroup.get(field).valid && this.userFormGroup.get(field).touched);
+    return (!this.userFormGroup.get(field).valid && this.userFormGroup.get(field).touched);
   }
 
   async onSubmit(event) {
