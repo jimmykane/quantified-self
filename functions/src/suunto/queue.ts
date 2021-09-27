@@ -42,7 +42,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
   maxInstances: 1,
-}).pubsub.schedule('every 15 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
@@ -50,6 +50,6 @@ export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
   maxInstances: 1,
-}).pubsub.schedule('every 15 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
   await parseQueueItems(ServiceNames.SuuntoApp, true);
 });
