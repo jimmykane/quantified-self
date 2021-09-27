@@ -26,7 +26,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
 import { DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DataSwimPace } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 
 
 @Component({

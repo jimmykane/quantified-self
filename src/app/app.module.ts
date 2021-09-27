@@ -8,17 +8,16 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
 import { HttpClientModule } from '@angular/common/http';
-import { AngularFireModule } from '@angular/fire';
-import { AngularFirestoreModule } from '@angular/fire/firestore';
-import { AngularFireAuthModule } from '@angular/fire/auth';
-import { AngularFireFunctionsModule, REGION } from '@angular/fire/functions';
+import { AngularFireModule } from '@angular/fire/compat';
+import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
+import { AngularFireAuthModule } from '@angular/fire/compat/auth';
+import { AngularFireFunctionsModule, REGION } from '@angular/fire/compat/functions';
 import * as Sentry from '@sentry/angular';
 import {
   AngularFirePerformanceModule,
-  AUTOMATICALLY_TRACE_CORE_NG_METRICS,
   DATA_COLLECTION_ENABLED,
-  INSTRUMENTATION_ENABLED
-} from '@angular/fire/performance';
+  INSTRUMENTATION_ENABLED, PerformanceMonitoringService
+} from '@angular/fire/compat/performance';
 import { MaterialModule } from './modules/material.module';
 import { AgmCoreModule } from '@agm/core';
 import {
@@ -30,7 +29,7 @@ import {
   DEBUG_MODE,
   ScreenTrackingService,
   UserTrackingService
-} from '@angular/fire/analytics';
+} from '@angular/fire/compat/analytics';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
@@ -69,6 +68,7 @@ import { AppUpdateService } from './services/app.update.service';
   providers: [
     ScreenTrackingService,
     UserTrackingService,
+    PerformanceMonitoringService,
     {
       provide: ErrorHandler,
       useValue: Sentry.createErrorHandler({
@@ -82,7 +82,6 @@ import { AppUpdateService } from './services/app.update.service';
         anonymize_ip: true
       }
     },
-    {provide: AUTOMATICALLY_TRACE_CORE_NG_METRICS, useValue: (environment.production || environment.beta)},
     {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
     {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production || environment.beta)},
     {provide: COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},

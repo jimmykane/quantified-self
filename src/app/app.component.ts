@@ -26,7 +26,7 @@ import {slideInAnimation} from './animations/animations';
 
 import * as firebase from 'firebase/app'
 import {AppWindowService} from './services/app.window.service';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 
 declare function require(moduleName: string): any;
 
@@ -53,10 +53,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private sideNavService: AppSideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    private titleService: Title,
-    private windowService: AppWindowService,
-    private afa: AngularFireAnalytics,
-    private snackBar: MatSnackBar) {
+    private titleService: Title) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.addIconsToRegistry();
   }

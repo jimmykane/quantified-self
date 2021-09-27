@@ -17,7 +17,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { switchMap, take, tap } from 'rxjs/operators';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';

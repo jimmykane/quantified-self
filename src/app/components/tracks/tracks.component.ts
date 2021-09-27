@@ -15,7 +15,7 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { Subject, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
-import { AngularFireStorage } from '@angular/fire/storage';
+import { AngularFireStorage } from '@angular/fire/compat/storage';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
@@ -24,9 +24,9 @@ import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-allianc
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { AppUserService } from '../../services/app.user.service';
-import firebase from 'firebase/app';
+import firebase from 'firebase/compat/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({

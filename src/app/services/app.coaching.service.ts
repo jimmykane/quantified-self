@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { AngularFirestore } from '@angular/fire/firestore';
+import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { map, switchMap } from 'rxjs/operators';
 import { combineLatest, Observable } from 'rxjs';
 import { AppUserService } from './app.user.service';
@@ -8,7 +8,7 @@ import { AppEventService } from './app.event.service';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { getDatesForDateRange } from '../helpers/date-range-helper';
-import firebase from 'firebase/app';
+import firebase from 'firebase/compat/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 

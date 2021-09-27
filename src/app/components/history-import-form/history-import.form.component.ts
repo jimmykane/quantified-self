@@ -13,7 +13,7 @@ import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {AppUserService} from '../../services/app.user.service';
 import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import {Subscription} from 'rxjs';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 

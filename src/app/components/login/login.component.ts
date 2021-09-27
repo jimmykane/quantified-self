@@ -9,9 +9,9 @@ import {AppUserService} from '../../services/app.user.service';
 import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 
-import {AngularFireAuth} from '@angular/fire/auth';
+import {AngularFireAuth} from '@angular/fire/compat/auth';
 import {PhoneFormComponent} from './phone-form/phone.form.component';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 

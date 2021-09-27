@@ -32,12 +32,12 @@ import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confi
 import { AppUserService } from '../../services/app.user.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
-import firebase from 'firebase';
+import firebase from 'firebase/compat/app';
 import OrderByDirection = firebase.firestore.OrderByDirection;
 
 

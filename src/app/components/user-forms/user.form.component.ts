@@ -9,7 +9,7 @@ import {AppUserService} from '../../services/app.user.service';
 import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 import {AppWindowService} from '../../services/app.window.service';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 
 
 @Component({

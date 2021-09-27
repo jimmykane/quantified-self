@@ -9,7 +9,7 @@ import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.int
 import {AppSharingService} from '../../services/app.sharing.service';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 import {ActivityFormComponent} from '../activity-form/activity.form.component';
 import {take} from 'rxjs/operators';
 import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
@@ -22,7 +22,7 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
 import { environment } from '../../../environments/environment';
 import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { AngularFireAuth } from '@angular/fire/auth';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
 import {
   COROSAPIEventMetaDataInterface, GarminHealthAPIEventMetaDataInterface,
   ServiceNames,

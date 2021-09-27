@@ -5,7 +5,7 @@ import {
   TileTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { AppUserService } from '../../services/app.user.service';
 
 @Directive()

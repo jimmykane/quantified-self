@@ -3,7 +3,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { Input, Directive } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 

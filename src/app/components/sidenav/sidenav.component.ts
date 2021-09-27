@@ -7,7 +7,7 @@ import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.a
 import { Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';

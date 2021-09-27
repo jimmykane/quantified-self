@@ -2,14 +2,13 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { EventImporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/json/importer.json';
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
-import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/firestore';
+import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/compat/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import * as Sentry from '@sentry/browser';
-import { fromPromise } from 'rxjs/internal-compatibility';
 import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
@@ -21,7 +20,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
-import firebase from 'firebase/app'
+import firebase from 'firebase/compat/app'
 import DocumentData = firebase.firestore.DocumentData;
 import firestore = firebase.firestore
 
@@ -492,7 +491,7 @@ export class AppEventService implements OnDestroy {
     const batchSize = 500;
     return new Promise<number>((resolve, reject) =>
       from(collections)
-        .pipe(concatMap(collection => fromPromise(collection.ref.get())))
+        .pipe(concatMap(collection => from(collection.ref.get())))
         .pipe(concatMap(q => from(q.docs)))
         .pipe(bufferCount(batchSize))
         .pipe(concatMap((docs) => Observable.create((o: Observer<number>) => {

@@ -25,7 +25,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import {UserDashboardSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import {LapTypesHelper} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import {AngularFireAnalytics} from '@angular/fire/analytics';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {
   MapThemes,

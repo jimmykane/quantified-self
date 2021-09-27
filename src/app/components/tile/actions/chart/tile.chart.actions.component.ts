@@ -34,7 +34,7 @@ import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import { DataFeeling } from '@sports-alliance/sports-lib/lib/data/data.feeling';
 import { DataRPE } from '@sports-alliance/sports-lib/lib/data/data.rpe';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';

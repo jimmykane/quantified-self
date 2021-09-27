@@ -11,12 +11,12 @@ import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 import { getDatesForDateRange } from 'app/helpers/date-range-helper';
-import firebase from 'firebase/app';
+import firebase from 'firebase/compat/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({

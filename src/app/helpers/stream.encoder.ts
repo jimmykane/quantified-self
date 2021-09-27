@@ -1,5 +1,5 @@
 import * as Pako from 'pako';
-import firebase from 'firebase/app';
+import firebase from 'firebase/compat/app';
 import firestore = firebase.firestore
 import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';

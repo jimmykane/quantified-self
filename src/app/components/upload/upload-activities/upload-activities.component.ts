@@ -9,7 +9,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
-import { AngularFireAnalytics } from '@angular/fire/analytics';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';

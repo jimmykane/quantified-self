@@ -1,29 +1,21 @@
 import {
   AfterViewInit,
-  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   Inject,
-  Input, OnDestroy,
+  OnDestroy,
   OnInit
 } from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {
-  FormBuilder,
   FormControl,
   FormGroup,
-  FormGroupDirective,
-  NgForm,
-  ValidationErrors,
-  ValidatorFn,
   Validators
 } from '@angular/forms';
-import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppWindowService} from '../../../services/app.window.service';
-import {AngularFireAuth} from '@angular/fire/auth';
-import firebase from 'firebase/app';
+import {AngularFireAuth} from '@angular/fire/compat/auth';
+import firebase from 'firebase/compat/app';
 
 
 @Component({
