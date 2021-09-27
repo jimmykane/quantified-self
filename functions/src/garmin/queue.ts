@@ -96,23 +96,24 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
         },
         {
           key: serviceToken.accessToken,
-          secret: serviceToken.accessTokenSecret
+          secret: serviceToken.accessTokenSecret,
+          token: queueItem.token
         })),
       encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
       // gzip: true,
-      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`,
+      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
     });
     console.timeEnd('DownloadFile');
     console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`)
   } catch (e) {
     if (e.statusCode === 400) {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20`))
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`))
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
     } else if (e.statusCode === 500) {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20`))
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`))
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
     } else {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`));
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
     }
     console.timeEnd('DownloadFile');
