@@ -11,7 +11,7 @@ import {
 
 import * as am4core from '@amcharts/amcharts4/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import { AxisRendererCircular, CategoryAxis, DateAxis } from '@amcharts/amcharts4/charts';
+import { AxisRendererCircular, CategoryAxis, DateAxis, RadarColumn } from '@amcharts/amcharts4/charts';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
@@ -239,7 +239,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
     columnSeries.tooltip.pointerOrientation = 'down';
     columnSeries.tooltip.background.fillOpacity = 1;
     columnSeries.columns.template.tooltipText = '{valueY}';
-    columnSeries.columns.template.adapter.add('tooltipText', (text, target, key) => {
+    // @ts-ignore
+    columnSeries.columns.template.adapter.add('tooltipText', (text: string, target: RadarColumn, key: 'tooltipText') => {
       if (!target.dataItem || !target.dataItem.dataContext || !target.dataItem.dataContext[activityType]) {
         return '';
       }
