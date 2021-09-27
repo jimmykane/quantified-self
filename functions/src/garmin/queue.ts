@@ -47,6 +47,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           manual: activityFile.manual,
           activityFileID: activityFileID,
           activityFileType: activityFile.fileType,
+          token: activityFile.token
         });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e) {
@@ -185,4 +186,5 @@ export interface GarminHealthAPIActivityFileInterface {
   callbackURL: string,
   startTimeInSeconds: number,
   manual: boolean,
+  token: string,
 }
