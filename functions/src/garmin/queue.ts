@@ -23,8 +23,8 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 
 const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
-const TIMEOUT_IN_SECONDS = 300;
-const MEMORY = "2GB";
+const TIMEOUT_IN_SECONDS = 540;
+const MEMORY = "4GB";
 
 export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
