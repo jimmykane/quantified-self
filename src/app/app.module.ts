@@ -12,7 +12,7 @@ import { AngularFireModule } from '@angular/fire';
 import { AngularFirestoreModule } from '@angular/fire/firestore';
 import { AngularFireAuthModule } from '@angular/fire/auth';
 import { AngularFireFunctionsModule, REGION } from '@angular/fire/functions';
-
+import * as Sentry from '@sentry/angular';
 import {
   AngularFirePerformanceModule,
   AUTOMATICALLY_TRACE_CORE_NG_METRICS,
@@ -36,7 +36,6 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
 import { AppUpdateService } from './services/app.update.service';
-import { SentryErrorHandler } from './errors/sentry-error-handler';
 
 
 @NgModule({
@@ -70,7 +69,12 @@ import { SentryErrorHandler } from './errors/sentry-error-handler';
   providers: [
     ScreenTrackingService,
     UserTrackingService,
-    {provide: ErrorHandler, useClass: SentryErrorHandler},
+    {
+      provide: ErrorHandler,
+      useValue: Sentry.createErrorHandler({
+        showDialog: true,
+      }),
+    },
     {provide: REGION, useValue: 'europe-west2'},
     {
       provide: CONFIG, useValue: {
