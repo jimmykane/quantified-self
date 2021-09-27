@@ -28,7 +28,8 @@ export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInte
   startTimeInSeconds: number,
   manual: boolean,
   activityFileID: string,
-  activityFileType: 'FIT' | 'TCX' | 'GPX'
+  activityFileType: 'FIT' | 'TCX' | 'GPX',
+  token: string
 }
 
 export interface QueueItemError {

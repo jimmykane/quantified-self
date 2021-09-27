@@ -137,6 +137,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     startTimeInSeconds: queueItem.startTimeInSeconds,
     manual: queueItem.manual,
     activityFileID: queueItem.activityFileID,
+    token: queueItem.token,
     activityFileType: queueItem.activityFileType,
     retryCount: 0,
     processed: false,

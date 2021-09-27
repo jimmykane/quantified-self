@@ -36,6 +36,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
     let queueItemDocumentReference
     try {
       const activityFileID = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
+      const activityFileToken = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('token');
       if (!activityFileID) {
         res.status(500).send();
         return;
@@ -47,7 +48,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           manual: activityFile.manual,
           activityFileID: activityFileID,
           activityFileType: activityFile.fileType,
-          token: activityFile.token
+          token: activityFileToken || "No token"
         });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e) {
@@ -99,7 +100,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
         })),
       encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
       // gzip: true,
-      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`,
     });
     console.timeEnd('DownloadFile');
     console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`)
