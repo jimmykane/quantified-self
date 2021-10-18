@@ -22,7 +22,7 @@ import {
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
-const GARMIN_ACTIVITY_URI = 'https://healthapi.garmin.com/wellness-api/rest/activityFile'
+const GARMIN_ACTIVITY_URI = 'https://apis.garmin.com/wellness-api/rest/activityFile'
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = "4GB";
 
@@ -87,33 +87,33 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   const oAuth = GarminHealthAPIAuth();
 
   let result;
+  const url = `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`
   try {
     console.time('DownloadFile');
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({
-          url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+          url: url,
           method: 'get',
         },
         {
           key: serviceToken.accessToken,
           secret: serviceToken.accessTokenSecret,
-          token: queueItem.token
         })),
       encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
       // gzip: true,
-      url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+      url: url,
     });
     console.timeEnd('DownloadFile');
     console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`)
   } catch (e) {
     if (e.statusCode === 400) {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`))
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${url}`))
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
     } else if (e.statusCode === 500) {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`))
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${url}`))
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
     } else {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`));
+      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
     }
     console.timeEnd('DownloadFile');
@@ -139,7 +139,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           console.time('DownloadFile');
           result = await requestPromise.get({
             headers: oAuth.toHeader(oAuth.authorize({
-                url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+                url: url,
                 method: 'get',
               },
               {
@@ -148,7 +148,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
               })),
             encoding: null,
             // gzip: true,
-            url: `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}`,
+            url: url,
           });
           console.timeEnd('DownloadFile');
           console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`)
