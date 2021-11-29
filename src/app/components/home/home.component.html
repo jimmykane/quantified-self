@@ -141,6 +141,11 @@
               (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"></mat-icon>
     <mat-icon class="large-svg-icon" svgIcon="garmin"
               (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"></mat-icon>
-
+    <mat-divider [inset]="true"></mat-divider>
+    <br/>
+    <mat-list-item routerLink="/policies">
+      <mat-icon>policy</mat-icon>
+      <span>Privacy & Policies</span><span class="fill-space"></span>
+    </mat-list-item>
   </mat-card>
 </section>
