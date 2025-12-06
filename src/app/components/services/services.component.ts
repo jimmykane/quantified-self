@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormGroup } from '@angular/forms';
+import { UntypedFormGroup } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClient } from '@angular/common/http';
 import { AppFileService } from '../../services/app.file.service';
@@ -16,12 +16,13 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 
 @Component({
-  selector: 'app-services',
-  templateUrl: './services.component.html',
-  styleUrls: ['./services.component.css'],
+    selector: 'app-services',
+    templateUrl: './services.component.html',
+    styleUrls: ['./services.component.css'],
+    standalone: false
 })
 export class ServicesComponent implements OnInit, OnDestroy {
-  public suuntoAppLinkFormGroup: FormGroup;
+  public suuntoAppLinkFormGroup: UntypedFormGroup;
   public isLoading = false;
   public user: User;
   public isGuest: boolean;

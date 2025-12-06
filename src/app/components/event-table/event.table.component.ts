@@ -42,14 +42,15 @@ import OrderByDirection = firebase.firestore.OrderByDirection;
 
 
 @Component({
-  selector: 'app-event-table',
-  templateUrl: './event.table.component.html',
-  styleUrls: ['./event.table.component.css'],
-  animations: [
-    rowsAnimation,
-  ],
-  providers: [DatePipe],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-table',
+    templateUrl: './event.table.component.html',
+    styleUrls: ['./event.table.component.css'],
+    animations: [
+        rowsAnimation,
+    ],
+    providers: [DatePipe],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventTableComponent extends DataTableAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {

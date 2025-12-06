@@ -20,9 +20,10 @@ import firebase from 'firebase/compat/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
-  selector: 'app-dashboard',
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css'],
+    selector: 'app-dashboard',
+    templateUrl: './dashboard.component.html',
+    styleUrls: ['./dashboard.component.css'],
+    standalone: false
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {

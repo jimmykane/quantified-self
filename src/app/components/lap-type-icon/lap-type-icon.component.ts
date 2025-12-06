@@ -5,10 +5,11 @@ import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
 
 
 @Component({
-  selector: 'app-lap-type-icon',
-  templateUrl: './lap-type-icon.component.html',
-  styleUrls: ['./lap-type-icon.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-lap-type-icon',
+    templateUrl: './lap-type-icon.component.html',
+    styleUrls: ['./lap-type-icon.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class LapTypeIconComponent {

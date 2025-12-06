@@ -4,10 +4,11 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bott
 import { MatSnackBar } from '@angular/material/snack-bar';
 
 @Component({
-  selector: 'app-my-tracks-progress-info',
-  templateUrl: './tracks.progress.html',
-  styleUrls: ['./tracks.progress.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-my-tracks-progress-info',
+    templateUrl: './tracks.progress.html',
+    styleUrls: ['./tracks.progress.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class MyTracksProgressComponent implements OnInit, OnDestroy {
 

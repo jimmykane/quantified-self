@@ -11,10 +11,11 @@ import { AppEventService } from '../../services/app.event.service';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 
 @Component({
-  selector: 'app-athletes',
-  templateUrl: './athletes.component.html',
-  styleUrls: ['./athletes.component.css'],
-  providers: [],
+    selector: 'app-athletes',
+    templateUrl: './athletes.component.html',
+    styleUrls: ['./athletes.component.css'],
+    providers: [],
+    standalone: false
 })
 export class AthletesComponent implements OnInit, OnDestroy {
   public user: User;

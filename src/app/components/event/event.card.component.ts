@@ -30,10 +30,11 @@ import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/
 
 
 @Component({
-  selector: 'app-event-card',
-  templateUrl: './event.card.component.html',
-  styleUrls: ['./event.card.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card',
+    templateUrl: './event.card.component.html',
+    styleUrls: ['./event.card.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventCardComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {

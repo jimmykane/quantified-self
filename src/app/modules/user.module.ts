@@ -10,23 +10,20 @@ import {UserFormComponent} from '../components/user-forms/user.form.component';
 
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    UserRoutingModule
-  ],
-  exports: [
-  ],
-  declarations: [
-    UserComponent,
-    UserActionsComponent,
-    UserSettingsComponent,
-    UserFormComponent,
-  ],
-  entryComponents: [],
-  providers: [
-  ]
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        UserRoutingModule
+    ],
+    exports: [],
+    declarations: [
+        UserComponent,
+        UserActionsComponent,
+        UserSettingsComponent,
+        UserFormComponent,
+    ],
+    providers: []
 })
 
 

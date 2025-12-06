@@ -4,9 +4,10 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 
 
 @Component({
-  selector: 'app-services-garmin',
-  templateUrl: './services.garmin.component.html',
-  styleUrls: ['../services-abstract-component.directive.css', './services.garmin.component.css'],
+    selector: 'app-services-garmin',
+    templateUrl: './services.garmin.component.html',
+    styleUrls: ['../services-abstract-component.directive.css', './services.garmin.component.css'],
+    standalone: false
 })
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 

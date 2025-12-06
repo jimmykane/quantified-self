@@ -10,11 +10,12 @@ import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.hear
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
-  selector: 'app-event-card-laps',
-  templateUrl: './event.card.laps.component.html',
-  styleUrls: ['./event.card.laps.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card-laps',
+    templateUrl: './event.card.laps.component.html',
+    styleUrls: ['./event.card.laps.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventCardLapsComponent extends DataTableAbstractDirective implements OnChanges {

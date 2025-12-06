@@ -16,9 +16,10 @@ import { AppFilesStatusService } from '../../../services/upload/app-files-status
 import { Overlay } from '@angular/cdk/overlay';
 
 @Component({
-  selector: 'app-upload-activities',
-  templateUrl: './upload-activities.component.html',
-  styleUrls: ['../upload-abstract.css', './upload-activities.component.css'],
+    selector: 'app-upload-activities',
+    templateUrl: './upload-activities.component.html',
+    styleUrls: ['../upload-abstract.css', './upload-activities.component.css'],
+    standalone: false
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective {
 

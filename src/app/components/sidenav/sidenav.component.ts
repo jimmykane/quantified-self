@@ -14,9 +14,10 @@ import { AppUserService } from '../../services/app.user.service';
 import { environment } from '../../../environments/environment';
 
 @Component({
-  selector: 'app-sidenav',
-  templateUrl: './sidenav.component.html',
-  styleUrls: ['./sidenav.component.css'],
+    selector: 'app-sidenav',
+    templateUrl: './sidenav.component.html',
+    styleUrls: ['./sidenav.component.css'],
+    standalone: false
 })
 export class SideNavComponent implements OnInit, OnDestroy {
 

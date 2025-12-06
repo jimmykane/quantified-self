@@ -22,10 +22,11 @@ import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-l
 
 
 @Component({
-  selector: 'app-columns-chart',
-  templateUrl: './charts.columns.component.html',
-  styleUrls: ['./charts.columns.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-columns-chart',
+    templateUrl: './charts.columns.component.html',
+    styleUrls: ['./charts.columns.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsColumnsComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
   @Input() vertical = true;

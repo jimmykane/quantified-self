@@ -7,12 +7,12 @@ import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 
 
 @Component({
-  selector: 'app-event-form',
-  templateUrl: './promo-dialog.component.html',
-  styleUrls: ['./promo-dialog.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-
+    selector: 'app-event-form',
+    templateUrl: './promo-dialog.component.html',
+    styleUrls: ['./promo-dialog.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 

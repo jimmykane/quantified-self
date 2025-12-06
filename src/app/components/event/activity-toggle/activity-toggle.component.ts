@@ -17,10 +17,11 @@ import {MatSlideToggleChange} from '@angular/material/slide-toggle';
 import {User} from '@sports-alliance/sports-lib/lib/users/user';
 
 @Component({
-  selector: 'app-activity-toggle',
-  templateUrl: './activity-toggle.component.html',
-  styleUrls: ['./activity-toggle.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush, // @todo not sure
+    selector: 'app-activity-toggle',
+    templateUrl: './activity-toggle.component.html',
+    styleUrls: ['./activity-toggle.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class ActivityToggleComponent implements OnChanges, OnInit, OnDestroy {

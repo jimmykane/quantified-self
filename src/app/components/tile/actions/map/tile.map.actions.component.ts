@@ -6,10 +6,11 @@ import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/setti
 import { TileMapSettingsInterface } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 
 @Component({
-  selector: 'app-tile-map-actions',
-  templateUrl: './tile.map.actions.component.html',
-  styleUrls: ['../tile.actions.abstract.css', './tile.map.actions.component.css'],
-  providers: [],
+    selector: 'app-tile-map-actions',
+    templateUrl: './tile.map.actions.component.html',
+    styleUrls: ['../tile.actions.abstract.css', './tile.map.actions.component.css'],
+    providers: [],
+    standalone: false
 })
 export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
   @Input() mapType: MapTypes;

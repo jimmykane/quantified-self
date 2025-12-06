@@ -12,10 +12,11 @@ import {User} from '@sports-alliance/sports-lib/lib/users/user';
 import {DataIBI} from '@sports-alliance/sports-lib/lib/data/data.ibi';
 
 @Component({
-  selector: 'app-event-card-tools',
-  templateUrl: './event.card.tools.component.html',
-  styleUrls: ['./event.card.tools.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card-tools',
+    templateUrl: './event.card.tools.component.html',
+    styleUrls: ['./event.card.tools.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class EventCardToolsComponent implements OnChanges, OnInit, OnDestroy {
 

@@ -9,7 +9,7 @@ import {
   Output,
   SimpleChanges
 } from '@angular/core';
-import { FormControl, FormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
@@ -20,10 +20,11 @@ import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import * as moment from 'moment';
 
 @Component({
-  selector: 'app-event-search',
-  templateUrl: './event-search.component.html',
-  styleUrls: ['./event-search.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-event-search',
+    templateUrl: './event-search.component.html',
+    styleUrls: ['./event-search.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventSearchComponent extends LoadingAbstractDirective implements OnChanges, OnInit {
@@ -50,7 +51,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 
-  public searchFormGroup: FormGroup;
+  public searchFormGroup: UntypedFormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
@@ -61,15 +62,15 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnInit(): void {
-    this.searchFormGroup = new FormGroup({
-      search: new FormControl(null, [
+    this.searchFormGroup = new UntypedFormGroup({
+      search: new UntypedFormControl(null, [
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      startDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate, [
+      startDate: new UntypedFormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate, [
         // Validators.required,
       ]),
-      endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
+      endDate: new UntypedFormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ])
     });
@@ -157,19 +158,19 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.search();
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({ onlySelf: true });
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });
   }
 }
 
-export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const startDateToEndDateValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
   if (endDate.value < startDate.value) {
@@ -178,7 +179,7 @@ export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): Va
   return null;
 };
 
-export const maxDateDistanceValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const maxDateDistanceValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
   if (endDate.value - startDate.value > new Date(365 * 5 * 24 * 3600 * 1000).getTime()) { // @todo improve this

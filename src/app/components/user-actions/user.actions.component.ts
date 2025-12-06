@@ -10,12 +10,12 @@ import {UserFormComponent} from '../user-forms/user.form.component';
 import { Clipboard } from '@angular/cdk/clipboard';
 
 @Component({
-  selector: 'app-user-actions',
-  templateUrl: './user.actions.component.html',
-  styleUrls: ['./user.actions.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-
+    selector: 'app-user-actions',
+    templateUrl: './user.actions.component.html',
+    styleUrls: ['./user.actions.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class UserActionsComponent implements OnInit {
   @Input() user: User;

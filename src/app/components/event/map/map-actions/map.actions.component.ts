@@ -10,10 +10,11 @@ import {AppUserService} from '../../../../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 
 @Component({
-  selector: 'app-map-actions',
-  templateUrl: './map.actions.component.html',
-  styleUrls: ['./map.actions.component.css'],
-  providers: [],
+    selector: 'app-map-actions',
+    templateUrl: './map.actions.component.html',
+    styleUrls: ['./map.actions.component.css'],
+    providers: [],
+    standalone: false
 })
 
 export class MapActionsComponent implements OnChanges {

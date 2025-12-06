@@ -2,9 +2,9 @@ import {Component, Inject, Input, OnInit} from '@angular/core';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {AppEventService} from '../../services/app.event.service';
 import {
-  FormBuilder,
-  FormControl,
-  FormGroup,
+  UntypedFormBuilder,
+  UntypedFormControl,
+  UntypedFormGroup,
   ValidationErrors,
   ValidatorFn,
   Validators,
@@ -25,10 +25,11 @@ import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
 
 
 @Component({
-  selector: 'app-activity-form',
-  templateUrl: './activity.form.component.html',
-  styleUrls: ['./activity.form.component.css'],
-  providers: [],
+    selector: 'app-activity-form',
+    templateUrl: './activity.form.component.html',
+    styleUrls: ['./activity.form.component.css'],
+    providers: [],
+    standalone: false
 })
 
 
@@ -40,7 +41,7 @@ export class ActivityFormComponent implements OnInit {
   public user: User;
   public activityTypesArray = ActivityTypesHelper.getActivityTypesAsUniqueArray();
 
-  public activityFormGroup: FormGroup;
+  public activityFormGroup: UntypedFormGroup;
 
   public isLoading: boolean;
 
@@ -49,7 +50,7 @@ export class ActivityFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: AppEventService,
     private snackBar: MatSnackBar,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
   ) {
     this.activity = data.activity;
     this.event = data.event;
@@ -61,49 +62,49 @@ export class ActivityFormComponent implements OnInit {
       throw new Error('Component needs event and user')
     }
     // Now build the controls
-    this.activityFormGroup = new FormGroup({
-        activity: new FormControl(this.activity),
-        creatorName: new FormControl(this.activity.creator.name, [
+    this.activityFormGroup = new UntypedFormGroup({
+        activity: new UntypedFormControl(this.activity),
+        creatorName: new UntypedFormControl(this.activity.creator.name, [
           Validators.required,
         ]),
-        startDate: new FormControl(this.activity.startDate, [
+        startDate: new UntypedFormControl(this.activity.startDate, [
           Validators.required,
         ]),
-        endDate: new FormControl({value: this.activity.endDate, disabled: true}, [
+        endDate: new UntypedFormControl({value: this.activity.endDate, disabled: true}, [
           Validators.required,
         ]),
-        startTime: new FormControl(this.getTimeFromDateAsString(this.activity.startDate), [
+        startTime: new UntypedFormControl(this.getTimeFromDateAsString(this.activity.startDate), [
           Validators.required,
         ]),
-        endTime: new FormControl({
+        endTime: new UntypedFormControl({
           value: this.getTimeFromDateAsString(this.activity.endDate),
           disabled: true
         }, [
           Validators.required,
         ]),
-        type: new FormControl(this.activity.type, [
+        type: new UntypedFormControl(this.activity.type, [
           Validators.required,
         ]),
       }
     );
 
     const ascent = this.activity.getStat(DataAscent.type);
-    this.activityFormGroup.addControl('ascent', new FormControl(ascent ? ascent.getValue() : 0, [
+    this.activityFormGroup.addControl('ascent', new UntypedFormControl(ascent ? ascent.getValue() : 0, [
       Validators.required,
     ]));
 
     const descent = this.activity.getStat(DataDescent.type);
-    this.activityFormGroup.addControl('descent', new FormControl(descent ? descent.getValue() : 0, [
+    this.activityFormGroup.addControl('descent', new UntypedFormControl(descent ? descent.getValue() : 0, [
       Validators.required,
     ]));
 
     const distance = this.activity.getStat(DataDistance.type);
-    this.activityFormGroup.addControl('distance', new FormControl(distance ? distance.getValue() : 0, [
+    this.activityFormGroup.addControl('distance', new UntypedFormControl(distance ? distance.getValue() : 0, [
       Validators.required,
     ]));
 
     const energy = this.activity.getStat(DataEnergy.type);
-    this.activityFormGroup.addControl('energy', new FormControl(energy ? energy.getValue() : 0, [
+    this.activityFormGroup.addControl('energy', new UntypedFormControl(energy ? energy.getValue() : 0, [
       Validators.required,
     ]));
 
@@ -230,12 +231,12 @@ export class ActivityFormComponent implements OnInit {
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });
@@ -254,7 +255,7 @@ export class ActivityFormComponent implements OnInit {
 
 
 
-export const autocompleteSelectionValidator: ValidatorFn = (control: FormControl): ValidationErrors | null => {
+export const autocompleteSelectionValidator: ValidatorFn = (control: UntypedFormControl): ValidationErrors | null => {
   const selection: any = control.value;
   if (typeof selection === 'string') {
     return {requireMatch: true};

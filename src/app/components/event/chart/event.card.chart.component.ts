@@ -101,10 +101,11 @@ const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
 
 @Component({
-  selector: 'app-event-card-chart',
-  templateUrl: './event.card.chart.component.html',
-  styleUrls: ['./event.card.chart.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card-chart',
+    templateUrl: './event.card.chart.component.html',
+    styleUrls: ['./event.card.chart.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class EventCardChartComponent extends ChartAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
 

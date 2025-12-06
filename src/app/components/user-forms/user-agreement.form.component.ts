@@ -1,5 +1,5 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import {FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -14,10 +14,11 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/serv
 
 
 @Component({
-  selector: 'app-user-agreement-form',
-  templateUrl: './user-agreement.form.component.html',
-  styleUrls: ['./user-agreement.form.component.css'],
-  providers: [],
+    selector: 'app-user-agreement-form',
+    templateUrl: './user-agreement.form.component.html',
+    styleUrls: ['./user-agreement.form.component.css'],
+    providers: [],
+    standalone: false
 })
 
 
@@ -29,7 +30,7 @@ export class UserAgreementFormComponent implements OnInit {
     displayName: string;
   };
 
-  public userFormGroup: FormGroup;
+  public userFormGroup: UntypedFormGroup;
   private readonly signInMethod: string;
 
   constructor(
@@ -49,20 +50,20 @@ export class UserAgreementFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.userFormGroup = new FormGroup({
-      acceptPrivacyPolicy: new FormControl(this.user.acceptedPrivacyPolicy, [
+    this.userFormGroup = new UntypedFormGroup({
+      acceptPrivacyPolicy: new UntypedFormControl(this.user.acceptedPrivacyPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDataPolicy: new FormControl(this.user.acceptedDataPolicy, [
+      acceptDataPolicy: new UntypedFormControl(this.user.acceptedDataPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptTrackingPolicy: new FormControl(this.user.acceptedTrackingPolicy, [
+      acceptTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDiagnosticsPolicy: new FormControl(this.user.acceptedDiagnosticsPolicy, [
+      acceptDiagnosticsPolicy: new UntypedFormControl(this.user.acceptedDiagnosticsPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
@@ -107,12 +108,12 @@ export class UserAgreementFormComponent implements OnInit {
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

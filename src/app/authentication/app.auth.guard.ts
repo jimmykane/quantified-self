@@ -1,13 +1,5 @@
 import { Injectable } from '@angular/core';
-import {
-  ActivatedRouteSnapshot,
-  CanActivate,
-  CanLoad,
-  Route,
-  Router,
-  RouterStateSnapshot,
-  UrlSegment
-} from '@angular/router';
+import { ActivatedRouteSnapshot, Route, Router, RouterStateSnapshot, UrlSegment } from '@angular/router';
 import { Observable } from 'rxjs';
 import { AppAuthService } from './app.auth.service';
 import { map, take, tap } from 'rxjs/operators';
@@ -16,7 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 @Injectable({
   providedIn: 'root'
 })
-export class AppAuthGuard implements CanActivate, CanLoad {
+export class AppAuthGuard  {
 
   constructor(private authService: AppAuthService, private router: Router, private snackBar: MatSnackBar) {
   }

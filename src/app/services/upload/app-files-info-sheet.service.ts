@@ -61,7 +61,7 @@ export class AppFilesInfoSheetService implements OnDestroy {
         this.dialog.open(UploadErrorComponent, {
           width: '75vw',
           disableClose: false,
-          data: {files: files},
+          data: { files: files },
         });
       }
     }

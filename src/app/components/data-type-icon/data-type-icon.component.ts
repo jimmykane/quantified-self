@@ -51,10 +51,11 @@ import { DataHeartRateMin } from '@sports-alliance/sports-lib/lib/data/data.hear
 import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
 
 @Component({
-  selector: 'app-data-type-icon',
-  templateUrl: './data-type-icon.component.html',
-  styleUrls: ['./data-type-icon.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-data-type-icon',
+    templateUrl: './data-type-icon.component.html',
+    styleUrls: ['./data-type-icon.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class DataTypeIconComponent {

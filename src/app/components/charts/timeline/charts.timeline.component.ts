@@ -23,10 +23,11 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 @Component({
-  selector: 'app-timeline-chart',
-  templateUrl: './charts.timeline.component.html',
-  styleUrls: ['./charts.timeline.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-timeline-chart',
+    templateUrl: './charts.timeline.component.html',
+    styleUrls: ['./charts.timeline.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsTimelineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 

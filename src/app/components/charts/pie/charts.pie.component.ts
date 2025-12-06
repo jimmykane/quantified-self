@@ -22,10 +22,11 @@ import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activi
 
 
 @Component({
-  selector: 'app-pie-chart',
-  templateUrl: './charts.pie.component.html',
-  styleUrls: ['./charts.pie.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-pie-chart',
+    templateUrl: './charts.pie.component.html',
+    styleUrls: ['./charts.pie.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsPieComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 

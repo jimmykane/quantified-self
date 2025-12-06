@@ -31,11 +31,12 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.reco
 import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 @Component({
-  selector: 'app-event-card-stats-grid',
-  templateUrl: './event.card.stats-grid.component.html',
-  styleUrls: ['./event.card.stats-grid.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card-stats-grid',
+    templateUrl: './event.card.stats-grid.component.html',
+    styleUrls: ['./event.card.stats-grid.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventCardStatsGridComponent implements OnChanges {

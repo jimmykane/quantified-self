@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
 import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
 import {AppEventService} from '../../services/app.event.service';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import {FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
 import {ErrorStateMatcher} from '@angular/material/core';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
@@ -11,12 +11,12 @@ import {User} from '@sports-alliance/sports-lib/lib/users/user';
 
 
 @Component({
-  selector: 'app-event-form',
-  templateUrl: './event.form.component.html',
-  styleUrls: ['./event.form.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-
+    selector: 'app-event-form',
+    templateUrl: './event.form.component.html',
+    styleUrls: ['./event.form.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 
@@ -29,7 +29,7 @@ export class EventFormComponent implements OnInit {
     name: string;
   };
 
-  public eventFormGroup: FormGroup;
+  public eventFormGroup: UntypedFormGroup;
 
   constructor(
     public dialogRef: MatDialogRef<EventFormComponent>,
@@ -46,7 +46,7 @@ export class EventFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.eventFormGroup = new FormGroup({
+    this.eventFormGroup = new UntypedFormGroup({
       // name: new FormControl(this.event.name, [
       //   Validators.required,
       //   // Validators.minLength(4),
@@ -55,11 +55,11 @@ export class EventFormComponent implements OnInit {
       //   // Validators.required,
       //   // Validators.minLength(4),
       // ]),
-      privacy: new FormControl(this.event.privacy, [
+      privacy: new UntypedFormControl(this.event.privacy, [
         Validators.required,
         // Validators.minLength(4),
       ]),
-      isMerge: new FormControl(this.event.isMerge, [
+      isMerge: new UntypedFormControl(this.event.isMerge, [
         // Validators.required,
         // Validators.minLength(4),
       ]),
@@ -96,12 +96,12 @@ export class EventFormComponent implements OnInit {
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

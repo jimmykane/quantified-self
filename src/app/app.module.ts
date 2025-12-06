@@ -7,7 +7,7 @@ import { AppRoutingModule } from './app.routing.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
-import { HttpClientModule } from '@angular/common/http';
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { AngularFireModule } from '@angular/fire/compat';
 import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 import { AngularFireAuthModule } from '@angular/fire/compat/auth';
@@ -19,7 +19,6 @@ import {
   INSTRUMENTATION_ENABLED, PerformanceMonitoringService
 } from '@angular/fire/compat/performance';
 import { MaterialModule } from './modules/material.module';
-import { AgmCoreModule } from '@agm/core';
 import {
   AngularFireAnalyticsModule,
   APP_NAME,
@@ -38,58 +37,49 @@ import { AppUpdateService } from './services/app.update.service';
 
 
 @NgModule({
-  imports: [
-    BrowserModule,
+  declarations: [
+    AppComponent,
+    SideNavComponent,
+    UploadActivitiesComponent,
+  ],
+  bootstrap: [AppComponent], imports: [BrowserModule,
     BrowserAnimationsModule,
     AppRoutingModule,
-    HttpClientModule,
     AngularFireModule.initializeApp(environment.firebase),
     AngularFirestoreModule,
-    AngularFirestoreModule.enablePersistence({synchronizeTabs: true}),
+    AngularFirestoreModule.enablePersistence({ synchronizeTabs: true }),
     AngularFireFunctionsModule,
     AngularFireAuthModule,
     AngularFirePerformanceModule,
     AngularFireAnalyticsModule,
     ClipboardModule,
     MaterialModule,
-    AgmCoreModule.forRoot({
-      apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-      apiVersion: 'weekly',
-      libraries: ['visualization']
-    }),
-    ServiceWorkerModule.register('ngsw-worker.js', {enabled: environment.production})
-  ],
-  declarations: [
-    AppComponent,
-    SideNavComponent,
-    UploadActivitiesComponent,
-  ],
-  entryComponents: [],
-  providers: [
-    ScreenTrackingService,
-    UserTrackingService,
-    PerformanceMonitoringService,
-    {
-      provide: ErrorHandler,
-      useValue: Sentry.createErrorHandler({
-        showDialog: true,
-      }),
-    },
-    {provide: REGION, useValue: 'europe-west2'},
-    {
-      provide: CONFIG, useValue: {
-        allow_ad_personalization_signals: false,
-        anonymize_ip: true
-      }
-    },
-    {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: APP_VERSION, useValue: environment.appVersion},
-    {provide: APP_NAME, useValue: 'quantified-self.io'},
-    {provide: DEBUG_MODE, useValue: (environment.localhost || environment.beta)},
-  ],
-  bootstrap: [AppComponent],
+    // AGM removed - incompatible with Angular 19, maps will need migration to @angular/google-maps
+    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production })], providers: [
+      ScreenTrackingService,
+      UserTrackingService,
+      PerformanceMonitoringService,
+      {
+        provide: ErrorHandler,
+        useValue: Sentry.createErrorHandler({
+          showDialog: true,
+        }),
+      },
+      { provide: REGION, useValue: 'europe-west2' },
+      {
+        provide: CONFIG, useValue: {
+          allow_ad_personalization_signals: false,
+          anonymize_ip: true
+        }
+      },
+      { provide: DATA_COLLECTION_ENABLED, useValue: (environment.production || environment.beta) },
+      { provide: INSTRUMENTATION_ENABLED, useValue: (environment.production || environment.beta) },
+      { provide: COLLECTION_ENABLED, useValue: (environment.production || environment.beta) },
+      { provide: APP_VERSION, useValue: environment.appVersion },
+      { provide: APP_NAME, useValue: 'quantified-self.io' },
+      { provide: DEBUG_MODE, useValue: (environment.localhost || environment.beta) },
+      provideHttpClient(withInterceptorsFromDi()),
+    ]
 })
 
 export class AppModule {

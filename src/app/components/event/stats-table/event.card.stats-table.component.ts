@@ -15,10 +15,11 @@ import {AppEventColorService} from '../../../services/color/app.event.color.serv
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
 
 @Component({
-  selector: 'app-event-stats-table',
-  templateUrl: './event.card.stats-table.component.html',
-  styleUrls: ['./event.card.stats-table.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-stats-table',
+    templateUrl: './event.card.stats-table.component.html',
+    styleUrls: ['./event.card.stats-table.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventCardStatsTableComponent implements OnChanges {

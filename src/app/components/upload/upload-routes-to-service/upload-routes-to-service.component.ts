@@ -14,9 +14,10 @@ import * as Pako from 'pako';
 import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 
 @Component({
-  selector: 'app-upload-route-to-service',
-  templateUrl: './upload-routes-to-service.component.html',
-  styleUrls: ['../upload-abstract.css', './upload-routes-to-service.component.css']
+    selector: 'app-upload-route-to-service',
+    templateUrl: './upload-routes-to-service.component.html',
+    styleUrls: ['../upload-abstract.css', './upload-routes-to-service.component.css'],
+    standalone: false
 })
 
 export class UploadRoutesToServiceComponent extends UploadAbstractDirective {

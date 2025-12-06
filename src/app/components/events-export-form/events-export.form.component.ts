@@ -1,6 +1,6 @@
 import { Component, Inject } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { FormsAbstract } from '../forms/forms.abstract';
@@ -30,16 +30,17 @@ import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 
 
 @Component({
-  selector: 'app-export-events-form',
-  templateUrl: './events-export.form.component.html',
-  styleUrls: ['./events-export.form.component.css'],
-  providers: [],
+    selector: 'app-export-events-form',
+    templateUrl: './events-export.form.component.html',
+    styleUrls: ['./events-export.form.component.css'],
+    providers: [],
+    standalone: false
 })
 
 
 export class EventsExportFormComponent extends FormsAbstract {
 
-  public exportFromGroup: FormGroup;
+  public exportFromGroup: UntypedFormGroup;
   public user: User;
   public events: EventInterface[];
   public startDate: Date;
@@ -70,30 +71,30 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.startDate = this.events[0].startDate;
     this.endDate = this.events[this.events.length - 1].endDate;
 
-    this.exportFromGroup = new FormGroup({
-        startDate: new FormControl(this.user.settings.exportToCSVSettings.startDate, [
+    this.exportFromGroup = new UntypedFormGroup({
+        startDate: new UntypedFormControl(this.user.settings.exportToCSVSettings.startDate, [
           Validators.required
         ]),
-        name: new FormControl(this.user.settings.exportToCSVSettings.name, []),
-        description: new FormControl(this.user.settings.exportToCSVSettings.description, []),
-        activityTypes: new FormControl(this.user.settings.exportToCSVSettings.activityTypes, []),
-        distance: new FormControl(this.user.settings.exportToCSVSettings.distance, []),
-        duration: new FormControl(this.user.settings.exportToCSVSettings.duration, []),
-        ascent: new FormControl(this.user.settings.exportToCSVSettings.ascent, []),
-        descent: new FormControl(this.user.settings.exportToCSVSettings.descent, []),
-        calories: new FormControl(this.user.settings.exportToCSVSettings.calories, []),
-        feeling: new FormControl(this.user.settings.exportToCSVSettings.feeling, []),
-        rpe: new FormControl(this.user.settings.exportToCSVSettings.rpe, []),
-        averageSpeed: new FormControl(this.user.settings.exportToCSVSettings.averageSpeed, []),
-        averagePace: new FormControl(this.user.settings.exportToCSVSettings.averagePace, []),
-        averageSwimPace: new FormControl(this.user.settings.exportToCSVSettings.averageSwimPace, []),
-        averageGradeAdjustedPace: new FormControl(this.user.settings.exportToCSVSettings.avgGradeAdjustedPace, []),
-        averageHeartRate: new FormControl(this.user.settings.exportToCSVSettings.averageHeartRate, []),
-        maximumHeartRate: new FormControl(this.user.settings.exportToCSVSettings.maximumHeartRate, []),
-        averagePower: new FormControl(this.user.settings.exportToCSVSettings.averagePower, []),
-        maximumPower: new FormControl(this.user.settings.exportToCSVSettings.maximumPower, []),
-        vO2Max: new FormControl(this.user.settings.exportToCSVSettings.vO2Max, []),
-        includeLink: new FormControl(this.user.settings.exportToCSVSettings.includeLink, []),
+        name: new UntypedFormControl(this.user.settings.exportToCSVSettings.name, []),
+        description: new UntypedFormControl(this.user.settings.exportToCSVSettings.description, []),
+        activityTypes: new UntypedFormControl(this.user.settings.exportToCSVSettings.activityTypes, []),
+        distance: new UntypedFormControl(this.user.settings.exportToCSVSettings.distance, []),
+        duration: new UntypedFormControl(this.user.settings.exportToCSVSettings.duration, []),
+        ascent: new UntypedFormControl(this.user.settings.exportToCSVSettings.ascent, []),
+        descent: new UntypedFormControl(this.user.settings.exportToCSVSettings.descent, []),
+        calories: new UntypedFormControl(this.user.settings.exportToCSVSettings.calories, []),
+        feeling: new UntypedFormControl(this.user.settings.exportToCSVSettings.feeling, []),
+        rpe: new UntypedFormControl(this.user.settings.exportToCSVSettings.rpe, []),
+        averageSpeed: new UntypedFormControl(this.user.settings.exportToCSVSettings.averageSpeed, []),
+        averagePace: new UntypedFormControl(this.user.settings.exportToCSVSettings.averagePace, []),
+        averageSwimPace: new UntypedFormControl(this.user.settings.exportToCSVSettings.averageSwimPace, []),
+        averageGradeAdjustedPace: new UntypedFormControl(this.user.settings.exportToCSVSettings.avgGradeAdjustedPace, []),
+        averageHeartRate: new UntypedFormControl(this.user.settings.exportToCSVSettings.averageHeartRate, []),
+        maximumHeartRate: new UntypedFormControl(this.user.settings.exportToCSVSettings.maximumHeartRate, []),
+        averagePower: new UntypedFormControl(this.user.settings.exportToCSVSettings.averagePower, []),
+        maximumPower: new UntypedFormControl(this.user.settings.exportToCSVSettings.maximumPower, []),
+        vO2Max: new UntypedFormControl(this.user.settings.exportToCSVSettings.vO2Max, []),
+        includeLink: new UntypedFormControl(this.user.settings.exportToCSVSettings.includeLink, []),
       }
     );
   }

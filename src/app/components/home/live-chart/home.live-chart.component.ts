@@ -19,10 +19,11 @@ import { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
 
 
 @Component({
-  selector: 'app-home-live-chart',
-  templateUrl: './home.live-chart.component.html',
-  styleUrls: ['./home.live-chart.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-home-live-chart',
+    templateUrl: './home.live-chart.component.html',
+    styleUrls: ['./home.live-chart.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class HomeLiveChartComponent extends ChartAbstractDirective implements OnDestroy, AfterViewInit {
 

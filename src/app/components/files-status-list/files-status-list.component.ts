@@ -3,9 +3,10 @@ import {UPLOAD_STATUS} from '../upload/upload-status/upload.status';
 import { FileInterface } from '../upload/file.interface';
 
 @Component({
-  selector: 'app-files-status-list',
-  templateUrl: './files-status-list.component.html',
-  styleUrls: ['./files-status-list.component.css'],
+    selector: 'app-files-status-list',
+    templateUrl: './files-status-list.component.html',
+    styleUrls: ['./files-status-list.component.css'],
+    standalone: false
 })
 
 export class FilesStatusListComponent {

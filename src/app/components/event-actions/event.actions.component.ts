@@ -34,12 +34,12 @@ import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilit
 import { AppWindowService } from '../../services/app.window.service';
 
 @Component({
-  selector: 'app-event-actions',
-  templateUrl: './event.actions.component.html',
-  styleUrls: ['./event.actions.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-
+    selector: 'app-event-actions',
+    templateUrl: './event.actions.component.html',
+    styleUrls: ['./event.actions.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;

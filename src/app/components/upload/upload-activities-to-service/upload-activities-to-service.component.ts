@@ -14,9 +14,10 @@ import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helper
 
 
 @Component({
-  selector: 'app-upload-activity-to-service',
-  templateUrl: './upload-activities-to-service.component.html',
-  styleUrls: ['../upload-abstract.css', './upload-activities-to-service.component.css'],
+    selector: 'app-upload-activity-to-service',
+    templateUrl: './upload-activities-to-service.component.html',
+    styleUrls: ['../upload-abstract.css', './upload-activities-to-service.component.css'],
+    standalone: false
 })
 
 export class UploadActivitiesToServiceComponent extends UploadAbstractDirective {

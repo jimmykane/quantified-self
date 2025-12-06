@@ -41,10 +41,11 @@ import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib
 
 
 @Component({
-  selector: 'app-tile-chart-actions',
-  templateUrl: './tile.chart.actions.component.html',
-  styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
-  providers: []
+    selector: 'app-tile-chart-actions',
+    templateUrl: './tile.chart.actions.component.html',
+    styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
+    providers: [],
+    standalone: false
 })
 export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
   @Input() chartType: ChartTypes;

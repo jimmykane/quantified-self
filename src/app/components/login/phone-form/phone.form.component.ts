@@ -7,8 +7,8 @@ import {
   OnInit
 } from '@angular/core';
 import {
-  FormControl,
-  FormGroup,
+  UntypedFormControl,
+  UntypedFormGroup,
   Validators
 } from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
@@ -19,10 +19,11 @@ import firebase from 'firebase/compat/app';
 
 
 @Component({
-  selector: 'app-phone-form',
-  templateUrl: './phone.form.component.html',
-  styleUrls: ['./phone.form.component.css'],
-  providers: [],
+    selector: 'app-phone-form',
+    templateUrl: './phone.form.component.html',
+    styleUrls: ['./phone.form.component.css'],
+    providers: [],
+    standalone: false
 })
 
 
@@ -33,8 +34,8 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
   windowRef: any;
 
   user: any;
-  public phoneNumberFormGroup: FormGroup;
-  public verificationCodeFormGroup: FormGroup;
+  public phoneNumberFormGroup: UntypedFormGroup;
+  public verificationCodeFormGroup: UntypedFormGroup;
 
   constructor(
     public dialogRef: MatDialogRef<PhoneFormComponent>,
@@ -44,18 +45,18 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     private afAuth: AngularFireAuth,
     private  changeDetector: ChangeDetectorRef,
   ) {
-    this.phoneNumberFormGroup = new FormGroup({
-        phoneNumber: new FormControl(null, [
+    this.phoneNumberFormGroup = new UntypedFormGroup({
+        phoneNumber: new UntypedFormControl(null, [
           Validators.required,
         ]),
-        reCaptcha: new FormControl(null, [
+        reCaptcha: new UntypedFormControl(null, [
           Validators.requiredTrue,
         ]),
       },
     );
 
-    this.verificationCodeFormGroup = new FormGroup({
-        verificationCode: new FormControl(null, [
+    this.verificationCodeFormGroup = new UntypedFormGroup({
+        verificationCode: new UntypedFormControl(null, [
           Validators.required,
         ]),
       },
@@ -115,7 +116,7 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // @todo extract to abstract for all forms
 
-  hasError(formGroup: FormGroup, field?: string) {
+  hasError(formGroup: UntypedFormGroup, field?: string) {
     if (!field) {
       return !formGroup.valid;
     }
@@ -123,12 +124,12 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // @todo extract to abstract for all forms
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

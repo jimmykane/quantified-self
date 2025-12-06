@@ -10,7 +10,7 @@ import {
   ViewChild
 } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { AgmMap } from '@agm/core';
+// AGM removed - incompatible with Angular 19\n// import { AgmMap } from '@agm/core';
 import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
@@ -32,10 +32,13 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
   styleUrls: ['./events-map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [DatePipe],
+  standalone: false
 })
 
 export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit {
-  @ViewChild(AgmMap) agmMap;
+  // AGM removed - incompatible with Angular 19
+  // @ViewChild(AgmMap) agmMap;
+  agmMap: any; // Placeholder
   @Input() events: EventInterface[];
   @Input() theme: MapThemes;
   @Input() type: MapTypes;
@@ -135,7 +138,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       if (eventStartPositionStat) {
         const location = eventStartPositionStat.getValue();
         const marker = new google.maps.Marker({
-          position: {lat: location.latitudeDegrees, lng: location.longitudeDegrees},
+          position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
           title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayUnit()}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,

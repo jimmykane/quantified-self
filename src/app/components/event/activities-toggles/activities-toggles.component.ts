@@ -3,10 +3,11 @@ import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.int
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 
 @Component({
-  selector: 'app-activities-toggles',
-  templateUrl: './activities-toggles.component.html',
-  styleUrls: ['./activities-toggles.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush, // @todo not sure
+    selector: 'app-activities-toggles',
+    templateUrl: './activities-toggles.component.html',
+    styleUrls: ['./activities-toggles.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class ActivitiesTogglesComponent {

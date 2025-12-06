@@ -11,10 +11,11 @@ import { AppDataColors } from '../../../services/color/app.data.colors';
 
 
 @Component({
-  selector: 'app-intensity-zones-chart',
-  templateUrl: './charts.intensity-zones.component.html',
-  styleUrls: ['./charts.intensity-zones.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-intensity-zones-chart',
+    templateUrl: './charts.intensity-zones.component.html',
+    styleUrls: ['./charts.intensity-zones.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
@@ -47,7 +48,7 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
     // X Axis
     const categoryAxis = chart.xAxes.push(new am4charts.CategoryAxis());
     // categoryAxis.renderer.grid.template.disabled = true;
-    categoryAxis.renderer.grid.template.location = -1;
+    categoryAxis.renderer.grid.template.location = 0;
     categoryAxis.renderer.minGridDistance = 1;
     // categoryAxis.renderer.grid.template.strokeWidth = 2;
     // categoryAxis.renderer.grid.template.strokeOpacity = ;

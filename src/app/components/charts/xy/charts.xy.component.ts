@@ -22,10 +22,11 @@ import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-l
 
 
 @Component({
-  selector: 'app-xy-chart',
-  templateUrl: './charts.xy.component.html',
-  styleUrls: ['./charts.xy.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-xy-chart',
+    templateUrl: './charts.xy.component.html',
+    styleUrls: ['./charts.xy.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsXYComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 

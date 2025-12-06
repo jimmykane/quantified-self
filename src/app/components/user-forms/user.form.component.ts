@@ -1,5 +1,5 @@
 import {Component, Inject, Input, OnInit} from '@angular/core';
-import {FormControl, FormGroup, Validators} from '@angular/forms';
+import {UntypedFormControl, UntypedFormGroup, Validators} from '@angular/forms';
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
@@ -13,12 +13,11 @@ import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 
 
 @Component({
-  selector: 'app-user-form',
-  templateUrl: './user.form.component.html',
-  styleUrls: ['./user.form.component.css'],
-  providers: [],
-  // changeDetection: ChangeDetectionStrategy.OnPush,
-
+    selector: 'app-user-form',
+    templateUrl: './user.form.component.html',
+    styleUrls: ['./user.form.component.css'],
+    providers: [],
+    standalone: false
 })
 
 
@@ -33,7 +32,7 @@ export class UserFormComponent implements OnInit {
   public isLoading: boolean;
   public isUserBranded: boolean;
 
-  public userFormGroup: FormGroup;
+  public userFormGroup: UntypedFormGroup;
 
   constructor(
     public afa: AngularFireAnalytics,
@@ -55,24 +54,24 @@ export class UserFormComponent implements OnInit {
     // Set this to loading
     this.isLoading = true;
 
-    this.userFormGroup = new FormGroup({
-      displayName: new FormControl(this.user.displayName, [
+    this.userFormGroup = new UntypedFormGroup({
+      displayName: new UntypedFormControl(this.user.displayName, [
         Validators.required,
         // Validators.minLength(4),
       ]),
-      privacy: new FormControl(this.user.privacy, [
+      privacy: new UntypedFormControl(this.user.privacy, [
         Validators.required,
         // Validators.minLength(4),
       ]),
-      description: new FormControl(this.user.description, [
+      description: new UntypedFormControl(this.user.description, [
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      brandText: new FormControl({value: this.user.brandText, disabled: !(await this.userService.isBranded(this.user))}, [
+      brandText: new UntypedFormControl({value: this.user.brandText, disabled: !(await this.userService.isBranded(this.user))}, [
       ]),
     });
 
-    this.userFormGroup.addControl('brandText', new FormControl(0, []));
+    this.userFormGroup.addControl('brandText', new UntypedFormControl(0, []));
     // Set this to done loading
     this.isLoading = false;
   }
@@ -107,12 +106,12 @@ export class UserFormComponent implements OnInit {
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

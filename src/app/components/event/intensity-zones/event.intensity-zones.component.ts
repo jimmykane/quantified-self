@@ -25,10 +25,11 @@ import { AppDataColors } from '../../../services/color/app.data.colors';
 
 
 @Component({
-  selector: 'app-event-intensity-zones',
-  templateUrl: './event.intensity-zones.component.html',
-  styleUrls: ['./event.intensity-zones.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-intensity-zones',
+    templateUrl: './event.intensity-zones.component.html',
+    styleUrls: ['./event.intensity-zones.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class EventIntensityZonesComponent extends ChartAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[];
@@ -88,7 +89,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     // Y Axis
     const categoryAxis = chart.yAxes.push(new am4charts.CategoryAxis());
     // categoryAxis.renderer.grid.template.disabled = true;
-    categoryAxis.renderer.grid.template.location = -1;
+    categoryAxis.renderer.grid.template.location = 0;
     categoryAxis.renderer.minGridDistance = 1;
     // categoryAxis.renderer.grid.template.strokeWidth = 2;
     // categoryAxis.renderer.grid.template.strokeOpacity = ;

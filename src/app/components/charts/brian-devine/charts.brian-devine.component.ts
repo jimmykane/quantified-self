@@ -20,10 +20,11 @@ import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpe
 import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 
 @Component({
-  selector: 'app-brian-devine-chart',
-  templateUrl: './charts.brian-devine.component.html',
-  styleUrls: ['./charts.brian-devine.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-brian-devine-chart',
+    templateUrl: './charts.brian-devine.component.html',
+    styleUrls: ['./charts.brian-devine.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy, AfterViewInit {
 

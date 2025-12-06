@@ -4,9 +4,10 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 
 
 @Component({
-  selector: 'app-services-coros',
-  templateUrl: './services.coros.component.html',
-  styleUrls: ['../services-abstract-component.directive.css', './services.coros.component.css'],
+    selector: 'app-services-coros',
+    templateUrl: './services.coros.component.html',
+    styleUrls: ['../services-abstract-component.directive.css', './services.coros.component.css'],
+    standalone: false
 })
 export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 

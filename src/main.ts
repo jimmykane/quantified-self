@@ -1,9 +1,8 @@
-import {enableProdMode} from '@angular/core';
-import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
-import {environment} from './environments/environment';
-import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { enableProdMode } from '@angular/core';
+import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
+import { environment } from './environments/environment';
+import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import * as Sentry from '@sentry/angular';
-import { Integrations } from '@sentry/tracing';
 
 
 Sentry.init({
@@ -12,10 +11,7 @@ Sentry.init({
   release: environment.appVersion,
   debug: environment.production || environment.beta,
   integrations: [
-    new Integrations.BrowserTracing({
-      tracingOrigins: ['https://quantified-self.io/', 'https://beta.quantified-self.io/'],
-      routingInstrumentation: Sentry.routingInstrumentation,
-    }),
+    Sentry.browserTracingIntegration(),
   ],
 
   // We recommend adjusting this value in production, or using tracesSampler

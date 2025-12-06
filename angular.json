@@ -81,18 +81,18 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "track-tools:build"
+            "buildTarget": "track-tools:build"
           },
           "configurations": {
             "production": {
-              "browserTarget": "track-tools:build:production"
+              "buildTarget": "track-tools:build:production"
             }
           }
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "track-tools:build"
+            "buildTarget": "track-tools:build"
           }
         },
         "test": {
@@ -115,16 +115,6 @@
               "src/sitemap.xml"
             ]
           }
-        },
-        "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
-          "options": {
-            "tsConfig": [
-              "src/tsconfig.app.json",
-              "src/tsconfig.spec.json"
-            ],
-            "exclude": []
-          }
         }
       }
     },
@@ -139,20 +129,10 @@
             "protractorConfig": "./protractor.conf.js",
             "devServerTarget": "track-tools:serve"
           }
-        },
-        "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
-          "options": {
-            "tsConfig": [
-              "e2e/tsconfig.e2e.json"
-            ],
-            "exclude": []
-          }
         }
       }
     }
   },
-  "defaultProject": "track-tools",
   "schematics": {
     "@schematics/angular:component": {
       "prefix": "app",

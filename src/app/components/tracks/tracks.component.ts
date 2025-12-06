@@ -30,10 +30,10 @@ import firebase from 'firebase/compat/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
-  selector: 'app-tracks',
-  templateUrl: './tracks.component.html',
-  styleUrls: ['./tracks.component.css'],
-  // changeDetection: ChangeDetectionStrategy.OnPush // @todo consider this for performance
+    selector: 'app-tracks',
+    templateUrl: './tracks.component.html',
+    styleUrls: ['./tracks.component.css'],
+    standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {
   @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;

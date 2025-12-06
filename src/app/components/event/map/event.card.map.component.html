@@ -4,125 +4,18 @@
       <mat-icon>map</mat-icon>
     </div>
     <mat-card-subtitle>
-      <app-map-actions
-        [(showLaps)]="showLaps"
-        [(showArrows)]="showArrows"
-        [user]="user">
+      <app-map-actions [(showLaps)]="showLaps" [(showArrows)]="showArrows" [user]="user">
       </app-map-actions>
     </mat-card-subtitle>
   </mat-card-header>
   <section class="container">
-    <mat-card class="map-legend mat-elevation-z0" *ngIf="agmMap && event.getActivities().length > 1">
-      <app-activity-toggle *ngFor="let activity of event.getActivities()"
-                           [activity]="activity"
-                           [event]="event"
-                           [showActions]="false"
-                           [showToggle]="false"
-                           [showStats]="false"
-                           [showDate]="false">
-      </app-activity-toggle>
-    </mat-card>
     <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
-    <!-- Map -->
+    <!-- Map placeholder - AGM removed, migration to @angular/google-maps needed -->
     <section class="placeholder" *ngIf="activitiesMapData.length === 0"></section>
-    <agm-map *ngIf="activitiesMapData.length > 0"
-             [mapTypeId]="user && user.settings ? user.settings.mapSettings.mapType : 'roadmap'"
-             (mapTypeIdChange)="changeMapType($event)"
-             [gestureHandling]="'cooperative'"
-             [scrollwheel]="null"
-             [tilt]="45"
-             [controlSize]="32"
-             [disableDefaultUI]="true"
-             [styles]="getStyles(theme)">
-      <agm-fullscreen-control></agm-fullscreen-control>
-      <agm-scale-control></agm-scale-control>
-      <agm-rotate-control [position]="6"></agm-rotate-control>
-      <agm-zoom-control [position]="7"></agm-zoom-control>
-      <agm-street-view-control></agm-street-view-control>
-      <agm-map-type-control [style]="0" [mapTypeIds]="mapTypeIds" [position]="2"></agm-map-type-control>
-      <ng-container *ngFor="let activityMapData of activitiesMapData">
-        <!-- Start Marker -->
-        <!-- @todo fix for non existen activity positions -->
-        <agm-marker
-          [iconUrl]="getHomeMarkerIcon(activityMapData.activity)"
-          [markerClickable]="false"
-          [zIndex]="9999"
-          [latitude]="activityMapData.positions[0].latitudeDegrees"
-          [longitude]="activityMapData.positions[0].longitudeDegrees">
-        </agm-marker>
-
-
-        <!-- marker for cursor -->
-        <agm-marker
-          *ngIf="activitiesCursors.get(activityMapData.activity.getID())"
-          [markerClickable]="false"
-          [iconUrl]="getCursorMarkerIcon(activityMapData.activity)"
-          [zIndex]="9999"
-          [latitude]="activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees"
-          [longitude]="activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees">
-        </agm-marker>
-
-        <!-- Polyline for the activity -->
-        <agm-polyline
-          (lineMouseMove)="onLineMouseMove($event, activityMapData)"
-          (lineMouseDown)="onLineMouseMove($event, activityMapData)"
-          (lineMouseOut)="onLineMouseMove($event, activityMapData)"
-          [strokeColor]="activityMapData.strokeColor"
-          [strokeWeight]="strokeWidth">
-          <!-- Points -->
-          <agm-polyline-point
-            *ngFor="let position of activityMapData.positions"
-            [latitude]="position.latitudeDegrees"
-            [longitude]="position.longitudeDegrees">
-          </agm-polyline-point>
-
-          <agm-icon-sequence
-            *ngIf="showArrows"
-            [fixedRotation]="false"
-            [scale]="4"
-            [offset]="'10%'"
-            [repeat]="'200px'"
-            [strokeColor]="'#00000'"
-            [fillColor]="'#FFFFFF'"
-            [strokeWeight]="1.2"
-            [fillOpacity]="0.8"
-            [path]="'FORWARD_CLOSED_ARROW'">
-          </agm-icon-sequence>
-        </agm-polyline>
-        <!-- End marker -->
-        <!-- @todo fix for non existen activity positions -->
-        <agm-marker
-          [iconUrl]="getFlagMarkerIcon(activityMapData.activity)"
-          [markerClickable]="false"
-          [zIndex]="9999"
-          [latitude]="activityMapData.positions[activityMapData.positions.length -1].latitudeDegrees"
-          [longitude]="activityMapData.positions[activityMapData.positions.length -1].longitudeDegrees">
-        </agm-marker>
-        <!--      [iconUrl]="'https://chart.googleapis.com/chart?chst=' +  'd_map_pin_letter&chld=' + (i+1) + '|' + eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"-->
-        <!-- Laps -->
-        <agm-marker
-          *ngFor="let lap of activityMapData.laps; let i = index; last as isLast"
-          [markerClickable]="false"
-          [iconUrl]="getMarkerIcon(activityMapData.activity)"
-          [zIndex]="i+1"
-          [label]="getLabel((i+1).toString())"
-          [latitude]="lap.lapPosition.latitudeDegrees"
-          [longitude]="lap.lapPosition.longitudeDegrees">
-        </agm-marker>
-
-        <ng-container *ngIf="showPoints">
-          <agm-marker
-            *ngFor="let position of activityMapData.positions"
-            [iconUrl]="getCircleMarkerIcon(activityMapData.activity)"
-            [markerClickable]="false"
-            [latitude]="position.latitudeDegrees"
-            [longitude]="position.longitudeDegrees">
-          </agm-marker>
-        </ng-container>
-
-      </ng-container>
-
-
-    </agm-map>
+    <div *ngIf="activitiesMapData.length > 0" class="map-placeholder">
+      <mat-icon>map</mat-icon>
+      <p>Map functionality temporarily disabled.</p>
+      <p>Migration from &#64;agm/core to &#64;angular/google-maps required.</p>
+    </div>
   </section>
 </mat-card>

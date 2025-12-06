@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { environment } from '../../../../environments/environment';
@@ -8,12 +8,13 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 
 
 @Component({
-  selector: 'app-services-suunto',
-  templateUrl: './services.suunto.component.html',
-  styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
+    selector: 'app-services-suunto',
+    templateUrl: './services.suunto.component.html',
+    styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
+    standalone: false
 })
 export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit {
-  public suuntoAppLinkFormGroup: FormGroup;
+  public suuntoAppLinkFormGroup: UntypedFormGroup;
 
   public serviceName = ServiceNames.SuuntoApp;
   clicks = 0;
@@ -35,8 +36,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   async ngOnInit() {
-    this.suuntoAppLinkFormGroup = new FormGroup({
-      input: new FormControl('', [
+    this.suuntoAppLinkFormGroup = new UntypedFormGroup({
+      input: new UntypedFormControl('', [
         Validators.required,
         // Validators.minLength(4),
       ]),
@@ -99,12 +100,12 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

@@ -6,11 +6,12 @@ import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
-  selector: 'app-event-card-chart-actions',
-  templateUrl: './event.card.chart.actions.component.html',
-  styleUrls: ['./event.card.chart.actions.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card-chart-actions',
+    templateUrl: './event.card.chart.actions.component.html',
+    styleUrls: ['./event.card.chart.actions.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventCardChartActionsComponent implements OnChanges {

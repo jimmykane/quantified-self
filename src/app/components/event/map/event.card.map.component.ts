@@ -10,7 +10,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import { AgmMap, } from '@agm/core';
+// AGM removed - incompatible with Angular 19\n// import { AgmMap, } from '@agm/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -33,10 +33,13 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
   templateUrl: './event.card.map.component.html',
   styleUrls: ['./event.card.map.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @ViewChild(AgmMap) agmMap;
+  // AGM removed - incompatible with Angular 19
+  // @ViewChild(AgmMap) agmMap;
+  agmMap: any; // Placeholder
   @Input() event: EventInterface;
   @Input() targetUserID: string;
   @Input() user: User;
@@ -56,7 +59,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   /** key is the activity id **/
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
   private activitiesCursorSubscription: Subscription;
-  private lineMouseMoveSubject: Subject<{event: google.maps.PolyMouseEvent, activityMapData: MapData }> = new Subject()
+  private lineMouseMoveSubject: Subject<{ event: google.maps.PolyMouseEvent, activityMapData: MapData }> = new Subject()
   private lineMouseMoveSubscription: Subscription;
 
 
@@ -127,7 +130,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       strokeColor: '#FFF',
       strokeWeight: 0.8,
       scale: 1.2,
-      anchor: {x: 12, y: 12}
+      anchor: { x: 12, y: 12 }
     }
   }
 
@@ -151,7 +154,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       strokeColor: '#FFF',
       strokeWeight: 0.8,
       scale: 1,
-      anchor: {x: 6, y: 24}
+      anchor: { x: 6, y: 24 }
     }
   }
 
@@ -163,7 +166,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       strokeColor: '#FFF',
       strokeWeight: 1,
       scale: 1.2,
-      anchor: {x: 12, y: 12}
+      anchor: { x: 12, y: 12 }
     }
   }
 
@@ -177,7 +180,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   onLineMouseMove(event, activityMapData: MapData) {
-    this.lineMouseMoveSubject.next({event: event, activityMapData: activityMapData});
+    this.lineMouseMoveSubject.next({ event: event, activityMapData: activityMapData });
   }
 
   private async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
@@ -190,7 +193,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()
     }, activityMapData.positions.map(a => {
-      return {latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time}
+      return { latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time }
     }));
 
     if (!nearest) {
@@ -219,7 +222,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       return;
     }
     this.user.settings.mapSettings.mapType = mapType;
-    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
@@ -284,9 +287,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .getData(true)
         .reduce((positionWithTimeArray: PositionWithTime[], time, index): PositionWithTime[] => {
-          positionWithTimeArray.push(Object.assign({time: activity.startDate.getTime()  + time * 1000}, positionData[index]))
-            return positionWithTimeArray
-          }, []);
+          positionWithTimeArray.push(Object.assign({ time: activity.startDate.getTime() + time * 1000 }, positionData[index]))
+          return positionWithTimeArray
+        }, []);
       this.activitiesMapData.push({
         activity: activity,
         positions: positions,

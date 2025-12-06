@@ -40,10 +40,11 @@ import * as weeknumber from 'weeknumber'
 import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
 
 @Component({
-  selector: 'app-summaries',
-  templateUrl: './summaries.component.html',
-  styleUrls: ['./summaries.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-summaries',
+    templateUrl: './summaries.component.html',
+    styleUrls: ['./summaries.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
