@@ -1,5 +1,7 @@
 <app-shade [isActive]="isLoading" [hasError]="markers && markers.length === 0"
   [errorMessage]="'Nothing to show'"></app-shade>
+
+<!-- Selected Event Card -->
 <mat-card *ngIf="selectedEvent">
   <button class="close-button" mat-icon-button (click)="selectedEvent=null; selectedEventPositionsByActivity = []"
     align="end">
@@ -33,9 +35,15 @@
     <button mat-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">Open</button>
   </mat-card-actions>
 </mat-card>
-<!-- Map placeholder - AGM removed, migration to @angular/google-maps needed -->
-<div class="map-placeholder">
-  <mat-icon>map</mat-icon>
-  <p>Map functionality temporarily disabled.</p>
-  <p>Migration from &#64;agm/core to &#64;angular/google-maps required.</p>
-</div>
+
+<!-- Google Map -->
+<google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom" [mapTypeId]="mapTypeId"
+  [options]="mapOptions" (mapInitialized)="onMapReady($event)">
+
+  <!-- Polylines for selected event activities -->
+  <ng-container *ngIf="selectedEventPositionsByActivity">
+    <map-polyline *ngFor="let positionsByActivity of selectedEventPositionsByActivity"
+      [path]="getPolylinePath(positionsByActivity.positions)" [options]="getPolylineOptions(positionsByActivity.color)">
+    </map-polyline>
+  </ng-container>
+</google-map>

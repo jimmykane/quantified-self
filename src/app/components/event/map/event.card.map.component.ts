@@ -10,7 +10,7 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-// AGM removed - incompatible with Angular 19\n// import { AgmMap, } from '@agm/core';
+import { GoogleMap, MapPolyline, MapMarker } from '@angular/google-maps';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -35,11 +35,8 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-
 export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  // AGM removed - incompatible with Angular 19
-  // @ViewChild(AgmMap) agmMap;
-  agmMap: any; // Placeholder
+  @ViewChild(GoogleMap) googleMap: GoogleMap;
   @Input() event: EventInterface;
   @Input() targetUserID: string;
   @Input() user: User;
@@ -55,14 +52,30 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeIds: ['hybrid', 'roadmap', 'satellite', 'terrain'];
-  /** key is the activity id **/
+  public mapTypeId: google.maps.MapTypeId = google.maps.MapTypeId.ROADMAP;
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
+
+  // Map options
+  public mapOptions: google.maps.MapOptions = {
+    gestureHandling: 'cooperative',
+    scrollwheel: false,
+    tilt: 45,
+    controlSize: 32,
+    disableDefaultUI: true,
+    fullscreenControl: true,
+    scaleControl: true,
+    rotateControl: true,
+    zoomControl: true,
+    streetViewControl: true,
+    mapTypeControl: true,
+  };
+
+  public mapCenter: google.maps.LatLngLiteral = { lat: 0, lng: 0 };
+  public mapZoom = 12;
+
   private activitiesCursorSubscription: Subscription;
-  private lineMouseMoveSubject: Subject<{ event: google.maps.PolyMouseEvent, activityMapData: MapData }> = new Subject()
+  private lineMouseMoveSubject: Subject<{ event: google.maps.MapMouseEvent, activityMapData: MapData }> = new Subject();
   private lineMouseMoveSubscription: Subscription;
-
-
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -73,27 +86,60 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     super(changeDetectorRef);
   }
 
-
   ngOnInit() {
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-
+    // Apply theme styles
+    this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
   }
 
   ngAfterViewInit(): void {
-  }
+    // Subscribe to cursor changes from chart
+    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
+      debounceTime(250)
+    ).subscribe((cursors) => {
+      cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
+        const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
+        if (cursorActivityMapData) {
+          const position = cursorActivityMapData.positions.reduce((prev, curr) =>
+            Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
+          if (position) {
+            this.activitiesCursors.set(cursor.activityID, {
+              latitudeDegrees: position.latitudeDegrees,
+              longitudeDegrees: position.longitudeDegrees
+            });
+            if (this.googleMap?.googleMap) {
+              this.googleMap.googleMap.panTo({
+                lat: position.latitudeDegrees,
+                lng: position.longitudeDegrees
+              });
+            }
+          }
+        }
+      });
+      this.changeDetectorRef.detectChanges();
+    });
 
+    this.lineMouseMoveSubscription = this.lineMouseMoveSubject.subscribe(value => {
+      this.lineMouseMove(value.event, value.activityMapData);
+    });
+  }
 
   ngOnChanges(simpleChanges) {
     if ((simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.lapTypes
-      // || simpleChanges.showArrows
       || simpleChanges.showLaps)) {
       this.bindToNewData();
     }
+    if (simpleChanges.theme) {
+      this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
+    }
+  }
 
+  onMapReady(map: google.maps.Map) {
+    this.fitBoundsToActivities();
   }
 
   openLapMarkerInfoWindow(lap) {
@@ -106,101 +152,121 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.openedLapMarkerInfoWindow = void 0;
   }
 
-  getMarkerIcon(activity: ActivityInterface) {
+  getMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
     return {
-      path: 'M22-48h-44v43h16l6 5 6-5h16z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.5,
-      scale: 0.5,
-      labelOrigin: {
-        x: 0,
-        y: -24
+      icon: {
+        path: 'M22-48h-44v43h16l6 5 6-5h16z',
+        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillOpacity: 1,
+        strokeColor: '#FFF',
+        strokeWeight: 0.5,
+        scale: 0.5,
+        labelOrigin: new google.maps.Point(0, -24)
       }
-    }
+    };
   }
 
-  //
-  getHomeMarkerIcon(activity: ActivityInterface) {
+  getHomeMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
     return {
-      path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.8,
-      scale: 1.2,
-      anchor: { x: 12, y: 12 }
-    }
+      icon: {
+        path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
+        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillOpacity: 1,
+        strokeColor: '#FFF',
+        strokeWeight: 0.8,
+        scale: 1.2,
+        anchor: new google.maps.Point(12, 12)
+      }
+    };
   }
 
-  getCircleMarkerIcon(activity: ActivityInterface) {
+  getFlagMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
     return {
-      path: 0,
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.8,
-      scale: 1.2,
-      // anchor: {x: 12, y: 12}
-    }
+      icon: {
+        path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
+        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillOpacity: 1,
+        strokeColor: '#FFF',
+        strokeWeight: 0.8,
+        scale: 1,
+        anchor: new google.maps.Point(6, 24)
+      }
+    };
   }
 
-  getFlagMarkerIcon(activity: ActivityInterface) {
+  getCursorMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
     return {
-      path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 0.8,
-      scale: 1,
-      anchor: { x: 6, y: 24 }
-    }
+      icon: {
+        path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillOpacity: 1,
+        strokeColor: '#FFF',
+        strokeWeight: 1,
+        scale: 1.2,
+        anchor: new google.maps.Point(12, 12)
+      }
+    };
   }
 
-  getCursorMarkerIcon(activity: ActivityInterface) {
+  getLapMarkerOptions(activity: ActivityInterface, lapIndex: number): google.maps.MarkerOptions {
     return {
-      path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-      fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
-      fillOpacity: 1,
-      strokeColor: '#FFF',
-      strokeWeight: 1,
-      scale: 1.2,
-      anchor: { x: 12, y: 12 }
-    }
+      icon: {
+        path: 'M22-48h-44v43h16l6 5 6-5h16z',
+        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillOpacity: 1,
+        strokeColor: '#FFF',
+        strokeWeight: 0.5,
+        scale: 0.5,
+        labelOrigin: new google.maps.Point(0, -24)
+      },
+      label: {
+        color: 'white',
+        fontSize: '14px',
+        text: (lapIndex + 1).toString()
+      },
+      zIndex: lapIndex + 1
+    };
   }
 
-  // @todo make prop
-  getLabel(text) {
+  getPolylineOptions(activityMapData: MapData): google.maps.PolylineOptions {
     return {
-      color: 'white',
-      fontSize: '14px',
-      text: text
-    }
+      strokeColor: activityMapData.strokeColor,
+      strokeWeight: this.strokeWidth || 3,
+      strokeOpacity: 1,
+      clickable: true
+    };
   }
 
-  onLineMouseMove(event, activityMapData: MapData) {
-    this.lineMouseMoveSubject.next({ event: event, activityMapData: activityMapData });
+  getPolylinePath(activityMapData: MapData): google.maps.LatLngLiteral[] {
+    return activityMapData.positions.map(pos => ({
+      lat: pos.latitudeDegrees,
+      lng: pos.longitudeDegrees
+    }));
   }
 
-  private async lineMouseMove(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
+  onPolylineClick(event: google.maps.MapMouseEvent, activityMapData: MapData) {
+    this.lineMouseMoveSubject.next({ event, activityMapData });
+  }
+
+  private async lineMouseMove(event: google.maps.MapMouseEvent, activityMapData: MapData) {
+    if (!event.latLng) return;
+
     this.activitiesCursors.set(activityMapData.activity.getID(), {
       latitudeDegrees: event.latLng.lat(),
       longitudeDegrees: event.latLng.lng()
     });
     this.changeDetectorRef.detectChanges();
+
     const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
       latitude: event.latLng.lat(),
       longitude: event.latLng.lng()
-    }, activityMapData.positions.map(a => {
-      return { latitude: a.latitudeDegrees, longitude: a.longitudeDegrees, time: a.time }
-    }));
+    }, activityMapData.positions.map(a => ({
+      latitude: a.latitudeDegrees,
+      longitude: a.longitudeDegrees,
+      time: a.time
+    })));
 
-    if (!nearest) {
-      return;
-    }
-
-    // this.activityCursorService.clear();
+    if (!nearest) return;
 
     this.activityCursorService.setCursor({
       activityID: activityMapData.activity.getID(),
@@ -209,25 +275,20 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
   }
 
-  lineMouseOut(event: google.maps.PolyMouseEvent, activityMapData: MapData) {
-    // this.activitiesCursors.delete(activityMapData.activity.getID());
-  }
-
   getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
     return Array.from(map.values());
   }
 
-  async changeMapType(mapType) {
-    if (!this.user) {
-      return;
-    }
-    this.user.settings.mapSettings.mapType = mapType;
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+  async changeMapType(mapType: google.maps.MapTypeId) {
+    if (!this.user) return;
+    this.mapTypeId = mapType;
+    this.user.settings.mapSettings.mapType = mapType as any;
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   @HostListener('window:resize', ['$event.target.innerWidth'])
   onResize(width) {
-    // this.resizeMapToBounds();
+    this.fitBoundsToActivities();
   }
 
   ngOnDestroy(): void {
@@ -235,74 +296,39 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private bindToNewData() {
-
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
     this.unSubscribeFromAll();
-    if (!this.selectedActivities.length) {
+
+    if (!this.selectedActivities?.length) {
       this.noMapData = true;
       this.loaded();
       return;
     }
 
-    // Read the cursor
-    this.lineMouseMoveSubscription = this.lineMouseMoveSubject.pipe(
-      // debounceTime(250)
-    ).subscribe(value => {
-      this.lineMouseMove(value.event, value.activityMapData);
-    });
-
-    // Set the cursor
-    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(250)
-    ).subscribe((cursors) => {
-
-      cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
-        console.log(cursor)
-        const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
-        if (cursorActivityMapData) {
-          const position = cursorActivityMapData.positions.reduce((prev, curr) => Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
-          if (position) {
-            this.activitiesCursors.set(cursor.activityID, {
-              latitudeDegrees: position.latitudeDegrees,
-              longitudeDegrees: position.longitudeDegrees
-            });
-            this.agmMap._mapsWrapper.panTo({
-              lat: position.latitudeDegrees,
-              lng: position.longitudeDegrees
-            })
-          }
-        }
-      });
-      this.changeDetectorRef.detectChanges();
-    });
-
     this.selectedActivities.forEach((activity) => {
-      if (!activity.hasPositionData()) {
-        return
-      }
-      // 1. We need the lat, long stream to get also the times for using the time for cursor reference
+      if (!activity.hasPositionData()) return;
+
       const positionData = activity.getSquashedPositionData();
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
         .getData(true)
         .reduce((positionWithTimeArray: PositionWithTime[], time, index): PositionWithTime[] => {
-          positionWithTimeArray.push(Object.assign({ time: activity.startDate.getTime() + time * 1000 }, positionData[index]))
-          return positionWithTimeArray
+          positionWithTimeArray.push({
+            time: activity.startDate.getTime() + time * 1000,
+            ...positionData[index]
+          });
+          return positionWithTimeArray;
         }, []);
+
       this.activitiesMapData.push({
         activity: activity,
         positions: positions,
         strokeColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
         laps: activity.getLaps().reduce((laps, lap) => {
-          // @todo gives back too big arrays should check the implementation of the activity method
           const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
-          if (!lapPositionData.length || !this.showLaps) {
-            return laps;
-          }
-          if (this.lapTypes.indexOf(lap.type) === -1) {
-            return laps;
-          }
+          if (!lapPositionData.length || !this.showLaps) return laps;
+          if (this.lapTypes.indexOf(lap.type) === -1) return laps;
           laps.push({
             lap: lap,
             lapPosition: {
@@ -313,10 +339,29 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           return laps;
         }, [])
       });
+    });
 
-    })
     this.loaded();
-    this.resizeMapToBounds();
+
+    // Set initial center if we have data
+    if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {
+      this.mapCenter = {
+        lat: this.activitiesMapData[0].positions[0].latitudeDegrees,
+        lng: this.activitiesMapData[0].positions[0].longitudeDegrees
+      };
+    }
+
+    // Fit bounds after a short delay to ensure map is ready
+    setTimeout(() => this.fitBoundsToActivities(), 100);
+  }
+
+  private fitBoundsToActivities() {
+    if (!this.googleMap?.googleMap || !this.activitiesMapData.length) return;
+
+    const allPositions = this.activitiesMapData.reduce((arr, data) => arr.concat(data.positions), []);
+    const bounds = this.getBounds(allPositions);
+
+    this.googleMap.googleMap.fitBounds(bounds);
   }
 
   private unSubscribeFromAll() {
@@ -327,20 +372,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.lineMouseMoveSubscription.unsubscribe();
     }
   }
-
-  private resizeMapToBounds() {
-    if (!this.agmMap) {
-      return;
-    }
-    this.agmMap.triggerResize().then(() => {
-      if (!this.agmMap) {
-        return;
-      }
-      this.agmMap._mapsWrapper.fitBounds(this.getBounds(this.activitiesMapData.reduce((pointsArray, activityData) => pointsArray.concat(activityData.positions), [])))
-    });
-  }
 }
-
 
 export interface MapData {
   activity: ActivityInterface;
@@ -348,14 +380,13 @@ export interface MapData {
   strokeColor: string;
   laps: {
     lap: LapInterface,
-    lapPosition: { latitudeDegrees: number, longitudeDegrees: number, time: number },
-    symbol: any,
+    lapPosition: { latitudeDegrees: number, longitudeDegrees: number, time?: number },
+    symbol?: any,
   }[]
 }
 
 export interface PositionWithTime {
-  latitudeDegrees: number,
-  longitudeDegrees: number,
-  time: number
+  latitudeDegrees: number;
+  longitudeDegrees: number;
+  time: number;
 }
-

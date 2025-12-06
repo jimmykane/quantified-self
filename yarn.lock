@@ -290,6 +290,14 @@
   dependencies:
     tslib "^2.3.0"
 
+"@angular/google-maps@^21.0.2":
+  version "21.0.2"
+  resolved "https://registry.npmjs.org/@angular/google-maps/-/google-maps-21.0.2.tgz"
+  integrity sha512-IU3lyn9wJ7dS7voRIa2imAzUid/SU6vtYYP09L9cgpQexY2t4uOFgT+XUqH1GF2hlbksRuggXpOYQmx1f34MUw==
+  dependencies:
+    "@types/google.maps" "^3.54.10"
+    tslib "^2.3.0"
+
 "@angular/material-moment-adapter@^19.2.19":
   version "19.2.19"
   resolved "https://registry.npmjs.org/@angular/material-moment-adapter/-/material-moment-adapter-19.2.19.tgz"
@@ -2859,6 +2867,11 @@
   version "7946.0.8"
   resolved "https://registry.npmjs.org/@types/geojson/-/geojson-7946.0.8.tgz"
   integrity sha512-1rkryxURpr6aWP7R786/UQOkJ3PcpQiWkAXBmdWc7ryFWqN6a4xfK7BtjXvFBKO9LjQ+MWQSWxYeZX1OApnArA==
+
+"@types/google.maps@^3.54.10":
+  version "3.58.1"
+  resolved "https://registry.npmjs.org/@types/google.maps/-/google.maps-3.58.1.tgz"
+  integrity sha512-X9QTSvGJ0nCfMzYOnaVs/k6/4L+7F5uCS+4iUmkLEls6J9S/Phv+m/i3mDeyc49ZBgwab3EFO1HEoBY7k98EGQ==
 
 "@types/googlemaps@3.39.12":
   version "3.39.12"

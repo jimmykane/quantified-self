@@ -20,6 +20,7 @@ import { EventCardChartComponent } from '../components/event/chart/event.card.ch
 import { ActivityToggleComponent } from '../components/event/activity-toggle/activity-toggle.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
+import { GoogleMapsModule } from '@angular/google-maps';
 
 
 @NgModule({
@@ -28,7 +29,7 @@ import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.
         SharedModule,
         MaterialModule,
         EventRoutingModule,
-        // AGM removed - incompatible with Angular 19
+        GoogleMapsModule,
     ],
     exports: [
         EventHeaderComponent
