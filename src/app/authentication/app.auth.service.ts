@@ -8,8 +8,23 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppUserService } from '../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
-import firebase from 'firebase/compat/app';
-import 'firebase/auth';
+import { FirebaseApp } from '@angular/fire/compat';
+import {
+  getAuth,
+  signInWithPopup,
+  signInAnonymously,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  FacebookAuthProvider,
+  TwitterAuthProvider,
+  Auth,
+  browserLocalPersistence,
+  setPersistence,
+  browserPopupRedirectResolver
+} from 'firebase/auth';
 
 
 @Injectable({
@@ -17,20 +32,22 @@ import 'firebase/auth';
 })
 export class AppAuthService implements OnDestroy {
   user: Observable<User | null>;
-  // store the URL so we can redirect after logging in
   redirectUrl: string;
   private authState = null;
   private guest: boolean;
   private userSubscription: Subscription;
+  private _auth: Auth | null = null;
 
   constructor(
-    private afAuth: AngularFireAuth,
+    private afAuth: AngularFireAuth, // Keep for authState observation only
+    private firebaseApp: FirebaseApp, // Inject AngularFire's FirebaseApp
     private afs: AngularFirestore,
     private afa: AngularFireAnalytics,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
     private localStorageService: LocalStorageService
   ) {
+    // Use AngularFireAuth only for state observation (it works for that)
     this.user = this.afAuth.authState.pipe(
       switchMap(user => {
         if (user) {
@@ -41,9 +58,6 @@ export class AppAuthService implements OnDestroy {
               dbUser.creationDate = new Date(user.metadata.creationTime);
               dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
             }
-            // if (dbUser) {
-            //   this.afa.setAnalyticsCollectionEnabled(true);
-            // }
             return dbUser;
           }));
         } else {
@@ -62,56 +76,77 @@ export class AppAuthService implements OnDestroy {
     return !!this.guest;
   }
 
+  private get auth(): Auth {
+    if (!this._auth) {
+      // AngularFire Compat wraps the Modular app in _delegate
+      const modularApp = (this.firebaseApp as any)._delegate || this.firebaseApp;
+      this._auth = getAuth(modularApp);
+      console.log('[AppAuthService] Lazily initialized Modular Auth from FirebaseApp._delegate:', this._auth);
+    }
+    return this._auth;
+  }
+
+  // Using pure Modular SDK signInWithPopup - bypassing AngularFireAuth entirely
   googleLoginWithRedirect() {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    return this.oAuthLoginWithRedirect(provider);
+    const provider = new GoogleAuthProvider();
+    provider.addScope('profile');
+    provider.addScope('email');
+    return this.oAuthLoginWithPopup(provider);
   }
 
   githubLoginWithRedirect() {
-    const provider = new firebase.auth.GithubAuthProvider();
-    return this.oAuthLoginWithRedirect(provider);
+    const provider = new GithubAuthProvider();
+    return this.oAuthLoginWithPopup(provider);
   }
 
   facebookLoginWithRedirect() {
-    const provider = new firebase.auth.FacebookAuthProvider();
-    return this.oAuthLoginWithRedirect(provider);
+    const provider = new FacebookAuthProvider();
+    return this.oAuthLoginWithPopup(provider);
   }
 
   twitterLoginWithRedirect() {
-    const provider = new firebase.auth.TwitterAuthProvider();
-    return this.oAuthLoginWithRedirect(provider);
+    const provider = new TwitterAuthProvider();
+    return this.oAuthLoginWithPopup(provider);
   }
 
   gitHubLoginWithRedirect() {
-    const provider = new firebase.auth.GithubAuthProvider();
-    return this.oAuthLoginWithRedirect(provider);
+    const provider = new GithubAuthProvider();
+    return this.oAuthLoginWithPopup(provider);
   }
 
-  oAuthLoginWithRedirect(provider: any) {
+  async oAuthLoginWithPopup(provider: GoogleAuthProvider | GithubAuthProvider | FacebookAuthProvider | TwitterAuthProvider) {
     try {
-      return this.afAuth.signInWithRedirect(provider);
+      console.log('[AppAuthService] Setting persistence and calling signInWithPopup', { provider });
+      // Set persistence to local to ensure state retention
+      await setPersistence(this.auth, browserLocalPersistence);
+
+      // Use browserPopupRedirectResolver to handle cross-origin popup reliability
+      const result = await signInWithPopup(this.auth, provider, browserPopupRedirectResolver);
+      console.log('[AppAuthService] signInWithPopup result:', result);
+      return result;
     } catch (e) {
+      console.error('[AppAuthService] Error in oAuthLoginWithPopup', e);
       this.handleError(e);
       throw e;
     }
   }
 
-  //// Anonymous Auth ////
+  async getRedirectResult() {
+    return null;
+  }
 
   async anonymousLogin() {
     try {
-      return await this.afAuth.signInAnonymously();
+      return await signInAnonymously(this.auth);
     } catch (e) {
       this.handleError(e);
       throw e;
     }
   }
 
-  //// Email/Password Auth ////
-
   async emailSignUp(email: string, password: string) {
     try {
-      return this.afAuth.createUserWithEmailAndPassword(email, password);
+      return createUserWithEmailAndPassword(this.auth, email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -120,18 +155,14 @@ export class AppAuthService implements OnDestroy {
 
   async emailLogin(email: string, password: string) {
     try {
-      return this.afAuth.signInWithEmailAndPassword(email, password);
+      return signInWithEmailAndPassword(this.auth, email, password);
     } catch (e) {
       this.handleError(e);
-      throw e;
     }
   }
 
-  // Sends email allowing user to reset password
   resetPassword(email: string) {
-    const fbAuth = firebase.auth();
-    return fbAuth
-      .sendPasswordResetEmail(email)
+    return sendPasswordResetEmail(this.auth, email)
       .then(() => this.snackBar.open(`Password update email sent`, null, {
         duration: 2000
       }))
@@ -150,7 +181,6 @@ export class AppAuthService implements OnDestroy {
   }
 
   private async getOrInsertUser(user: User) {
-    // Check if we have a user
     const databaseUser = await this.userService.getUserByID(user.uid).pipe(take(1)).toPromise();
     if (!databaseUser) {
       return this.userService.createOrUpdateUser(new User(user.uid, user.displayName, user.photoURL));
@@ -158,11 +188,10 @@ export class AppAuthService implements OnDestroy {
     return Promise.resolve(databaseUser);
   }
 
-  // If error, console log and notify user
-  private handleError(error: Error) {
-    console.error(error);
+  private handleError(error: any) {
+    console.error('[AppAuthService] Error:', error);
     this.snackBar.open(`Could not login due to error ${error.message}`, null, {
-      duration: 2000
+      duration: 5000
     });
   }
 }

@@ -11,19 +11,20 @@ import {
   UntypedFormGroup,
   Validators
 } from '@angular/forms';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {AppWindowService} from '../../../services/app.window.service';
-import {AngularFireAuth} from '@angular/fire/compat/auth';
-import firebase from 'firebase/compat/app';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppWindowService } from '../../../services/app.window.service';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { FirebaseApp } from '@angular/fire/compat';
+import { getAuth, RecaptchaVerifier, signInWithPhoneNumber, Auth } from 'firebase/auth';
 
 
 @Component({
-    selector: 'app-phone-form',
-    templateUrl: './phone.form.component.html',
-    styleUrls: ['./phone.form.component.css'],
-    providers: [],
-    standalone: false
+  selector: 'app-phone-form',
+  templateUrl: './phone.form.component.html',
+  styleUrls: ['./phone.form.component.css'],
+  providers: [],
+  standalone: false
 })
 
 
@@ -36,6 +37,7 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
   user: any;
   public phoneNumberFormGroup: UntypedFormGroup;
   public verificationCodeFormGroup: UntypedFormGroup;
+  private _auth: Auth | null = null;
 
   constructor(
     public dialogRef: MatDialogRef<PhoneFormComponent>,
@@ -43,28 +45,38 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     private snackBar: MatSnackBar,
     private windowService: AppWindowService,
     private afAuth: AngularFireAuth,
-    private  changeDetector: ChangeDetectorRef,
+    private firebaseApp: FirebaseApp,
+    private changeDetector: ChangeDetectorRef,
   ) {
     this.phoneNumberFormGroup = new UntypedFormGroup({
-        phoneNumber: new UntypedFormControl(null, [
-          Validators.required,
-        ]),
-        reCaptcha: new UntypedFormControl(null, [
-          Validators.requiredTrue,
-        ]),
-      },
+      phoneNumber: new UntypedFormControl(null, [
+        Validators.required,
+      ]),
+      reCaptcha: new UntypedFormControl(null, [
+        Validators.requiredTrue,
+      ]),
+    },
     );
 
     this.verificationCodeFormGroup = new UntypedFormGroup({
-        verificationCode: new UntypedFormControl(null, [
-          Validators.required,
-        ]),
-      },
+      verificationCode: new UntypedFormControl(null, [
+        Validators.required,
+      ]),
+    },
     );
   }
 
+  private get auth(): Auth {
+    if (!this._auth) {
+      const modularApp = (this.firebaseApp as any)._delegate || this.firebaseApp;
+      this._auth = getAuth(modularApp);
+    }
+    return this._auth;
+  }
+
   async ngAfterViewInit() {
-    this.windowRef.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container');
+    // Use Modular SDK RecaptchaVerifier with lazy auth initialization
+    this.windowRef.recaptchaVerifier = new RecaptchaVerifier(this.auth, 'recaptcha-container', {});
     this.windowRef.recaptchaWidgetId = await this.windowRef.recaptchaVerifier.render();
     this.windowRef.recaptchaVerifier.verify().then(() => {
       this.phoneNumberFormGroup.get('reCaptcha').setValue(true);
@@ -85,7 +97,12 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isLoading = true;
     this.changeDetector.detectChanges();
     try {
-      this.windowRef.confirmationResult = await this.afAuth.signInWithPhoneNumber(this.phoneNumberFormGroup.get('phoneNumber').value, this.windowRef.recaptchaVerifier);
+      // Use Modular SDK signInWithPhoneNumber
+      this.windowRef.confirmationResult = await signInWithPhoneNumber(
+        this.auth,
+        this.phoneNumberFormGroup.get('phoneNumber').value,
+        this.windowRef.recaptchaVerifier
+      );
     } catch (e) {
       this.snackBar.open(`Could not verify login number due to ${e.message}`, null, {
         duration: 2000,
@@ -106,7 +123,7 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     this.changeDetector.detectChanges();
     try {
       this.user = await this.windowRef.confirmationResult.confirm(this.verificationCodeFormGroup.get('verificationCode').value);
-      this.dialogRef.close({user: this.user});
+      this.dialogRef.close({ user: this.user });
     } catch (e) {
       this.snackBar.open(`Could not verify code due to ${e.message}`, null, {
         duration: 2000,
@@ -128,7 +145,7 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
