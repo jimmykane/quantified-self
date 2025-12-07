@@ -26,7 +26,6 @@ import { slideInAnimation } from './animations/animations';
 
 import * as firebase from 'firebase/app'
 import { AppWindowService } from './services/app.window.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 
 declare function require(moduleName: string): any;
 

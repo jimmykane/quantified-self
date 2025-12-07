@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -7,7 +7,7 @@ import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.a
 import { Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -31,6 +31,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
   private userSubscription: Subscription
   private themeSubscription: Subscription
+  private analytics = inject(Analytics);
 
   constructor(
     public authService: AppAuthService,
@@ -38,7 +39,6 @@ export class SideNavComponent implements OnInit, OnDestroy {
     public sideNav: AppSideNavService,
     public themeService: AppThemeService,
     private windowService: AppWindowService,
-    private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar,
     private router: Router) {
   }
@@ -56,27 +56,27 @@ export class SideNavComponent implements OnInit, OnDestroy {
   }
 
   async donate() {
-    this.afa.logEvent('donate_click', { method: 'PayPal' });
+    logEvent(this.analytics, 'donate_click', { method: 'PayPal' });
     window.open('https://paypal.me/DKanellopoulos');
   }
 
   async becomeAPatron() {
-    this.afa.logEvent('become_a_patron_click');
+    logEvent(this.analytics, 'become_a_patron_click');
     window.open('https://www.patreon.com/dimitrioskanellopoulos');
   }
 
   async gitHubSponsor() {
-    this.afa.logEvent('github_sponsor');
+    logEvent(this.analytics, 'github_sponsor');
     window.open('https://github.com/sponsors/jimmykane?utm_source=qs');
   }
 
   async gitHubStar() {
-    this.afa.logEvent('github_star');
+    logEvent(this.analytics, 'github_star');
     window.open('https://github.com/jimmykane/quantified-self/');
   }
 
   async logout() {
-    this.afa.logEvent('logout', {});
+    logEvent(this.analytics, 'logout', {});
     this.router.navigate(['/']).then(async () => {
       await this.authService.signOut();
       localStorage.clear();

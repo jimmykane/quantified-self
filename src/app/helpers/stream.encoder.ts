@@ -1,6 +1,5 @@
 import * as Pako from 'pako';
-import firebase from 'firebase/compat/app';
-import firestore = firebase.firestore
+import { Bytes } from 'firebase/firestore';
 import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
 
@@ -29,7 +28,7 @@ export class StreamEncoder {
       return compressedStream
     }
     // Then try Pako (as the fastest)
-    compressedStream.data = firestore.Blob.fromUint8Array(Pako.gzip(JSON.stringify(stream.data)));
+    compressedStream.data = Bytes.fromUint8Array(Pako.gzip(JSON.stringify(stream.data)));
     compressedStream.encoding = CompressionEncodings.UInt8Array
     compressedStream.compressionMethod = CompressionMethods.Pako
 
@@ -53,8 +52,8 @@ export class StreamEncoder {
       default:
       case CompressionMethods.Pako: // Pako is the default here
         stream.data = compressedStreamJSON.encoding === CompressionEncodings.Binary
-          ? Pako.ungzip(compressedStreamJSON.data.toBase64(), {to: 'string'})
-          : Pako.ungzip(compressedStreamJSON.data.toUint8Array(), {to: 'string'});
+          ? Pako.ungzip(compressedStreamJSON.data.toBase64(), { to: 'string' })
+          : Pako.ungzip(compressedStreamJSON.data.toUint8Array(), { to: 'string' });
         break;
     }
     const t1 = performance.now();

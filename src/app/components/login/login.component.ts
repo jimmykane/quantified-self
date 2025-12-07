@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
@@ -9,9 +9,9 @@ import { AppUserService } from '../../services/app.user.service';
 import { UserAgreementFormComponent } from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 
-import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { Auth, getRedirectResult, signInWithCustomToken } from '@angular/fire/auth';
 import { PhoneFormComponent } from './phone-form/phone.form.component';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { Subscription } from 'rxjs';
 
@@ -27,20 +27,20 @@ export class LoginComponent implements OnInit, OnDestroy {
   isLoading: boolean;
   signInProviders = SignInProviders;
   private userSubscription: Subscription;
+  private auth = inject(Auth);
+  private analytics = inject(Analytics);
 
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event) {
     this.isLoading = true;
-    const loggedInUser = await this.afAuth.signInWithCustomToken(event.detail.firebaseAuthToken);
+    const loggedInUser = await signInWithCustomToken(this.auth, event.detail.firebaseAuthToken);
     return this.redirectOrShowDataPrivacyDialog(loggedInUser);
   }
 
 
   constructor(
     public authService: AppAuthService,
-    private afAuth: AngularFireAuth,
-    private afa: AngularFireAnalytics,
     public userService: AppUserService,
     private router: Router,
     private snackBar: MatSnackBar,
@@ -57,14 +57,14 @@ export class LoginComponent implements OnInit, OnDestroy {
     });
 
     try {
-      const result = await this.afAuth.getRedirectResult();
-      if (result.user) {
+      const result = await getRedirectResult(this.auth);
+      if (result && result.user) {
         await this.redirectOrShowDataPrivacyDialog(result);
       }
     } catch (e) {
       Sentry.captureException(e);
 
-      this.snackBar.open(`Could not log in due to ${e} `, null, {
+      this.snackBar.open(`Could not log in due to ${e} `, undefined, {
         duration: 2000,
       });
     } finally {
@@ -99,7 +99,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     } catch (e) {
       Sentry.captureException(e);
 
-      this.snackBar.open(`Could not log in due to ${e} `, null, {
+      this.snackBar.open(`Could not log in due to ${e} `, undefined, {
         duration: 2000,
       });
     }
@@ -111,9 +111,9 @@ export class LoginComponent implements OnInit, OnDestroy {
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
-        this.afa.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
+        logEvent(this.analytics, 'login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
         await this.router.navigate(['/dashboard']);
-        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'} `, null, {
+        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'} `, undefined, {
           duration: 5000,
         });
         return;

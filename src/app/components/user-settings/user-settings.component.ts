@@ -1,21 +1,21 @@
-import {Component, Input, OnChanges} from '@angular/core';
-import {ActivatedRoute, Router} from '@angular/router';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {AppUserService} from '../../services/app.user.service';
-import {MatDialog} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {UntypedFormControl, UntypedFormGroup, Validators} from '@angular/forms';
+import { Component, Input, OnChanges, inject } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppUserService } from '../../services/app.user.service';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
-import {UserSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
+import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   UserChartSettingsInterface,
   XAxisTypes,
 } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {AppThemes, UserAppSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
+import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import {
   PaceUnits,
   SpeedUnits,
@@ -23,9 +23,9 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {UserDashboardSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import {LapTypesHelper} from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { UserDashboardSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { LapTypesHelper } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import {
   MapThemes,
@@ -34,10 +34,10 @@ import {
 } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 
 @Component({
-    selector: 'app-user-settings',
-    templateUrl: './user-settings.component.html',
-    styleUrls: ['./user-settings.component.css'],
-    standalone: false
+  selector: 'app-user-settings',
+  templateUrl: './user-settings.component.html',
+  styleUrls: ['./user-settings.component.css'],
+  standalone: false
 })
 export class UserSettingsComponent implements OnChanges {
 
@@ -64,7 +64,7 @@ export class UserSettingsComponent implements OnChanges {
   public mapThemes = MapThemes;
   public lapTypes = LapTypesHelper.getLapTypesAsUniqueArray();
 
-  public eventsPerPage = [10, 25, 50, 100, 250,  500, 1000, 2500, 5000];
+  public eventsPerPage = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
 
   public mapTypes = MapTypes;
 
@@ -75,15 +75,15 @@ export class UserSettingsComponent implements OnChanges {
   public userSettingsFormGroup: UntypedFormGroup;
 
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
+  private analytics = inject(Analytics);
 
 
   constructor(private authService: AppAuthService,
-              private route: ActivatedRoute,
-              private userService: AppUserService,
-              private router: Router,
-              private snackBar: MatSnackBar,
-              private afa: AngularFireAnalytics,
-              private dialog: MatDialog) {
+    private route: ActivatedRoute,
+    private userService: AppUserService,
+    private router: Router,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog) {
   }
 
   ngOnChanges(): void {
@@ -280,7 +280,7 @@ export class UserSettingsComponent implements OnChanges {
     this.isSaving = true;
     try {
       const userChartSettings = Array.from(this.userSettingsFormGroup.get('dataTypesToUse').value).reduce((newUserChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
-        newUserChartSettings.dataTypeSettings[dataTypeToUse] = {enabled: true};
+        newUserChartSettings.dataTypeSettings[dataTypeToUse] = { enabled: true };
         return newUserChartSettings
       }, {
         dataTypeSettings: {},
@@ -307,7 +307,7 @@ export class UserSettingsComponent implements OnChanges {
       await this.userService.updateUserProperties(this.user, {
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
-          appSettings: <UserAppSettingsInterface>{theme: this.userSettingsFormGroup.get('appTheme').value},
+          appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
           mapSettings: <UserMapSettingsInterface>{
             theme: this.userSettingsFormGroup.get('mapTheme').value,
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
@@ -338,7 +338,7 @@ export class UserSettingsComponent implements OnChanges {
             }
           },
           summariesSettings: {
-            removeAscentForEventTypes:  this.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value
+            removeAscentForEventTypes: this.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value
           },
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
@@ -346,7 +346,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      this.afa.logEvent('user_settings_update');
+      logEvent(this.analytics, 'user_settings_update');
     } catch (e) {
 
       this.snackBar.open('Could not update user', null, {
@@ -363,7 +363,7 @@ export class UserSettingsComponent implements OnChanges {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }

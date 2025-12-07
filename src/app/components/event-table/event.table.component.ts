@@ -10,6 +10,7 @@ import {
   OnInit,
   SimpleChanges,
   ViewChild,
+  inject
 } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
 import { Router } from '@angular/router';
@@ -32,25 +33,24 @@ import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confi
 import { AppUserService } from '../../services/app.user.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
-import firebase from 'firebase/compat/app';
-import OrderByDirection = firebase.firestore.OrderByDirection;
+import { OrderByDirection } from 'firebase/firestore';
 
 
 @Component({
-    selector: 'app-event-table',
-    templateUrl: './event.table.component.html',
-    styleUrls: ['./event.table.component.css'],
-    animations: [
-        rowsAnimation,
-    ],
-    providers: [DatePipe],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-table',
+  templateUrl: './event.table.component.html',
+  styleUrls: ['./event.table.component.css'],
+  animations: [
+    rowsAnimation,
+  ],
+  providers: [DatePipe],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventTableComponent extends DataTableAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
@@ -59,9 +59,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() targetUser: User;
   @Input() showActions: boolean;
   @Input() isLoading: boolean;
-  @ViewChild(MatSort, {static: true}) sort: MatSort;
-  @ViewChild(MatPaginator, {static: true}) paginator: MatPaginator;
-  @ViewChild(MatCard, {static: true}) table: MatCard;
+  @ViewChild(MatSort, { static: true }) sort: MatSort;
+  @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
+  @ViewChild(MatCard, { static: true }) table: MatCard;
 
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
@@ -75,16 +75,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
 
   private searchSubject: Subject<string> = new Subject();
+  private analytics = inject(Analytics);
 
   constructor(private snackBar: MatSnackBar,
-              private eventService: AppEventService,
-              private deleteConfirmationBottomSheet: MatBottomSheet,
-              private userService: AppUserService,
-              private afa: AngularFireAnalytics,
-              changeDetector: ChangeDetectorRef,
-              private eventColorService: AppEventColorService,
-              private dialog: MatDialog,
-              private router: Router, private  datePipe: DatePipe) {
+    private eventService: AppEventService,
+    private deleteConfirmationBottomSheet: MatBottomSheet,
+    private userService: AppUserService,
+    changeDetector: ChangeDetectorRef,
+    private eventColorService: AppEventColorService,
+    private dialog: MatDialog,
+    private router: Router, private datePipe: DatePipe) {
     super(changeDetector);
   }
 
@@ -125,7 +125,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
         this.user.settings.dashboardSettings.tableSettings.active = sort.active;
         this.user.settings.dashboardSettings.tableSettings.direction = sort.direction as OrderByDirection;
-        await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+        await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
       }
     });
     this.processChanges();
@@ -166,7 +166,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const mergedEvent = EventUtilities.mergeEvents(events);
     try {
       await this.eventService.writeAllEventData(this.user, mergedEvent);
-      this.afa.logEvent('merge_events');
+      logEvent(this.analytics, 'merge_events');
       await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
       this.snackBar.open('Events merged', null, {
         duration: 2000,
@@ -197,7 +197,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.selection.selected.map(selected => selected.Event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
       this.selection.clear();
       await Promise.all(deletePromises);
-      this.afa.logEvent('delete_events');
+      logEvent(this.analytics, 'delete_events');
       this.snackBar.open('Events deleted', null, {
         duration: 2000,
       });
@@ -269,7 +269,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async selectedColumnsChange(event: string[]) {
     this.selectedColumns = event
     this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
-    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   ngOnDestroy() {

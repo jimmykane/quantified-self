@@ -1,17 +1,17 @@
-import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output} from '@angular/core';
-import {XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../../../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, inject } from '@angular/core';
+import { XAxisTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppUserService } from '../../../../services/app.user.service';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 @Component({
-    selector: 'app-event-card-chart-actions',
-    templateUrl: './event.card.chart.actions.component.html',
-    styleUrls: ['./event.card.chart.actions.component.css'],
-    providers: [],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-card-chart-actions',
+  templateUrl: './event.card.chart.actions.component.html',
+  styleUrls: ['./event.card.chart.actions.component.css'],
+  providers: [],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardChartActionsComponent implements OnChanges {
@@ -27,9 +27,10 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
 
   public xAxisTypes = XAxisTypes;
+  private analytics = inject(Analytics);
 
   constructor(
-      private userService: AppUserService, private afa: AngularFireAnalytics) {
+    private userService: AppUserService) {
   }
 
   async somethingChanged(event) {
@@ -38,13 +39,13 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.user.settings.chartSettings.showAllData = this.showAllData;
       this.user.settings.chartSettings.showLaps = this.showLaps;
       this.user.settings.chartSettings.stackYAxes = this.stackYAxes;
-      await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+      await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
     this.xAxisTypeChange.emit(this.xAxisType);
     this.showAllDataChange.emit(this.showAllData);
     this.showLapsChange.emit(this.showLaps);
     this.stackYAxesChange.emit(this.stackYAxes);
-    return this.afa.logEvent('event_chart_settings_change');
+    return logEvent(this.analytics, 'event_chart_settings_change');
   }
 
   formatLabel(value: number | null) {

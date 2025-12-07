@@ -1,24 +1,24 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit, inject } from '@angular/core';
+import { FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators } from '@angular/forms';
 import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../services/app.user.service';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {Router} from '@angular/router';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { Router } from '@angular/router';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 @Component({
-    selector: 'app-user-agreement-form',
-    templateUrl: './user-agreement.form.component.html',
-    styleUrls: ['./user-agreement.form.component.css'],
-    providers: [],
-    standalone: false
+  selector: 'app-user-agreement-form',
+  templateUrl: './user-agreement.form.component.html',
+  styleUrls: ['./user-agreement.form.component.css'],
+  providers: [],
+  standalone: false
 })
 
 
@@ -32,6 +32,7 @@ export class UserAgreementFormComponent implements OnInit {
 
   public userFormGroup: UntypedFormGroup;
   private readonly signInMethod: string;
+  private analytics = inject(Analytics);
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -40,7 +41,6 @@ export class UserAgreementFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private afa: AngularFireAnalytics,
   ) {
     this.user = data.user; // Perhaps move to service?
     this.signInMethod = data.signInMethod;
@@ -92,7 +92,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      this.afa.logEvent('sign_up', {method: this.signInMethod});
+      logEvent(this.analytics, 'sign_up', { method: this.signInMethod });
       await this.router.navigate(['dashboard']);
       this.snackBar.open(`Thanks for signing in ${dbUser.displayName || 'guest'}!`, null, {
         duration: 2000,
@@ -112,7 +112,7 @@ export class UserAgreementFormComponent implements OnInit {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }

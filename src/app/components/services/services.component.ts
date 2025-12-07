@@ -9,7 +9,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppUserService } from '../../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { AppWindowService } from '../../services/app.window.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
@@ -33,7 +32,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private userSubscription: Subscription;
 
   constructor(private http: HttpClient, private fileService: AppFileService,
-    private afa: AngularFireAnalytics,
     private eventService: AppEventService,
     public authService: AppAuthService,
     private userService: AppUserService,

@@ -1,23 +1,23 @@
-import {Component, Inject, Input, OnInit} from '@angular/core';
-import {UntypedFormControl, UntypedFormGroup, Validators} from '@angular/forms';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
+import { Component, Inject, Input, OnInit, inject } from '@angular/core';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../services/app.user.service';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {Router} from '@angular/router';
-import {AppWindowService} from '../../services/app.window.service';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { Router } from '@angular/router';
+import { AppWindowService } from '../../services/app.window.service';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 
 
 @Component({
-    selector: 'app-user-form',
-    templateUrl: './user.form.component.html',
-    styleUrls: ['./user.form.component.css'],
-    providers: [],
-    standalone: false
+  selector: 'app-user-form',
+  templateUrl: './user.form.component.html',
+  styleUrls: ['./user.form.component.css'],
+  providers: [],
+  standalone: false
 })
 
 
@@ -34,8 +34,9 @@ export class UserFormComponent implements OnInit {
 
   public userFormGroup: UntypedFormGroup;
 
+  private analytics = inject(Analytics);
+
   constructor(
-    public afa: AngularFireAnalytics,
     public dialogRef: MatDialogRef<UserFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: any,
     private userService: AppUserService,
@@ -67,7 +68,7 @@ export class UserFormComponent implements OnInit {
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      brandText: new UntypedFormControl({value: this.user.brandText, disabled: !(await this.userService.isBranded(this.user))}, [
+      brandText: new UntypedFormControl({ value: this.user.brandText, disabled: !(await this.userService.isBranded(this.user)) }, [
       ]),
     });
 
@@ -110,7 +111,7 @@ export class UserFormComponent implements OnInit {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
@@ -123,7 +124,7 @@ export class UserFormComponent implements OnInit {
     this.isDeleting = true;
     try {
       await this.userService.deleteAllUserData(this.user);
-      this.afa.logEvent('user_delete', {});
+      logEvent(this.analytics, 'user_delete', {});
       await this.authService.signOut();
       await this.router.navigate(['/']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {
