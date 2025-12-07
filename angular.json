@@ -94,10 +94,7 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "buildTarget": "track-tools:build",
-            "ssl": true,
-            "sslCert": "./certs/localhost.crt",
-            "sslKey": "./certs/localhost.key"
+            "buildTarget": "track-tools:build"
           }
         },
         "test": {

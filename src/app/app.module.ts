@@ -13,6 +13,7 @@ import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 import { AngularFireAuthModule } from '@angular/fire/compat/auth';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth } from '@angular/fire/auth';
+import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { AngularFireFunctionsModule, REGION } from '@angular/fire/compat/functions';
 import * as Sentry from '@sentry/angular';
 import {
@@ -83,6 +84,7 @@ import { AppUpdateService } from './services/app.update.service';
       provideHttpClient(withInterceptorsFromDi()),
       provideFirebaseApp(() => initializeApp(environment.firebase)),
       provideAuth(() => getAuth()),
+      provideFirestore(() => getFirestore()),
     ]
 })
 

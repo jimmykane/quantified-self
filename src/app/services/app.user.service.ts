@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { inject, Injectable, OnDestroy } from '@angular/core';
 import { AngularFirestore, AngularFirestoreDocument } from '@angular/fire/compat/firestore';
 import { Observable } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -84,6 +84,7 @@ import { DataEPOC } from '@sports-alliance/sports-lib/lib/data/data.epoc';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
 import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { Firestore, doc, docData } from '@angular/fire/firestore';
 
 
 /**
@@ -94,7 +95,7 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.reco
 })
 export class AppUserService implements OnDestroy {
 
-
+  private firestore = inject(Firestore);
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -125,7 +126,7 @@ export class AppUserService implements OnDestroy {
 
   static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
-      dataTypeSettings[dataTypeToUse] = {enabled: true};
+      dataTypeSettings[dataTypeToUse] = { enabled: true };
       return dataTypeSettings
     }, {})
   }
@@ -140,7 +141,7 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     };
   }
 
@@ -153,7 +154,7 @@ export class AppUserService implements OnDestroy {
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     };
   }
 
@@ -166,7 +167,7 @@ export class AppUserService implements OnDestroy {
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Duration',
       order: 1,
@@ -176,7 +177,7 @@ export class AppUserService implements OnDestroy {
       dataType: DataDuration.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Distance',
       order: 2,
@@ -186,7 +187,7 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Ascent',
       order: 3,
@@ -196,7 +197,7 @@ export class AppUserService implements OnDestroy {
       dataType: DataAscent.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }]
   }
 
@@ -395,7 +396,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async setLastSeenPromoToNow(user: User) {
-    return this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
+    return this.updateUserProperties(user, { lastSeenPromo: (new Date().getTime()) })
   }
 
   async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
@@ -407,9 +408,9 @@ export class AppUserService implements OnDestroy {
     }
     return this.http.post(
       serviceNamesToFunctionsURI[serviceName], {
-        startDate: startDate,
-        endDate: endDate
-      },
+      startDate: startDate,
+      endDate: endDate
+    },
       {
         headers:
           new HttpHeaders({
@@ -445,8 +446,8 @@ export class AppUserService implements OnDestroy {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return <Promise<{ redirect_uri: string }>>this.http.post(
       serviceNamesToFunctionsURI[serviceName], {
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
-      },
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
+    },
       {
         headers:
           new HttpHeaders({
@@ -459,9 +460,9 @@ export class AppUserService implements OnDestroy {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetGarminHealthAPIAccessToken, {
-        state: state,
-        oauthVerifier: oauthVerifier
-      },
+      state: state,
+      oauthVerifier: oauthVerifier
+    },
       {
         headers:
           new HttpHeaders({
@@ -474,10 +475,10 @@ export class AppUserService implements OnDestroy {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetSuuntoAPIAccessToken, {
-        state: state,
-        code: code,
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
-      },
+      state: state,
+      code: code,
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
+    },
       {
         headers:
           new HttpHeaders({
@@ -490,10 +491,10 @@ export class AppUserService implements OnDestroy {
     const idToken = await (await this.afAuth.currentUser).getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetCOROSAPIAccessToken, {
-        state: state,
-        code: code,
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
-      },
+      state: state,
+      code: code,
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
+    },
       {
         headers:
           new HttpHeaders({
@@ -511,7 +512,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
-    return this.updateUserProperties(user, {privacy: privacy});
+    return this.updateUserProperties(user, { privacy: privacy });
   }
 
   public async isBranded(user: User): Promise<boolean> {
@@ -525,9 +526,9 @@ export class AppUserService implements OnDestroy {
 
   public async deleteAllUserData(user: User) {
     const serviceTokens = [
-      {[ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise()},
-      {[ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise()},
-      {[ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise()}
+      { [ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise() },
+      { [ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise() },
+      { [ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise() }
     ].filter((serviceToken) => serviceToken[Object.keys(serviceToken)[0]])
     for (const serviceToken of serviceTokens) {
       try {
@@ -594,7 +595,7 @@ export class AppUserService implements OnDestroy {
       .doc(user.uid);
   }
 
-  private fillMissingAppSettings(user: User): UserSettingsInterface {
+  public fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     // App
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
