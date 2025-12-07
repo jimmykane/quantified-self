@@ -1,5 +1,3 @@
-import 'firebase/database';
-import 'firebase/firestore';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
@@ -10,7 +8,7 @@ import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth } from '@angular/fire/auth';
-import { provideFirestore, getFirestore, enableMultiTabIndexedDbPersistence } from '@angular/fire/firestore';
+import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
@@ -51,7 +49,6 @@ import { AppUpdateService } from './services/app.update.service';
     provideAuth(() => getAuth()),
     provideFirestore(() => {
       const firestore = getFirestore();
-      enableMultiTabIndexedDbPersistence(firestore);
       return firestore;
     }),
     provideFunctions(() => getFunctions(undefined, 'europe-west2')),
