@@ -2,27 +2,12 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AngularFireAuth } from '@angular/fire/compat/auth';
-import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { Firestore, doc, onSnapshot } from '@angular/fire/firestore';
+import { Auth, authState, signInWithRedirect, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, getAuth } from '@angular/fire/auth';
+import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppUserService } from '../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
-import {
-  signInWithRedirect,
-  signInAnonymously,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  signOut,
-  GoogleAuthProvider,
-  GithubAuthProvider,
-  FacebookAuthProvider,
-  TwitterAuthProvider,
-  AuthProvider,
-  getAuth
-} from 'firebase/auth';
 
 @Injectable({
   providedIn: 'root'
@@ -33,19 +18,18 @@ export class AppAuthService {
   redirectUrl: string;
 
   private firestore = inject(Firestore);
+  private auth = inject(Auth);
+  private analytics = inject(Analytics);
   private injector = inject(EnvironmentInjector);
   private zone = inject(NgZone);
 
   constructor(
-    private afAuth: AngularFireAuth,
-    private afs: AngularFirestore,
-    private afa: AngularFireAnalytics,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
     private localStorageService: LocalStorageService
   ) {
-    // Use compat AngularFireAuth.authState to stay in injection context
-    this.user$ = this.afAuth.authState.pipe(
+    // Use modular authState to stay in injection context
+    this.user$ = authState(this.auth).pipe(
       switchMap(user => {
         if (user) {
           return new Observable<User | null>(observer => {
@@ -91,41 +75,36 @@ export class AppAuthService {
   }
 
   // Get the underlying Firebase Auth instance for modular functions
+  // In modular, this.auth IS the instance. Keeping wrapper for compatibility if needed.
   private async getAuthInstance() {
-    await this.afAuth.authState.pipe(take(1)).toPromise();
-    return getAuth();
+    return this.auth;
   }
 
   async googleLoginWithRedirect() {
-    const auth = await this.getAuthInstance();
     const provider = new GoogleAuthProvider();
-    return signInWithRedirect(auth, provider);
+    return signInWithRedirect(this.auth, provider);
   }
 
   async githubLoginWithRedirect() {
-    const auth = await this.getAuthInstance();
     const provider = new GithubAuthProvider();
-    return signInWithRedirect(auth, provider);
+    return signInWithRedirect(this.auth, provider);
   }
 
   async facebookLoginWithRedirect() {
-    const auth = await this.getAuthInstance();
     const provider = new FacebookAuthProvider();
-    return signInWithRedirect(auth, provider);
+    return signInWithRedirect(this.auth, provider);
   }
 
   async twitterLoginWithRedirect() {
-    const auth = await this.getAuthInstance();
     const provider = new TwitterAuthProvider();
-    return signInWithRedirect(auth, provider);
+    return signInWithRedirect(this.auth, provider);
   }
 
   //// Anonymous Auth ////
 
   async anonymousLogin() {
     try {
-      const auth = await this.getAuthInstance();
-      return await signInAnonymously(auth);
+      return await signInAnonymously(this.auth);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -136,8 +115,7 @@ export class AppAuthService {
 
   async emailSignUp(email: string, password: string) {
     try {
-      const auth = await this.getAuthInstance();
-      return createUserWithEmailAndPassword(auth, email, password);
+      return createUserWithEmailAndPassword(this.auth, email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -146,8 +124,7 @@ export class AppAuthService {
 
   async emailLogin(email: string, password: string) {
     try {
-      const auth = await this.getAuthInstance();
-      return signInWithEmailAndPassword(auth, email, password);
+      return signInWithEmailAndPassword(this.auth, email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -157,8 +134,7 @@ export class AppAuthService {
   // Sends email allowing user to reset password
   async resetPassword(email: string) {
     try {
-      const auth = await this.getAuthInstance();
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(this.auth, email);
       this.snackBar.open(`Password update email sent`, null, {
         duration: 2000
       });
@@ -168,11 +144,10 @@ export class AppAuthService {
   }
 
   async signOut(): Promise<void> {
-    const auth = await this.getAuthInstance();
-    await signOut(auth);
-    await this.afs.firestore.terminate();
+    await signOut(this.auth);
+    await terminate(this.firestore);
     this.localStorageService.clearAllStorage();
-    return this.afs.firestore.clearPersistence();
+    return clearIndexedDbPersistence(this.firestore);
   }
 
   // If error, console log and notify user

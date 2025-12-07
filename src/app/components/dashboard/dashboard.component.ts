@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
 import { asyncScheduler, of, Subscription } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
@@ -11,13 +11,13 @@ import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
 import { getDatesForDateRange } from 'app/helpers/date-range-helper';
-import firebase from 'firebase/compat/app';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { WhereFilterOp } from 'firebase/firestore';
+
 
 @Component({
   selector: 'app-dashboard',
@@ -42,7 +42,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   private shouldSearch: boolean;
   private promoDialogRef: MatDialogRef<PromoDialogComponent>
 
-
+  private analytics = inject(Analytics);
 
 
   constructor(public authService: AppAuthService,
@@ -52,7 +52,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     private changeDetector: ChangeDetectorRef,
     private route: ActivatedRoute,
     private dialog: MatDialog,
-    private afa: AngularFireAnalytics,
     private snackBar: MatSnackBar) {
   }
 
@@ -174,7 +173,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
     this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    this.afa.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
+    logEvent(this.analytics, 'dashboard_search', { method: DateRanges[search.dateRange] });
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
