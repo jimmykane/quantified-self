@@ -28,8 +28,7 @@
               "./node_modules/leaflet-fullscreen/dist/leaflet.fullscreen.css",
               "./src/styles.scss"
             ],
-            "scripts": [
-            ],
+            "scripts": [],
             "vendorChunk": true,
             "extractLicenses": false,
             "buildOptimizer": false,
@@ -81,7 +80,11 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "buildTarget": "track-tools:build"
+            "buildTarget": "track-tools:build",
+            "ssl": true,
+            "sslCert": "certs/localhost.crt",
+            "sslKey": "certs/localhost.key",
+            "proxyConfig": "proxy.conf.json"
           },
           "configurations": {
             "production": {
@@ -102,8 +105,7 @@
             "karmaConfig": "./karma.conf.js",
             "polyfills": "src/polyfills.ts",
             "tsConfig": "src/tsconfig.spec.json",
-            "scripts": [
-            ],
+            "scripts": [],
             "styles": [
               "node_modules/material-design-icons-iconfont/dist/material-design-icons.css",
               "src/styles.scss"

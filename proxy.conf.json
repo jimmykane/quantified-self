@@ -1,0 +1,7 @@
+{
+    "/__/auth": {
+        "target": "https://quantified-self-io.firebaseapp.com",
+        "secure": true,
+        "changeOrigin": true
+    }
+}

@@ -63,3 +63,6 @@ src/assets/fonts/
 
 #Lisences
 licenses.json
+
+# SSL certificates (generate locally with mkcert)
+/certs

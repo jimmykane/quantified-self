@@ -13,7 +13,7 @@ export const environment = {
   localhost: true,
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-    authDomain: 'quantified-self-io.firebaseapp.com',
+    authDomain: 'localhost:4201',
     databaseURL: 'https://quantified-self-io.firebaseio.com',
     projectId: 'quantified-self-io',
     storageBucket: 'quantified-self-io.appspot.com',
