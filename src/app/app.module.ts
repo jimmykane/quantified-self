@@ -11,6 +11,8 @@ import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
 import { AngularFireModule } from '@angular/fire/compat';
 import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
 import { AngularFireAuthModule } from '@angular/fire/compat/auth';
+import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideAuth, getAuth } from '@angular/fire/auth';
 import { AngularFireFunctionsModule, REGION } from '@angular/fire/compat/functions';
 import * as Sentry from '@sentry/angular';
 import {
@@ -79,6 +81,8 @@ import { AppUpdateService } from './services/app.update.service';
       { provide: APP_NAME, useValue: 'quantified-self.io' },
       { provide: DEBUG_MODE, useValue: (environment.localhost || environment.beta) },
       provideHttpClient(withInterceptorsFromDi()),
+      provideFirebaseApp(() => initializeApp(environment.firebase)),
+      provideAuth(() => getAuth()),
     ]
 })
 

@@ -16,10 +16,10 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
 
 
 @Component({
-    selector: 'app-services',
-    templateUrl: './services.component.html',
-    styleUrls: ['./services.component.css'],
-    standalone: false
+  selector: 'app-services',
+  templateUrl: './services.component.html',
+  styleUrls: ['./services.component.css'],
+  standalone: false
 })
 export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppLinkFormGroup: UntypedFormGroup;
@@ -33,28 +33,28 @@ export class ServicesComponent implements OnInit, OnDestroy {
   private userSubscription: Subscription;
 
   constructor(private http: HttpClient, private fileService: AppFileService,
-              private afa: AngularFireAnalytics,
-              private eventService: AppEventService,
-              public authService: AppAuthService,
-              private userService: AppUserService,
-              private router: Router,
-              private route: ActivatedRoute,
-              private windowService: AppWindowService,
-              private snackBar: MatSnackBar) {
+    private afa: AngularFireAnalytics,
+    private eventService: AppEventService,
+    public authService: AppAuthService,
+    private userService: AppUserService,
+    private router: Router,
+    private route: ActivatedRoute,
+    private windowService: AppWindowService,
+    private snackBar: MatSnackBar) {
   }
 
   async ngOnInit() {
     this.isLoading = true;
-    this.userSubscription = this.authService.user.subscribe(((user) => {
+    this.userSubscription = this.authService.user$.subscribe(((user) => {
       this.user = user;
       this.isLoading = false;
-      if (!this.user) {
+      if (!user) {
         this.snackBar.open('You must login if you want to use the service features', 'OK', {
           duration: null,
         });
         return
       }
-      this.isGuest = this.authService.isGuest();
+      this.isGuest = !!(user as any)?.isAnonymous;
       if (this.isGuest) {
         this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
           duration: null,

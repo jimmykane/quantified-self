@@ -1,95 +1,97 @@
-import { Injectable, OnDestroy } from '@angular/core';
-import { Observable, of, Subscription } from 'rxjs';
-import { map, switchMap, take } from 'rxjs/operators';
+import { inject, Injectable } from '@angular/core';
+import { Observable, of } from 'rxjs';
+import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { AngularFireAuth } from '@angular/fire/compat/auth';
 import { AngularFirestore } from '@angular/fire/compat/firestore';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppUserService } from '../services/app.user.service';
 import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
-import firebase from 'firebase/compat/app';
-import 'firebase/auth';
-
+import {
+  Auth,
+  authState,
+  signInWithRedirect,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signOut,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  FacebookAuthProvider,
+  TwitterAuthProvider,
+  AuthProvider
+} from '@angular/fire/auth';
 
 @Injectable({
   providedIn: 'root'
 })
-export class AppAuthService implements OnDestroy {
-  user: Observable<User | null>;
+export class AppAuthService {
+  public user$: Observable<User | null>;
   // store the URL so we can redirect after logging in
   redirectUrl: string;
-  private authState = null;
-  private guest: boolean;
-  private userSubscription: Subscription;
+
+  private auth = inject(Auth);
 
   constructor(
-    private afAuth: AngularFireAuth,
     private afs: AngularFirestore,
     private afa: AngularFireAnalytics,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
     private localStorageService: LocalStorageService
   ) {
-    this.user = this.afAuth.authState.pipe(
+    this.user$ = authState(this.auth).pipe(
       switchMap(user => {
         if (user) {
-          this.guest = user.isAnonymous;
-          return this.userService.getUserByID(user.uid).pipe(map((dbUser: User) => {
-            this.authState = !!dbUser;
-            if (dbUser) {
-              dbUser.creationDate = new Date(user.metadata.creationTime);
-              dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
-            }
-            // if (dbUser) {
-            //   this.afa.setAnalyticsCollectionEnabled(true);
-            // }
-            return dbUser;
-          }));
+          return this.userService.getUserByID(user.uid).pipe(
+            map((dbUser: User) => {
+              if (dbUser) {
+                // Update local user object with metadata from Firebase Auth
+                dbUser.creationDate = new Date(user.metadata.creationTime);
+                dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
+                (dbUser as any).isAnonymous = user.isAnonymous;
+              }
+              return dbUser;
+            })
+          );
         } else {
-          this.authState = false;
           return of(null);
         }
-      })
+      }),
+      shareReplay(1)
     );
   }
 
-  authenticated(): boolean {
-    return this.authState;
-  }
-
-  isGuest(): boolean {
-    return !!this.guest;
+  /*
+   * Get the current user value (snapshot) from the observable
+   */
+  async getUser(): Promise<User | null> {
+    return this.user$.pipe(take(1)).toPromise();
   }
 
   googleLoginWithRedirect() {
-    const provider = new firebase.auth.GoogleAuthProvider();
+    const provider = new GoogleAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   githubLoginWithRedirect() {
-    const provider = new firebase.auth.GithubAuthProvider();
+    const provider = new GithubAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   facebookLoginWithRedirect() {
-    const provider = new firebase.auth.FacebookAuthProvider();
+    const provider = new FacebookAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
   twitterLoginWithRedirect() {
-    const provider = new firebase.auth.TwitterAuthProvider();
+    const provider = new TwitterAuthProvider();
     return this.oAuthLoginWithRedirect(provider);
   }
 
-  gitHubLoginWithRedirect() {
-    const provider = new firebase.auth.GithubAuthProvider();
-    return this.oAuthLoginWithRedirect(provider);
-  }
-
-  oAuthLoginWithRedirect(provider: any) {
+  private oAuthLoginWithRedirect(provider: AuthProvider) {
     try {
-      return this.afAuth.signInWithRedirect(provider);
+      return signInWithRedirect(this.auth, provider);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -100,7 +102,7 @@ export class AppAuthService implements OnDestroy {
 
   async anonymousLogin() {
     try {
-      return await this.afAuth.signInAnonymously();
+      return await signInAnonymously(this.auth);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -111,7 +113,7 @@ export class AppAuthService implements OnDestroy {
 
   async emailSignUp(email: string, password: string) {
     try {
-      return this.afAuth.createUserWithEmailAndPassword(email, password);
+      return createUserWithEmailAndPassword(this.auth, email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -120,7 +122,7 @@ export class AppAuthService implements OnDestroy {
 
   async emailLogin(email: string, password: string) {
     try {
-      return this.afAuth.signInWithEmailAndPassword(email, password);
+      return signInWithEmailAndPassword(this.auth, email, password);
     } catch (e) {
       this.handleError(e);
       throw e;
@@ -129,9 +131,7 @@ export class AppAuthService implements OnDestroy {
 
   // Sends email allowing user to reset password
   resetPassword(email: string) {
-    const fbAuth = firebase.auth();
-    return fbAuth
-      .sendPasswordResetEmail(email)
+    return sendPasswordResetEmail(this.auth, email)
       .then(() => this.snackBar.open(`Password update email sent`, null, {
         duration: 2000
       }))
@@ -139,23 +139,10 @@ export class AppAuthService implements OnDestroy {
   }
 
   async signOut(): Promise<void> {
-    await this.afAuth.signOut();
+    await signOut(this.auth);
     await this.afs.firestore.terminate();
     this.localStorageService.clearAllStorage();
     return this.afs.firestore.clearPersistence();
-  }
-
-  ngOnDestroy(): void {
-    this.userSubscription.unsubscribe();
-  }
-
-  private async getOrInsertUser(user: User) {
-    // Check if we have a user
-    const databaseUser = await this.userService.getUserByID(user.uid).pipe(take(1)).toPromise();
-    if (!databaseUser) {
-      return this.userService.createOrUpdateUser(new User(user.uid, user.displayName, user.photoURL));
-    }
-    return Promise.resolve(databaseUser);
   }
 
   // If error, console log and notify user

@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { Router} from '@angular/router';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {AppSideNavService} from '../../services/side-nav/app-side-nav.service';
+import { Router } from '@angular/router';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
 import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
 import { Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
@@ -14,10 +14,10 @@ import { AppUserService } from '../../services/app.user.service';
 import { environment } from '../../../environments/environment';
 
 @Component({
-    selector: 'app-sidenav',
-    templateUrl: './sidenav.component.html',
-    styleUrls: ['./sidenav.component.css'],
-    standalone: false
+  selector: 'app-sidenav',
+  templateUrl: './sidenav.component.html',
+  styleUrls: ['./sidenav.component.css'],
+  standalone: false
 })
 export class SideNavComponent implements OnInit, OnDestroy {
 
@@ -47,7 +47,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
     this.themeSubscription = this.themeService.getAppTheme().subscribe(theme => {
       this.appTheme = theme
     })
-    this.userSubscription = this.authService.user.subscribe((user) => {
+    this.userSubscription = this.authService.user$.subscribe((user) => {
       this.user = user;
       // if (!user) {
       //   return
@@ -56,7 +56,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
   }
 
   async donate() {
-    this.afa.logEvent('donate_click', {method: 'PayPal'});
+    this.afa.logEvent('donate_click', { method: 'PayPal' });
     window.open('https://paypal.me/DKanellopoulos');
   }
 

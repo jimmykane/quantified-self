@@ -20,10 +20,10 @@ import firebase from 'firebase/compat/app';
 import WhereFilterOp = firebase.firestore.WhereFilterOp;
 
 @Component({
-    selector: 'app-dashboard',
-    templateUrl: './dashboard.component.html',
-    styleUrls: ['./dashboard.component.css'],
-    standalone: false
+  selector: 'app-dashboard',
+  templateUrl: './dashboard.component.html',
+  styleUrls: ['./dashboard.component.css'],
+  standalone: false
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
@@ -46,14 +46,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
 
   constructor(public authService: AppAuthService,
-              private router: Router,
-              private eventService: AppEventService,
-              private userService: AppUserService,
-              private changeDetector: ChangeDetectorRef,
-              private route: ActivatedRoute,
-              private dialog: MatDialog,
-              private afa: AngularFireAnalytics,
-              private snackBar: MatSnackBar) {
+    private router: Router,
+    private eventService: AppEventService,
+    private userService: AppUserService,
+    private changeDetector: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private dialog: MatDialog,
+    private afa: AngularFireAnalytics,
+    private snackBar: MatSnackBar) {
   }
 
   async ngOnInit() {
@@ -70,7 +70,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
     }
-    this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
+    this.dataSubscription = this.authService.user$.pipe(switchMap((user: User | null) => {
 
       this.isLoading = true;
       // Get the user
@@ -78,7 +78,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.router.navigate(['login']).then(() => {
           this.snackBar.open('You were signed out out')
         });
-        return of({user: null, events: null});
+        return of({ user: null, events: null });
       }
 
       // this.showUpload = this.authService.isGuest();
@@ -114,7 +114,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       if ((!this.searchStartDate || !this.searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
-        return of({events: [], user: user})
+        return of({ events: [], user: user })
       }
       if (user.settings.dashboardSettings.dateRange !== DateRanges.all) {
         // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
@@ -138,7 +138,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         : this.events.length ? of(this.events) : this.eventService
           .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
-        .pipe(throttleTime(2000, asyncScheduler, {leading: true, trailing: true}))
+        .pipe(throttleTime(2000, asyncScheduler, { leading: true, trailing: true }))
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
           if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
@@ -152,7 +152,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           return result;
         }))
         .pipe(map((events) => {
-          return {events: events, user: user}
+          return { events: events, user: user }
         }))
     })).subscribe((eventsAndUser) => {
 
@@ -174,8 +174,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
     this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    this.afa.logEvent('dashboard_search', {method: DateRanges[search.dateRange]});
-    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    this.afa.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   ngOnChanges() {

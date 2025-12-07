@@ -1,9 +1,7 @@
 <section class="component-container">
   <mat-card class="mat-elevation-z0 compoent-container">
     <mat-card-header>
-      <mat-icon style="height: 48px !important" mat-card-avatar svgIcon="logo" (click)="authService.authenticated() ?
-           router.navigate(['/dashboard'])
-           : router.navigate(['/login']) ">
+      <mat-icon style="height: 48px !important" mat-card-avatar svgIcon="logo" (click)="navigateToDashboardOrLogin()">
       </mat-icon>
       <mat-card-title>
         Quantified Self

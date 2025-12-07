@@ -30,11 +30,11 @@ import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/
 
 
 @Component({
-    selector: 'app-event-card',
-    templateUrl: './event.card.component.html',
-    styleUrls: ['./event.card.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-card',
+  templateUrl: './event.card.component.html',
+  styleUrls: ['./event.card.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
@@ -101,7 +101,7 @@ export class EventCardComponent extends LoadingAbstractDirective implements OnIn
     // Set a "user from params"
     this.targetUserID = userID;
 
-    this.subscriptions.push(this.authService.user.pipe(switchMap((user) => {
+    this.subscriptions.push(this.authService.user$.pipe(switchMap((user: User | null) => {
       this.currentUser = user;
 
       // @todo check against no current user

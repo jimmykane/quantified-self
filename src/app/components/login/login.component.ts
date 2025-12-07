@@ -1,33 +1,32 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import {MatDialog} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {Router} from '@angular/router';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {take} from 'rxjs/operators';
-import {AppUserService} from '../../services/app.user.service';
-import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { take } from 'rxjs/operators';
+import { AppUserService } from '../../services/app.user.service';
+import { UserAgreementFormComponent } from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 
-import {AngularFireAuth} from '@angular/fire/compat/auth';
-import {PhoneFormComponent} from './phone-form/phone.form.component';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { PhoneFormComponent } from './phone-form/phone.form.component';
+import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { Subscription } from 'rxjs';
 
 
 @Component({
-    selector: 'app-login',
-    templateUrl: './login.component.html',
-    styleUrls: ['./login.component.css'],
-    standalone: false
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.css'],
+  standalone: false
 })
 export class LoginComponent implements OnInit, OnDestroy {
 
   isLoading: boolean;
   signInProviders = SignInProviders;
-
-
-  private userSubscription; Subscription
+  private userSubscription: Subscription;
 
 
   @HostListener('window:tokensReceived', ['$event'])
@@ -51,11 +50,12 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.isLoading = true;
-    this.userSubscription = this.authService.user.subscribe((user) => {
+    this.userSubscription = this.authService.user$.subscribe((user) => {
       if (user) {
         this.router.navigate(['/dashboard']);
       }
-    })
+    });
+
     try {
       const result = await this.afAuth.getRedirectResult();
       if (result.user) {
@@ -64,7 +64,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     } catch (e) {
       Sentry.captureException(e);
 
-      this.snackBar.open(`Could not log in due to ${e}`, null, {
+      this.snackBar.open(`Could not log in due to ${e} `, null, {
         duration: 2000,
       });
     } finally {
@@ -90,7 +90,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           await this.authService.twitterLoginWithRedirect();
           break;
         case SignInProviders.GitHub:
-          await this.authService.gitHubLoginWithRedirect();
+          await this.authService.githubLoginWithRedirect();
           break;
         case SignInProviders.PhoneNumber:
           this.showPhoneNumberForm();
@@ -99,7 +99,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     } catch (e) {
       Sentry.captureException(e);
 
-      this.snackBar.open(`Could not log in due to ${e}`, null, {
+      this.snackBar.open(`Could not log in due to ${e} `, null, {
         duration: 2000,
       });
     }
@@ -111,9 +111,9 @@ export class LoginComponent implements OnInit, OnDestroy {
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
-        this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
+        this.afa.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
         await this.router.navigate(['/dashboard']);
-        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'}`, null, {
+        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'} `, null, {
           duration: 5000,
         });
         return;

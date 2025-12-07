@@ -8,20 +8,19 @@
   <span class="fill-space"></span>
 
   <button mat-flat-button class="right" color="accent"
-    *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'" disabled>
+    *ngIf="authState === null && title && title !== 'Dashboard' && title !== 'Login'" disabled>
     Loading
   </button>
-  <button mat-flat-button class="right" color="accent"
-    *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
+  <button mat-flat-button class="right" color="accent" *ngIf="authState === true && title && title !== 'Dashboard'"
     (click)="router.navigate(['/dashboard']);">
     My dashboard
   </button>
-  <button mat-flat-button class="right" color="accent"
-    *ngIf="authService.authenticated() === false && title && title !== 'Login'" (click)="router.navigate(['/login']);">
+  <button mat-flat-button class="right" color="accent" *ngIf="authState === false && title && title !== 'Login'"
+    (click)="router.navigate(['/login']);">
     Login or Register
   </button>
 
-  <app-upload-activities class="right" *ngIf="title && title === 'Dashboard' && authService.user | async as user"
+  <app-upload-activities class="right" *ngIf="title && title === 'Dashboard' && authService.user$ | async as user"
     [user]="user">
   </app-upload-activities>
 

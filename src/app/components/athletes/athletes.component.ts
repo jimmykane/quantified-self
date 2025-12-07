@@ -11,11 +11,11 @@ import { AppEventService } from '../../services/app.event.service';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 
 @Component({
-    selector: 'app-athletes',
-    templateUrl: './athletes.component.html',
-    styleUrls: ['./athletes.component.css'],
-    providers: [],
-    standalone: false
+  selector: 'app-athletes',
+  templateUrl: './athletes.component.html',
+  styleUrls: ['./athletes.component.css'],
+  providers: [],
+  standalone: false
 })
 export class AthletesComponent implements OnInit, OnDestroy {
   public user: User;
@@ -38,7 +38,7 @@ export class AthletesComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    this.authService.user.pipe(switchMap((user) => {
+    this.authService.user$.pipe(switchMap((user: User | null) => {
       this.isLoading = true;
       this.user = user;
       if (!user) {

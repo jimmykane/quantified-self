@@ -8,7 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 @Injectable({
   providedIn: 'root'
 })
-export class AppAuthGuard  {
+export class AppAuthGuard {
 
   constructor(private authService: AppAuthService, private router: Router, private snackBar: MatSnackBar) {
   }
@@ -24,7 +24,7 @@ export class AppAuthGuard  {
   }
 
   checkLogin(url: string): Observable<boolean> | Promise<boolean> | boolean {
-    return this.authService.user.pipe(take(1)).pipe(map(user => !!user)).pipe(tap(loggedIn => {
+    return this.authService.user$.pipe(take(1)).pipe(map(user => !!user)).pipe(tap(loggedIn => {
       this.authService.redirectUrl = null;
       if (loggedIn) {
         return true

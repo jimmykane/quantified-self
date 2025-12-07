@@ -47,6 +47,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
   public loading: boolean;
+  public authState: boolean | null = null;
 
   constructor(
     public authService: AppAuthService,
@@ -61,6 +62,9 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
+    this.authService.user$.subscribe(user => {
+      this.authState = !!user;
+    });
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       switch (true) {
