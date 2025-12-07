@@ -1,25 +1,25 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router } from '@angular/router';
-import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { take } from 'rxjs/operators';
-import { AppUserService } from '../../services/app.user.service';
-import { UserAgreementFormComponent } from '../user-forms/user-agreement.form.component';
+import {MatDialog} from '@angular/material/dialog';
+import {MatSnackBar} from '@angular/material/snack-bar';
+import {Router} from '@angular/router';
+import {AppAuthService} from '../../authentication/app.auth.service';
+import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import {take} from 'rxjs/operators';
+import {AppUserService} from '../../services/app.user.service';
+import {UserAgreementFormComponent} from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 
-import { AngularFireAuth } from '@angular/fire/compat/auth';
-import { PhoneFormComponent } from './phone-form/phone.form.component';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import {AngularFireAuth} from '@angular/fire/compat/auth';
+import {PhoneFormComponent} from './phone-form/phone.form.component';
+import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
 @Component({
-  selector: 'app-login',
-  templateUrl: './login.component.html',
-  styleUrls: ['./login.component.css'],
-  standalone: false
+    selector: 'app-login',
+    templateUrl: './login.component.html',
+    styleUrls: ['./login.component.css'],
+    standalone: false
 })
 export class LoginComponent implements OnInit, OnDestroy {
 
@@ -57,14 +57,11 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
     })
     try {
-      console.log('[LoginComponent] Checking for redirect result');
-      const result = await this.authService.getRedirectResult();
-      console.log('[LoginComponent] Redirect result:', result);
-      if (result && result.user) {
+      const result = await this.afAuth.getRedirectResult();
+      if (result.user) {
         await this.redirectOrShowDataPrivacyDialog(result);
       }
     } catch (e) {
-      console.error('[LoginComponent] Error getting redirect result', e);
       Sentry.captureException(e);
 
       this.snackBar.open(`Could not log in due to ${e}`, null, {
@@ -114,7 +111,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       if (databaseUser) {
-        this.afa.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
+        this.afa.logEvent('login', {method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest'});
         await this.router.navigate(['/dashboard']);
         this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'}`, null, {
           duration: 5000,
