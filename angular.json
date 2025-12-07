@@ -82,9 +82,8 @@
           "options": {
             "buildTarget": "track-tools:build",
             "ssl": true,
-            "sslCert": "certs/localhost.crt",
-            "sslKey": "certs/localhost.key",
-            "proxyConfig": "proxy.conf.json"
+            "sslCert": "./certs/localhost.crt",
+            "sslKey": "./certs/localhost.key"
           },
           "configurations": {
             "production": {
@@ -95,7 +94,10 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "buildTarget": "track-tools:build"
+            "buildTarget": "track-tools:build",
+            "ssl": true,
+            "sslCert": "./certs/localhost.crt",
+            "sslKey": "./certs/localhost.key"
           }
         },
         "test": {
