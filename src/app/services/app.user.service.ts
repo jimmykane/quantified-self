@@ -347,10 +347,10 @@ export class AppUserService implements OnDestroy {
     const userDoc = doc(this.firestore, 'users', userID);
     return docData(userDoc).pipe(map((user: User) => {
       if (!user) {
-        return null
+        return null;
       }
       user.settings = this.fillMissingAppSettings(user);
-      return user
+      return user;
     }));
   }
 
@@ -377,9 +377,9 @@ export class AppUserService implements OnDestroy {
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
     const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
-    return docData(metaDoc).pipe(map((doc) => {
-      return <UserServiceMetaInterface>doc;
-    }))
+    return docData(metaDoc).pipe(map((d) => {
+      return <UserServiceMetaInterface>d;
+    }));
   }
 
   public shouldShowPromo(user: User) {
@@ -557,8 +557,7 @@ export class AppUserService implements OnDestroy {
   ngOnDestroy() {
   }
 
-  private getServiceTokens(user: User, serviceName: ServiceNames) {
-    // Fixed implementation
+  private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
     const serviceNamesToCollectionName = {
       [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
       [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
@@ -571,10 +570,10 @@ export class AppUserService implements OnDestroy {
     );
   }
 
-  private getGarminHealthAPITokens(user: User) {
+  private getGarminHealthAPITokens(user: User): Observable<any[]> {
     const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
     return docData(docRef).pipe(
-      map(doc => [doc]),
+      map(d => [d]),
       catchError(error => {
         return [];
       })
