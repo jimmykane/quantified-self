@@ -5,19 +5,22 @@ import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.a
 import * as Sentry from '@sentry/angular';
 
 
-Sentry.init({
-  dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
-  environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
-  release: environment.appVersion,
-  debug: environment.production || environment.beta,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-  ],
+// Only initialize Sentry in non-localhost environments
+if (!environment.localhost) {
+  Sentry.init({
+    dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
+    environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
+    release: environment.appVersion,
+    debug: environment.production || environment.beta,
+    integrations: [
+      Sentry.browserTracingIntegration(),
+    ],
 
-  // We recommend adjusting this value in production, or using tracesSampler
-  // for finer control
-  tracesSampleRate: 1.0,
-});
+    // We recommend adjusting this value in production, or using tracesSampler
+    // for finer control
+    tracesSampleRate: 1.0,
+  });
+}
 
 if (environment.production) {
   enableProdMode();
