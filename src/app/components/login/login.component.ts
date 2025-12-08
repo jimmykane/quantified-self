@@ -9,7 +9,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { UserAgreementFormComponent } from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
 
-import { Auth, getRedirectResult, signInWithCustomToken } from '@angular/fire/auth';
+import { Auth, signInWithCustomToken, authState } from '@angular/fire/auth';
 import { PhoneFormComponent } from './phone-form/phone.form.component';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
@@ -50,47 +50,63 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.isLoading = true;
+
+    // Handle redirect result from OAuth providers
+    try {
+      const redirectResult = await this.authService.getRedirectResult();
+      if (redirectResult && redirectResult.user) {
+        await this.redirectOrShowDataPrivacyDialog(redirectResult);
+        return;
+      }
+    } catch (e) {
+      console.error('Redirect result error:', e);
+      Sentry.captureException(e);
+    }
+
     this.userSubscription = this.authService.user$.subscribe((user) => {
       if (user) {
         this.router.navigate(['/dashboard']);
       }
     });
 
-    try {
-      const result = await getRedirectResult(this.auth);
-      if (result && result.user) {
-        await this.redirectOrShowDataPrivacyDialog(result);
+    // Check if user is already authenticated with Firebase but has no DB profile
+    authState(this.auth).pipe(take(1)).subscribe(async (firebaseUser) => {
+      if (firebaseUser) {
+        setTimeout(async () => {
+          const dbUser = await this.authService.getUser();
+          if (!dbUser) {
+            console.warn('Login: Firebase authenticated, but no DB profile. Triggering registration flow.');
+            this.redirectOrShowDataPrivacyDialog({ user: firebaseUser });
+          }
+        }, 500);
       }
-    } catch (e) {
-      Sentry.captureException(e);
+    });
 
-      this.snackBar.open(`Could not log in due to ${e} `, undefined, {
-        duration: 2000,
-      });
-    } finally {
-      this.isLoading = false;
-    }
+    this.isLoading = false;
   }
 
 
   async signInWithProvider(provider: SignInProviders) {
     this.isLoading = true;
     try {
+      let result;
       switch (provider) {
         case SignInProviders.Anonymous:
-          await this.redirectOrShowDataPrivacyDialog(await this.authService.anonymousLogin());
+          result = await this.authService.anonymousLogin();
+          await this.redirectOrShowDataPrivacyDialog(result);
           break;
         case SignInProviders.Google:
-          await this.authService.googleLoginWithRedirect();
+          // Redirect-based auth - page will reload after redirect
+          await this.authService.googleLogin();
           break;
         case SignInProviders.Facebook:
-          await this.authService.facebookLoginWithRedirect();
+          await this.authService.facebookLogin();
           break;
         case SignInProviders.Twitter:
-          await this.authService.twitterLoginWithRedirect();
+          await this.authService.twitterLogin();
           break;
         case SignInProviders.GitHub:
-          await this.authService.githubLoginWithRedirect();
+          await this.authService.githubLogin();
           break;
         case SignInProviders.PhoneNumber:
           this.showPhoneNumberForm();

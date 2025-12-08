@@ -2,7 +2,7 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, authState, signInWithRedirect, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, getAuth } from '@angular/fire/auth';
+import { Auth, authState, signInWithRedirect, getRedirectResult, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, getAuth } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppUserService } from '../services/app.user.service';
@@ -80,24 +80,29 @@ export class AppAuthService {
     return this.auth;
   }
 
-  async googleLoginWithRedirect() {
+  async googleLogin() {
     const provider = new GoogleAuthProvider();
     return signInWithRedirect(this.auth, provider);
   }
 
-  async githubLoginWithRedirect() {
+  async githubLogin() {
     const provider = new GithubAuthProvider();
     return signInWithRedirect(this.auth, provider);
   }
 
-  async facebookLoginWithRedirect() {
+  async facebookLogin() {
     const provider = new FacebookAuthProvider();
     return signInWithRedirect(this.auth, provider);
   }
 
-  async twitterLoginWithRedirect() {
+  async twitterLogin() {
     const provider = new TwitterAuthProvider();
     return signInWithRedirect(this.auth, provider);
+  }
+
+  // Get the result after redirect-based sign in
+  async getRedirectResult() {
+    return getRedirectResult(this.auth);
   }
 
   //// Anonymous Auth ////

@@ -1,96 +1,83 @@
 import { TestBed } from '@angular/core/testing';
+import { authGuard } from './app.auth.guard';
 import { AppAuthService } from './app.auth.service';
-import { AngularFirestore } from '@angular/fire/compat/firestore';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
-import { AppUserService } from '../services/app.user.service';
+import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { LocalStorageService } from '../services/storage/app.local.storage.service';
-import { of, BehaviorSubject } from 'rxjs';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { Auth } from '@angular/fire/auth';
+import { of } from 'rxjs';
 
-// Mock the modular authState function
-const authState$ = new BehaviorSubject<any>(null);
-jest.mock('@angular/fire/auth', () => {
-    const originalModule = jest.requireActual('@angular/fire/auth');
-    return {
-        ...originalModule,
-        authState: () => authState$.asObservable()
-    };
-});
-
-describe('AppAuthService', () => {
-    let service: AppAuthService;
-    let authMock: any;
-    let afsMock: any;
-    let afaMock: any;
-    let userServiceMock: any;
-    let snackBarMock: any;
-    let localStorageServiceMock: any;
+describe('authGuard', () => {
+    let routerMock: jasmine.SpyObj<Router>;
+    let snackBarMock: jasmine.SpyObj<MatSnackBar>;
 
     beforeEach(() => {
-        authState$.next(null);
-        authMock = {
-            // The modular Auth object
+        routerMock = jasmine.createSpyObj('Router', ['navigate']);
+        snackBarMock = jasmine.createSpyObj('MatSnackBar', ['open']);
+    });
+
+    it('should redirect to login when user is not authenticated', (done) => {
+        const authServiceMock = {
+            user$: of(null),
+            redirectUrl: null as string | null
         };
 
-        afsMock = {
-            firestore: {
-                terminate: jasmine.createSpy('terminate').and.returnValue(Promise.resolve()),
-                clearPersistence: jasmine.createSpy('clearPersistence').and.returnValue(Promise.resolve())
-            }
-        };
-
-        afaMock = {};
-
-        userServiceMock = {
-            getUserByID: jasmine.createSpy('getUserByID').and.returnValue(of(new User('123', 'Test User', 'photo.jpg')))
-        };
-
-        snackBarMock = {
-            open: jasmine.createSpy('open')
-        };
-
-        localStorageServiceMock = {
-            clearAllStorage: jasmine.createSpy('clearAllStorage')
-        };
-
+        TestBed.resetTestingModule();
         TestBed.configureTestingModule({
             providers: [
-                AppAuthService,
-                { provide: Auth, useValue: authMock },
-                { provide: AngularFirestore, useValue: afsMock },
-                { provide: AngularFireAnalytics, useValue: afaMock },
-                { provide: AppUserService, useValue: userServiceMock },
-                { provide: MatSnackBar, useValue: snackBarMock },
-                { provide: LocalStorageService, useValue: localStorageServiceMock }
+                { provide: AppAuthService, useValue: authServiceMock },
+                { provide: Router, useValue: routerMock },
+                { provide: MatSnackBar, useValue: snackBarMock }
             ]
         });
-        service = TestBed.inject(AppAuthService);
-    });
 
-    it('should be created', () => {
-        expect(service).toBeTruthy();
-    });
+        TestBed.runInInjectionContext(() => {
+            const result$ = authGuard(
+                { path: 'dashboard' } as any,
+                [{ path: 'dashboard' }] as any
+            );
 
-    it('should emit user when authenticated', (done) => {
-        const mockUser = { uid: '123', isAnonymous: false, metadata: { creationTime: 'now', lastSignInTime: 'now' } };
-        authState$.next(mockUser);
-
-        service.user$.subscribe(user => {
-            expect(user).toBeTruthy();
-            expect(user.uid).toBe('123');
-            expect(userServiceMock.getUserByID).toHaveBeenCalledWith('123');
-            done();
+            if (result$ && typeof (result$ as any).subscribe === 'function') {
+                (result$ as any).subscribe((allowed: boolean) => {
+                    expect(allowed).toBeFalse();
+                    expect(routerMock.navigate).toHaveBeenCalledWith(['/login']);
+                    expect(snackBarMock.open).toHaveBeenCalled();
+                    done();
+                });
+            } else {
+                fail('Expected observable result');
+            }
         });
     });
 
-    it('should emit null when not authenticated', (done) => {
-        authState$.next(null);
+    it('should allow access when user is authenticated', (done) => {
+        const authenticatedUserMock = {
+            user$: of({ uid: '123', displayName: 'Test User' }),
+            redirectUrl: null as string | null
+        };
 
-        service.user$.subscribe(user => {
-            expect(user).toBeNull();
-            done();
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: AppAuthService, useValue: authenticatedUserMock },
+                { provide: Router, useValue: routerMock },
+                { provide: MatSnackBar, useValue: snackBarMock }
+            ]
+        });
+
+        TestBed.runInInjectionContext(() => {
+            const result$ = authGuard(
+                { path: 'dashboard' } as any,
+                [{ path: 'dashboard' }] as any
+            );
+
+            if (result$ && typeof (result$ as any).subscribe === 'function') {
+                (result$ as any).subscribe((allowed: boolean) => {
+                    expect(allowed).toBeTrue();
+                    expect(routerMock.navigate).not.toHaveBeenCalled();
+                    done();
+                });
+            } else {
+                fail('Expected observable result');
+            }
         });
     });
 });
