@@ -17,6 +17,21 @@
             }
         },
         {
+            "name": "ng serve + Auth Emulator",
+            "type": "chrome",
+            "request": "launch",
+            "preLaunchTask": "start:with-emulator",
+            "url": "https://localhost:4201",
+            "webRoot": "${workspaceFolder}",
+            "sourceMapPathOverrides": {
+                "webpack:/*": "${webRoot}/*",
+                "/./*": "${webRoot}/*",
+                "/src/*": "${webRoot}/src/*",
+                "/*": "*",
+                "/./~/*": "${webRoot}/node_modules/*"
+            }
+        },
+        {
             "name": "ng serve (attach)",
             "type": "chrome",
             "request": "attach",

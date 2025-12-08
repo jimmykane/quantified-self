@@ -2,12 +2,13 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, authState, signInWithRedirect, getRedirectResult, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, getAuth } from '@angular/fire/auth';
+import { Auth, authState, signInWithRedirect, signInWithPopup, getRedirectResult, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, getAuth } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { AppUserService } from '../services/app.user.service';
 import { Analytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
@@ -80,28 +81,57 @@ export class AppAuthService {
     return this.auth;
   }
 
+  /**
+   * Sign in with a given OAuth provider.
+   * - Localhost: Use popup (works in Safari, Chrome needs cookie exception)
+   * - Production: Use redirect (better mobile experience, avoids popup blockers)
+   */
+  private async signInWithProvider(provider: GoogleAuthProvider | GithubAuthProvider | FacebookAuthProvider | TwitterAuthProvider) {
+    console.log('[Auth] signInWithProvider - localhost:', environment.localhost);
+    try {
+      if (environment.localhost) {
+        console.log('[Auth] Using popup...');
+        const result = await signInWithPopup(this.auth, provider);
+        console.log('[Auth] Popup succeeded:', result);
+        return result;
+      } else {
+        console.log('[Auth] Using redirect...');
+        return signInWithRedirect(this.auth, provider);
+      }
+    } catch (error: any) {
+      console.error('[Auth] signInWithProvider error:', error);
+      console.error('[Auth] Error code:', error?.code);
+      console.error('[Auth] Error message:', error?.message);
+      throw error;
+    }
+  }
+
   async googleLogin() {
     const provider = new GoogleAuthProvider();
-    return signInWithRedirect(this.auth, provider);
+    return this.signInWithProvider(provider);
   }
 
   async githubLogin() {
     const provider = new GithubAuthProvider();
-    return signInWithRedirect(this.auth, provider);
+    return this.signInWithProvider(provider);
   }
 
   async facebookLogin() {
     const provider = new FacebookAuthProvider();
-    return signInWithRedirect(this.auth, provider);
+    return this.signInWithProvider(provider);
   }
 
   async twitterLogin() {
     const provider = new TwitterAuthProvider();
-    return signInWithRedirect(this.auth, provider);
+    return this.signInWithProvider(provider);
   }
 
-  // Get the result after redirect-based sign in
+  // Get the result after redirect-based sign in (production only)
   async getRedirectResult() {
+    // Localhost uses popup, so no redirect result to process
+    if (environment.localhost) {
+      return null;
+    }
     return getRedirectResult(this.auth);
   }
 

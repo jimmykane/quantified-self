@@ -47,6 +47,38 @@
             },
             "label": "npm: test",
             "detail": "ng test"
+        },
+        {
+            "label": "firebase: auth-emulator",
+            "type": "shell",
+            "command": "firebase emulators:start --only auth",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "firebase",
+                "pattern": {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": {
+                        "regexp": "Starting emulators"
+                    },
+                    "endsPattern": {
+                        "regexp": "All emulators ready"
+                    }
+                }
+            },
+            "detail": "Start Firebase Auth Emulator"
+        },
+        {
+            "label": "start:with-emulator",
+            "dependsOn": [
+                "firebase: auth-emulator",
+                "npm: start"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
         }
     ]
 }

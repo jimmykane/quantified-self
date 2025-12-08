@@ -52,15 +52,26 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = true;
 
     // Handle redirect result from OAuth providers
+    console.log('[Auth Debug] ngOnInit - checking for redirect result...');
     try {
       const redirectResult = await this.authService.getRedirectResult();
+      console.log('[Auth Debug] getRedirectResult returned:', redirectResult);
       if (redirectResult && redirectResult.user) {
+        console.log('[Auth Debug] Redirect result has user, processing...');
         await this.redirectOrShowDataPrivacyDialog(redirectResult);
         return;
+      } else {
+        console.log('[Auth Debug] No redirect result or no user in result');
       }
-    } catch (e) {
-      console.error('Redirect result error:', e);
-      Sentry.captureException(e);
+    } catch (e: any) {
+      console.error('[Auth Debug] getRedirectResult error:', e);
+      // Ignore "missing initial state" error - this happens when:
+      // 1. Switching from redirect to popup auth (old pending redirect)
+      // 2. Storage partitioning in cross-origin scenario
+      if (e?.code !== 'auth/missing-initial-state') {
+        console.error('Redirect result error:', e);
+        Sentry.captureException(e);
+      }
     }
 
     this.userSubscription = this.authService.user$.subscribe((user) => {
@@ -86,40 +97,57 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
 
-  async signInWithProvider(provider: SignInProviders) {
+  signInWithProvider(provider: SignInProviders) {
     this.isLoading = true;
-    try {
-      let result;
-      switch (provider) {
-        case SignInProviders.Anonymous:
-          result = await this.authService.anonymousLogin();
-          await this.redirectOrShowDataPrivacyDialog(result);
-          break;
-        case SignInProviders.Google:
-          // Redirect-based auth - page will reload after redirect
-          await this.authService.googleLogin();
-          break;
-        case SignInProviders.Facebook:
-          await this.authService.facebookLogin();
-          break;
-        case SignInProviders.Twitter:
-          await this.authService.twitterLogin();
-          break;
-        case SignInProviders.GitHub:
-          await this.authService.githubLogin();
-          break;
-        case SignInProviders.PhoneNumber:
-          this.showPhoneNumberForm();
-          break;
-      }
-    } catch (e) {
-      Sentry.captureException(e);
 
+    // Helper to handle login result
+    const handleResult = async (result: any) => {
+      if (result) {
+        await this.redirectOrShowDataPrivacyDialog(result);
+      }
+      this.isLoading = false;
+    };
+
+    // Helper to handle errors
+    const handleError = (e: any) => {
+      Sentry.captureException(e);
       this.snackBar.open(`Could not log in due to ${e} `, undefined, {
         duration: 2000,
       });
+      this.isLoading = false;
+    };
+
+    switch (provider) {
+      case SignInProviders.Anonymous:
+        this.authService.anonymousLogin()
+          .then(handleResult)
+          .catch(handleError);
+        break;
+      case SignInProviders.Google:
+        // Call synchronously (no await before popup) to avoid Safari blocking
+        this.authService.googleLogin()
+          .then(handleResult)
+          .catch(handleError);
+        break;
+      case SignInProviders.Facebook:
+        this.authService.facebookLogin()
+          .then(handleResult)
+          .catch(handleError);
+        break;
+      case SignInProviders.Twitter:
+        this.authService.twitterLogin()
+          .then(handleResult)
+          .catch(handleError);
+        break;
+      case SignInProviders.GitHub:
+        this.authService.githubLogin()
+          .then(handleResult)
+          .catch(handleError);
+        break;
+      case SignInProviders.PhoneNumber:
+        this.showPhoneNumberForm();
+        break;
     }
-    this.isLoading = false;
   }
 
   private async redirectOrShowDataPrivacyDialog(loginServiceUser) {
