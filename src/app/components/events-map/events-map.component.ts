@@ -7,7 +7,8 @@ import {
   NgZone,
   OnChanges,
   SimpleChanges,
-  ViewChild
+  ViewChild,
+  OnInit
 } from '@angular/core';
 import { GoogleMap, MapMarker } from '@angular/google-maps';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
@@ -25,6 +26,7 @@ import { take } from 'rxjs/operators';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-events-map',
@@ -34,7 +36,7 @@ import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.
   providers: [DatePipe],
   standalone: false
 })
-export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit {
+export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit {
   @ViewChild(GoogleMap) googleMap: GoogleMap;
   @Input() events: EventInterface[];
   @Input() theme: MapThemes;
@@ -56,6 +58,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   public mapCenter: google.maps.LatLngLiteral = { lat: 0, lng: 0 };
   public mapZoom = 3;
   public mapTypeId: string = 'roadmap';
+  public apiLoaded = false;
 
   private nativeMap: google.maps.Map;
   private heatMap: google.maps.visualization.HeatmapLayer;
@@ -67,6 +70,10 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private eventColorService: AppEventColorService,
     private eventService: AppEventService) {
     super(changeDetectorRef);
+  }
+
+  ngOnInit(): void {
+    this.loadGoogleMaps();
   }
 
   ngAfterViewInit() {
@@ -87,22 +94,54 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         this.mapTypeId = this.type as string;
       }
 
-      if (this.showHeatMap && this.events?.length) {
-        this.latLngArray = this.getLatLngArray(this.events);
+      if (this.apiLoaded) {
+        this.initMapData();
+      }
+    });
+    this.changeDetectorRef.detectChanges();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.nativeMap || !this.apiLoaded) return;
+
+    this.zone.runOutsideAngular(() => {
+      this.initMapData();
+    });
+  }
+
+  private initMapData() {
+    if (!this.nativeMap) return;
+
+    // Update heatmap data
+    if (this.showHeatMap && this.events?.length) {
+      this.latLngArray = this.getLatLngArray(this.events);
+      if (!this.heatMap) {
         this.heatMap = new google.maps.visualization.HeatmapLayer({
           map: this.nativeMap,
           data: this.latLngArray,
           radius: 50,
         });
+      } else {
+        this.heatMap.setData(this.latLngArray);
+      }
+    }
+
+    // Create and add markers
+    if (this.events?.length) {
+      // Clear existing markers
+      if (this.markers) {
+        this.markers.forEach(m => m.setMap(null));
+      }
+      if (this.markerClusterer) {
+        this.markerClusterer.clearMarkers();
       }
 
-      // Create and add markers
-      if (this.events?.length) {
-        this.markers = this.getMarkersFromEvents(this.events);
-        this.markers.forEach(marker => marker.setMap(this.nativeMap));
+      this.markers = this.getMarkersFromEvents(this.events);
+      this.markers.forEach(marker => marker.setMap(this.nativeMap));
 
-        if (this.clusterMarkers) {
-          this.markerClusterer = new MarkerClusterer(map,
+      if (this.clusterMarkers) {
+        if (!this.markerClusterer) {
+          this.markerClusterer = new MarkerClusterer(this.nativeMap,
             this.markers,
             {
               imagePath: '/assets/icons/heatmap/m',
@@ -111,41 +150,74 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
               maxZoom: 18,
               minimumClusterSize: 15,
             });
-        }
-
-        // Fit bounds to show all events
-        const startPositions = this.getStartPositionsFromEvents(this.events);
-        if (startPositions.length > 0) {
-          this.nativeMap.fitBounds(this.getBounds(startPositions));
+        } else {
+          this.markerClusterer.addMarkers(this.markers);
+          this.markerClusterer.repaint();
         }
       }
-    });
-    this.changeDetectorRef.detectChanges();
+
+      // Fit bounds to show all events
+      const startPositions = this.getStartPositionsFromEvents(this.events);
+      if (startPositions.length > 0) {
+        this.nativeMap.fitBounds(this.getBounds(startPositions));
+      }
+    }
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (!this.nativeMap) return;
+  private loadGoogleMaps() {
+    if (typeof google === 'object' && typeof google.maps === 'object') {
+      this.apiLoaded = true;
+      this.changeDetectorRef.markForCheck();
+      return;
+    }
 
-    this.zone.runOutsideAngular(() => {
-      // Update heatmap data
-      if (this.heatMap && this.events) {
-        this.latLngArray = this.getLatLngArray(this.events);
-        this.heatMap.setData(this.latLngArray);
-      }
+    const scriptSrc = `https://maps.googleapis.com/maps/api/js?key=${environment.firebase.apiKey}&libraries=visualization`;
+    if (document.querySelector(`script[src="${scriptSrc}"]`)) {
+      // Script is already loading or loaded, but 'google' object might not be ready yet.
+      // We can poll or wait. Simpler approach for now is to trust that if script is there, it will load.
+      // But since we need to flip apiLoaded to true, we should probably attach a listener if possible,
+      // or just rely on a simple interval check if we can't easily hook into the existing script tag's onload.
+      // However, a better way is to attach a new load listener to the existing script element.
+      const existingScript = document.querySelector(`script[src="${scriptSrc}"]`) as HTMLScriptElement;
 
-      // Update markers in clusterer
-      if (this.markerClusterer && this.events) {
-        this.markerClusterer.clearMarkers();
-        this.markers = this.getMarkersFromEvents(this.events);
-        this.markerClusterer.addMarkers(this.markers);
-        this.markerClusterer.repaint();
+      if (!existingScript.getAttribute('data-loaded')) {
+        const originalOnLoad = existingScript.onload;
+        existingScript.onload = (e) => {
+          if (originalOnLoad) {
+            (originalOnLoad as any)(e);
+          }
+          this.zone.run(() => {
+            this.apiLoaded = true;
+            this.changeDetectorRef.markForCheck();
+            if (this.nativeMap) {
+              this.initMapData();
+            }
+          });
+        };
+      } else {
+        this.apiLoaded = true;
+        this.changeDetectorRef.markForCheck();
       }
+      return;
+    }
 
-      // Fit bounds
-      if (this.events?.length) {
-        this.nativeMap.fitBounds(this.getBounds(this.getStartPositionsFromEvents(this.events)));
-      }
-    });
+    const script = document.createElement('script');
+    script.src = scriptSrc;
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+    script.onload = () => {
+      script.setAttribute('data-loaded', 'true');
+      this.zone.run(() => {
+        this.apiLoaded = true;
+        this.changeDetectorRef.markForCheck();
+        // If map was already ready (e.g. somehow), init data. 
+        // Realistically onMapReady triggers initMapData, but if API loads LATE, we need to trigger it if map is ready.
+        if (this.nativeMap) {
+          this.initMapData();
+        }
+      });
+    }
   }
 
   getStartPositionsFromEvents(events: EventInterface[]): DataPositionInterface[] {
@@ -180,7 +252,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         const location = eventStartPositionStat.getValue();
         const marker = new google.maps.Marker({
           position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
-          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayUnit()}`,
+          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayValue()}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillOpacity: 1,
