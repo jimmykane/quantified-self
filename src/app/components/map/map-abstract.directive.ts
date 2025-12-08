@@ -2,11 +2,18 @@ import { ChangeDetectorRef, Directive } from '@angular/core';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
 import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
+// import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
 
 declare function require(moduleName: string): any;
 
 const mapStyles = require('./map-styles.json');
+
+export interface LiteralBounds {
+  east: number;
+  west: number;
+  north: number;
+  south: number;
+}
 
 @Directive()
 export abstract class MapAbstractDirective extends LoadingAbstractDirective {
@@ -15,9 +22,9 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
     super(changeDetector)
   }
 
-  getBounds(postions: DataPositionInterface[]): LatLngBoundsLiteral {
+  getBounds(postions: DataPositionInterface[]): LiteralBounds {
     if (!postions.length) {
-      return <LatLngBoundsLiteral>{
+      return <LiteralBounds>{
         east: 0,
         west: 0,
         north: 0,
@@ -39,7 +46,7 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
       return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    return <LatLngBoundsLiteral>{
+    return <LiteralBounds>{
       east: mostEast.longitudeDegrees,
       west: mostWest.longitudeDegrees,
       north: mostNorth.latitudeDegrees,
@@ -48,6 +55,7 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
   }
 
   getStyles(mapTheme: MapThemes) {
-    return mapStyles[mapTheme] || MapThemes.Black
+    // If the theme is not found try to find the Dark theme or else return the default
+    return mapStyles[mapTheme] || mapStyles['Dark'] || [];
   }
 }

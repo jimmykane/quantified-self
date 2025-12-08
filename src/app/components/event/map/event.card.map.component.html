@@ -10,69 +10,67 @@
   </mat-card-header>
   <section class="container">
     @if (googleMap && event.getActivities().length > 1) {
-      <mat-card class="map-legend mat-elevation-z0">
-        @for (activity of event.getActivities(); track activity) {
-          <app-activity-toggle [activity]="activity" [event]="event"
-            [showActions]="false" [showToggle]="false" [showStats]="false" [showDate]="false">
-          </app-activity-toggle>
-        }
-      </mat-card>
+    <mat-card class="map-legend mat-elevation-z0">
+      @for (activity of event.getActivities(); track activity) {
+      <app-activity-toggle [activity]="activity" [event]="event" [showActions]="false" [showToggle]="false"
+        [showStats]="false" [showDate]="false">
+      </app-activity-toggle>
+      }
+    </mat-card>
     }
     <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
 
     <!-- Placeholder when no data -->
     @if (activitiesMapData.length === 0) {
-      <section class="placeholder"></section>
+    <section class="placeholder"></section>
     }
 
     <!-- Google Map -->
-    @if (activitiesMapData.length > 0) {
-      <google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom"
-        [mapTypeId]="mapTypeId" [options]="mapOptions" (mapInitialized)="onMapReady($event)">
-        @for (activityMapData of activitiesMapData; track activityMapData) {
-          <!-- Start Marker -->
-          @if (activityMapData.positions.length > 0) {
-            <map-marker
-              [position]="{lat: activityMapData.positions[0].latitudeDegrees, lng: activityMapData.positions[0].longitudeDegrees}"
-              [options]="getHomeMarkerOptions(activityMapData.activity)">
-            </map-marker>
-          }
-          <!-- Cursor Marker -->
-          @if (activitiesCursors.get(activityMapData.activity.getID())) {
-            <map-marker
-              [position]="{lat: activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees}"
-              [options]="getCursorMarkerOptions(activityMapData.activity)">
-            </map-marker>
-          }
-          <!-- Activity Polyline -->
-          <map-polyline [path]="getPolylinePath(activityMapData)" [options]="getPolylineOptions(activityMapData)"
-            (polylineClick)="onPolylineClick($event, activityMapData)">
-          </map-polyline>
-          <!-- End Marker -->
-          @if (activityMapData.positions.length > 0) {
-            <map-marker
-              [position]="{lat: activityMapData.positions[activityMapData.positions.length - 1].latitudeDegrees, lng: activityMapData.positions[activityMapData.positions.length - 1].longitudeDegrees}"
-              [options]="getFlagMarkerOptions(activityMapData.activity)">
-            </map-marker>
-          }
-          <!-- Lap Markers -->
-          @for (lap of activityMapData.laps; track lap; let i = $index) {
-            <map-marker
-              [position]="{lat: lap.lapPosition.latitudeDegrees, lng: lap.lapPosition.longitudeDegrees}"
-              [options]="getLapMarkerOptions(activityMapData.activity, i)">
-            </map-marker>
-          }
-          <!-- Point Markers (optional) -->
-          @if (showPoints) {
-            @for (position of activityMapData.positions; track position) {
-              <map-marker
-                [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
-                [options]="{icon: {path: 0, fillColor: eventColorService.getActivityColor(event.getActivities(), activityMapData.activity), fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 0.8, scale: 1.2}}">
-              </map-marker>
-            }
-          }
-        }
-      </google-map>
+    @if (activitiesMapData.length > 0 && apiLoaded) {
+    <google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom" [mapTypeId]="mapTypeId"
+      [options]="mapOptions" (mapInitialized)="onMapReady($event)">
+      @for (activityMapData of activitiesMapData; track activityMapData) {
+      <!-- Start Marker -->
+      @if (activityMapData.positions.length > 0) {
+      <map-marker
+        [position]="{lat: activityMapData.positions[0].latitudeDegrees, lng: activityMapData.positions[0].longitudeDegrees}"
+        [options]="getHomeMarkerOptions(activityMapData.activity)">
+      </map-marker>
+      }
+      <!-- Cursor Marker -->
+      @if (activitiesCursors.get(activityMapData.activity.getID())) {
+      <map-marker
+        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees}"
+        [options]="getCursorMarkerOptions(activityMapData.activity)">
+      </map-marker>
+      }
+      <!-- Activity Polyline -->
+      <map-polyline [path]="getPolylinePath(activityMapData)" [options]="getPolylineOptions(activityMapData)"
+        (polylineClick)="onPolylineClick($event, activityMapData)">
+      </map-polyline>
+      <!-- End Marker -->
+      @if (activityMapData.positions.length > 0) {
+      <map-marker
+        [position]="{lat: activityMapData.positions[activityMapData.positions.length - 1].latitudeDegrees, lng: activityMapData.positions[activityMapData.positions.length - 1].longitudeDegrees}"
+        [options]="getFlagMarkerOptions(activityMapData.activity)">
+      </map-marker>
+      }
+      <!-- Lap Markers -->
+      @for (lap of activityMapData.laps; track lap; let i = $index) {
+      <map-marker [position]="{lat: lap.lapPosition.latitudeDegrees, lng: lap.lapPosition.longitudeDegrees}"
+        [options]="getLapMarkerOptions(activityMapData.activity, i)">
+      </map-marker>
+      }
+      <!-- Point Markers (optional) -->
+      @if (showPoints) {
+      @for (position of activityMapData.positions; track position) {
+      <map-marker [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
+        [options]="{icon: {path: 0, fillColor: eventColorService.getActivityColor(event.getActivities(), activityMapData.activity), fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 0.8, scale: 1.2}}">
+      </map-marker>
+      }
+      }
+      }
+    </google-map>
     }
   </section>
 </mat-card>

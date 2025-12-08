@@ -18,13 +18,9 @@
 mat-card.item {
   margin: 0;
   padding: 0;
-  /*max-width: 25%;*/
-  flex: 1 1 25%;
-  height: 25%;
   min-width: 120px;
   margin-bottom: 1em;
-  /*display: inline-block;*/
-  /*flex-basis: 0;*/
+  height: auto;
 }
 
 ::ng-deep .no-margin .mat-card-header-text{

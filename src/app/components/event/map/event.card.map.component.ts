@@ -9,6 +9,7 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
+  NgZone
 } from '@angular/core';
 import { GoogleMap, MapPolyline, MapMarker } from '@angular/google-maps';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -27,6 +28,7 @@ import { debounceTime } from 'rxjs/operators';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-event-card-map',
@@ -52,7 +54,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeId: google.maps.MapTypeId = google.maps.MapTypeId.ROADMAP;
+  public mapTypeId: google.maps.MapTypeId | string = 'roadmap';
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
   // Map options
@@ -77,7 +79,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private lineMouseMoveSubject: Subject<{ event: google.maps.MapMouseEvent, activityMapData: MapData }> = new Subject();
   private lineMouseMoveSubscription: Subscription;
 
+  public apiLoaded = false;
+
   constructor(
+    private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
     private eventService: AppEventService,
     private userService: AppUserService,
@@ -90,8 +95,54 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-    // Apply theme styles
-    this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
+    this.loadGoogleMaps();
+  }
+
+  private loadGoogleMaps() {
+    if (typeof google === 'object' && typeof google.maps === 'object') {
+      this.apiLoaded = true;
+      this.changeDetectorRef.markForCheck();
+      // Apply theme styles if map is already ready roughly
+      this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
+      return;
+    }
+
+    const scriptSrc = `https://maps.googleapis.com/maps/api/js?key=${environment.firebase.apiKey}&libraries=visualization`;
+    if (document.querySelector(`script[src="${scriptSrc}"]`)) {
+      const existingScript = document.querySelector(`script[src="${scriptSrc}"]`) as HTMLScriptElement;
+      if (!existingScript.getAttribute('data-loaded')) {
+        const originalOnLoad = existingScript.onload;
+        existingScript.onload = (e) => {
+          if (originalOnLoad) {
+            (originalOnLoad as any)(e);
+          }
+          this.zone.run(() => {
+            this.apiLoaded = true;
+            this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
+            this.changeDetectorRef.markForCheck();
+          });
+        };
+      } else {
+        this.apiLoaded = true;
+        this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
+        this.changeDetectorRef.markForCheck();
+      }
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = scriptSrc;
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+    script.onload = () => {
+      script.setAttribute('data-loaded', 'true');
+      this.zone.run(() => {
+        this.apiLoaded = true;
+        this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
+        this.changeDetectorRef.markForCheck();
+      });
+    }
   }
 
   ngAfterViewInit(): void {

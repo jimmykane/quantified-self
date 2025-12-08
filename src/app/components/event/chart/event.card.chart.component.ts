@@ -292,19 +292,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       switch (this.xAxisType) {
         case XAxisTypes.Time:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
-          this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-            activityID: activity.getID(),
-            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime(),
-            byChart: true,
-          }));
+          if (xAxis.positionToDate) {
+            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+              activityID: activity.getID(),
+              time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime(),
+              byChart: true,
+            }));
+          }
           break;
         case XAxisTypes.Duration:
           xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
-          this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-            activityID: activity.getID(),
-            time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
-            byChart: true,
-          }));
+          if (xAxis.positionToDate) {
+            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+              activityID: activity.getID(),
+              time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
+              byChart: true,
+            }));
+          }
           break;
       }
 
@@ -326,12 +330,12 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       let end;
       switch (this.xAxisType) {
         case XAxisTypes.Time:
-          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.start));
-          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.end));
+          start = (<am4charts.DateAxis>axis).positionToDate ? (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.start)) : new Date();
+          end = (<am4charts.DateAxis>axis).positionToDate ? (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.end)) : new Date();
           break;
         case XAxisTypes.Duration:
-          start = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.start));
-          end = (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.end));
+          start = (<am4charts.DateAxis>axis).positionToDate ? (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.start)) : new Date();
+          end = (<am4charts.DateAxis>axis).positionToDate ? (<am4charts.DateAxis>axis).positionToDate(axis.toAxisPosition(ev.target.xRange.end)) : new Date();
           break;
         default:
           start = (<am4charts.ValueAxis>axis).positionToValue(axis.toAxisPosition(ev.target.xRange.start));
