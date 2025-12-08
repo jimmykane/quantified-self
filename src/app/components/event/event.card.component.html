@@ -2,53 +2,50 @@
 
   <app-shade [isActive]="isLoading"></app-shade>
 
-  <ng-container *ngIf="event">
+  @if (event) {
     <app-event-header
       [event]="event"
       [user]='currentUser'
       [isOwner]="currentUser && (currentUser.uid === targetUserID)">
     </app-event-header>
-
-    <app-activities-toggles
-      *ngIf="event.getActivities().length > 1"
-      [event]="event"
-      [user]="currentUser"
-      [isOwner]="isOwner()">
-    </app-activities-toggles>
-
+    @if (event.getActivities().length > 1) {
+      <app-activities-toggles
+        [event]="event"
+        [user]="currentUser"
+        [isOwner]="isOwner()">
+      </app-activities-toggles>
+    }
     <app-event-card-stats-grid
       [event]="event"
       [selectedActivities]="selectedActivities"
       [unitSettings]="userUnitSettings">
     </app-event-card-stats-grid>
-
-    <app-event-intensity-zones
-      *ngIf="hasIntensityZones(event)"
-      [activities]="selectedActivities"
-      [useAnimations]="useChartAnimations"
-      [chartTheme]="chartTheme">
-    </app-event-intensity-zones>
-
+    @if (hasIntensityZones(event)) {
+      <app-event-intensity-zones
+        [activities]="selectedActivities"
+        [useAnimations]="useChartAnimations"
+        [chartTheme]="chartTheme">
+      </app-event-intensity-zones>
+    }
     <app-event-stats-table
       [selectedActivities]="selectedActivities"
       [userUnitSettings]="userUnitSettings"
       [event]="event">
     </app-event-stats-table>
-
-    <app-event-card-map
-      *ngIf="event && targetUserID && hasPositions(event)"
-      [selectedActivities]="selectedActivities"
-      [targetUserID]="targetUserID"
-      [user]="currentUser"
-      [event]="event"
-      [showLaps]="showMapLaps"
-      [showPoints]="showMapPoints"
-      [lapTypes]="mapLapTypes"
-      [showArrows]="showMapArrows"
-      [strokeWidth]="mapStrokeWidth"
-      [theme]="mapTheme">
-    </app-event-card-map>
-
+    @if (event && targetUserID && hasPositions(event)) {
+      <app-event-card-map
+        [selectedActivities]="selectedActivities"
+        [targetUserID]="targetUserID"
+        [user]="currentUser"
+        [event]="event"
+        [showLaps]="showMapLaps"
+        [showPoints]="showMapPoints"
+        [lapTypes]="mapLapTypes"
+        [showArrows]="showMapArrows"
+        [strokeWidth]="mapStrokeWidth"
+        [theme]="mapTheme">
+      </app-event-card-map>
+    }
     <app-event-card-chart
       [showAllData]="showAllData"
       [showLaps]="showChartLaps"
@@ -76,19 +73,18 @@
       [waterMark]="currentUser ? currentUser.brandText : null"
       [event]="event">
     </app-event-card-chart>
-
-    <app-event-card-laps
-      *ngIf="hasLaps(event)"
-      [selectedActivities]="selectedActivities"
-      [unitSettings]="userUnitSettings"
-      [event]="event">
-    </app-event-card-laps>
-
-    <app-event-card-devices
-      *ngIf="hasDevices(event)"
-      [selectedActivities]="selectedActivities"
-      [event]="event">
-    </app-event-card-devices>
-
-  </ng-container>
+    @if (hasLaps(event)) {
+      <app-event-card-laps
+        [selectedActivities]="selectedActivities"
+        [unitSettings]="userUnitSettings"
+        [event]="event">
+      </app-event-card-laps>
+    }
+    @if (hasDevices(event)) {
+      <app-event-card-devices
+        [selectedActivities]="selectedActivities"
+        [event]="event">
+      </app-event-card-devices>
+    }
+  }
 </mat-card>

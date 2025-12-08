@@ -17,7 +17,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { switchMap, take, tap } from 'rxjs/operators';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
@@ -46,15 +46,15 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   protected serviceDataSubscription: Subscription;
 
   constructor(protected http: HttpClient,
-              protected fileService: AppFileService,
-              protected afa: AngularFireAnalytics,
-              protected eventService: AppEventService,
-              protected authService: AppAuthService,
-              protected userService: AppUserService,
-              protected router: Router,
-              protected route: ActivatedRoute,
-              protected windowService: AppWindowService,
-              protected snackBar: MatSnackBar) {
+    protected fileService: AppFileService,
+    protected analytics: Analytics,
+    protected eventService: AppEventService,
+    protected authService: AppAuthService,
+    protected userService: AppUserService,
+    protected router: Router,
+    protected route: ActivatedRoute,
+    protected windowService: AppWindowService,
+    protected snackBar: MatSnackBar) {
   }
 
   async ngOnChanges() {
@@ -95,7 +95,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.isConnecting = true;
       try {
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
-        this.afa.logEvent('connected_to_service', {serviceName: this.serviceName});
+        logEvent(this.analytics, 'connected_to_service', { serviceName: this.serviceName });
         this.snackBar.open(`Successfully connected to ${this.serviceName}`, null, {
           duration: 10000,
         });
@@ -138,7 +138,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,
       });
-      this.afa.logEvent('disconnected_from_service', {serviceName: this.serviceName});
+      logEvent(this.analytics, 'disconnected_from_service', { serviceName: this.serviceName });
     } catch (e) {
       Sentry.captureException(e);
       this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
@@ -156,7 +156,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   abstract isConnectedToService(): boolean;
 
-  abstract buildRedirectURIFromServiceToken(redirectUri: {redirect_uri: string}|{redirect_uri: string, state: string, oauthToken: string}): string
+  abstract buildRedirectURIFromServiceToken(redirectUri: { redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }): string
 
   abstract requestAndSetToken(params: ParamMap)
 }

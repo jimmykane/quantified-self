@@ -25,16 +25,16 @@ import { AppDataColors } from '../../../services/color/app.data.colors';
 
 
 @Component({
-    selector: 'app-event-intensity-zones',
-    templateUrl: './event.intensity-zones.component.html',
-    styleUrls: ['./event.intensity-zones.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-intensity-zones',
+  templateUrl: './event.intensity-zones.component.html',
+  styleUrls: ['./event.intensity-zones.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class EventIntensityZonesComponent extends ChartAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
   @Input() activities: ActivityInterface[];
 
-  protected chart: am4charts.XYChart;
+  protected declare chart: am4charts.XYChart;
 
   private static getData(activities: ActivityInterface[]): any[] {
     return convertIntensityZonesStatsToChartData(activities)
@@ -42,8 +42,8 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
 
 
   constructor(protected zone: NgZone,
-              changeDetector: ChangeDetectorRef,
-              private eventColorService: AppEventColorService) {
+    changeDetector: ChangeDetectorRef,
+    private eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
 

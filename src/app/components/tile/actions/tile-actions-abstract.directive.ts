@@ -9,12 +9,6 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
-  @Input() isLoading: boolean;
-  @Input() user: User;
-  @Input() order: number;
-  @Input() type: TileTypes;
-  @Input() size: { columns: number, rows: number };
-
   protected analytics = inject(Analytics);
 
   constructor(protected userService: AppUserService) {

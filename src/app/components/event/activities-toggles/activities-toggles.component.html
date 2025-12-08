@@ -1,12 +1,13 @@
 <mat-card class="mat-elevation-z0" style="padding-top: 0; padding-bottom: 0;">
   <section [class.flex]="event.getActivities().length > 3">
-    <app-activity-toggle  [class.flex-header]="event.getActivities().length > 3"
-      *ngFor="let activity of event.getActivities()"
-      [event]="event"
-      [user]="user"
-      [isOwner]="isOwner"
-      [showActions]="true"
-      [activity]="activity">
-    </app-activity-toggle>
+    @for (activity of event.getActivities(); track activity) {
+      <app-activity-toggle  [class.flex-header]="event.getActivities().length > 3"
+        [event]="event"
+        [user]="user"
+        [isOwner]="isOwner"
+        [showActions]="true"
+        [activity]="activity">
+      </app-activity-toggle>
+    }
   </section>
 </mat-card>

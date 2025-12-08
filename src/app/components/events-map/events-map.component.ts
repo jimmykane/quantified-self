@@ -40,7 +40,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   @Input() theme: MapThemes;
   @Input() type: MapTypes;
   @Input() user: User;
-  @Input() isLoading: boolean;
   @Input() showHeatMap: boolean;
   @Input() clusterMarkers: boolean;
 

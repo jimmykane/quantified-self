@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
+import { logEvent } from '@angular/fire/analytics';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { environment } from '../../../../environments/environment';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
@@ -8,10 +9,10 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 
 
 @Component({
-    selector: 'app-services-suunto',
-    templateUrl: './services.suunto.component.html',
-    styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
-    standalone: false
+  selector: 'app-services-suunto',
+  templateUrl: './services.suunto.component.html',
+  styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
+  standalone: false
 })
 export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit {
   public suuntoAppLinkFormGroup: UntypedFormGroup;
@@ -71,11 +72,11 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
       const result = await this.http.get(
         environment.functions.stWorkoutDownloadAsFit, {
-          params: {
-            activityID: activityID
-          },
-          responseType: 'arraybuffer',
-        }).toPromise();
+        params: {
+          activityID: activityID
+        },
+        responseType: 'arraybuffer',
+      }).toPromise();
 
       if (!shouldImportAndOpen) {
         this.fileService.downloadFile(new Blob([new Uint8Array(result)]), activityID, 'fit');
@@ -83,11 +84,11 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         this.snackBar.open('Activity download started', null, {
           duration: 2000,
         });
-        this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
+        logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.SuuntoApp });
       } else {
         const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
         await this.eventService.writeAllEventData(this.user, newEvent);
-        this.afa.logEvent('imported_fit_file', {method: ServiceNames.SuuntoApp});
+        logEvent(this.analytics, 'imported_fit_file', { method: ServiceNames.SuuntoApp });
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }
     } catch (e) {
@@ -104,7 +105,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }

@@ -58,7 +58,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   @Input() events: EventInterface[];
   @Input() targetUser: User;
   @Input() showActions: boolean;
-  @Input() isLoading: boolean;
   @ViewChild(MatSort, { static: true }) sort: MatSort;
   @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
   @ViewChild(MatCard, { static: true }) table: MatCard;

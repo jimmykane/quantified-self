@@ -20,11 +20,11 @@ import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import * as moment from 'moment';
 
 @Component({
-    selector: 'app-event-search',
-    templateUrl: './event-search.component.html',
-    styleUrls: ['./event-search.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-search',
+  templateUrl: './event-search.component.html',
+  styleUrls: ['./event-search.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventSearchComponent extends LoadingAbstractDirective implements OnChanges, OnInit {
@@ -33,7 +33,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() selectedEndDate: Date;
   @Input() startOfTheWeek: DaysOfTheWeek;
   @Input() selectedActivityTypes: ActivityTypes[];
-  @Input() isLoading: boolean;
   @Input() showDatePicker = true;
   @Input() showActivityTypePicker = true;
   @Input() dateRangesToShow: DateRanges[] = [
@@ -102,11 +101,11 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
     let startDate: Date = this.searchFormGroup.get('startDate').value;
     let endDate: Date = this.searchFormGroup.get('endDate').value;
-    if (this.searchFormGroup.get('startDate').value instanceof moment) {
+    if (moment.isMoment(this.searchFormGroup.get('startDate').value)) {
       startDate = this.searchFormGroup.get('startDate').value.toDate();
     }
 
-    if (this.searchFormGroup.get('endDate').value instanceof moment) {
+    if (moment.isMoment(this.searchFormGroup.get('endDate').value)) {
       endDate = this.searchFormGroup.get('endDate').value.toDate();
     }
 

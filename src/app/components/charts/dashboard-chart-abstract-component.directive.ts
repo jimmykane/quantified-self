@@ -1,13 +1,13 @@
-import {ChartAbstractDirective} from './chart-abstract.directive';
-import {AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges} from '@angular/core';
+import { ChartAbstractDirective } from './chart-abstract.directive';
+import { AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges } from '@angular/core';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {SummariesChartDataInterface} from '../summaries/summaries.component';
+import { SummariesChartDataInterface } from '../summaries/summaries.component';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes, TimeIntervals
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
 import * as am4core from '@amcharts/amcharts4/core';
 
 @Directive()
@@ -17,7 +17,6 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
   @Input() chartDataValueType?: ChartDataValueTypes;
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
-  @Input() isLoading: boolean;
 
   protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
     super(zone, changeDetector);

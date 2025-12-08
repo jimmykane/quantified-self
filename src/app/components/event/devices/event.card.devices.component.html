@@ -9,7 +9,7 @@
           Connected devices info
         </mat-panel-description>
       </mat-expansion-panel-header>
-      <ng-container *ngFor="let activity of selectedActivities">
+      @for (activity of selectedActivities; track activity) {
         <app-activity-toggle
           [event]="event"
           [showToggle]="false"
@@ -17,16 +17,22 @@
           [showStats]="false"
           [activity]="activity">
         </app-activity-toggle>
-        <mat-divider *ngIf="selectedActivities.length > 1" [inset]="true"></mat-divider>
-        <mat-table *ngIf="getData(activity).data.length" [dataSource]="getData(activity)">
-          <ng-container *ngFor="let column of getColumns(activity)" [matColumnDef]="column">
-            <mat-header-cell *matHeaderCellDef><app-data-type-icon [dataType]="column"></app-data-type-icon></mat-header-cell>
-            <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
-          </ng-container>
-          <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
-          <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
-        </mat-table>
-      </ng-container>
+        @if (selectedActivities.length > 1) {
+          <mat-divider [inset]="true"></mat-divider>
+        }
+        @if (getData(activity).data.length) {
+          <mat-table [dataSource]="getData(activity)">
+            @for (column of getColumns(activity); track column) {
+              <ng-container [matColumnDef]="column">
+                <mat-header-cell *matHeaderCellDef><app-data-type-icon [dataType]="column"></app-data-type-icon></mat-header-cell>
+                <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+              </ng-container>
+            }
+            <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
+            <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+          </mat-table>
+        }
+      }
     </mat-expansion-panel>
   </mat-accordion>
 </mat-card>
