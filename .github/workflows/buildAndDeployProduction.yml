@@ -1,41 +1,29 @@
-
 name: PRODUCTION Build and Deploy
 
 on:
   release:
     types: [published]
 
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [12.18.4]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - name: Cache node modules
-        uses: actions/cache@v1
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
-        with:
-          node-version: ${{ matrix.node-version }}
-
-      - name: Get lisences
+      - name: Get licenses
         run: |
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Flicenses.json?alt=media&token=470a21d4-571d-432d-a6f6-95df7a24de33" --create-dirs -o licenses.json
 
-      - name: npm test and npm run build
+      - name: Install, test and build
         run: |
-          yarn install
+          npm ci
           npm run test
           npm run build-production
 
