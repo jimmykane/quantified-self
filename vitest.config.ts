@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import angular from '@analogjs/vite-plugin-angular';
+import { resolve } from 'path';
 
 export default defineConfig({
     plugins: [angular({
@@ -11,5 +12,5 @@ export default defineConfig({
         setupFiles: ['src/test-setup.ts'],
         include: ['**/*.spec.ts'],
         reporters: ['default'],
-    },
+    }
 });

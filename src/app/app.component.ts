@@ -262,6 +262,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   ngOnDestroy(): void {
     this.routerEventSubscription.unsubscribe();
-    this.actionButtonsSubscription.unsubscribe();
+    if (this.actionButtonsSubscription) {
+      this.actionButtonsSubscription.unsubscribe();
+    }
   }
 }
