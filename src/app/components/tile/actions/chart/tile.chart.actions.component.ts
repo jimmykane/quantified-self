@@ -1,6 +1,6 @@
 import { Component, Input, OnInit } from '@angular/core';
 import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data-aerobic-training-effect';
 import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
 import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
@@ -118,7 +118,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
         DataFeeling.type,
         DataRPE.type,
         DataVO2Max.type,
-        DataTotalTrainingEffect.type,
+        DataAerobicTrainingEffect.type,
         DataPeakEPOC.type,
         DataRecoveryTime.type
       ]

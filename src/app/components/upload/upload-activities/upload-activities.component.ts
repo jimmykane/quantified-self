@@ -50,7 +50,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
               newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
             }
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'sml') {
-            newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult, 'application/xml');
+            newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult);
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'tcx') {
             newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'gpx') {

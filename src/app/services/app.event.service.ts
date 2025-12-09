@@ -47,6 +47,7 @@ export class AppEventService implements OnDestroy {
       if (error && error.code && error.code === 'permission-denied') {
         return of([null, null])
       }
+      console.error('Error fetching event or activities:', error);
       Sentry.captureException(error);
 
       return of([null, null]) // @todo fix this
@@ -59,6 +60,7 @@ export class AppEventService implements OnDestroy {
       return event;
     })).pipe(catchError((error) => {
       // debugger;
+      console.error('Error adding activities to event:', error);
       Sentry.captureException(error);
 
       return of(null); // @todo is this the best we can do?
@@ -113,7 +115,20 @@ export class AppEventService implements OnDestroy {
     return (collectionData(activitiesCollection, { idField: 'id' }) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
-          activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot).setID(activitySnapshot.id));
+          try {
+            // Ensure required properties exist for sports-lib 6.x compatibility
+            const safeActivityData = {
+              ...activitySnapshot,
+              stats: activitySnapshot.stats || {},
+              laps: activitySnapshot.laps || [],
+              streams: activitySnapshot.streams || [],
+              intensityZones: activitySnapshot.intensityZones || [],
+              events: activitySnapshot.events || []
+            };
+            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>safeActivityData).setID(activitySnapshot.id));
+          } catch (e) {
+            console.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
+          }
           return activitiesArray;
         }, []);
       }),
@@ -175,30 +190,34 @@ export class AppEventService implements OnDestroy {
     // createId replacement: use a random doc ref
     const newEventId = event.getID() || doc(collection(this.firestore, 'users', user.uid, 'events')).id;
     event.setID(newEventId);
-
-    event.getActivities()
-      .forEach((activity) => {
+    // We want to debug that so instrad of promise all do a for loop or something with more controll to figure out what promise fails
+    try {
+      for (const activity of event.getActivities()) {
         const newActivityId = activity.getID() || doc(collection(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities')).id;
         activity.setID(newActivityId);
 
-        writePromises.push(
-          setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID()), activity.toJSON())
-        );
+        const activityJSON = activity.toJSON();
+        delete activityJSON.streams;
 
-        activity.getAllExportableStreams().forEach((stream) => {
-          writePromises.push(
-            setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID(), 'streams', stream.type), StreamEncoder.compressStream(stream.toJSON()))
-          );
-        });
-      });
-    try {
-      await Promise.all(writePromises);
-      return setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), event.toJSON());
-    } catch (e) {
 
+        await setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID()), activityJSON);
+
+        for (const stream of activity.getAllExportableStreams()) {
+          try {
+            await setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID(), 'streams', stream.type), StreamEncoder.compressStream(stream.toJSON()));
+          } catch (e: any) {
+            throw new Error(`Failed to write stream ${stream.type}: ${e.message}`);
+          }
+        }
+      }
+      const eventJSON = event.toJSON()
+      delete eventJSON.activities;
+      await setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), eventJSON);
+    } catch (e: any) {
+      console.error(e)
       // Try to delete the parent entity and all subdata
       await this.deleteAllEventData(user, event.getID());
-      throw new Error('Could not parse event');
+      throw new Error('Could not parse event' + e.message);
     }
   }
 

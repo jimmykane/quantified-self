@@ -81,7 +81,7 @@ import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-ma
 import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.peak-training-effect';
 import { DataEPOC } from '@sports-alliance/sports-lib/lib/data/data.epoc';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data-aerobic-training-effect';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
 
@@ -320,7 +320,7 @@ export class AppUserService implements OnDestroy {
       DataPowerAvg.type,
       // DataPowerMax.type,
       DataVO2Max.type,
-      DataTotalTrainingEffect.type,
+      DataAerobicTrainingEffect.type,
       DataRecoveryTime.type,
       DataPeakEPOC.type,
       DataDeviceNames.type,
