@@ -34,7 +34,7 @@ import {
 import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import { MatDialog } from '@angular/material/dialog';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import * as equal from 'fast-deep-equal';
+import equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
 import * as weeknumber from 'weeknumber'
 import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
@@ -44,13 +44,13 @@ import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-z
   templateUrl: './summaries.component.html',
   styleUrls: ['./summaries.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() showActions: boolean;
-  @Input() isLoading: boolean;
 
   public rowHeight;
   public numberOfCols: number;
@@ -67,12 +67,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
 
   constructor(private router: Router,
-              private authService: AppAuthService,
-              private eventService: AppEventService,
-              private themeService: AppThemeService,
-              private snackBar: MatSnackBar,
-              private dialog: MatDialog,
-              changeDetector: ChangeDetectorRef,
+    private authService: AppAuthService,
+    private eventService: AppEventService,
+    private themeService: AppThemeService,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog,
+    changeDetector: ChangeDetectorRef,
   ) {
     super(changeDetector);
     this.rowHeight = this.getRowHeight();
@@ -326,11 +326,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const key = this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, timeInterval)
       const summariesChartDataInterface = valueByTypeMap.get(this.getEventCategoryKey(event, events, categoryType, timeInterval))
         || {
-          [key]: null,
-          [`${key}-Count`]: 0,
-          [valueType]: null,
-          count: 0
-        };
+        [key]: null,
+        [`${key}-Count`]: 0,
+        [valueType]: null,
+        count: 0
+      };
       // Bump em up
       summariesChartDataInterface.count++;
       // additional check here and bump up intentionaly
@@ -410,7 +410,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private convertToCategories(valueByType: Map<string | number, { [type: string]: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
-      data.push({...{time: type, type: type, ...item}});
+      data.push({ ...{ time: type, type: type, ...item } });
     });
     return data // @todo ?
     //   .filter(dataItem => isNumber(dataItem.value))

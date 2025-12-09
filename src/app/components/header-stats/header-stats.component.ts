@@ -4,10 +4,11 @@ import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/s
 import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 
 @Component({
-  selector: 'app-header-stats',
-  templateUrl: './header-stats.component.html',
-  styleUrls: ['./header-stats.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-header-stats',
+    templateUrl: './header-stats.component.html',
+    styleUrls: ['./header-stats.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class HeaderStatsComponent implements OnChanges {
   @Input() statsToShow: string[];

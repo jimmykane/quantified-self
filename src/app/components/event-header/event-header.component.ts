@@ -10,10 +10,11 @@ import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib/lib/data/da
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
 
 @Component({
-  selector: 'app-event-header',
-  templateUrl: './event-header.component.html',
-  styleUrls: ['./event-header.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-header',
+    templateUrl: './event-header.component.html',
+    styleUrls: ['./event-header.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventHeaderComponent implements OnChanges {

@@ -2,12 +2,13 @@ import {Component, Input, OnInit} from '@angular/core';
 import { rowsAnimation } from '../../animations/animations';
 
 @Component({
-  selector: 'app-shade',
-  templateUrl: './shade.component.html',
-  styleUrls: ['./shade.component.css'],
-  animations: [
-    rowsAnimation,
-  ],
+    selector: 'app-shade',
+    templateUrl: './shade.component.html',
+    styleUrls: ['./shade.component.css'],
+    animations: [
+        rowsAnimation,
+    ],
+    standalone: false
 })
 
 export class ShadeComponent {

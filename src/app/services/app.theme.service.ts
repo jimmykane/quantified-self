@@ -1,10 +1,10 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import {AppUserService} from './app.user.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { AppUserService } from './app.user.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
 import { AppAuthService } from '../authentication/app.auth.service';
 
 
@@ -28,7 +28,7 @@ export class AppThemeService implements OnDestroy {
     this.appTheme.next(this.getAppThemeFromStorage());
     this.chartTheme.next(this.getChartThemeFromStorage());
     this.mapTheme.next(this.getMapThemeFromStorage());
-    this.userSubscription = this.authService.user.subscribe(user => {
+    this.userSubscription = this.authService.user$.subscribe(user => {
       this.user = user;
       if (this.user) {
         this.setAppTheme(this.user.settings.appSettings.theme)

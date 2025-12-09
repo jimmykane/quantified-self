@@ -1,15 +1,15 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit, inject } from '@angular/core';
+import { FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators } from '@angular/forms';
 import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../services/app.user.service';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {Router} from '@angular/router';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { Router } from '@angular/router';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 
 
@@ -18,6 +18,7 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/serv
   templateUrl: './user-agreement.form.component.html',
   styleUrls: ['./user-agreement.form.component.css'],
   providers: [],
+  standalone: false
 })
 
 
@@ -29,8 +30,9 @@ export class UserAgreementFormComponent implements OnInit {
     displayName: string;
   };
 
-  public userFormGroup: FormGroup;
+  public userFormGroup: UntypedFormGroup;
   private readonly signInMethod: string;
+  private analytics = inject(Analytics);
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -39,7 +41,6 @@ export class UserAgreementFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private afa: AngularFireAnalytics,
   ) {
     this.user = data.user; // Perhaps move to service?
     this.signInMethod = data.signInMethod;
@@ -49,20 +50,20 @@ export class UserAgreementFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.userFormGroup = new FormGroup({
-      acceptPrivacyPolicy: new FormControl(this.user.acceptedPrivacyPolicy, [
+    this.userFormGroup = new UntypedFormGroup({
+      acceptPrivacyPolicy: new UntypedFormControl(this.user.acceptedPrivacyPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDataPolicy: new FormControl(this.user.acceptedDataPolicy, [
+      acceptDataPolicy: new UntypedFormControl(this.user.acceptedDataPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptTrackingPolicy: new FormControl(this.user.acceptedTrackingPolicy, [
+      acceptTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDiagnosticsPolicy: new FormControl(this.user.acceptedDiagnosticsPolicy, [
+      acceptDiagnosticsPolicy: new UntypedFormControl(this.user.acceptedDiagnosticsPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
@@ -91,7 +92,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      this.afa.logEvent('sign_up', {method: this.signInMethod});
+      logEvent(this.analytics, 'sign_up', { method: this.signInMethod });
       await this.router.navigate(['dashboard']);
       this.snackBar.open(`Thanks for signing in ${dbUser.displayName || 'guest'}!`, null, {
         duration: 2000,
@@ -107,12 +108,12 @@ export class UserAgreementFormComponent implements OnInit {
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
-        control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      if (control instanceof UntypedFormControl) {
+        control.markAsTouched({ onlySelf: true });
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

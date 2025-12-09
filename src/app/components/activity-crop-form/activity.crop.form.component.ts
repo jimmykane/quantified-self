@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { AppEventService } from '../../services/app.event.service';
-import { FormBuilder, FormControl, FormGroup, ValidationErrors, ValidatorFn, Validators, } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn, Validators, } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
@@ -15,10 +15,11 @@ import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilit
 
 
 @Component({
-  selector: 'app-activity-form',
-  templateUrl: './activity.crop.form.component.html',
-  styleUrls: ['./activity.crop.form.component.css'],
-  providers: [],
+    selector: 'app-activity-form',
+    templateUrl: './activity.crop.form.component.html',
+    styleUrls: ['./activity.crop.form.component.css'],
+    providers: [],
+    standalone: false
 })
 
 
@@ -27,7 +28,7 @@ export class ActivityCropFormComponent implements OnInit {
   public event: EventInterface;
   public user: User;
   public activityTypesArray = ActivityTypesHelper.getActivityTypesAsUniqueArray();
-  public activityFormGroup: FormGroup;
+  public activityFormGroup: UntypedFormGroup;
   public isLoading: boolean;
 
 
@@ -36,7 +37,7 @@ export class ActivityCropFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: AppEventService,
     private snackBar: MatSnackBar,
-    private formBuilder: FormBuilder,
+    private formBuilder: UntypedFormBuilder,
   ) {
     this.activity = data.activity;
     this.event = data.event;
@@ -55,15 +56,15 @@ export class ActivityCropFormComponent implements OnInit {
     this.activity.clearStreams();
     this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
     // Now build the controls
-    this.activityFormGroup = new FormGroup({});
+    this.activityFormGroup = new UntypedFormGroup({});
 
     // Find the starting distance for this activity
-    this.activityFormGroup.addControl('startDistance', new FormControl(0, [
+    this.activityFormGroup.addControl('startDistance', new UntypedFormControl(0, [
       Validators.required,
       Validators.min(0),
       Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
     ]));
-    this.activityFormGroup.addControl('endDistance', new FormControl(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1], [
+    this.activityFormGroup.addControl('endDistance', new UntypedFormControl(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1], [
       Validators.required,
       Validators.min(0),
       Validators.max(this.activity.getSquashedStreamData(DataDistance.type)[this.activity.getSquashedStreamData(DataDistance.type).length - 1]),
@@ -112,12 +113,12 @@ export class ActivityCropFormComponent implements OnInit {
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });
@@ -135,7 +136,7 @@ export class ActivityCropFormComponent implements OnInit {
 }
 
 
-export const activityDistanceValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const activityDistanceValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
   const startDistance = control.get('startDistance');
   const endDistance = control.get('endDistance');
 
@@ -145,7 +146,7 @@ export const activityDistanceValidator: ValidatorFn = (control: FormGroup): Vali
   return null;
 };
 
-export const autocompleteSelectionValidator: ValidatorFn = (control: FormControl): ValidationErrors | null => {
+export const autocompleteSelectionValidator: ValidatorFn = (control: UntypedFormControl): ValidationErrors | null => {
   const selection: any = control.value;
   if (typeof selection === 'string') {
     return {requireMatch: true};

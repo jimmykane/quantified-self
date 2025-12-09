@@ -12,6 +12,7 @@ import { UserFormComponent } from '../user-forms/user.form.component';
   selector: 'app-user',
   templateUrl: './user.component.html',
   styleUrls: ['./user.component.css'],
+  standalone: false
 })
 export class UserComponent implements OnInit, OnDestroy {
 
@@ -19,15 +20,15 @@ export class UserComponent implements OnInit, OnDestroy {
   private userSubscription: Subscription;
 
   constructor(private authService: AppAuthService,
-              private route: ActivatedRoute,
-              private userService: AppUserService,
-              private router: Router,
-              private snackBar: MatSnackBar,
-              private dialog: MatDialog) {
+    private route: ActivatedRoute,
+    private userService: AppUserService,
+    private router: Router,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog) {
   }
 
   ngOnInit(): void {
-    this.userSubscription = this.authService.user.subscribe((user) => {
+    this.userSubscription = this.authService.user$.subscribe((user) => {
       if (!user) {
         this.router.navigate(['login']).then(() => {
           this.snackBar.open('You were signed out out')

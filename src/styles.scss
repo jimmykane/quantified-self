@@ -1,47 +1,28 @@
-@use '~@angular/material' as mat;
-// Plus imports for other components in your app.
+// Use prebuilt Angular Material theme
+@use '@angular/material/prebuilt-themes/indigo-pink.css';
 
-// Include the common styles for Angular Material. We include this here so that you only
-// have to load a single css file for Angular Material in your app.
-// **Be sure that you only ever include this mixin once!**
-$custom-typography: mat.define-typography-config(
-  $font-family: '"QSFont", Roboto, sans-serif;'
-  //$body-1:        mat-typography-level(14px, 20px, 400)
-);
-@include mat.core($custom-typography);
-// Define the default theme (same as the example above).
-$candy-app-primary: mat.define-palette(mat.$indigo-palette);
-$candy-app-accent: mat.define-palette(mat.$pink-palette, A200, A100, A400);
-$candy-app-theme: mat.define-light-theme($candy-app-primary, $candy-app-accent);
-
-// Include the default theme styles.
-@include mat.all-component-themes($candy-app-theme);
-
-
-// Define an alternate dark theme.
-$dark-primary: mat.define-palette(mat.$blue-palette);
-$dark-accent: mat.define-palette(mat.$pink-palette, A200, A100, A400);
-$dark-warn: mat.define-palette(mat.$deep-orange-palette);
-$dark-theme: mat.define-dark-theme($dark-primary, $dark-accent, $dark-warn);
-
-// Include the alternative theme styles inside of a block with a CSS class. You can make this
-// CSS class whatever you want. In this example, any component inside of an element with
-// `.dark-theme` will be affected by this alternate dark theme instead of the default theme.
+// Dark theme support via CSS class (basic colors override)
 .dark-theme {
-  @include mat.all-component-themes($dark-theme);
+  --mat-theme-surface: #303030;
+  --mat-theme-background: #303030;
+  --mat-theme-on-surface: #fff;
+  --mat-card-background-color: #424242;
+  background-color: #303030;
+  color: #fff;
 }
 
-.mat-header-cell{
-  color: black!important;
+.mat-header-cell {
+  color: black !important;
 }
-.dark-theme .mat-header-cell{
-  color: white!important;
+
+.dark-theme .mat-header-cell {
+  color: white !important;
 }
 
 @font-face {
   font-family: 'QSFont';
   src: url('/assets/fonts/proxima-nova-regular.woff2') format('woff2'),
-  url('/assets/fonts/proxima-nova-regular.woff') format('woff');
+    url('/assets/fonts/proxima-nova-regular.woff') format('woff');
   font-weight: normal;
   font-style: normal;
 }
@@ -65,6 +46,7 @@ body {
   0% {
     opacity: 0;
   }
+
   100% {
     opacity: 1;
   }
@@ -105,67 +87,95 @@ body {
   -webkit-animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
   animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
 }
+
 .sk-cube-grid .sk-cube1 {
   -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s; }
+  animation-delay: 0.2s;
+}
+
 .sk-cube-grid .sk-cube2 {
   -webkit-animation-delay: 0.3s;
-  animation-delay: 0.3s; }
+  animation-delay: 0.3s;
+}
+
 .sk-cube-grid .sk-cube3 {
   -webkit-animation-delay: 0.4s;
-  animation-delay: 0.4s; }
+  animation-delay: 0.4s;
+}
+
 .sk-cube-grid .sk-cube4 {
   -webkit-animation-delay: 0.1s;
-  animation-delay: 0.1s; }
+  animation-delay: 0.1s;
+}
+
 .sk-cube-grid .sk-cube5 {
   -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s; }
+  animation-delay: 0.2s;
+}
+
 .sk-cube-grid .sk-cube6 {
   -webkit-animation-delay: 0.3s;
-  animation-delay: 0.3s; }
+  animation-delay: 0.3s;
+}
+
 .sk-cube-grid .sk-cube7 {
   -webkit-animation-delay: 0s;
-  animation-delay: 0s; }
+  animation-delay: 0s;
+}
+
 .sk-cube-grid .sk-cube8 {
   -webkit-animation-delay: 0.1s;
-  animation-delay: 0.1s; }
+  animation-delay: 0.1s;
+}
+
 .sk-cube-grid .sk-cube9 {
   -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s; }
+  animation-delay: 0.2s;
+}
 
 @-webkit-keyframes sk-cubeGridScaleDelay {
-  0%, 70%, 100% {
+
+  0%,
+  70%,
+  100% {
     -webkit-transform: scale3D(1, 1, 1);
     transform: scale3D(1, 1, 1);
-  } 35% {
-      -webkit-transform: scale3D(0, 0, 1);
-      transform: scale3D(0, 0, 1);
-    }
+  }
+
+  35% {
+    -webkit-transform: scale3D(0, 0, 1);
+    transform: scale3D(0, 0, 1);
+  }
 }
 
 @keyframes sk-cubeGridScaleDelay {
-  0%, 70%, 100% {
+
+  0%,
+  70%,
+  100% {
     -webkit-transform: scale3D(1, 1, 1);
     transform: scale3D(1, 1, 1);
-  } 35% {
-      -webkit-transform: scale3D(0, 0, 1);
-      transform: scale3D(0, 0, 1);
-    }
+  }
+
+  35% {
+    -webkit-transform: scale3D(0, 0, 1);
+    transform: scale3D(0, 0, 1);
+  }
 }
 
 
-mat-icon.large-svg-icon{
-  padding-bottom: 2px!important;
-  padding-top: 2px!important;
-  width: 80px!important;
-  height: 36px!important;
-  font-size: 1em!important;
+mat-icon.large-svg-icon {
+  padding-bottom: 2px !important;
+  padding-top: 2px !important;
+  width: 80px !important;
+  height: 36px !important;
+  font-size: 1em !important;
 }
 
-mat-icon.large-svg-icon-coros{
-  padding-bottom: 2px!important;
-  height: 36px!important;
-  font-size: 1em!important;
+mat-icon.large-svg-icon-coros {
+  padding-bottom: 2px !important;
+  height: 36px !important;
+  font-size: 1em !important;
   padding-top: 10px !important;
   width: 100px !important;
 }
@@ -175,15 +185,14 @@ mat-icon.large-svg-icon-coros{
   background: #424242;
 }
 
-.white-theme section.component-container {
-}
+.white-theme section.component-container {}
 
 section.component-container {
   position: relative;
   background: white;
 }
 
-mat-card.component-container{
+mat-card.component-container {
   border-radius: 0;
 }
 
@@ -192,6 +201,6 @@ mat-card.component-container{
   opacity: 1 !important;
 }
 
-.avatar{
+.avatar {
   background-size: cover;
 }

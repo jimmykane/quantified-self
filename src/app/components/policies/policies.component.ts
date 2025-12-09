@@ -3,9 +3,10 @@ import {AppAuthService} from '../../authentication/app.auth.service';
 import {Router} from '@angular/router';
 
 @Component({
-  selector: 'app-policies',
-  templateUrl: './policies.component.html',
-  styleUrls: ['./policies.component.css'],
+    selector: 'app-policies',
+    templateUrl: './policies.component.html',
+    styleUrls: ['./policies.component.css'],
+    standalone: false
 })
 export class PoliciesComponent {
 

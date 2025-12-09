@@ -7,10 +7,10 @@ import {
   OnInit,
   ViewChild,
 } from '@angular/core';
-import {MatIconRegistry} from '@angular/material/icon';
-import {MatSidenav} from '@angular/material/sidenav';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {Subscription} from 'rxjs';
+import { MatIconRegistry } from '@angular/material/icon';
+import { MatSidenav } from '@angular/material/sidenav';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { Subscription } from 'rxjs';
 import {
   NavigationCancel,
   NavigationEnd,
@@ -19,14 +19,13 @@ import {
   Router, RouterEvent,
   RoutesRecognized
 } from '@angular/router';
-import {AppAuthService} from './authentication/app.auth.service';
-import {AppSideNavService} from './services/side-nav/app-side-nav.service';
-import {DomSanitizer, Title} from '@angular/platform-browser';
-import {slideInAnimation} from './animations/animations';
+import { AppAuthService } from './authentication/app.auth.service';
+import { AppSideNavService } from './services/side-nav/app-side-nav.service';
+import { DomSanitizer, Title } from '@angular/platform-browser';
+import { slideInAnimation } from './animations/animations';
 
 import * as firebase from 'firebase/app'
-import {AppWindowService} from './services/app.window.service';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { AppWindowService } from './services/app.window.service';
 
 declare function require(moduleName: string): any;
 
@@ -37,14 +36,17 @@ declare function require(moduleName: string): any;
   styleUrls: ['./app.component.scss'],
   animations: [slideInAnimation]
   // changeDetection: ChangeDetectionStrategy.OnPush,
+  ,
+  standalone: false
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
-  @ViewChild('sidenav', {static: true}) sideNav: MatSidenav;
+  @ViewChild('sidenav', { static: true }) sideNav: MatSidenav;
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
   public loading: boolean;
+  public authState: boolean | null = null;
 
   constructor(
     public authService: AppAuthService,
@@ -59,8 +61,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
+    this.authService.user$.subscribe(user => {
+      this.authState = !!user;
+    });
     this.sideNavService.setSidenav(this.sideNav);
-    this.routerEventSubscription = this.router.events.subscribe((event: RouterEvent) => {
+    this.routerEventSubscription = this.router.events.subscribe((event) => {
       switch (true) {
         case event instanceof RoutesRecognized:
           this.title = (<RoutesRecognized>event).state.root.firstChild.data['title'];

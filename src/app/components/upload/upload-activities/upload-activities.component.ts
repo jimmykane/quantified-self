@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { AppEventService } from '../../../services/app.event.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -9,7 +9,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapter
 import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
 import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
@@ -19,8 +19,10 @@ import { Overlay } from '@angular/cdk/overlay';
   selector: 'app-upload-activities',
   templateUrl: './upload-activities.component.html',
   styleUrls: ['../upload-abstract.css', './upload-activities.component.css'],
+  standalone: false
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective {
+  private analytics = inject(Analytics);
 
   constructor(
     protected snackBar: MatSnackBar,
@@ -28,13 +30,12 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected bottomSheet: MatBottomSheet,
     protected filesStatusService: AppFilesStatusService,
     protected overlay: Overlay,
-    private eventService: AppEventService,
-    private afa: AngularFireAnalytics) {
+    private eventService: AppEventService) {
     super(snackBar, dialog, filesStatusService)
   }
 
   processAndUploadFile(file): Promise<EventInterface> {
-    this.afa.logEvent('upload_file', {method: file.extension});
+    logEvent(this.analytics, 'upload_file', { method: file.extension });
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
@@ -49,7 +50,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
               newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
             }
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'sml') {
-            newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult, 'application/xml');
+            newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult);
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'tcx') {
             newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
           } else if ((typeof fileReaderResult === 'string') && file.extension === 'gpx') {
@@ -62,7 +63,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           }
           newEvent.name = file.filename;
         } catch (e) {
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', {duration: 2000});
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 2000 });
           reject(e); // no-op here!
           return;
         }

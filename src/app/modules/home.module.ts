@@ -7,18 +7,17 @@ import { HomeComponent } from '../components/home/home.component';
 import { HomeLiveChartComponent } from '../components/home/live-chart/home.live-chart.component';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    HomeRoutingModule,
-  ],
-  exports: [],
-  declarations: [
-    HomeComponent,
-    HomeLiveChartComponent,
-  ],
-  entryComponents: [],
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        HomeRoutingModule,
+    ],
+    exports: [],
+    declarations: [
+        HomeComponent,
+        HomeLiveChartComponent,
+    ]
 })
 
 

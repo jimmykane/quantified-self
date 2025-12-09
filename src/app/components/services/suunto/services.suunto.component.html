@@ -10,53 +10,60 @@
 
   <mat-tab-group [dynamicHeight]="true">
 
-    <mat-tab label="Sync" *ngIf='user && !isGuest' [disabled]="!user || isGuest">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Sync settings">sync</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle *ngIf="!isConnectedToService()">
-              Connect to Suunto app
-              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                info
-              </mat-icon>
-            </mat-card-subtitle>
-            <mat-card-subtitle *ngIf="isConnectedToService()">Connected</mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-
-          <mat-list *ngIf="isConnectedToService()">
-
-            <div mat-subheader>Accounts</div>
-
-            <mat-list-item style="text-align: left"
-                           *ngFor="let serviceToken of serviceTokens; let i = index;">
-              <mat-icon mat-list-icon (click)="clicks = clicks+1">account_circle</mat-icon>
-              <div mat-line>{{ serviceToken.userName }} </div>
-              <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
-            </mat-list-item>
-          </mat-list>
-
-          <button mat-stroked-button
-                  class="big"
-                  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                  *ngIf="!isConnectedToService() || clicks > 10"
-                  (click)="connectWithService($event)">Connect
-          </button>
-
-          <button class="big"
-                  mat-flat-button color="warn"
-                  *ngIf="isConnectedToService()"
-                  (click)="deauthorizeService($event)">Diconnect
-          </button>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
+    @if (user && !isGuest) {
+      <mat-tab label="Sync" [disabled]="!user || isGuest">
+        <ng-template matTabLabel>
+          <mat-icon matTooltip="Sync settings">sync</mat-icon>
+        </ng-template>
+        <ng-template matTabContent>
+          <mat-card class="mat-elevation-z0">
+            <mat-card-header>
+              @if (!isConnectedToService()) {
+                <mat-card-subtitle>
+                  Connect to Suunto app
+                  <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+                    info
+                  </mat-icon>
+                </mat-card-subtitle>
+              }
+              @if (isConnectedToService()) {
+                <mat-card-subtitle>Connected</mat-card-subtitle>
+              }
+            </mat-card-header>
+            <mat-divider></mat-divider>
+            @if (isConnectedToService()) {
+              <mat-list>
+                <div mat-subheader>Accounts</div>
+                @for (serviceToken of serviceTokens; track serviceToken; let i = $index) {
+                  <mat-list-item style="text-align: left"
+                    >
+                    <mat-icon mat-list-icon (click)="clicks = clicks+1">account_circle</mat-icon>
+                    <div mat-line>{{ serviceToken.userName }} </div>
+                    <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
+                  </mat-list-item>
+                }
+              </mat-list>
+            }
+            @if (!isConnectedToService() || clicks > 10) {
+              <button mat-stroked-button
+                class="big"
+                mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+                (click)="connectWithService($event)">Connect
+              </button>
+            }
+            @if (isConnectedToService()) {
+              <button class="big"
+                mat-flat-button color="warn"
+                (click)="deauthorizeService($event)">Diconnect
+              </button>
+            }
+          </mat-card>
+        </ng-template>
+      </mat-tab>
+    }
 
     <mat-tab label="History import"
-             [disabled]="!isConnectedToService()">
+      [disabled]="!isConnectedToService()">
       <ng-template matTabLabel>
         <mat-icon matTooltip="History import">history</mat-icon>
       </ng-template>
@@ -87,23 +94,27 @@
           </mat-card-header>
           <mat-divider></mat-divider>
           <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()"
-                autocomplete="off">
+            autocomplete="off">
             <mat-form-field>
               <label>
                 <input matInput placeholder="Link" formControlName="input">
               </label>
               <mat-hint>Paste a Suunto app link that is public</mat-hint>
-              <mat-error *ngIf="hasError('input')">
-                This cannot be empty
-              </mat-error>
+              @if (hasError('input')) {
+                <mat-error>
+                  This cannot be empty
+                </mat-error>
+              }
             </mat-form-field>
             <section>
               <button class="big" mat-flat-button color="primary" (click)="onSubmit()">
                 Download
               </button>
-              <button *ngIf="user" class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
-                Import
-              </button>
+              @if (user) {
+                <button class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
+                  Import
+                </button>
+              }
             </section>
           </form>
         </mat-card>
@@ -143,10 +154,12 @@
                 info
               </mat-icon>
             </mat-card-subtitle>
-            <mat-card-subtitle
-              *ngIf="serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 3">
-              {{serviceMeta.uploadedRoutesCount}} routes uploaded
-            </mat-card-subtitle>
+            @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 3) {
+              <mat-card-subtitle
+                >
+                {{serviceMeta.uploadedRoutesCount}} routes uploaded
+              </mat-card-subtitle>
+            }
           </mat-card-header>
           <mat-divider></mat-divider>
           <app-upload-route-to-service [user]="user"></app-upload-route-to-service>

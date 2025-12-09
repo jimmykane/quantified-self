@@ -1,33 +1,38 @@
-<mat-progress-bar
-  *ngIf="loading" color="primary" mode="query">
-</mat-progress-bar>
-<nav mat-tab-nav-bar class="mat-app-background mat-typography">
+@if (loading) {
+  <mat-progress-bar color="primary" mode="query">
+  </mat-progress-bar>
+}
+<nav mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-app-background mat-typography">
   <a matTabLink (click)="sidenav.toggle()">
     <mat-icon class="larger_icon">menu</mat-icon>
   </a>
 
   <span class="fill-space"></span>
 
-  <button mat-flat-button class="right" color="accent"
-          *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
-          disabled>
-    Loading
-  </button>
-  <button mat-flat-button class="right" color="accent"
-          *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
-          (click)="router.navigate(['/dashboard']);">
-    My dashboard
-  </button>
-  <button mat-flat-button class="right" color="accent"
-          *ngIf="authService.authenticated() === false && title && title !== 'Login'"
-          (click)="router.navigate(['/login']);">
-    Login or Register
-  </button>
+  @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
+    <button mat-flat-button class="right" color="accent"
+      disabled>
+      Loading
+    </button>
+  }
+  @if (authState === true && title && title !== 'Dashboard') {
+    <button mat-flat-button class="right" color="accent"
+      (click)="router.navigate(['/dashboard']);">
+      My dashboard
+    </button>
+  }
+  @if (authState === false && title && title !== 'Login') {
+    <button mat-flat-button class="right" color="accent"
+      (click)="router.navigate(['/login']);">
+      Login or Register
+    </button>
+  }
 
-  <app-upload-activities class="right"
-                         *ngIf="title && title === 'Dashboard' && authService.user | async as user"
-                         [user]="user">
-  </app-upload-activities>
+  @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+    <app-upload-activities class="right"
+      [user]="user">
+    </app-upload-activities>
+  }
 
 </nav>
 
@@ -40,10 +45,12 @@
 
   <!--<mat-card>-->
   <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
-  <!--</mat-card>-->
-<!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
-<!--        && routerOutlet.activatedRouteData['animation']">-->
+<!--</mat-card>-->
+  <!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
+  <!--        && routerOutlet.activatedRouteData['animation']">-->
+  <mat-tab-nav-panel #tabPanel>
     <router-outlet #routerOutlet="outlet"></router-outlet>
-<!--  </div>-->
+  </mat-tab-nav-panel>
+  <!--  </div>-->
 
 </mat-sidenav-container>

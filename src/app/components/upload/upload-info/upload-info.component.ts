@@ -9,9 +9,10 @@ import { Subscription } from 'rxjs';
  * until the activity has finished being processed
  */
 @Component({
-  selector: 'app-upload-info',
-  templateUrl: './upload-info.component.html',
-  styleUrls: ['./upload-info.component.css']
+    selector: 'app-upload-info',
+    templateUrl: './upload-info.component.html',
+    styleUrls: ['./upload-info.component.css'],
+    standalone: false
 })
 export class UploadInfoComponent implements OnInit, OnDestroy {
 

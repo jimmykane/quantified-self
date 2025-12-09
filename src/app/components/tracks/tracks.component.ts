@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import * as L from 'leaflet';
@@ -15,7 +15,6 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { Subject, Subscription } from 'rxjs';
 import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
 import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
-import { AngularFireStorage } from '@angular/fire/compat/storage';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
@@ -24,19 +23,18 @@ import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-allianc
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { AppUserService } from '../../services/app.user.service';
-import firebase from 'firebase/compat/app';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { WhereFilterOp } from 'firebase/firestore';
 
 @Component({
   selector: 'app-tracks',
   templateUrl: './tracks.component.html',
   styleUrls: ['./tracks.component.css'],
-  // changeDetection: ChangeDetectionStrategy.OnPush // @todo consider this for performance
+  standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {
-  @ViewChild('mapDiv', {static: true}) mapDiv: ElementRef;
+  @ViewChild('mapDiv', { static: true }) mapDiv: ElementRef;
 
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
@@ -60,6 +58,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private eventsSubscription: Subscription;
 
   private promiseTime: number;
+  private analytics = inject(Analytics);
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -71,7 +70,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     private fileService: AppFileService,
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
-    private afa: AngularFireAnalytics,
     private userService: AppUserService,
     private snackBar: MatSnackBar) {
   }
@@ -79,18 +77,18 @@ export class TracksComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.map = this.initMap()
     this.centerMapToStartingLocation(this.map);
-    this.user = await this.authService.user.pipe(take(1)).toPromise();
+    this.user = await this.authService.user$.pipe(take(1)).toPromise();
     await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
   }
 
   public async search(event) {
     this.unsubscribeFromAll();
     this.user.settings.myTracksSettings.dateRange = event.dateRange;
-    await this.userService.updateUserProperties(this.user, {settings: this.user.settings});
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
     this.clearAllPolylines();
     this.centerMapToStartingLocation(this.map)
     await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
-    this.afa.logEvent('my_tracks_search', {method: DateRanges[event.dateRange]});
+    logEvent(this.analytics, 'my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 
   public ngOnDestroy() {
@@ -275,7 +273,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       map.getContainer().focus = () => {
       } // Fix fullscreen switch
 
-      const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0], {detectRetina: true})
+      const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0], { detectRetina: true })
       tiles.addTo(map);
       // L.easyButton({
       //   type: 'animate',
@@ -421,7 +419,7 @@ export function screenshot(map, format) {
 
       const xml = (new XMLSerializer()).serializeToString(svg);
 
-      const blob = new Blob([xml], {type: 'application/octet-stream'});
+      const blob = new Blob([xml], { type: 'application/octet-stream' });
       this.fileService.downloadFile(blob, 'should add dateranges svg', 'svg')
     }
   });

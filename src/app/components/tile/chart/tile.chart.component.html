@@ -1,77 +1,86 @@
 <section>
-  <app-tile-chart-actions class="actions" *ngIf="showActions"
-    [user]="user"
-    [chartType]="chartType"
-    [order]="order"
-    [size]="size"
-    [type]="type"
-    [chartDataType]="dataType"
-    [chartDataCategoryType]="dataCategoryType"
-    [chartTimeInterval]="dataTimeInterval"
-    [chartDataValueType]="dataValueType">
-  </app-tile-chart-actions>
-  <app-pie-chart *ngIf="chartType === chartTypes.Pie"
-                 [isLoading]="isLoading"
-                 [data]="data"
-                 [chartTheme]="chartTheme"
-                 [chartDataType]="dataType"
-                 [chartDataValueType]="dataValueType"
-                 [chartDataCategoryType]="dataCategoryType"
-                 [chartDataTimeInterval]="dataTimeInterval">
-  </app-pie-chart>
-  <app-xy-chart
-    *ngIf="chartType === chartTypes.LinesHorizontal
-        || chartType === chartTypes.LinesVertical"
-    [isLoading]="isLoading"
-    [data]="data"
-    [chartTheme]="chartTheme"
-    [chartDataType]="dataType"
-    [chartDataValueType]="dataValueType"
-    [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
-  </app-xy-chart>
-  <app-columns-chart
-    *ngIf="chartType === chartTypes.ColumnsHorizontal
-        || chartType === chartTypes.ColumnsVertical
-        || chartType === chartTypes.PyramidsVertical"
-    [isLoading]="isLoading"
-    [data]="data"
-    [chartTheme]="chartTheme"
+  @if (showActions) {
+    <app-tile-chart-actions class="actions"
+      [user]="user"
+      [chartType]="chartType"
+      [order]="order"
+      [size]="size"
+      [type]="type"
+      [chartDataType]="dataType"
+      [chartDataCategoryType]="dataCategoryType"
+      [chartTimeInterval]="dataTimeInterval"
+      [chartDataValueType]="dataValueType">
+    </app-tile-chart-actions>
+  }
+  @if (chartType === chartTypes.Pie) {
+    <app-pie-chart
+      [isLoading]="isLoading"
+      [data]="data"
+      [chartTheme]="chartTheme"
+      [chartDataType]="dataType"
+      [chartDataValueType]="dataValueType"
+      [chartDataCategoryType]="dataCategoryType"
+      [chartDataTimeInterval]="dataTimeInterval">
+    </app-pie-chart>
+  }
+  @if (chartType === chartTypes.LinesHorizontal
+    || chartType === chartTypes.LinesVertical) {
+    <app-xy-chart
+      [isLoading]="isLoading"
+      [data]="data"
+      [chartTheme]="chartTheme"
+      [chartDataType]="dataType"
+      [chartDataValueType]="dataValueType"
+      [chartDataCategoryType]="dataCategoryType"
+      [chartDataTimeInterval]="dataTimeInterval">
+    </app-xy-chart>
+  }
+  @if (chartType === chartTypes.ColumnsHorizontal
+    || chartType === chartTypes.ColumnsVertical
+    || chartType === chartTypes.PyramidsVertical) {
+    <app-columns-chart
+      [isLoading]="isLoading"
+      [data]="data"
+      [chartTheme]="chartTheme"
     [type]="(chartType === chartTypes.ColumnsVertical || chartType === chartTypes.ColumnsHorizontal)
       ? 'columns'
       : 'pyramids'"
-    [vertical]="chartType === chartTypes.PyramidsVertical|| chartType === chartTypes.ColumnsVertical"
-    [chartDataType]="dataType"
-    [chartDataValueType]="dataValueType"
-    [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
-  </app-columns-chart>
-  <app-timeline-chart
-    *ngIf="chartType === chartTypes.Spiral"
-    [isLoading]="isLoading"
-    [data]="data"
-    [chartTheme]="chartTheme"
-    [chartDataType]="dataType"
-    [chartDataValueType]="dataValueType"
-    [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
-  </app-timeline-chart>
-  <app-brian-devine-chart *ngIf="chartType === chartTypes.BrianDevine"
-                          [isLoading]="isLoading"
-                          [data]="data"
-                          [chartTheme]="chartTheme"
-                          [chartDataType]="dataType"
-                          [chartDataValueType]="dataValueType"
-                          [chartDataTimeInterval]="dataTimeInterval">
-  </app-brian-devine-chart>
-  <app-intensity-zones-chart
-    *ngIf="chartType === chartTypes.IntensityZones"
-    [isLoading]="isLoading"
-    [data]="data"
-    [chartTheme]="chartTheme"
-    [chartDataType]="dataType"
-    [chartDataValueType]="dataValueType"
-    [chartDataCategoryType]="dataCategoryType"
-    [chartDataTimeInterval]="dataTimeInterval">
-  </app-intensity-zones-chart>
+      [chartDataType]="dataType"
+      [chartDataValueType]="dataValueType"
+      [chartDataCategoryType]="dataCategoryType"
+      [chartDataTimeInterval]="dataTimeInterval">
+    </app-columns-chart>
+  }
+  @if (chartType === chartTypes.Spiral) {
+    <app-timeline-chart
+      [isLoading]="isLoading"
+      [data]="data"
+      [chartTheme]="chartTheme"
+      [chartDataType]="dataType"
+      [chartDataValueType]="dataValueType"
+      [chartDataCategoryType]="dataCategoryType"
+      [chartDataTimeInterval]="dataTimeInterval">
+    </app-timeline-chart>
+  }
+  @if (chartType === chartTypes.BrianDevine) {
+    <app-brian-devine-chart
+      [isLoading]="isLoading"
+      [data]="data"
+      [chartTheme]="chartTheme"
+      [chartDataType]="dataType"
+      [chartDataValueType]="dataValueType"
+      [chartDataTimeInterval]="dataTimeInterval">
+    </app-brian-devine-chart>
+  }
+  @if (chartType === chartTypes.IntensityZones) {
+    <app-intensity-zones-chart
+      [isLoading]="isLoading"
+      [data]="data"
+      [chartTheme]="chartTheme"
+      [chartDataType]="dataType"
+      [chartDataValueType]="dataValueType"
+      [chartDataCategoryType]="dataCategoryType"
+      [chartDataTimeInterval]="dataTimeInterval">
+    </app-intensity-zones-chart>
+  }
 </section>

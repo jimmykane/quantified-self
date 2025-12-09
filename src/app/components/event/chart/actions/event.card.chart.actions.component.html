@@ -7,9 +7,9 @@
         (change)="somethingChanged($event)"
         (click)="$event.stopPropagation();"
         [(ngModel)]="stackYAxes">
-      <span [matTooltip]="user ? 'Show charts on top of each other' : 'You need to sign in to user this feature'">
-        Stack Y Axes
-      </span>
+        <span [matTooltip]="user ? 'Show charts on top of each other' : 'You need to sign in to user this feature'">
+          Stack Y Axes
+        </span>
       </mat-slide-toggle>
     </section>
 
@@ -20,9 +20,9 @@
         (change)="somethingChanged($event)"
         (click)="$event.stopPropagation();"
         [(ngModel)]="showLaps">
-      <span [matTooltip]="user ? 'When enabled auto lap markers will be added to the chart' :  'You need to sign in to user this feature'">
-        Show laps
-      </span>
+        <span [matTooltip]="user ? 'When enabled auto lap markers will be added to the chart' :  'You need to sign in to user this feature'">
+          Show laps
+        </span>
       </mat-slide-toggle>
     </section>
 
@@ -33,9 +33,9 @@
         (change)="somethingChanged($event)"
         (click)="$event.stopPropagation();"
         [(ngModel)]="showAllData">
-      <span [matTooltip]="user ? 'Show everything that was read from the file' :  'You need to sign in to user this feature'">
-        Show all data
-      </span>
+        <span [matTooltip]="user ? 'Show everything that was read from the file' :  'You need to sign in to user this feature'">
+          Show all data
+        </span>
       </mat-slide-toggle>
     </section>
   </section>
@@ -48,9 +48,11 @@
         placeholder="X Axis type"
         [(value)]="xAxisType"
         (selectionChange)="somethingChanged($event)">
-        <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
-          {{xAxisType.key}}
-        </mat-option>
+        @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
+          <mat-option [value]="xAxisType.value">
+            {{xAxisType.key}}
+          </mat-option>
+        }
       </mat-select>
     </mat-form-field>
   </section>

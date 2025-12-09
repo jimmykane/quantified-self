@@ -10,22 +10,19 @@ import {PhoneFormComponent} from '../components/login/phone-form/phone.form.comp
 
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    LoginRoutingModule
-  ],
-  exports: [
-  ],
-  declarations: [
-    LoginComponent,
-    UserAgreementFormComponent,
-    PhoneFormComponent,
-  ],
-  entryComponents: [],
-  providers: [
-  ]
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        LoginRoutingModule
+    ],
+    exports: [],
+    declarations: [
+        LoginComponent,
+        UserAgreementFormComponent,
+        PhoneFormComponent,
+    ],
+    providers: []
 })
 
 

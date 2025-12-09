@@ -1,18 +1,18 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
-import {Router} from '@angular/router';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {AppEventService} from '../../services/app.event.service';
-import {AppFileService} from '../../services/app.file.service';
-import {EventFormComponent} from '../event-form/event.form.component';
-import {EventExporterJSON} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {AppSharingService} from '../../services/app.sharing.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
-import {ActivityFormComponent} from '../activity-form/activity.form.component';
-import {take} from 'rxjs/operators';
-import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject } from '@angular/core';
+import { Router } from '@angular/router';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { AppEventService } from '../../services/app.event.service';
+import { AppFileService } from '../../services/app.file.service';
+import { EventFormComponent } from '../event-form/event.form.component';
+import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
+import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { AppSharingService } from '../../services/app.sharing.service';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
+import { Analytics, logEvent } from '@angular/fire/analytics';
+import { ActivityFormComponent } from '../activity-form/activity.form.component';
+import { take } from 'rxjs/operators';
+import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
@@ -22,7 +22,7 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
 import { environment } from '../../../environments/environment';
 import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { Auth, getIdToken } from '@angular/fire/auth';
 import {
   COROSAPIEventMetaDataInterface, GarminHealthAPIEventMetaDataInterface,
   ServiceNames,
@@ -39,7 +39,7 @@ import { AppWindowService } from '../../services/app.window.service';
   styleUrls: ['./event.actions.component.css'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
-
+  standalone: false
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
@@ -50,6 +50,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   public corosAPIServiceMetaData: COROSAPIEventMetaDataInterface;
   public garminHealthAPIServiceMetaData: GarminHealthAPIEventMetaDataInterface;
   private deleteConfirmationSubscription;
+  private auth = inject(Auth);
+  private analytics = inject(Analytics);
+
 
   constructor(
     private eventService: AppEventService,
@@ -60,9 +63,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private sharingService: AppSharingService,
     private fileService: AppFileService,
     private deleteConfirmationBottomSheet: MatBottomSheet,
-    private afa: AngularFireAnalytics,
     private http: HttpClient,
-    private afAuth: AngularFireAuth,
     private windowService: AppWindowService,
     private dialog: MatDialog) {
   }
@@ -95,8 +96,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
     this.clipboardService.copy(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
-    this.afa.logEvent('share', {method: 'event_actions', content_type: 'event'});
-    this.snackBar.open('Privacy is changed to public and link copied to your clipboard', null, {
+    logEvent(this.analytics, 'share', { method: 'event_actions', content_type: 'event' });
+    this.snackBar.open('Privacy is changed to public and link copied to your clipboard', undefined, {
       duration: 20000,
     })
   }
@@ -145,7 +146,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async reGenerateStatistics() {
-    this.snackBar.open('Re-calculating activity statistics', null, {
+    this.snackBar.open('Re-calculating activity statistics', undefined, {
       duration: 2000,
     });
     // To use this component we need the full hydrated object and we might not have it
@@ -155,7 +156,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.event.getFirstActivity());
     EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.writeAllEventData(this.user, this.event);
-    this.snackBar.open('Activity and event statistics have been recalculated', null, {
+    this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
       duration: 2000,
     });
   }
@@ -180,7 +181,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.getFileName(this.event),
       new EventExporterJSON().fileExtension,
     );
-    this.snackBar.open('JSON file served', null, {
+    this.snackBar.open('JSON file served', undefined, {
       duration: 2000,
     });
   }
@@ -192,8 +193,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.getFileName(this.event),
       new EventExporterGPX().fileExtension,
     );
-    this.afa.logEvent('downloaded_gpx_file');
-    this.snackBar.open('GPX file served', null, {
+    logEvent(this.analytics, 'downloaded_gpx_file');
+    this.snackBar.open('GPX file served', undefined, {
       duration: 2000,
     });
   }
@@ -203,24 +204,24 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       const result = await this.http.post(
         environment.functions.getSuuntoFITFile,
         {
-          firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true),
+          firebaseAuthToken: await getIdToken(this.auth.currentUser, true),
           workoutID: this.suuntoAppServiceMetaData.serviceWorkoutID,
           userName: this.suuntoAppServiceMetaData.serviceUserName,
         },
         {
           headers:
             new HttpHeaders({
-              'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
+              'Authorization': await getIdToken(this.auth.currentUser, true)
             }),
           responseType: 'arraybuffer',
         }).toPromise();
-        this.fileService.downloadFile(new Blob([new Uint8Array(result)], {type: 'application/octet-stream'}), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
-        this.snackBar.open('Download started', null, {
-          duration: 2000,
-        });
-        this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
+      this.fileService.downloadFile(new Blob([new Uint8Array(result)], { type: 'application/octet-stream' }), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
+      this.snackBar.open('Download started', undefined, {
+        duration: 2000,
+      });
+      logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.SuuntoApp });
     } catch (e) {
-      this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
+      this.snackBar.open(`Could not download original fit file due to ${e.message}`, undefined, {
         duration: 5000,
       });
       Sentry.captureException(e);
@@ -229,10 +230,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   async downloadCOROSFIT() {
     try {
-      this.windowService.windowRef.open(this.corosAPIServiceMetaData.serviceFITFileURI, )
-      this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.COROSAPI});
+      this.windowService.windowRef.open(this.corosAPIServiceMetaData.serviceFITFileURI,)
+      logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.COROSAPI });
     } catch (e) {
-      this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
+      this.snackBar.open(`Could not download original fit file due to ${e.message}`, undefined, {
         duration: 5000,
       });
       Sentry.captureException(e);
@@ -248,7 +249,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
       await this.eventService.deleteAllEventData(this.user, this.event.getID());
       await this.router.navigate(['/dashboard']);
-      this.snackBar.open('Event deleted', null, {
+      this.snackBar.open('Event deleted', undefined, {
         duration: 2000,
       });
     });

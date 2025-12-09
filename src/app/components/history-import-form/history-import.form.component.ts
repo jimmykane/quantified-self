@@ -1,19 +1,19 @@
-import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject } from '@angular/core';
 import {
   AbstractControl,
-  FormArray,
-  FormControl,
-  FormGroup,
+  UntypedFormArray,
+  UntypedFormControl,
+  UntypedFormGroup,
   Validators,
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib/lib/users/user';
 
-import {AppUserService} from '../../services/app.user.service';
-import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
-import {Subscription} from 'rxjs';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
+import { AppUserService } from '../../services/app.user.service';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { Subscription } from 'rxjs';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
@@ -22,6 +22,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
   templateUrl: './history-import.form.component.html',
   styleUrls: ['./history-import.form.component.css'],
   providers: [],
+  standalone: false
 })
 
 export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges {
@@ -29,32 +30,32 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() userMetaForService: UserServiceMetaInterface;
 
 
-  public formGroup: FormGroup;
+  public formGroup: UntypedFormGroup;
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
   public isLoading: boolean;
   public serviceNames = ServiceNames
+  private analytics = inject(Analytics);
 
   constructor(
     private userService: AppUserService,
     private snackBar: MatSnackBar,
-    private afa: AngularFireAnalytics,
   ) {
   }
 
   async ngOnInit() {
-    this.formGroup = new FormGroup({
-      formArray: new FormArray([
-        new FormGroup({
-          startDate: new FormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
+    this.formGroup = new UntypedFormGroup({
+      formArray: new UntypedFormArray([
+        new UntypedFormGroup({
+          startDate: new UntypedFormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
             Validators.required,
           ]),
-          endDate: new FormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
+          endDate: new UntypedFormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
             Validators.required,
           ])
         }),
-        new FormGroup({
-          accepted: new FormControl(false, [
+        new UntypedFormGroup({
+          accepted: new UntypedFormControl(false, [
             Validators.requiredTrue,
             // Validators.minLength(4),
           ]),
@@ -123,7 +124,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!field) {
       return !this.formGroup.valid;
     }
-    const formArray = <FormArray>this.formGroup.get('formArray');
+    const formArray = <UntypedFormArray>this.formGroup.get('formArray');
     return !(formArray.controls[formGroupIndex].get(field).valid && formArray.controls[formGroupIndex].get(field).touched);
   }
 
@@ -145,7 +146,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
-      this.afa.logEvent('imported_history', {method: this.serviceName});
+      logEvent(this.analytics, 'imported_history', { method: this.serviceName });
     } catch (e) {
       // debugger;
       Sentry.captureException(e);
@@ -158,12 +159,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
-        control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      if (control instanceof UntypedFormControl) {
+        control.markAsTouched({ onlySelf: true });
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

@@ -1,8 +1,8 @@
 import { ApplicationRef, Injectable } from '@angular/core';
-import { SwUpdate } from '@angular/service-worker';
+import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { concat, interval } from 'rxjs';
-import { first } from 'rxjs/operators';
+import { filter, first } from 'rxjs/operators';
 
 
 @Injectable({
@@ -19,14 +19,16 @@ export class AppUpdateService {
     const everySixHoursOnceAppIsStable$ = concat(appIsStable, everySixMinutes);
 
     everySixHoursOnceAppIsStable$.subscribe(() => updates.checkForUpdate());
-    updates.available.subscribe(evt => {
-      const snack = this.snackbar.open('There is a new version available', 'Reload');
-      snack
-        .onAction()
-        .subscribe(() => {
-          window.location.reload();
-        });
-    });
+    updates.versionUpdates
+      .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
+      .subscribe(evt => {
+        const snack = this.snackbar.open('There is a new version available', 'Reload');
+        snack
+          .onAction()
+          .subscribe(() => {
+            window.location.reload();
+          });
+      });
   }
 
 }

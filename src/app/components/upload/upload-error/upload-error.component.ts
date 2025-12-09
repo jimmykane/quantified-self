@@ -4,11 +4,11 @@ import { UPLOAD_STATUS } from '../upload-status/upload.status';
 
 
 @Component({
-  selector: 'app-upload-error',
-  templateUrl: './upload-error.component.html',
-  styleUrls: ['./upload-error.component.css'],
-  providers: [],
-  // changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-upload-error',
+    templateUrl: './upload-error.component.html',
+    styleUrls: ['./upload-error.component.css'],
+    providers: [],
+    standalone: false
 })
 
 

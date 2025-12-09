@@ -23,55 +23,54 @@ import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-mo
  * @todo perhaps to many shared components
  */
 @NgModule({
-  imports: [
-    CommonModule,
-    MaterialModule,
-    ReactiveFormsModule,
-    FormsModule
-  ],
-  declarations: [
-    ShadeComponent,
-    PrivacyIconComponent,
-    EventActionsComponent,
-    EventFormComponent,
-    PromoDialogComponent,
-    ActivityFormComponent,
-    ActivityCropFormComponent,
-    DeleteConfirmationComponent,
-    DataTypeIconComponent,
-    UploadInfoComponent,
-    UploadErrorComponent,
-    FilesStatusListComponent,
-    EventSearchComponent,
-    ActivityTypesMultiSelectComponent,
-  ],
-  providers: [
-    // @todo get it from settings as a service perhaps
-    {provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
-        ? window.navigator.languages[0]
-        : window.navigator['userLanguage'] || window.navigator.language},
-    {provide: DateAdapter, useClass: MomentDateAdapter, deps: [MAT_DATE_LOCALE]},
-    {provide: MAT_DATE_FORMATS, useValue: MAT_MOMENT_DATE_FORMATS},
-  ],
-  entryComponents: [],
-  exports: [
-    ShadeComponent,
-    PrivacyIconComponent,
-    EventActionsComponent,
-    EventFormComponent,
-    ActivityFormComponent,
-    ActivityCropFormComponent,
-    DeleteConfirmationComponent,
-    DataTypeIconComponent,
-    ReactiveFormsModule,
-    FormsModule,
-    UploadInfoComponent,
-    UploadErrorComponent,
-    FilesStatusListComponent,
-    PromoDialogComponent,
-    EventSearchComponent,
-    ActivityTypesMultiSelectComponent,
-  ]
+    imports: [
+        CommonModule,
+        MaterialModule,
+        ReactiveFormsModule,
+        FormsModule
+    ],
+    declarations: [
+        ShadeComponent,
+        PrivacyIconComponent,
+        EventActionsComponent,
+        EventFormComponent,
+        PromoDialogComponent,
+        ActivityFormComponent,
+        ActivityCropFormComponent,
+        DeleteConfirmationComponent,
+        DataTypeIconComponent,
+        UploadInfoComponent,
+        UploadErrorComponent,
+        FilesStatusListComponent,
+        EventSearchComponent,
+        ActivityTypesMultiSelectComponent,
+    ],
+    providers: [
+        // @todo get it from settings as a service perhaps
+        { provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
+                ? window.navigator.languages[0]
+                : window.navigator['userLanguage'] || window.navigator.language },
+        { provide: DateAdapter, useClass: MomentDateAdapter, deps: [MAT_DATE_LOCALE] },
+        { provide: MAT_DATE_FORMATS, useValue: MAT_MOMENT_DATE_FORMATS },
+    ],
+    exports: [
+        ShadeComponent,
+        PrivacyIconComponent,
+        EventActionsComponent,
+        EventFormComponent,
+        ActivityFormComponent,
+        ActivityCropFormComponent,
+        DeleteConfirmationComponent,
+        DataTypeIconComponent,
+        ReactiveFormsModule,
+        FormsModule,
+        UploadInfoComponent,
+        UploadErrorComponent,
+        FilesStatusListComponent,
+        PromoDialogComponent,
+        EventSearchComponent,
+        ActivityTypesMultiSelectComponent,
+    ]
 })
 
 export class SharedModule {

@@ -1,6 +1,5 @@
-import { Injectable, OnDestroy } from '@angular/core';
-import { AngularFirestore, AngularFirestoreDocument } from '@angular/fire/compat/firestore';
-import { Observable } from 'rxjs';
+import { inject, Injectable, OnDestroy } from '@angular/core';
+import { Observable, from, firstValueFrom } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 import { AppEventService } from './app.event.service';
@@ -30,7 +29,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { Auth, deleteUser } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import * as Sentry from '@sentry/browser';
@@ -82,8 +81,9 @@ import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-ma
 import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.peak-training-effect';
 import { DataEPOC } from '@sports-alliance/sports-lib/lib/data/data.epoc';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data-aerobic-training-effect';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
 
 
 /**
@@ -94,7 +94,8 @@ import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.reco
 })
 export class AppUserService implements OnDestroy {
 
-
+  private firestore = inject(Firestore);
+  private auth = inject(Auth);
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -125,7 +126,7 @@ export class AppUserService implements OnDestroy {
 
   static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
     return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
-      dataTypeSettings[dataTypeToUse] = {enabled: true};
+      dataTypeSettings[dataTypeToUse] = { enabled: true };
       return dataTypeSettings
     }, {})
   }
@@ -140,7 +141,7 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     };
   }
 
@@ -153,7 +154,7 @@ export class AppUserService implements OnDestroy {
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     };
   }
 
@@ -166,7 +167,7 @@ export class AppUserService implements OnDestroy {
       mapTheme: MapThemes.MidnightCommander,
       showHeatMap: true,
       clusterMarkers: true,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Duration',
       order: 1,
@@ -176,7 +177,7 @@ export class AppUserService implements OnDestroy {
       dataType: DataDuration.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Distance',
       order: 2,
@@ -186,7 +187,7 @@ export class AppUserService implements OnDestroy {
       dataTimeInterval: TimeIntervals.Auto,
       dataCategoryType: ChartDataCategoryTypes.ActivityType,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }, <TileChartSettingsInterface>{
       name: 'Ascent',
       order: 3,
@@ -196,7 +197,7 @@ export class AppUserService implements OnDestroy {
       dataType: DataAscent.type,
       dataTimeInterval: TimeIntervals.Auto,
       dataValueType: ChartDataValueTypes.Total,
-      size: {columns: 1, rows: 1},
+      size: { columns: 1, rows: 1 },
     }]
   }
 
@@ -319,7 +320,7 @@ export class AppUserService implements OnDestroy {
       DataPowerAvg.type,
       // DataPowerMax.type,
       DataVO2Max.type,
-      DataTotalTrainingEffect.type,
+      DataAerobicTrainingEffect.type,
       DataRecoveryTime.type,
       DataPeakEPOC.type,
       DataDeviceNames.type,
@@ -335,9 +336,7 @@ export class AppUserService implements OnDestroy {
   }
 
   constructor(
-    private afs: AngularFirestore,
     private eventService: AppEventService,
-    private afAuth: AngularFireAuth,
     private http: HttpClient,
     private windowService: AppWindowService,
   ) {
@@ -345,26 +344,22 @@ export class AppUserService implements OnDestroy {
   }
 
   public getUserByID(userID: string): Observable<User> {
-    return this.afs
-      .collection('users')
-      .doc(userID)
-      .valueChanges().pipe(map((user: User) => {
-        if (!user) {
-          return null
-        }
-        user.settings = this.fillMissingAppSettings(user);
-        return user
-      }));
+    const userDoc = doc(this.firestore, 'users', userID);
+    return docData(userDoc).pipe(map((user: User) => {
+      if (!user) {
+        return null;
+      }
+      user.settings = this.fillMissingAppSettings(user);
+      return user;
+    }));
   }
 
   public async createOrUpdateUser(user: User) {
     if (!user.acceptedPrivacyPolicy || !user.acceptedDataPolicy) {
       throw new Error('User has not accepted privacy or data policy');
     }
-    const userRef: AngularFirestoreDocument = this.afs.doc(
-      `users/${user.uid}`,
-    );
-    await userRef.set(user.toJSON());
+    const userRef = doc(this.firestore, `users/${user.uid}`);
+    await setDoc(userRef, user.toJSON());
     return Promise.resolve(user);
   }
 
@@ -381,9 +376,10 @@ export class AppUserService implements OnDestroy {
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
-    return this.getAllUserMeta(user).doc(serviceName).valueChanges().pipe(map((doc) => {
-      return <UserServiceMetaInterface>doc;
-    }))
+    const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
+    return docData(metaDoc).pipe(map((d) => {
+      return <UserServiceMetaInterface>d;
+    }));
   }
 
   public shouldShowPromo(user: User) {
@@ -395,11 +391,11 @@ export class AppUserService implements OnDestroy {
   }
 
   public async setLastSeenPromoToNow(user: User) {
-    return this.updateUserProperties(user, {lastSeenPromo: (new Date().getTime())})
+    return this.updateUserProperties(user, { lastSeenPromo: (new Date().getTime()) })
   }
 
   async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const idToken = await this.auth.currentUser?.getIdToken(true);
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
       [ServiceNames.GarminHealthAPI]: environment.functions.backfillHealthAPIActivities,
@@ -407,9 +403,9 @@ export class AppUserService implements OnDestroy {
     }
     return this.http.post(
       serviceNamesToFunctionsURI[serviceName], {
-        startDate: startDate,
-        endDate: endDate
-      },
+      startDate: startDate,
+      endDate: endDate
+    },
       {
         headers:
           new HttpHeaders({
@@ -419,7 +415,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deauthorizeService(serviceName: ServiceNames) {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const idToken = await this.auth.currentUser?.getIdToken(true);
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoApp,
       [ServiceNames.GarminHealthAPI]: environment.functions.deauthorizeGarminHealthAPI,
@@ -442,11 +438,11 @@ export class AppUserService implements OnDestroy {
       [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI,
       [ServiceNames.COROSAPI]: environment.functions.getCOROSAPIAuthRequestTokenRedirectURI
     }
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const idToken = await this.auth.currentUser?.getIdToken(true);
     return <Promise<{ redirect_uri: string }>>this.http.post(
       serviceNamesToFunctionsURI[serviceName], {
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
-      },
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
+    },
       {
         headers:
           new HttpHeaders({
@@ -456,12 +452,12 @@ export class AppUserService implements OnDestroy {
   }
 
   public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier: string) {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const idToken = await this.auth.currentUser?.getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetGarminHealthAPIAccessToken, {
-        state: state,
-        oauthVerifier: oauthVerifier
-      },
+      state: state,
+      oauthVerifier: oauthVerifier
+    },
       {
         headers:
           new HttpHeaders({
@@ -471,13 +467,13 @@ export class AppUserService implements OnDestroy {
   }
 
   public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string) {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const idToken = await this.auth.currentUser?.getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetSuuntoAPIAccessToken, {
-        state: state,
-        code: code,
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
-      },
+      state: state,
+      code: code,
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
+    },
       {
         headers:
           new HttpHeaders({
@@ -487,13 +483,13 @@ export class AppUserService implements OnDestroy {
   }
 
   public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string) {
-    const idToken = await (await this.afAuth.currentUser).getIdToken(true);
+    const idToken = await this.auth.currentUser?.getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetCOROSAPIAccessToken, {
-        state: state,
-        code: code,
-        redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
-      },
+      state: state,
+      code: code,
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
+    },
       {
         headers:
           new HttpHeaders({
@@ -503,49 +499,52 @@ export class AppUserService implements OnDestroy {
   }
 
   public async updateUserProperties(user: User, propertiesToUpdate: any) {
-    return this.afs.collection('users').doc(user.uid).update(propertiesToUpdate);
+    return updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate);
   }
 
   public async updateUser(user: User) {
-    return this.afs.collection('users').doc(user.uid).update(user.toJSON());
+    return updateDoc(doc(this.firestore, 'users', user.uid), user.toJSON());
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
-    return this.updateUserProperties(user, {privacy: privacy});
+    return this.updateUserProperties(user, { privacy: privacy });
   }
 
   public async isBranded(user: User): Promise<boolean> {
-    return this.getAccountPrivileges(user).get().pipe(take(1)).pipe(map((doc) => {
-      if (!doc.exists) {
+    const privDoc = doc(this.firestore, 'userAccountPrivileges', user.uid);
+    return firstValueFrom(from(getDoc(privDoc)).pipe(map((doc) => {
+      if (!doc.exists()) {
         return false;
       }
       return doc.data()['isBranded'];
-    })).toPromise();
+    })));
   }
 
   public async deleteAllUserData(user: User) {
     const serviceTokens = [
-      {[ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise()},
-      {[ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise()},
-      {[ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise()}
-    ].filter((serviceToken) => serviceToken[Object.keys(serviceToken)[0]])
+      { [ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise() },
+      { [ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise() },
+      { [ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise() }
+    ].filter((serviceToken) => serviceToken[Object.keys(serviceToken)[0]]);
     for (const serviceToken of serviceTokens) {
       try {
         await this.deauthorizeService(<ServiceNames>Object.keys(serviceToken)[0]);
       } catch (e) {
         Sentry.captureException(e);
-        console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`)
+        console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`);
       }
     }
 
     try {
-      return (await this.afAuth.currentUser).delete();
+      const currentUser = this.auth.currentUser;
+      if (currentUser) {
+        return deleteUser(currentUser);
+      }
     } catch (e) {
       Sentry.captureException(e);
       throw e;
     }
   }
-
   public getUserChartDataTypesToUse(user: User): string[] {
     return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
       if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
@@ -558,43 +557,30 @@ export class AppUserService implements OnDestroy {
   ngOnDestroy() {
   }
 
-  private getServiceTokens(user: User, serviceName: ServiceNames) {
+  private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
     const serviceNamesToCollectionName = {
       [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
       [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
-    }
-    return this.afs
-      .collection(serviceNamesToCollectionName[serviceName])
-      .doc(user.uid)
-      .collection('tokens')
-      .valueChanges()
-      .pipe(catchError(error => {
+    };
+    const collectionRef = collection(this.firestore, serviceNamesToCollectionName[serviceName], user.uid, 'tokens');
+    return collectionData(collectionRef).pipe(
+      catchError(error => {
         return [];
-      }));
+      })
+    );
   }
 
-  private getGarminHealthAPITokens(user: User) {
-    return this.afs
-      .collection('garminHealthAPITokens')
-      .doc(user.uid).valueChanges().pipe(map(doc => [doc]))// We create an array to be consistent with the other provides that support more than one token
-      .pipe(catchError(error => {
+  private getGarminHealthAPITokens(user: User): Observable<any[]> {
+    const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
+    return docData(docRef).pipe(
+      map(d => [d]),
+      catchError(error => {
         return [];
-      }));
+      })
+    );
   }
 
-  private getAllUserMeta(user: User) {
-    return this.afs
-      .collection('users')
-      .doc(user.uid).collection('meta');
-  }
-
-  private getAccountPrivileges(user: User) {
-    return this.afs
-      .collection('userAccountPrivileges')
-      .doc(user.uid);
-  }
-
-  private fillMissingAppSettings(user: User): UserSettingsInterface {
+  public fillMissingAppSettings(user: User): UserSettingsInterface {
     const settings: UserSettingsInterface = user.settings || {};
     // App
     settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};

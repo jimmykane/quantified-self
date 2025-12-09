@@ -1,47 +1,31 @@
-import { Injectable } from '@angular/core';
-import {
-  ActivatedRouteSnapshot,
-  CanActivate,
-  CanLoad,
-  Route,
-  Router,
-  RouterStateSnapshot,
-  UrlSegment
-} from '@angular/router';
-import { Observable } from 'rxjs';
-import { AppAuthService } from './app.auth.service';
+import { inject } from '@angular/core';
+import { Router, CanMatchFn } from '@angular/router';
 import { map, take, tap } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppAuthService } from './app.auth.service';
 
-@Injectable({
-  providedIn: 'root'
-})
-export class AppAuthGuard implements CanActivate, CanLoad {
+/**
+ * Functional auth guard using modern Angular patterns.
+ * Uses canMatch which is the recommended replacement for canLoad.
+ */
+export const authGuard: CanMatchFn = (route, segments) => {
+  const authService = inject(AppAuthService);
+  const router = inject(Router);
+  const snackBar = inject(MatSnackBar);
+  const url = '/' + segments.map(s => s.path).join('/');
 
-  constructor(private authService: AppAuthService, private router: Router, private snackBar: MatSnackBar) {
-  }
-
-  canActivate(
-    next: ActivatedRouteSnapshot,
-    state: RouterStateSnapshot): Observable<boolean> | Promise<boolean> | boolean {
-    return this.checkLogin(state.url);
-  }
-
-  canLoad(route: Route, segments: UrlSegment[]): Observable<boolean> | Promise<boolean> | boolean {
-    return this.checkLogin(`/${route.path}`);
-  }
-
-  checkLogin(url: string): Observable<boolean> | Promise<boolean> | boolean {
-    return this.authService.user.pipe(take(1)).pipe(map(user => !!user)).pipe(tap(loggedIn => {
-      this.authService.redirectUrl = null;
-      if (loggedIn) {
-        return true
+  return authService.user$.pipe(
+    take(1),
+    map(user => !!user),
+    tap(loggedIn => {
+      authService.redirectUrl = null;
+      if (!loggedIn) {
+        authService.redirectUrl = url;
+        snackBar.open('You must login first', null, {
+          duration: 2000,
+        });
+        router.navigate(['/login']);
       }
-      this.authService.redirectUrl = url;
-      this.snackBar.open('You must login first', null, {
-        duration: 2000,
-      });
-      return this.router.navigate(['/login']);
-    }))
-  }
-}
+    })
+  );
+};

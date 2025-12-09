@@ -8,11 +8,12 @@ import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
 import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
 
 @Component({
-  selector: 'app-event-card-devices',
-  templateUrl: './event.card.devices.component.html',
-  styleUrls: ['./event.card.devices.component.css'],
-  providers: [],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-event-card-devices',
+    templateUrl: './event.card.devices.component.html',
+    styleUrls: ['./event.card.devices.component.css'],
+    providers: [],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class EventCardDevicesComponent implements OnChanges {

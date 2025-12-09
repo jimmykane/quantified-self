@@ -18,7 +18,7 @@ import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration
 import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
 import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data-aerobic-training-effect';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
@@ -48,7 +48,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
       'Device Names',
       DataPeakEPOC.type,
       DataRecoveryTime.type,
-      DataTotalTrainingEffect.type,
+      DataAerobicTrainingEffect.type,
     ].indexOf(columnName) !== -1;
   }
 
@@ -67,7 +67,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     const rpe = stats.find(stat => stat.getType() === DataRPE.type);
     const feeling = stats.find(stat => stat.getType() === DataFeeling.type);
     const vO2Max = stats.find(stat => stat.getType() === DataVO2Max.type);
-    const TTE = stats.find(stat => stat.getType() === DataTotalTrainingEffect.type);
+    const TTE = stats.find(stat => stat.getType() === DataAerobicTrainingEffect.type);
     const EPOC = stats.find(stat => stat.getType() === DataPeakEPOC.type);
     const recoveryTime = stats.find(stat => stat.getType() === DataRecoveryTime.type);
 
@@ -77,7 +77,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[DataDescent.type] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
     statRowElement[DataEnergy.type] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
     statRowElement[DataVO2Max.type] = vO2Max ? `${vO2Max.getDisplayValue()} ${vO2Max.getDisplayUnit()}` : '';
-    statRowElement[DataTotalTrainingEffect.type] = TTE ? `${TTE.getDisplayValue()} ${TTE.getDisplayUnit()}` : '';
+    statRowElement[DataAerobicTrainingEffect.type] = TTE ? `${TTE.getDisplayValue()} ${TTE.getDisplayUnit()}` : '';
     statRowElement[DataPeakEPOC.type] = EPOC ? `${EPOC.getDisplayValue()} ${EPOC.getDisplayUnit()}` : '';
     statRowElement[DataRecoveryTime.type] = recoveryTime ? `${recoveryTime.getDisplayValue()} ${recoveryTime.getDisplayUnit()}` : '';
     statRowElement[DataPowerAvg.type] = avgPower ? `${avgPower.getDisplayValue()} ${avgPower.getDisplayUnit()}` : '';
@@ -106,7 +106,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[`sort.${DataVO2Max.type}`] = vO2Max ? <number>vO2Max.getValue() : 0;
     statRowElement[`sort.${DataPeakEPOC.type}`] = EPOC ? <number>EPOC.getValue() : 0;
     statRowElement[`sort.${DataRecoveryTime.type}`] = recoveryTime ? <number>recoveryTime.getValue() : 0;
-    statRowElement[`sort.${DataTotalTrainingEffect.type}`] = TTE ? <number>TTE.getValue() : 0;
+    statRowElement[`sort.${DataAerobicTrainingEffect.type}`] = TTE ? <number>TTE.getValue() : 0;
     statRowElement[`sort.${DataSpeedAvg.type}`] = avgSpeed ? <number>avgSpeed.getValue() : 0;
     statRowElement[`sort.${DataPowerAvg.type}`] = avgPower ? <number>avgPower.getValue() : 0;
     statRowElement[`sort.${DataPowerMax.type}`] = avgPower ? <number>avgPower.getValue() : 0;

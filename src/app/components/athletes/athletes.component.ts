@@ -15,6 +15,7 @@ import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashb
   templateUrl: './athletes.component.html',
   styleUrls: ['./athletes.component.css'],
   providers: [],
+  standalone: false
 })
 export class AthletesComponent implements OnInit, OnDestroy {
   public user: User;
@@ -37,7 +38,7 @@ export class AthletesComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    this.authService.user.pipe(switchMap((user) => {
+    this.authService.user$.pipe(switchMap((user: User | null) => {
       this.isLoading = true;
       this.user = user;
       if (!user) {

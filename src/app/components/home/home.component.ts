@@ -1,6 +1,6 @@
-import {Component, HostListener} from '@angular/core';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {Router} from '@angular/router';
+import { Component, HostListener } from '@angular/core';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { Router } from '@angular/router';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 
 
@@ -8,6 +8,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
   selector: 'app-home',
   templateUrl: './home.component.html',
   styleUrls: ['./home.component.css'],
+  standalone: false
 })
 export class HomeComponent {
 
@@ -20,5 +21,14 @@ export class HomeComponent {
   @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {
     return window.innerWidth < 600 ? 1 : 2;
+  }
+
+  async navigateToDashboardOrLogin() {
+    const user = await this.authService.getUser();
+    if (user) {
+      await this.router.navigate(['/dashboard']);
+    } else {
+      await this.router.navigate(['/login']);
+    }
   }
 }

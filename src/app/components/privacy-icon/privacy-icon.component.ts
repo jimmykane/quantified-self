@@ -2,10 +2,11 @@ import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
 import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
 
 @Component({
-  selector: 'app-privacy-icon',
-  templateUrl: './privacy-icon.component.html',
-  styleUrls: ['./privacy-icon.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-privacy-icon',
+    templateUrl: './privacy-icon.component.html',
+    styleUrls: ['./privacy-icon.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class PrivacyIconComponent {

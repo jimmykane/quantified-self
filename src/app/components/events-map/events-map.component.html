@@ -1,21 +1,20 @@
 <app-shade [isActive]="isLoading" [hasError]="markers && markers.length === 0"
-           [errorMessage]="'Nothing to show'"></app-shade>
-<mat-card *ngIf="selectedEvent">
-  <button class="close-button" mat-icon-button (click)="selectedEvent=null; selectedEventPositionsByActivity = []" align="end">
+  [errorMessage]="'Nothing to show'"></app-shade>
+
+<!-- Selected Event Card -->
+@if (selectedEvent) {
+<mat-card>
+  <button class="close-button" mat-icon-button (click)="selectedEvent=null; selectedEventPositionsByActivity = []"
+    align="end">
     <mat-icon>close</mat-icon>
   </button>
   <mat-card-header>
-<!--    <div mat-card-avatar class="avatar">-->
-<!--      <button mat-icon-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">-->
-<!--        <mat-icon>open_with</mat-icon>-->
-<!--      </button>-->
-<!--    </div>-->
     <mat-card-title>
       <span>
         <b>{{ selectedEvent.startDate | date:"d" }}</b>
       </span>
       <span style="font-size: 1em">
-         {{ selectedEvent.startDate | date:"MMM " }}
+        {{ selectedEvent.startDate | date:"MMM " }}
       </span>
       <span style="font-size: 0.8em">
         <b>{{ selectedEvent.startDate | date:"yyyy" }}</b>
@@ -30,38 +29,30 @@
       and {{selectedEvent.getDistance().getDisplayValue()}}{{selectedEvent.getDistance().getDisplayUnit()}}
     </mat-card-subtitle>
   </mat-card-header>
-  <mat-card-content *ngIf="selectedEvent.description">
+  @if (selectedEvent.description) {
+  <mat-card-content>
     {{selectedEvent.description}}
   </mat-card-content>
+  }
   <mat-card-actions>
     <button mat-button [routerLink]="['/user', user.uid, 'event', selectedEvent.getID()]">Open</button>
   </mat-card-actions>
 </mat-card>
-<agm-map [controlSize]="32"
-         [disableDefaultUI]="true"
-         [mapTypeId]="type"
-         [backgroundColor]="'none'"
-         [styles]="getStyles(theme)">
-<!--  <agm-scale-control></agm-scale-control>-->
-<!--  <agm-street-view-control></agm-street-view-control>-->
-  <agm-polyline *ngFor="let positionsByActivity of selectedEventPositionsByActivity"
-    [strokeColor]="positionsByActivity.color">
-    <!-- Points -->
-    <agm-polyline-point
-      *ngFor="let position of positionsByActivity.positions"
-      [latitude]="position.latitudeDegrees"
-      [longitude]="position.longitudeDegrees">
-    </agm-polyline-point>
-    <agm-icon-sequence
-      [fixedRotation]="false"
-      [scale]="3"
-      [offset]="'10%'"
-      [repeat]="'200px'"
-      [strokeColor]="'#00000'"
-      [fillColor]="'#FFFFFF'"
-      [strokeWeight]="1.2"
-      [fillOpacity]="0.8"
-      [path]="'FORWARD_CLOSED_ARROW'">
-    </agm-icon-sequence>
-  </agm-polyline>
-</agm-map>
+}
+
+<!-- Google Map -->
+<!-- Google Map -->
+@if (apiLoaded) {
+<google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom" [mapTypeId]="mapTypeId"
+  [options]="mapOptions" (mapInitialized)="onMapReady($event)">
+
+  <!-- Polylines for selected event activities -->
+  @if (selectedEventPositionsByActivity) {
+  @for (positionsByActivity of selectedEventPositionsByActivity; track positionsByActivity) {
+  <map-polyline [path]="getPolylinePath(positionsByActivity.positions)"
+    [options]="getPolylineOptions(positionsByActivity.color)">
+  </map-polyline>
+  }
+  }
+</google-map>
+}

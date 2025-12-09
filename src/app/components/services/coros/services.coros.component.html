@@ -14,46 +14,52 @@
       <ng-template matTabContent>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
-            <mat-card-subtitle *ngIf="!isConnectedToService()">
-              Connect to COROS API
-              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                info
-              </mat-icon>
-            </mat-card-subtitle>
-            <mat-card-subtitle *ngIf="isConnectedToService()">Connected</mat-card-subtitle>
+            @if (!isConnectedToService()) {
+              <mat-card-subtitle>
+                Connect to COROS API
+                <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+                  info
+                </mat-icon>
+              </mat-card-subtitle>
+            }
+            @if (isConnectedToService()) {
+              <mat-card-subtitle>Connected</mat-card-subtitle>
+            }
           </mat-card-header>
           <mat-divider></mat-divider>
 
-          <mat-list *ngIf="isConnectedToService()">
+          @if (isConnectedToService()) {
+            <mat-list>
+              <div mat-subheader>Accounts</div>
+              <mat-list-item style="text-align: left">
+                <mat-icon mat-list-icon>account_circle</mat-icon>
+                <div mat-line>{{ serviceTokens[0].openId }} </div>
+                <div mat-line>Connected at {{serviceTokens[0].dateCreated  | date:'medium'}}</div>
+              </mat-list-item>
+            </mat-list>
+          }
 
-            <div mat-subheader>Accounts</div>
+          @if (isConnectedToService()) {
+            <button class="big"
+              mat-flat-button color="warn"
+              (click)="deauthorizeService($event)">Disconnect
+            </button>
+          }
 
-            <mat-list-item style="text-align: left">
-              <mat-icon mat-list-icon>account_circle</mat-icon>
-              <div mat-line>{{ serviceTokens[0].openId }} </div>
-              <div mat-line>Connected at {{serviceTokens[0].dateCreated  | date:'medium'}}</div>
-            </mat-list-item>
-          </mat-list>
-
-          <button class="big"
-                  mat-flat-button color="warn"
-                  *ngIf="isConnectedToService()"
-                  (click)="deauthorizeService($event)">Disconnect
-          </button>
-
-          <button mat-stroked-button
-                  class="big"
-                  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                  *ngIf="!isConnectedToService()"
-                  (click)="connectWithService($event)">
-            Connect with COROS
-          </button>
+          @if (!isConnectedToService()) {
+            <button mat-stroked-button
+              class="big"
+              mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+              (click)="connectWithService($event)">
+              Connect with COROS
+            </button>
+          }
         </mat-card>
       </ng-template>
     </mat-tab>
 
     <mat-tab label="History import"
-             [disabled]="isGuest || !isConnectedToService()">
+      [disabled]="isGuest || !isConnectedToService()">
       <ng-template matTabLabel>
         <mat-icon matTooltip="History import">history</mat-icon>
       </ng-template>

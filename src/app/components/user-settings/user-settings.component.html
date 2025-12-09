@@ -1,7 +1,6 @@
 <mat-card class="mat-elevation-z0" style="position: relative">
   <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)">
-    <mat-tab-group
-      [dynamicHeight]="true">
+    <mat-tab-group [dynamicHeight]="true">
 
       <mat-tab label="App settings">
         <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
@@ -17,9 +16,11 @@
           <mat-divider></mat-divider>
           <mat-form-field>
             <mat-select placeholder="Theme that the app should use" formControlName="appTheme">
-              <mat-option *ngFor="let appTheme of appThemes | keyvalue" [value]="appTheme.value">
+              @for (appTheme of appThemes | keyvalue; track appTheme) {
+              <mat-option [value]="appTheme.value">
                 {{appTheme.key}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
           </mat-form-field>
@@ -71,19 +72,24 @@
 
           <mat-form-field>
             <mat-select placeholder="Events per page" formControlName="eventsPerPage">
-              <mat-option *ngFor="let eventsPerPageOption of eventsPerPage " [value]="eventsPerPageOption">
+              @for (eventsPerPageOption of eventsPerPage ; track eventsPerPageOption) {
+              <mat-option [value]="eventsPerPageOption">
                 {{eventsPerPageOption}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> the more selected the slower the app will load on the dashboard view</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
-            <mat-select placeholder="Hide ascent for activity types" formControlName="removeAscentForActivitiesSummaries" multiple >
+            <mat-select placeholder="Hide ascent for activity types"
+              formControlName="removeAscentForActivitiesSummaries" multiple>
               <mat-option>None</mat-option>
-              <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">
+              @for (activityType of activityTypes; track activityType) {
+              <mat-option [value]="activityType">
                 {{activityType}}
               </mat-option>
+              }
             </mat-select>
           </mat-form-field>
 
@@ -108,52 +114,52 @@
 
           <mat-form-field>
             <mat-select placeholder="Theme that the map should use" formControlName="mapTheme">
-              <mat-option *ngFor="let mapTheme of mapThemes | keyvalue" [value]="mapTheme.value">
+              @for (mapTheme of mapThemes | keyvalue; track mapTheme) {
+              <mat-option [value]="mapTheme.value">
                 {{mapTheme.key}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
             <mat-select placeholder="Map type that you prefer to use" formControlName="mapType">
-              <mat-option *ngFor="let mapType of mapTypes | keyvalue" [value]="mapType.value">
+              @for (mapType of mapTypes | keyvalue; track mapType) {
+              <mat-option [value]="mapType.value">
                 {{mapType.key}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> prefer satellite for non urban areas</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
             <mat-select placeholder="Lap types to show on the map" formControlName="mapLapTypes" multiple>
-              <mat-option *ngFor="let lapType of lapTypes" [value]="lapType">
+              @for (lapType of lapTypes; track lapType) {
+              <mat-option [value]="lapType">
                 {{lapType}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
           </mat-form-field>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showMapLaps">
+            <mat-slide-toggle [color]="'accent'" formControlName="showMapLaps">
               <span matTooltip="Show laps on map?">Show laps</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> laps can help in the track analysis</mat-hint>
           </section>
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showMapArrows">
+            <mat-slide-toggle [color]="'accent'" formControlName="showMapArrows">
               <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
           </section>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showMapPoints">
+            <mat-slide-toggle [color]="'accent'" formControlName="showMapPoints">
               <span matTooltip="Show points on map?">Show points</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> laps can help in the track analysis</mat-hint>
@@ -163,12 +169,8 @@
             <mat-hint matTooltip="How thick the map lines will be">
               Stroke width
             </mat-hint>
-            <mat-slider
-              [max]="10"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="mapStrokeWidth">
+            <mat-slider [max]="10" [min]="0.05" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="mapStrokeWidth">
             </mat-slider>
           </section>
 
@@ -192,38 +194,43 @@
 
           <mat-form-field>
             <mat-select placeholder="XAxis chart type" formControlName="xAxisType">
-              <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
+              @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
+              <mat-option [value]="xAxisType.value">
                 {{xAxisType.key}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
             <mat-select placeholder="Theme that the charts should use" formControlName="chartTheme">
-              <mat-option *ngFor="let chartTheme of chartThemes | keyvalue" [value]="chartTheme.value">
+              @for (chartTheme of chartThemes | keyvalue; track chartTheme) {
+              <mat-option [value]="chartTheme.value">
                 {{chartTheme.key}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> material and kelly are one of the best 😉</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
             <mat-select placeholder="" formControlName="dataTypesToUse" multiple>
-              <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
-                            [disabled]="dataGroup.disabled">
-                <mat-option *ngFor="let data of dataGroup.data" [value]="data">
+              @for (dataGroup of dataGroups; track dataGroup) {
+              <mat-optgroup [label]="dataGroup.name" [disabled]="dataGroup.disabled">
+                @for (data of dataGroup.data; track $index) {
+                <mat-option [value]="data">
                   {{data}}
                 </mat-option>
+                }
               </mat-optgroup>
+              }
             </mat-select>
             <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
           </mat-form-field>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showAllData">
+            <mat-slide-toggle [color]="'accent'" formControlName="showAllData">
               <span matTooltip="Show all data?">Show all data</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> turn this on if you don't need any filtering or want to see all activity data
@@ -231,9 +238,7 @@
           </section>
           <section>
 
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="chartCursorBehaviour">
+            <mat-slide-toggle [color]="'accent'" formControlName="chartCursorBehaviour">
               <span matTooltip="Cursor selection by default?">Cursor selection</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> turn this on if you want the default behaviour of the cursor to be select (default is
@@ -241,9 +246,7 @@
             </mat-hint>
           </section>
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="useAnimations">
+            <mat-slide-toggle [color]="'accent'" formControlName="useAnimations">
               <span matTooltip="Use animations or no">Animations</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
@@ -252,24 +255,16 @@
             <mat-hint matTooltip="How thick the chart lines will be">
               Stroke width
             </mat-hint>
-            <mat-slider
-              [max]="10"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartStrokeWidth">
+            <mat-slider [max]="10" [min]="0.05" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="chartStrokeWidth">
             </mat-slider>
           </section>
           <section>
             <mat-hint matTooltip="How vibrant the chart lines will be">
               Stroke opacity
             </mat-hint>
-            <mat-slider
-              [max]="1"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartStrokeOpacity">
+            <mat-slider [max]="1" [min]="0.05" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="chartStrokeOpacity">
             </mat-slider>
           </section>
 
@@ -277,55 +272,45 @@
             <mat-hint matTooltip="How strong the fill color should be">
               Fill opacity
             </mat-hint>
-            <mat-slider
-              [max]="1"
-              [min]="0.00"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartFillOpacity">
+            <mat-slider [max]="1" [min]="0.00" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="chartFillOpacity">
             </mat-slider>
           </section>
 
           <mat-form-field>
             <mat-select placeholder="Lap types to show on the chart" formControlName="chartLapTypes" multiple>
-              <mat-option *ngFor="let lapType of lapTypes" [value]="lapType">
+              @for (lapType of lapTypes; track lapType) {
+              <mat-option [value]="lapType">
                 {{lapType}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
           </mat-form-field>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showChartLaps">
+            <mat-slide-toggle [color]="'accent'" formControlName="showChartLaps">
               <span matTooltip="Show laps on chart?">Show laps</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> laps can help with the data analysis</mat-hint>
           </section>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showChartGrid">
+            <mat-slide-toggle [color]="'accent'" formControlName="showChartGrid">
               <span matTooltip="Show grid on the chart?">Show grid</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> showing the grid can help with the data analysis</mat-hint>
           </section>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="stackYAxes">
+            <mat-slide-toggle [color]="'accent'" formControlName="stackYAxes">
               <span matTooltip="Stack Y axes?">Stack Y Axes</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> this will stack the charts on top of each other</mat-hint>
           </section>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="chartHideAllSeriesOnInit">
+            <mat-slide-toggle [color]="'accent'" formControlName="chartHideAllSeriesOnInit">
               <span matTooltip="Hide all series on chart initialization?">Hide all sereis on initialization</span>
             </mat-slide-toggle>
             <mat-hint><b>Tip:</b> this will create an empty chart</mat-hint>
@@ -335,14 +320,10 @@
             <mat-hint matTooltip="Improves the scalability for power analysis">
               Extra max for Power
             </mat-hint>
-            <mat-slider
-              [max]="0.9"
-              [min]="-0.9"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartExtraMaxForPower">
+            <mat-slider [max]="0.9" [min]="-0.9" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="chartExtraMaxForPower">
             </mat-slider>
-            <br/>
+            <br />
             <mat-hint><b>Tip:</b> this will compress/decompress the power chart</mat-hint>
           </section>
 
@@ -350,14 +331,10 @@
             <mat-hint matTooltip="Improves the scalability for pace analysis">
               Extra max for Pace
             </mat-hint>
-            <mat-slider
-              [max]="0.9"
-              [min]="-0.9"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartExtraMaxForPace">
+            <mat-slider [max]="0.9" [min]="-0.9" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="chartExtraMaxForPace">
             </mat-slider>
-            <br/>
+            <br />
             <mat-hint><b>Tip:</b> this will compress/decompress the pace chart</mat-hint>
           </section>
 
@@ -365,28 +342,22 @@
             <mat-hint matTooltip="How easy it is to calculate gain or loss">
               Gain and loss threshold
             </mat-hint>
-            <mat-slider
-              [max]="10"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartGainAndLossThreshold">
+            <mat-slider [max]="10" [min]="0.05" [step]="0.05" discrete>
+              <input matSliderThumb formControlName="chartGainAndLossThreshold">
             </mat-slider>
-            <br/>
+            <br />
             <mat-hint><b>Tip:</b> use 5 (5m) if you are interested in a consistent filtering across data</mat-hint>
           </section>
 
           <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="chartDisableGrouping">
+            <mat-slide-toggle [color]="'accent'" formControlName="chartDisableGrouping">
               <span matTooltip="Disable grouping of data?">Disable grouping</span>
             </mat-slide-toggle>
-            <mat-hint><b>Grouping</b> "groups" the data to fit at the available screen pixel size.<br/>
-              This creates a more readable chart and improves performance by not calculating "those extra pixels"<br/>
-              The more you zoom on the chart, the more data is unfold on the chart.<br/>
+            <mat-hint><b>Grouping</b> "groups" the data to fit at the available screen pixel size.<br />
+              This creates a more readable chart and improves performance by not calculating "those extra pixels"<br />
+              The more you zoom on the chart, the more data is unfold on the chart.<br />
               However, if you use QS to mainly compare activities <b>at full zoomed out view</b>, eg heart rate or power
-              from more than once device, you might want to experiment with this setting.<br/>
+              from more than once device, you might want to experiment with this setting.<br />
               Disabling grouping it will load on the screen all available data and will impact performance.
             </mat-hint>
           </section>
@@ -395,19 +366,15 @@
             <mat-hint matTooltip="How much downsampling will happen for activities that are over 6h">
               Down-sampling level
             </mat-hint>
-            <mat-slider
-              [max]="20"
-              [min]="2"
-              [step]="1"
-              [thumbLabel]="true"
-              formControlName="chartDownSamplingLevel">
+            <mat-slider [max]="20" [min]="2" [step]="1" discrete>
+              <input matSliderThumb formControlName="chartDownSamplingLevel">
             </mat-slider>
             <mat-hint>
-              <br/>
+              <br />
               <b>Down-sampling</b> keeps data every nth second according to what you've chosen for activities that are
-              over 6 hours.<br/>
+              over 6 hours.<br />
               For example the default is 4 and that will keep the data from second 4,8,12 etc if the activity is
-              6hours.<br/>
+              6hours.<br />
               Raising this value can dramatically improve performance or lowering it improve details.
             </mat-hint>
           </section>
@@ -431,38 +398,44 @@
 
           <mat-form-field>
             <mat-select placeholder="Units for speed" formControlName="speedUnitsToUse" multiple>
-              <mat-option *ngFor="let speedUnit of speedUnits | keyvalue" [value]="speedUnit.value">
+              @for (speedUnit of speedUnits | keyvalue; track speedUnit) {
+              <mat-option [value]="speedUnit.value">
                 {{speedUnit.value}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
             <mat-select placeholder="Units for pace" formControlName="paceUnitsToUse" multiple>
-              <mat-option *ngFor="let paceUnit of paceUnits | keyvalue" [value]="paceUnit.value">
+              @for (paceUnit of paceUnits | keyvalue; track paceUnit) {
+              <mat-option [value]="paceUnit.value">
                 {{paceUnit.value}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
             <mat-select placeholder="Units for swim pace" formControlName="swimPaceUnitsToUse" multiple>
-              <mat-option *ngFor="let swimPaceUnit of swimPaceUnits | keyvalue" [value]="swimPaceUnit.value">
+              @for (swimPaceUnit of swimPaceUnits | keyvalue; track swimPaceUnit) {
+              <mat-option [value]="swimPaceUnit.value">
                 {{swimPaceUnit.value}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
           </mat-form-field>
 
           <mat-form-field>
-            <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse"
-                        multiple>
-              <mat-option *ngFor="let verticalSpeedUnit of verticalSpeedUnits | keyvalue"
-                          [value]="verticalSpeedUnit.value">
+            <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse" multiple>
+              @for (verticalSpeedUnit of verticalSpeedUnits | keyvalue; track verticalSpeedUnit) {
+              <mat-option [value]="verticalSpeedUnit.value">
                 {{verticalSpeedUnit.value}}
               </mat-option>
+              }
             </mat-select>
             <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
           </mat-form-field>
@@ -471,8 +444,10 @@
       </mat-tab>
     </mat-tab-group>
 
-    <button mat-flat-button *ngIf="!hasError()" [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
+    @if (!hasError()) {
+    <button mat-flat-button [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
       Save
     </button>
+    }
   </form>
 </mat-card>

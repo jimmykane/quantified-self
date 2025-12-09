@@ -27,6 +27,7 @@ yarn-error.log
 !.vscode/extensions.json
 
 # misc
+/.angular/cache
 /.sass-cache
 /connect.lock
 /coverage
@@ -62,3 +63,6 @@ src/assets/fonts/
 
 #Lisences
 licenses.json
+
+# SSL certificates (generate locally with mkcert)
+/certs

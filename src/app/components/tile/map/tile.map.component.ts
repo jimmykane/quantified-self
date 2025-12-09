@@ -6,10 +6,11 @@ import { User } from '@sports-alliance/sports-lib/lib/users/user';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 
 @Component({
-  selector: 'app-tile-map',
-  templateUrl: './tile.map.component.html',
-  styleUrls: ['../tile.abstract.css', './tile.map.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-tile-map',
+    templateUrl: './tile.map.component.html',
+    styleUrls: ['../tile.abstract.css', './tile.map.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class TileMapComponent extends TileAbstractDirective {

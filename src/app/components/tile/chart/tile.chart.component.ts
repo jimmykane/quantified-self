@@ -12,10 +12,10 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
   templateUrl: './tile.chart.component.html',
   styleUrls: ['../tile.abstract.css', './tile.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class TileChartComponent extends TileAbstractDirective {
-  @Input() isLoading: boolean;
   @Input() chartType: ChartTypes;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;

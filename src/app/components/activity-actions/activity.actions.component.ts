@@ -16,11 +16,12 @@ import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance
 import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
 
 @Component({
-  selector: 'app-activity-actions',
-  templateUrl: './activity.actions.component.html',
-  styleUrls: ['./activity.actions.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  providers: [],
+    selector: 'app-activity-actions',
+    templateUrl: './activity.actions.component.html',
+    styleUrls: ['./activity.actions.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    providers: [],
+    standalone: false
 })
 export class ActivityActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
