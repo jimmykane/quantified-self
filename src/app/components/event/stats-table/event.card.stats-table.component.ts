@@ -1,25 +1,25 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {MatTableDataSource} from '@angular/material/table';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
-import {AppColors} from '../../../services/color/app.colors';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
-import {DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {DataVerticalSpeed} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
-import {DataSwimPace} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {AppEventColorService} from '../../../services/color/app.event.color.service';
+import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
+import { MatTableDataSource } from '@angular/material/table';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
+import { AppColors } from '../../../services/color/app.colors';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
+import { DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
+import { DataVerticalSpeed } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
+import { DataSwimPace } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
+import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
 
 @Component({
-    selector: 'app-event-stats-table',
-    templateUrl: './event.card.stats-table.component.html',
-    styleUrls: ['./event.card.stats-table.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-stats-table',
+  templateUrl: './event.card.stats-table.component.html',
+  styleUrls: ['./event.card.stats-table.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardStatsTableComponent implements OnChanges {
@@ -27,7 +27,7 @@ export class EventCardStatsTableComponent implements OnChanges {
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];
   data: MatTableDataSource<object>;
-  columns: Array<object>;
+  columns: string[];
   appColors = AppColors;
 
   constructor(private eventColorService: AppEventColorService) {
@@ -109,7 +109,7 @@ export class EventCardStatsTableComponent implements OnChanges {
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
           return rowObj;
-        }, {Name: `${stat.getDisplayType()}`}),
+        }, { Name: `${stat.getDisplayType()}` }),
       );
       return array;
     }, []);
