@@ -4,12 +4,14 @@
     "outDir": "../out-tsc/spec",
     "baseUrl": "",
     "types": [
-      "jasmine",
+      "vitest/globals",
+      "vitest/importMeta",
+      "vite/client",
       "node"
     ]
   },
   "files": [
-    "test.ts",
+    "test-setup.ts",
     "polyfills.ts"
   ],
   "include": [
