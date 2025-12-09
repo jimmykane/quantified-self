@@ -114,7 +114,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
         1
       );
     })
-  };
+  }
 
   ngOnDestroy() {
     super.ngOnDestroy();

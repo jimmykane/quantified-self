@@ -342,8 +342,8 @@ export class AppEventService implements OnDestroy {
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
       // resultA is startAfter snapshot, resultB is endBefore snapshot (if both exist) or resultA if only one exists
       // Wait, zip emits inputs in order.
-      let startAfterSnap = startAfterDoc ? resultA : null;
-      let endBeforeSnap = endBeforeDoc ? (startAfterDoc ? resultB : resultA) : null;
+      const startAfterSnap = startAfterDoc ? resultA : null;
+      const endBeforeSnap = endBeforeDoc ? (startAfterDoc ? resultB : resultA) : null;
 
       if (startAfterDoc && endBeforeDoc) {
         return getActivities ? this._getEventsAndActivities(user, whereClauses, orderByField, asc, limitCount, startAfterSnap, endBeforeSnap) : this._getEvents(user, whereClauses, orderByField, asc, limitCount, startAfterSnap, endBeforeSnap);
@@ -460,7 +460,7 @@ export class AppEventService implements OnDestroy {
   }
 
   private chunkArray(myArray, chunk_size) {
-    var results = [];
+    const results = [];
     while (myArray.length) {
       results.push(myArray.splice(0, chunk_size));
     }

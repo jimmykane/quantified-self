@@ -135,7 +135,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.search();
   }
 
-  async onDateChange(event: MatDatepickerInputEvent<any>, isStartDate: Boolean) {
+  async onDateChange(event: MatDatepickerInputEvent<any>, isStartDate: boolean) {
     if (!event.value) {
       return;
     }

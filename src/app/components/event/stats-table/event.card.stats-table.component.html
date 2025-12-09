@@ -32,7 +32,7 @@
               }
             </mat-header-cell>
             <mat-cell *matCellDef="let row">
-              @if (column == 'Difference' && row[column]) {
+              @if (column === 'Difference' && row[column]) {
                 <span>
                   {{ row[column].display }}
                   @if (row[column].percent <= 2) {

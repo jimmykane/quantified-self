@@ -31,7 +31,11 @@ if (environment.production) {
 
 // Set the theme before app is running
 if (localStorage.getItem('appTheme')) {
-  localStorage.getItem('appTheme') === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme')
+  if (localStorage.getItem('appTheme') === AppThemes.Normal) {
+    document.body.classList.remove('dark-theme');
+  } else {
+    document.body.classList.add('dark-theme');
+  }
 }
 
 import('./app/app.module')

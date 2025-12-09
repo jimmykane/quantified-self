@@ -1,0 +1,64 @@
+{
+    "root": true,
+    "ignorePatterns": [
+        "projects/**/*"
+    ],
+    "overrides": [
+        {
+            "files": [
+                "*.ts"
+            ],
+            "extends": [
+                "eslint:recommended",
+                "plugin:@typescript-eslint/recommended",
+                "plugin:@angular-eslint/recommended",
+                "plugin:@angular-eslint/template/process-inline-templates"
+            ],
+            "rules": {
+                "@angular-eslint/directive-selector": [
+                    "error",
+                    {
+                        "type": "attribute",
+                        "prefix": "app",
+                        "style": "camelCase"
+                    }
+                ],
+                "@angular-eslint/component-selector": [
+                    "error",
+                    {
+                        "type": "element",
+                        "prefix": "app",
+                        "style": "kebab-case"
+                    }
+                ],
+                "@angular-eslint/prefer-standalone": "off",
+                "@angular-eslint/prefer-inject": "off",
+                "@angular-eslint/no-empty-lifecycle-method": "warn",
+                "@typescript-eslint/no-explicit-any": "off",
+                "@typescript-eslint/no-unused-vars": [
+                    "warn",
+                    {
+                        "argsIgnorePattern": "^_"
+                    }
+                ],
+                "@typescript-eslint/no-unused-expressions": "warn",
+                "@typescript-eslint/ban-ts-comment": "warn",
+                "no-console": "off",
+                "prefer-const": "warn",
+                "no-case-declarations": "warn"
+            }
+        },
+        {
+            "files": [
+                "*.html"
+            ],
+            "extends": [
+                "plugin:@angular-eslint/template/recommended"
+            ],
+            "rules": {
+                "@angular-eslint/template/click-events-have-key-events": "warn",
+                "@angular-eslint/template/interactive-supports-focus": "warn"
+            }
+        }
+    ]
+}

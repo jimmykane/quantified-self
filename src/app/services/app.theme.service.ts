@@ -58,7 +58,11 @@ export class AppThemeService implements OnDestroy {
   }
 
   public setAppTheme(appTheme: AppThemes) {
-    appTheme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
+    if (appTheme === AppThemes.Normal) {
+      document.body.classList.remove('dark-theme');
+    } else {
+      document.body.classList.add('dark-theme');
+    }
     localStorage.setItem('appTheme', appTheme);
     this.appTheme.next(appTheme);
   }

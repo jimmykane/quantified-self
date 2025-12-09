@@ -26,15 +26,15 @@ export class EventCardStatsTableComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];
-  data: MatTableDataSource<Object>;
-  columns: Array<Object>;
+  data: MatTableDataSource<object>;
+  columns: Array<object>;
   appColors = AppColors;
 
   constructor(private eventColorService: AppEventColorService) {
   }
 
   ngOnChanges(simpleChanges) {
-    this.data = new MatTableDataSource<Object>();
+    this.data = new MatTableDataSource<object>();
     this.columns = [];
     if (!this.selectedActivities.length || !this.userUnitSettings) {
       return;
