@@ -1,9 +1,9 @@
 import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Directive } from '@angular/core';
 import * as Sentry from '@sentry/browser';
 import * as am4charts from '@amcharts/amcharts4/charts';
-import {Subscription} from 'rxjs';
-import {DataPaceMinutesPerMile, DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { Subscription } from 'rxjs';
+import { DataPaceMinutesPerMile, DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
+import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 
 
 // Chart Themes
@@ -18,7 +18,7 @@ import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
 import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
 import kelly from '@amcharts/amcharts4/themes/kelly';
 import * as am4core from '@amcharts/amcharts4/core';
-import {LoadingAbstractDirective} from '../loading/loading-abstract.directive';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
 
 declare function require(moduleName: string): any;
@@ -33,8 +33,8 @@ try {
 // @todo should dectate to implement on screen change
 @Directive()
 export abstract class ChartAbstractDirective extends LoadingAbstractDirective implements OnDestroy {
-  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
-  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
+  @ViewChild('chartDiv', { static: true }) chartDiv: ElementRef;
+  @ViewChild('legendDiv', { static: true }) legendDiv: ElementRef;
 
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
   @Input() useAnimations: boolean;
@@ -60,7 +60,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     super(changeDetector);
     am4core.options.onlyShowOnViewport = false;
     am4core.options.queue = false;
-    am4core.options.commercialLicense = true;
+    am4core.options.commercialLicense = false;
     // @todo test perf
     am4core.options.autoDispose = true;
     if (am4ChartsTimeLineLicence) {
@@ -91,9 +91,9 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     exportingMenu.items = [{
       label: '...️',
       menu: [
-        {'type': 'png', 'label': 'PNG'}, // @todo add retina here
-        {'type': 'json', 'label': 'JSON'},
-        {'type': 'csv', 'label': 'CSV'},
+        { 'type': 'png', 'label': 'PNG' }, // @todo add retina here
+        { 'type': 'json', 'label': 'JSON' },
+        { 'type': 'csv', 'label': 'CSV' },
         // {'type': 'xlsx', 'label': 'XLSX'},
         // {"label": "Print", "type": "print"},
       ],
