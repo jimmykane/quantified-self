@@ -15,6 +15,9 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { Overlay } from '@angular/cdk/overlay';
 
+
+import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
+
 @Component({
   selector: 'app-upload-activities',
   templateUrl: './upload-activities.component.html',
@@ -44,7 +47,24 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
         try {
           if ((typeof fileReaderResult === 'string') && file.extension === 'json') {
             try {
-              newEvent = await EventImporterSuuntoJSON.getFromJSONString(fileReaderResult);
+              // Parse first to sanitize
+              const json = JSON.parse(fileReaderResult as string);
+              const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
+
+              if (unknownTypes.length > 0) {
+                Sentry.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
+                this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
+              }
+
+              // Re-serialize for the importer if it expects a string, or see if it accepts object
+              // EventImporterSuuntoJSON.getFromJSONString expects string.
+              // Just pass the sanitized object if possible. Checking library... 
+              // It seems getFromJSONString calls EventImporterJSON.getFromJSON(JSON.parse(str)).
+              // So we can probably skip getFromJSONString and call getFromJSON if we had access, but checking imports...
+              // EventImporterSuuntoJSON extends EventImporterJSON.
+              // For safety and compatibility with current code structure, we'll re-stringify.
+              newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson));
+
             } catch (e) {
 
               newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
@@ -61,6 +81,12 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
             reject(new Error('No compatible parser found'))
             return;
           }
+          // Sanitize the resulting EventInterface object? 
+          // If the importer worked, it means it didn't crash.
+          // However, if we didn't sanitize JSON inputs for other formats (like SML converted to JSON internally?), we might miss some.
+          // But the JSON importer is the one prone to "Class type ... not in store" if it walks the JSON directly.
+          // For now, handling the .json extension is the critical path requested.
+
           newEvent.name = file.filename;
         } catch (e) {
           this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 2000 });

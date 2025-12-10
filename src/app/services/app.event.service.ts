@@ -21,6 +21,9 @@ import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapter
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 
+
+import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -40,7 +43,11 @@ export class AppEventService implements OnDestroy {
       docData(eventDoc).pipe(
         map(eventSnapshot => {
           if (!eventSnapshot) return null;
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventID);
+          const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+          if (unknownTypes.length > 0) {
+            Sentry.captureMessage('Unknown Data Types in getEventAndActivities', { extra: { types: unknownTypes, eventID } });
+          }
+          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
         })),
       this.getActivities(user, eventID),
     ]).pipe(catchError((error) => {
@@ -125,7 +132,11 @@ export class AppEventService implements OnDestroy {
               intensityZones: activitySnapshot.intensityZones || [],
               events: activitySnapshot.events || []
             };
-            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>safeActivityData).setID(activitySnapshot.id));
+            const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(safeActivityData);
+            if (unknownTypes.length > 0) {
+              Sentry.captureMessage('Unknown Data Types in getActivities', { extra: { types: unknownTypes, eventID, activityID: activitySnapshot.id } });
+            }
+            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
           } catch (e) {
             console.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
           }
@@ -362,7 +373,11 @@ export class AppEventService implements OnDestroy {
 
     return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.map((eventSnapshot) => {
-        return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventSnapshot.id);
+        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+        if (unknownTypes.length > 0) {
+          Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
+        }
+        return EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
       })
     }));
   }
@@ -372,7 +387,11 @@ export class AppEventService implements OnDestroy {
 
     return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
-        events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventSnapshot.id));
+        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+        if (unknownTypes.length > 0) {
+          Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
+        }
+        events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id));
         return events;
       }, []);
     })).pipe(switchMap((events: EventInterface[]) => {

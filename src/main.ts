@@ -34,8 +34,6 @@ if (environment.production) {
 if (localStorage.getItem('appTheme')) {
   if (localStorage.getItem('appTheme') === AppThemes.Normal) {
     document.body.classList.remove('dark-theme');
-  } else {
-    document.body.classList.add('dark-theme');
   }
 }
 
