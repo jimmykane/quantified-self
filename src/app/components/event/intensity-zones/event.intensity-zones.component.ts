@@ -9,8 +9,8 @@ import {
   OnDestroy,
   SimpleChanges,
 } from '@angular/core';
-import * as am4core from '@amcharts/amcharts4/core';
-import * as am4charts from '@amcharts/amcharts4/charts';
+import type * as am4core from '@amcharts/amcharts4/core';
+import type * as am4charts from '@amcharts/amcharts4/charts';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
@@ -47,24 +47,27 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     super(zone, changeDetector);
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
+  async ngOnChanges(changes: SimpleChanges): Promise<void> {
     if (this.chart) {
       if (changes.chartTheme || changes.useAnimations) {
         this.destroyChart();
-        this.chart = this.createChart();
+        this.chart = await this.createChart();
       }
       this.updateChart(EventIntensityZonesComponent.getData(this.activities));
     }
   }
 
 
-  ngAfterViewInit(): void {
-    this.chart = this.createChart();
-    this.updateChart(EventIntensityZonesComponent.getData(this.activities));
+  async ngAfterViewInit(): Promise<void> {
+    this.chart = await this.createChart();
+    if (this.chart) {
+      this.updateChart(EventIntensityZonesComponent.getData(this.activities));
+    }
   }
 
-  protected createChart(): am4charts.XYChart {
-    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
+  protected async createChart(): Promise<am4charts.XYChart> {
+    const { am4core, am4charts } = await this.loadAmCharts();
+    const chart = <am4charts.XYChart>(await super.createChart(am4charts.XYChart));
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(12, 0, 0, 0);
@@ -116,15 +119,17 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     return chart;
   }
 
-  private updateChart(data: any) {
+  private async updateChart(data: any) {
+    if (!this.chart) return;
     this.chart.series.clear();
-    this.createChartSeries();
+    const { am4core, am4charts } = await this.loadAmCharts();
+    this.createChartSeries(am4core, am4charts);
     this.chart.data = data
   }
 
-  private createChartSeries() {
+  private createChartSeries(amCore: typeof am4core, amCharts: typeof am4charts) {
     DynamicDataLoader.zoneStatsTypeMap.forEach(statsTypeMap => {
-      const series = this.chart.series.push(new am4charts.ColumnSeries());
+      const series = this.chart.series.push(new amCharts.ColumnSeries());
       // series.clustered = false;
       series.dataFields.valueX = statsTypeMap.type;
       series.dataFields.categoryY = 'zone';
@@ -132,11 +137,11 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       series.legendSettings.labelText = `${statsTypeMap.type}`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
-      series.columns.template.height = am4core.percent(80);
+      series.columns.template.height = amCore.percent(80);
       series.columns.template.column.cornerRadiusBottomRight = 8;
       series.columns.template.column.cornerRadiusTopRight = 8;
 
-      const categoryLabel = series.bullets.push(new am4charts.LabelBullet());
+      const categoryLabel = series.bullets.push(new amCharts.LabelBullet());
       categoryLabel.label.adapter.add('text', (text, target) => {
         return `[bold]${Math.round(target.dataItem.values.valueX.percent)}[/]%`;
       });
@@ -148,7 +153,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       categoryLabel.label.dx = 10;
       categoryLabel.label.padding(1, 2, 0, 2);
 
-      categoryLabel.label.background = new am4core.RoundedRectangle();
+      categoryLabel.label.background = new amCore.RoundedRectangle();
       categoryLabel.label.background.fillOpacity = 1;
       categoryLabel.label.background.strokeOpacity = 1;
       categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
@@ -156,7 +161,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       });
       // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
-      series.fill = am4core.color(AppDataColors[statsTypeMap.type]);
+      series.fill = amCore.color(AppDataColors[statsTypeMap.type]);
     });
   }
 }

@@ -9,38 +9,45 @@ import {
   OnDestroy,
 } from '@angular/core';
 
-import * as am4charts from '@amcharts/amcharts4/charts';
+import type * as am4charts from '@amcharts/amcharts4/charts';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
-import { LinearGradient } from '@amcharts/amcharts4/core';
+import type * as am4core from '@amcharts/amcharts4/core';
 import { range, Subscription, timer } from 'rxjs';
 import { take } from 'rxjs/operators';
-import { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
+import type { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
 
 
 @Component({
-    selector: 'app-home-live-chart',
-    templateUrl: './home.live-chart.component.html',
-    styleUrls: ['./home.live-chart.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-home-live-chart',
+  templateUrl: './home.live-chart.component.html',
+  styleUrls: ['./home.live-chart.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class HomeLiveChartComponent extends ChartAbstractDirective implements OnDestroy, AfterViewInit {
 
 
   protected liveDataSubscription: Subscription;
 
+  private _am4core: typeof am4core;
+  private _am4charts: typeof am4charts;
+
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
 
-  ngAfterViewInit(): void {
-    this.chart = this.createChart();
+  async ngAfterViewInit() {
+    this.chart = await this.createChart();
     this.subscribeToLiveData();
   }
 
-  protected createChart(): am4charts.XYChart {
-    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
+  protected async createChart(): Promise<am4charts.XYChart> {
+    const { am4core, am4charts } = await this.loadAmCharts();
+    this._am4core = am4core;
+    this._am4charts = am4charts;
+    const chart = <am4charts.XYChart>(await super.createChart(am4charts.XYChart));
+
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(10, 0, 0, 1);
@@ -51,7 +58,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
 
     chart.data = this.getInitialData();
 
-    const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+    const dateAxis = chart.xAxes.push(new this._am4charts.DateAxis());
     dateAxis.renderer.grid.template.location = 0;
     dateAxis.renderer.minGridDistance = 30;
     dateAxis.dateFormats.setKey('second', 'ss');
@@ -62,7 +69,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     dateAxis.renderer.axisFills.template.disabled = true;
     dateAxis.renderer.ticks.template.disabled = true;
 
-    const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+    const valueAxis = chart.yAxes.push(new this._am4charts.ValueAxis());
     valueAxis.tooltip.disabled = true;
     valueAxis.interpolationDuration = 500;
     valueAxis.rangeChangeDuration = 500;
@@ -72,7 +79,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     valueAxis.renderer.axisFills.template.disabled = true;
     valueAxis.renderer.ticks.template.disabled = true;
 
-    const series = chart.series.push(new am4charts.LineSeries());
+    const series = chart.series.push(new this._am4charts.LineSeries());
     series.dataFields.dateX = 'date';
     series.dataFields.valueY = 'value';
     series.interpolationDuration = 500;
@@ -87,7 +94,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     dateAxis.rangeChangeDuration = 500;
 
     series.fillOpacity = 1;
-    const gradient = new LinearGradient();
+    const gradient = new this._am4core.LinearGradient();
     gradient.addColor(chart.colors.getIndex(0), 0.2);
     gradient.addColor(chart.colors.getIndex(0), 0);
     series.fill = gradient;
@@ -108,11 +115,22 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
 
   private subscribeToLiveData() {
     this.liveDataSubscription = timer(1000, 500).pipe().subscribe(x => {
-      const lastdataItem = <LineSeriesDataItem>this.chart.series.getIndex(0).dataItems.getIndex(this.chart.series.getIndex(0).dataItems.length - 1);
-      this.chart.addData(
-        { date: new Date(lastdataItem.dateX.getTime() + 1000), value: x + 60 },
-        1
-      );
+      // Need to cast to handle dynamic typing if needed, but if this.chart is typed correctly it's fine.
+      // However, we need to be careful with access if chart is not yet created?
+      // ngAfterViewInit awaits creation so this should be safe.
+      if (!this.chart) return;
+
+      // Accessing series by index. The type system might complain about getIndex returning generic Sprite.
+      const series = <am4charts.LineSeries>this.chart.series.getIndex(0);
+      if (series && series.dataItems) {
+        const lastdataItem = <LineSeriesDataItem>series.dataItems.getIndex(series.dataItems.length - 1);
+        if (lastdataItem) {
+          this.chart.addData(
+            { date: new Date(lastdataItem.dateX.getTime() + 1000), value: x + 60 },
+            1
+          );
+        }
+      }
     })
   }
 
