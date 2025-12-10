@@ -11,51 +11,46 @@ import {
   ViewChild,
 } from '@angular/core';
 
-import type * as am4core from '@amcharts/amcharts4/core';
-import type * as am4charts from '@amcharts/amcharts4/charts';
-import type * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
+import * as am4core from '@amcharts/amcharts4/core';
+import * as am4charts from '@amcharts/amcharts4/charts';
+import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
-import { SummariesChartDataInterface } from '../../summaries/summaries.component';
-import { ChartHelper } from '../../event/chart/chart-helper';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
+import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
+import {SummariesChartDataInterface} from '../../summaries/summaries.component';
+import {ChartHelper} from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 @Component({
-  selector: 'app-timeline-chart',
-  templateUrl: './charts.timeline.component.html',
-  styleUrls: ['./charts.timeline.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false
+    selector: 'app-timeline-chart',
+    templateUrl: './charts.timeline.component.html',
+    styleUrls: ['./charts.timeline.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsTimelineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
-  private _am4core: typeof am4core;
-  private _am4charts: typeof am4charts;
+
 
   constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
     super(zone, changeDetector);
   }
 
-  protected async createChart(): Promise<am4charts.XYChart> {
-    const { am4core, am4charts } = await this.loadAmCharts();
-    this._am4core = am4core;
-    this._am4charts = am4charts;
-    const am4plugins_timeline = await import('@amcharts/amcharts4/plugins/timeline');
 
-    const chart = <am4plugins_timeline.SpiralChart>await super.createChart(am4plugins_timeline.SpiralChart, am4core);
+  protected createChart(): am4charts.XYChart {
+    const chart = <am4plugins_timeline.SpiralChart>super.createChart(am4plugins_timeline.SpiralChart);
     chart.levelCount = 2;
     chart.inversed = true;
     chart.endAngle = -90;
-    chart.yAxisInnerRadius = this._am4core.percent(15);
-    chart.yAxisRadius = this._am4core.percent(120);
-    chart.innerRadius = this._am4core.percent(60);
+    chart.yAxisInnerRadius = am4core.percent(15);
+    chart.yAxisRadius = am4core.percent(120);
+    chart.innerRadius = am4core.percent(60);
     chart.paddingTop = 0;
     chart.paddingBottom = 0;
     chart.fontSize = '0.8em';
 
-    const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, am4charts));
+    const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
     // categoryAxis.dataFields.category = 'time';
     if (categoryAxis instanceof am4charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';
@@ -90,7 +85,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
       return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
     });
 
-    const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new this._am4charts.ValueAxis());
+    const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 100;
 
     // valueAxis.renderer.line.strokeDasharray = '1,0';
@@ -103,7 +98,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
     valueAxis.min = 0;
 
 
-    valueAxis.numberFormatter = new this._am4core.NumberFormatter();
+    valueAxis.numberFormatter = new am4core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
     //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
@@ -125,7 +120,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
 
     series.columns.template.adapter.add('fill', (fill, target) => {
       if (categoryAxis instanceof am4charts.CategoryAxis) {
-        return this._am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]));
+        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]));
       }
       return this.getFillColor(chart, target.dataItem.index);
     });
@@ -141,7 +136,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
 
     // series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
-    const label = series.createChild(this._am4core.Label);
+    const label = series.createChild(am4core.Label);
     label.horizontalCenter = 'middle';
     label.paddingLeft = 20;
     label.verticalCenter = 'middle';
@@ -159,7 +154,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
 
     // chart.scrollbarX = new am4core.Scrollbar();
     // chart.scrollbarX.align = 'center'
-    // chart.scrollbarX.width = this._am4core.percent(70);
+    // chart.scrollbarX.width = am4core.percent(70);
 
 
     // const cursor = new am4plugins_timeline.CurveCursor();

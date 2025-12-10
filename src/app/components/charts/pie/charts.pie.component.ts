@@ -7,30 +7,28 @@ import {
   OnDestroy,
 } from '@angular/core';
 
-import type * as am4core from '@amcharts/amcharts4/core';
-import type * as am4charts from '@amcharts/amcharts4/charts';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import * as am4core from '@amcharts/amcharts4/core';
+import * as am4charts from '@amcharts/amcharts4/charts';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
 import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import type * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
-import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
-import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
+import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
+import {AppEventColorService} from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
 
 
 @Component({
-  selector: 'app-pie-chart',
-  templateUrl: './charts.pie.component.html',
-  styleUrls: ['./charts.pie.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  standalone: false
+    selector: 'app-pie-chart',
+    templateUrl: './charts.pie.component.html',
+    styleUrls: ['./charts.pie.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ChartsPieComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
-  private _am4core: typeof am4core;
-  private _am4charts: typeof am4charts;
 
 
 
@@ -38,20 +36,17 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
     super(zone, changeDetector);
   }
 
-  protected async createChart(): Promise<am4charts.PieChart> {
-    const { am4core, am4charts } = await this.loadAmCharts();
-    this._am4core = am4core;
-    this._am4charts = am4charts;
-    const chart = <am4charts.PieChart>(await super.createChart(am4charts.PieChart));
+  protected createChart(): am4charts.PieChart {
+    const chart = <am4charts.PieChart>super.createChart(am4charts.PieChart);
     chart.fontSize = '0.8em'
     // chart.hiddenState.properties.opacity = 0;
     chart.padding(0, 5, 0, 5);
-    chart.radius = this._am4core.percent(55);
-    chart.innerRadius = this._am4core.percent(45);
+    chart.radius = am4core.percent(55);
+    chart.innerRadius = am4core.percent(45);
 
-    const pieSeries = chart.series.push(new this._am4charts.PieSeries());
+    const pieSeries = chart.series.push(new am4charts.PieSeries());
     pieSeries.dataFields.value = this.chartDataValueType;
-    pieSeries.dataFields.category = this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
+    pieSeries.dataFields.category =  this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? 'type' : 'time';
     // pieSeries.interpolationDuration = 500;f
     // pieSeries.rangeChangeDuration = 500;
     // pieSeries.sequencedInterpolation = true;
@@ -59,11 +54,11 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
     // pieSeries.slices.template.propertyFields.isActive = 'pulled';
     pieSeries.slices.template.strokeWidth = 0.4;
     pieSeries.slices.template.strokeOpacity = 1;
-    pieSeries.slices.template.stroke = this._am4core.color('#175e84');
+    pieSeries.slices.template.stroke = am4core.color('#175e84');
     // pieSeries.slices.template.filters.push(ChartHelper.getShadowFilter());
 
     pieSeries.slices.template.adapter.add('tooltipText', (text, target, key) => {
-      if (!target.dataItem || !target.dataItem.values || !target.dataItem.dataContext) {
+      if (!target.dataItem || !target.dataItem.values || ! target.dataItem.dataContext) {
         return '';
       }
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
@@ -72,7 +67,7 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
 
     pieSeries.slices.template.adapter.add('fill', (fill, target, key) => {
       if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
-        return this._am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]))
+        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]))
       }
       return this.getFillColor(chart, target.dataItem.index);
     });
@@ -93,7 +88,7 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
     pieSeries.labels.template.wrap = true
     pieSeries.labels.template.maxWidth = 70
 
-    const label = pieSeries.createChild(this._am4core.Label);
+    const label = pieSeries.createChild(am4core.Label);
     label.horizontalCenter = 'middle';
     label.verticalCenter = 'middle';
     // label.fontSize = 12;
@@ -119,7 +114,6 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
     // chart.exporting.menu = this.getExportingMenu();
 
     if (this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType) {
-      const am4plugins_sliceGrouper = await import('@amcharts/amcharts4/plugins/sliceGrouper');
       const grouper = pieSeries.plugins.push(new am4plugins_sliceGrouper.SliceGrouper());
       grouper.threshold = 7;
       grouper.groupName = 'Other';

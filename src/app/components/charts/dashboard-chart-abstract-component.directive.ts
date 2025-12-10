@@ -1,6 +1,6 @@
 import { ChartAbstractDirective } from './chart-abstract.directive';
 import { AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges } from '@angular/core';
-import type * as am4charts from '@amcharts/amcharts4/charts';
+import * as am4charts from '@amcharts/amcharts4/charts';
 import { SummariesChartDataInterface } from '../summaries/summaries.component';
 import {
   ChartDataCategoryTypes,
@@ -8,7 +8,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
-import type * as am4core from '@amcharts/amcharts4/core';
+import * as am4core from '@amcharts/amcharts4/core';
 
 @Directive()
 export abstract class DashboardChartAbstractDirective extends ChartAbstractDirective implements OnChanges, AfterViewInit {
@@ -22,31 +22,21 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
     super(zone, changeDetector);
   }
 
-  async ngAfterViewInit() {
-    // We can't set queue on am4core here easily without loading it, 
-    // but createChart does dynamic loading internally.
-    // If we want to set options globally for dashboard charts, we might do it in createChart or loadAmCharts in base.
-
-    // am4core.options.queue = true; // This requires importing am4core. 
-    // Let's rely on base class setting options or do it after load.
-
-    this.chart = <am4charts.XYChart>(await this.createChart());
-    if (this.chart) {
-      this.chart.data = this.data || [];
-    }
+  ngAfterViewInit(): void {
+    am4core.options.queue = true;
+    am4core.options.onlyShowOnViewport = true;
+    this.chart = <am4charts.XYChart>this.createChart();
+    this.chart.data = this.data || [];
   }
 
-  async ngOnChanges(simpleChanges) {
+  ngOnChanges(simpleChanges) {
     this.isLoading ? this.loading() : this.loaded();
-
-    if (simpleChanges.chartTheme) {
-      // Since chart creation is async, we need to be careful not to create multiple charts race condition
-      // For now, destroy and recreate
+    // If there is a new theme we need to destroy the chart and readd the data;
+    // If theme changes destroy the chart
+    if (simpleChanges.chartTheme && this.chart) {
       this.destroyChart();
-      if (this.chartDiv) { // Ensure view is initialized
-        this.chart = <am4charts.XYChart>(await this.createChart());
-        this.chart.data = this.data || [];
-      }
+      this.chart = <am4charts.XYChart>this.createChart();
+      this.chart.data = this.data || [];
     }
 
     if (!this.data) {
@@ -54,31 +44,24 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
     }
 
     if (simpleChanges.data) {
-      this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType));
+      // @todo this might change even if not needed
+      // @todo not sure if "important" as the caller also does the same
+      this.data = [...this.data].sort(this.sortData(this.chartDataCategoryType)); // Important to create new array
       if (this.chart) {
         this.chart.data = this.data || [];
+        // @todo should it also invalidate?
         this.chart.invalidateLabels();
       }
     }
   }
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDataTimeInterval: TimeIntervals, am4chartsModule: any): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
-    // We need to pass the module instance to create classes!
-    // This requires refactoring getCategoryAxis to accept the module.
-    // OR we keep static imports here? No, defeat the purpose.
 
-    // This method creates 'new am4charts.DateAxis()'. 
-    // This means this file ALSO needs to use dynamic imports or receive the factory from `createChart`.
-    // Since `createChart` in subclasses calls this, we should probably pass the loaded modules to this helper.
-
-    const am4charts = am4chartsModule;
-
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDataTimeInterval: TimeIntervals): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
     switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
         const axis = new am4charts.DateAxis();
         let key;
         axis.skipEmptyPeriods = true;
-        // ... (rest of logic same)
         switch (chartDataTimeInterval) {
           case TimeIntervals.Yearly:
             key = 'year';
@@ -113,9 +96,7 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
     }
   }
 
-  // Helper methods that don't need am4charts classes remain unchanged
   protected getChartDateFormat(timeInterval: TimeIntervals) {
-    // ... same
     switch (timeInterval) {
       case TimeIntervals.Yearly:
         return 'yyyy';
