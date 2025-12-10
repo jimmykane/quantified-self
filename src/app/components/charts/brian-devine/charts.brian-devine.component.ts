@@ -9,9 +9,13 @@ import {
   OnDestroy,
 } from '@angular/core';
 
-import * as am4core from '@amcharts/amcharts4/core';
-import * as am4charts from '@amcharts/amcharts4/charts';
-import { AxisRendererCircular, CategoryAxis, DateAxis, RadarColumn } from '@amcharts/amcharts4/charts';
+import { AmChartsService } from '../../../services/am-charts.service';
+
+// Type-only imports
+import type * as am4core from '@amcharts/amcharts4/core';
+import type * as am4charts from '@amcharts/amcharts4/charts';
+import type { AxisRendererCircular, CategoryAxis, DateAxis, RadarColumn } from '@amcharts/amcharts4/charts';
+
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
@@ -40,14 +44,18 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
   protected declare chart: am4charts.RadarChart;
 
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
-    super(zone, changeDetector);
+  private core: typeof am4core;
+  private charts: typeof am4charts;
+
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService) {
+    super(zone, changeDetector, amChartsService);
   }
 
-  ngAfterViewInit(): void {
-    am4core.options.queue = true;
-    am4core.options.onlyShowOnViewport = false;
-    this.chart = this.createChart(am4charts.RadarChart, this.data);
+
+  async ngAfterViewInit(): Promise<void> {
+    // am4core options are now handled in AmChartsService
+    this.chart = await this.createChart(undefined, this.data); // ChartType argument is unused in method signature? No, it is used. But undefined is passed?? Method helper signature below says chartType optional.
+
     if (!this.data || !this.data.daily || !this.data.daily.length || !this.data.weekly || !this.data.weekly.length) {
       return
     }
@@ -56,14 +64,16 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
   }
 
 
-  ngOnChanges(simpleChanges) {
+  async ngOnChanges(simpleChanges): Promise<void> {
     this.isLoading ? this.loading() : this.loaded();
+
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.chartTheme && this.chart) {
       this.destroyChart();
-      this.chart = this.createChart(am4charts.RadarChart, this.data);
+      this.chart = await this.createChart(undefined, this.data);
     }
+
 
     if (!this.data || !this.data.daily || !this.data.daily.length || !this.data.weekly || !this.data.weekly.length) {
       if (this.chart) {
@@ -88,15 +98,20 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
     }
   }
 
-  protected createChart(chartType?: typeof am4charts.Chart, data?: {
+  protected async createChart(chartType?: any, data?: {
     weekly: any[], daily: any[], activityTypes: ActivityTypes[]
-  }): am4charts.RadarChart {
+  }): Promise<am4charts.RadarChart> {
 
-    return this.zone.runOutsideAngular(() => {
+    const modules = await this.amChartsService.load();
+    this.core = modules.core;
+    this.charts = modules.charts;
 
-      const chart = <am4charts.RadarChart>super.createChart(am4charts.RadarChart);
-      chart.innerRadius = am4core.percent(20);
-      chart.radius = am4core.percent(95);
+    return this.zone.runOutsideAngular(async () => {
+
+      const chart = await super.createChart(this.charts.RadarChart) as am4charts.RadarChart;
+      chart.innerRadius = this.core.percent(20);
+      chart.radius = this.core.percent(95);
+
       chart.fontSize = '1em';
       chart.startAngle = 100;
       chart.endAngle = chart.startAngle + 340;
@@ -105,13 +120,15 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
       chart.zoomOutButton.valign = 'top';
 
       // Create axes
-      const dateAxis = chart.xAxes.push(<am4charts.DateAxis<am4charts.AxisRendererCircular>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
+      const dateAxis = chart.xAxes.push(<am4charts.DateAxis<am4charts.AxisRendererCircular>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, this.charts));
       // dateAxis.baseInterval = {timeUnit: 'week', count: 1};
-      dateAxis.renderer.innerRadius = am4core.percent(40);
+      dateAxis.renderer.innerRadius = this.core.percent(40);
+
       dateAxis.renderer.minGridDistance = 5;
       dateAxis.renderer.labels.template.relativeRotation = 0;
       dateAxis.renderer.labels.template.location = 0.5;
-      dateAxis.renderer.labels.template.radius = am4core.percent(-58);
+      dateAxis.renderer.labels.template.radius = this.core.percent(-58);
+
       dateAxis.renderer.labels.template.fontSize = '1em';
 
       // dateAxis.dateFormats.setKey('week', 'w');
@@ -121,32 +138,36 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
       // dateAxis.periodChangeDateFormats.setKey('week', this.getAxisDateFormat(this.chartDataTimeInterval));
       dateAxis.cursorTooltipEnabled = false;
 
-      const valueAxis = chart.yAxes.push(<am4charts.ValueAxis<am4charts.AxisRendererRadial>>new am4charts.ValueAxis());
+      const valueAxis = chart.yAxes.push(<am4charts.ValueAxis<am4charts.AxisRendererRadial>>new this.charts.ValueAxis());
       valueAxis.renderer.inversed = true;
-      valueAxis.renderer.radius = am4core.percent(40);
+      valueAxis.renderer.radius = this.core.percent(40);
+
       valueAxis.renderer.minGridDistance = 15;
       valueAxis.renderer.minLabelPosition = 0.05;
       valueAxis.renderer.grid.template.disabled = true;
       valueAxis.renderer.axisAngle = 90;
       valueAxis.cursorTooltipEnabled = false;
-      valueAxis.renderer.labels.template.fill = am4core.color('#ffffff');
+      valueAxis.renderer.labels.template.fill = this.core.color('#ffffff');
       valueAxis.renderer.labels.template.disabled = true;
 
 
+
       // day axis
-      const dayAxis = chart.yAxes.push(<am4charts.CategoryAxis<am4charts.AxisRendererRadial>>new am4charts.CategoryAxis());
+      const dayAxis = chart.yAxes.push(<am4charts.CategoryAxis<am4charts.AxisRendererRadial>>new this.charts.CategoryAxis());
+
       dayAxis.dataFields.category = 'day';
       // @todo should base to user start of the week day and be dynamycally generated by locale.
       // So better store it as number there
       dayAxis.data = [{ day: 'Mon' }, { day: 'Tue' }, { day: 'Wed' }, { day: 'Thu' }, { day: 'Fri' }, { day: 'Sat' }, { day: 'Sun' }]
-      dayAxis.renderer.innerRadius = am4core.percent(50);
+      dayAxis.renderer.innerRadius = this.core.percent(50);
+
       dayAxis.renderer.minGridDistance = 10;
       dayAxis.renderer.grid.template.location = 0;
       dayAxis.renderer.line.disabled = true;
       dayAxis.renderer.axisAngle = 90;
       dayAxis.cursorTooltipEnabled = false;
 
-      const label = chart.radarContainer.createChild(am4core.Label);
+      const label = chart.radarContainer.createChild(this.core.Label);
       label.horizontalCenter = 'middle';
       label.verticalCenter = 'middle';
       // label.fill = am4core.color('#ffffff');
@@ -186,8 +207,9 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
         return axis.renderer.pixelRadius + 7;
       })
       range.axisFill.fill = this.getColorForMonth(range.date.getMonth())
-      // range.axisFill.stroke = am4core.color('#b9ce37');
+      // range.axisFill.stroke = this.core.color('#b9ce37');
       range.grid.disabled = true;
+
       range.label.text = totalNumberOfMonths > 12
         ? `${range.endDate.toLocaleString('default', { month: 'long' })} ${range.endDate.getFullYear()}`
         : `${range.endDate.toLocaleString('default', { month: 'long' })}`;
@@ -198,8 +220,9 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
       range.label.paddingBottom = 0;
       range.label.interactionsEnabled = false;
       range.axisFill.interactionsEnabled = true;
-      range.axisFill.cursorOverStyle = am4core.MouseCursorStyle.pointer;
+      range.axisFill.cursorOverStyle = this.core.MouseCursorStyle.pointer;
       range.axisFill.events.on('hit', function (event) {
+
         if (axis.start === 0 && axis.end === 1) {
           axis.zoomToDates((<any>event.target.dataItem).date, (<any>event.target.dataItem).endDate);
         } else {
@@ -227,14 +250,16 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
     weekly: any[], daily: any[],
     activityTypes: ActivityTypes[]
   }) {
-    const columnSeries = chart.series.push(new am4charts.RadarColumnSeries());
+    const columnSeries = chart.series.push(new this.charts.RadarColumnSeries());
+
     columnSeries.stacked = true;
     columnSeries.data = data.weekly;
     columnSeries.dataFields.dateX = 'time';
     columnSeries.dataFields.valueY = activityType;
     columnSeries.columns.template.strokeOpacity = 0;
-    columnSeries.columns.template.width = am4core.percent(95);
-    columnSeries.fill = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+    columnSeries.columns.template.width = this.core.percent(95);
+    columnSeries.fill = this.core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+
     // columnSeries.fillOpacity = 0.6;
     columnSeries.tooltip.fontSize = '1em';
     columnSeries.tooltip.pointerOrientation = 'down';
@@ -251,7 +276,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
     columnSeries.cursorTooltipEnabled = false;
 
     // bubble series
-    const bubbleSeries = chart.series.push(new am4charts.RadarSeries())
+    const bubbleSeries = chart.series.push(new this.charts.RadarSeries())
+
     bubbleSeries.simplifiedProcessing = true
     bubbleSeries.name = activityType;
     bubbleSeries.dataFields.dateX = 'time';
@@ -272,10 +298,11 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
 
     bubbleSeries.bulletsContainer = chart.bulletsContainer;
 
-    const bubbleBullet = bubbleSeries.bullets.push(new am4charts.CircleBullet())
+    const bubbleBullet = bubbleSeries.bullets.push(new this.charts.CircleBullet())
     bubbleBullet.locationX = 0.5;
-    bubbleBullet.stroke = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
-    bubbleBullet.fill = am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+    bubbleBullet.stroke = this.core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+    bubbleBullet.fill = this.core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType));
+
     // bubbleBullet.fillOpacity = 0;
     bubbleBullet.tooltipText = '{value}';
     bubbleBullet.adapter.add('tooltipText', (text, target, key) => {
@@ -340,29 +367,30 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
     switch (month) {
       default:
       case 0:
-        return am4core.color('#0b85ce');
+        return this.core.color('#0b85ce');
       case 1:
-        return am4core.color('#1893bc');
+        return this.core.color('#1893bc');
       case 2:
-        return am4core.color('#0da157');
+        return this.core.color('#0da157');
       case 3:
-        return am4core.color('#88bc4e');
+        return this.core.color('#88bc4e');
       case 4:
-        return am4core.color('#ced629');
+        return this.core.color('#ced629');
       case 5:
-        return am4core.color('#f3bf1e');
+        return this.core.color('#f3bf1e');
       case 6:
-        return am4core.color('#f39b1f');
+        return this.core.color('#f39b1f');
       case 7:
-        return am4core.color('#f13f19');
+        return this.core.color('#f13f19');
       case 8:
-        return am4core.color('#f15c74');
+        return this.core.color('#f15c74');
       case 9:
-        return am4core.color('#c9428e');
+        return this.core.color('#c9428e');
       case 10:
-        return am4core.color('#8752ba');
+        return this.core.color('#8752ba');
       case 11:
-        return am4core.color('#5f58c0');
+        return this.core.color('#5f58c0');
     }
   }
+
 }

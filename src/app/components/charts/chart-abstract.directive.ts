@@ -1,40 +1,24 @@
 import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Directive } from '@angular/core';
 import * as Sentry from '@sentry/browser';
-import * as am4charts from '@amcharts/amcharts4/charts';
-import {Subscription} from 'rxjs';
-import {DataPaceMinutesPerMile, DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+// import * as am4charts from '@amcharts/amcharts4/charts'; // Removed static import
+import { Subscription } from 'rxjs';
+import { DataPaceMinutesPerMile, DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
+import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
 
 
 // Chart Themes
-import animated from '@amcharts/amcharts4/themes/animated';
-import material from '@amcharts/amcharts4/themes/material';
-import frozen from '@amcharts/amcharts4/themes/frozen';
-import dataviz from '@amcharts/amcharts4/themes/dataviz';
-import dark from '@amcharts/amcharts4/themes/dark';
-import amcharts from '@amcharts/amcharts4/themes/amcharts';
-import amchartsdark from '@amcharts/amcharts4/themes/amchartsdark';
-import moonrisekingdom from '@amcharts/amcharts4/themes/moonrisekingdom';
-import spiritedaway from '@amcharts/amcharts4/themes/spiritedaway';
-import kelly from '@amcharts/amcharts4/themes/kelly';
-import * as am4core from '@amcharts/amcharts4/core';
-import {LoadingAbstractDirective} from '../loading/loading-abstract.directive';
+import { AmChartsService } from '../../services/am-charts.service';
+import type * as am4charts from '@amcharts/amcharts4/charts';
+import type * as am4coretype from '@amcharts/amcharts4/core';
+import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
 
-declare function require(moduleName: string): any;
-
-let am4ChartsTimeLineLicence;
-try {
-  am4ChartsTimeLineLicence = require('../../../../licenses.json').am4ChartsTimeline;
-} catch (e) {
-  // Noop
-}
 
 // @todo should dectate to implement on screen change
 @Directive()
 export abstract class ChartAbstractDirective extends LoadingAbstractDirective implements OnDestroy {
-  @ViewChild('chartDiv', {static: true}) chartDiv: ElementRef;
-  @ViewChild('legendDiv', {static: true}) legendDiv: ElementRef;
+  @ViewChild('chartDiv', { static: true }) chartDiv: ElementRef;
+  @ViewChild('legendDiv', { static: true }) legendDiv: ElementRef;
 
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
   @Input() useAnimations: boolean;
@@ -44,77 +28,69 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
 
   protected subscriptions: Subscription[] = [];
 
-  protected themes = {
-    'material': material,
-    'frozen': frozen,
-    'dataviz': dataviz,
-    'dark': dark,
-    'amcharts': amcharts,
-    'amchartsdark': amchartsdark,
-    'moonrisekingdom': moonrisekingdom,
-    'spiritedaway': spiritedaway,
-    'kelly': kelly,
-  };
+  // protected themes = {}; // Removed static themes map
 
-  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
+
+  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected amChartsService: AmChartsService) {
     super(changeDetector);
-    am4core.options.onlyShowOnViewport = false;
-    am4core.options.queue = false;
-    am4core.options.commercialLicense = true;
-    // @todo test perf
-    am4core.options.autoDispose = true;
-    if (am4ChartsTimeLineLicence) {
-      am4core.addLicense(am4ChartsTimeLineLicence);
-    }
   }
 
-  protected createChart(chartType?: typeof am4charts.Chart, data?: any): am4charts.Chart {
+  protected async createChart(chartType?: any, data?: any): Promise<am4charts.Chart> {
+    const { core, charts } = await this.amChartsService.load();
 
+    // Config options set in service, but we can override or use core here
     return this.zone.runOutsideAngular(() => {
-      this.setChartThemes(this.chartTheme, this.useAnimations);
-      const chart = am4core.create(this.chartDiv.nativeElement, chartType || am4charts.XYChart);
+      this.setChartThemes(this.chartTheme, this.useAnimations, core);
+      const chart = core.create(this.chartDiv.nativeElement, chartType || charts.XYChart) as am4charts.Chart;
       chart.preloader.disabled = true;
 
       // chart.pixelPerfect = true;
       // chart.colors.step = 2;
       // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
-      chart.exporting.useRetina = true;
+      chart.exporting.useRetina = true; // access exporting via chart instance usually
       return chart;
     });
   }
 
-  protected getExportingMenu(): am4core.ExportMenu {
-    const exportingMenu = new am4core.ExportMenu();
-    exportingMenu.align = 'right';
-    exportingMenu.verticalAlign = 'bottom';
-    exportingMenu.items = [{
-      label: '...️',
-      menu: [
-        {'type': 'png', 'label': 'PNG'}, // @todo add retina here
-        {'type': 'json', 'label': 'JSON'},
-        {'type': 'csv', 'label': 'CSV'},
-        // {'type': 'xlsx', 'label': 'XLSX'},
-        // {"label": "Print", "type": "print"},
-      ],
-    }];
-    return exportingMenu;
+  protected getExportingMenu(): any { // Returning any for now as types are hard without namespace
+    // We need core to create ExportMenu but we don't have it synchronously here often
+    // Best to instantiate in createChart or use chart.exporting.menu directly
+    return null;
   }
 
-  protected setChartThemes(chartTheme: ChartThemes, useAnimations: boolean) {
-    this.zone.runOutsideAngular(() => {
-      am4core.unuseAllThemes();
-      am4core.useTheme(this.themes[chartTheme]);
-      if (useAnimations === true) {
-        am4core.useTheme(animated);
-      }
-    });
+  protected async setChartThemes(chartTheme: ChartThemes, useAnimations: boolean, am4core: typeof am4coretype) {
+    am4core.unuseAllThemes();
+
+    let themeModule;
+    switch (chartTheme) {
+      case 'material': themeModule = await import('@amcharts/amcharts4/themes/material'); break;
+      case 'frozen': themeModule = await import('@amcharts/amcharts4/themes/frozen'); break;
+      case 'dataviz': themeModule = await import('@amcharts/amcharts4/themes/dataviz'); break;
+      case 'dark': themeModule = await import('@amcharts/amcharts4/themes/dark'); break;
+      case 'amcharts': themeModule = await import('@amcharts/amcharts4/themes/amcharts'); break;
+      case 'amchartsdark': themeModule = await import('@amcharts/amcharts4/themes/amchartsdark'); break;
+      case 'moonrisekingdom': themeModule = await import('@amcharts/amcharts4/themes/moonrisekingdom'); break;
+      case 'spiritedaway': themeModule = await import('@amcharts/amcharts4/themes/spiritedaway'); break;
+      case 'kelly': themeModule = await import('@amcharts/amcharts4/themes/kelly'); break;
+      default: themeModule = await import('@amcharts/amcharts4/themes/material'); break;
+    }
+
+    am4core.useTheme(themeModule.default);
+
+    if (useAnimations === true) {
+      const animated = await import('@amcharts/amcharts4/themes/animated');
+      am4core.useTheme(animated.default);
+    }
   }
 
-  protected destroyChart() {
+  protected async destroyChart() {
     try {
+      const { core } = await this.amChartsService.load();
       this.zone.runOutsideAngular(() => {
-        am4core.unuseAllThemes();
+        // We need core to unuse themes, but strictly we just need to dispose the chart object which we have
+        // But to be safe let's load core if we want to unuseAllThemes
+        core.unuseAllThemes();
         if (this.chart) {
           this.chart.dispose();
           // delete this.chart

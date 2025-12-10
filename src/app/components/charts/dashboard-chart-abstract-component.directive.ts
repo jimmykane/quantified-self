@@ -1,6 +1,6 @@
 import { ChartAbstractDirective } from './chart-abstract.directive';
 import { AfterViewInit, ChangeDetectorRef, Directive, Input, NgZone, OnChanges } from '@angular/core';
-import * as am4charts from '@amcharts/amcharts4/charts';
+
 import { SummariesChartDataInterface } from '../summaries/summaries.component';
 import {
   ChartDataCategoryTypes,
@@ -8,7 +8,13 @@ import {
 } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
 import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
-import * as am4core from '@amcharts/amcharts4/core';
+
+import { AmChartsService } from '../../services/am-charts.service';
+
+// Type-only imports
+import type * as am4core from '@amcharts/amcharts4/core';
+import type * as am4charts from '@amcharts/amcharts4/charts';
+
 
 @Directive()
 export abstract class DashboardChartAbstractDirective extends ChartAbstractDirective implements OnChanges, AfterViewInit {
@@ -18,26 +24,27 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
 
-  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef) {
-    super(zone, changeDetector);
+  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected amChartsService: AmChartsService) {
+    super(zone, changeDetector, amChartsService);
   }
 
-  ngAfterViewInit(): void {
-    am4core.options.queue = true;
-    am4core.options.onlyShowOnViewport = true;
-    this.chart = <am4charts.XYChart>this.createChart();
+  async ngAfterViewInit(): Promise<void> {
+    // am4core options are now handled in AmChartsService
+    this.chart = await this.createChart() as am4charts.XYChart;
     this.chart.data = this.data || [];
   }
 
-  ngOnChanges(simpleChanges) {
+
+  async ngOnChanges(simpleChanges): Promise<void> {
     this.isLoading ? this.loading() : this.loaded();
     // If there is a new theme we need to destroy the chart and readd the data;
     // If theme changes destroy the chart
     if (simpleChanges.chartTheme && this.chart) {
       this.destroyChart();
-      this.chart = <am4charts.XYChart>this.createChart();
+      this.chart = await this.createChart() as am4charts.XYChart;
       this.chart.data = this.data || [];
     }
+
 
     if (!this.data) {
       return;
@@ -56,10 +63,12 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
   }
 
 
-  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDataTimeInterval: TimeIntervals): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
+
+  protected getCategoryAxis(chartDataCategoryType: ChartDataCategoryTypes, chartDataTimeInterval: TimeIntervals, charts: typeof am4charts): am4charts.CategoryAxis | am4charts.DateAxis | am4charts.Axis {
     switch (chartDataCategoryType) {
       case ChartDataCategoryTypes.DateType:
-        const axis = new am4charts.DateAxis();
+        const axis = new charts.DateAxis();
+
         let key;
         axis.skipEmptyPeriods = true;
         switch (chartDataTimeInterval) {
@@ -90,8 +99,9 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
         axis.periodChangeDateFormats.setKey(key, this.getAxisDateFormat(chartDataTimeInterval));
         return axis;
       case ChartDataCategoryTypes.ActivityType:
-        return new am4charts.CategoryAxis();
+        return new charts.CategoryAxis();
       default:
+
         throw new Error(`Not implemented`);
     }
   }

@@ -13,9 +13,11 @@ import {
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import * as am4core from '@amcharts/amcharts4/core';
-import * as am4charts from '@amcharts/amcharts4/charts';
-import { AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
+import type * as am4core from '@amcharts/amcharts4/core';
+import type * as am4charts from '@amcharts/amcharts4/charts';
+import type { AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
+import { AmChartsService } from '../../../services/am-charts.service';
+
 import { Subscription } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
@@ -72,7 +74,8 @@ import { DataStrydAltitude } from '@sports-alliance/sports-lib/lib/data/data.str
 import { DataEVPE } from '@sports-alliance/sports-lib/lib/data/data.evpe';
 import { DataAbsolutePressure } from '@sports-alliance/sports-lib/lib/data/data.absolute-pressure';
 import { ChartHelper, LabelData } from './chart-helper';
-import * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
+import type * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
+
 import { DataAirPower } from '@sports-alliance/sports-lib/lib/data/data.air-power';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
@@ -138,6 +141,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
   protected declare chart: am4charts.XYChart;
 
+  private core: typeof am4core;
+  private charts: typeof am4charts;
+  private annotationPlugin: typeof am4plugins_annotation;
+
+
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
 
@@ -148,13 +156,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     private chartSettingsLocalStorageService: AppChartSettingsLocalStorageService,
     private activityCursorService: AppActivityCursorService,
     private snackBar: MatSnackBar,
-    private eventColorService: AppEventColorService) {
-    super(zone, changeDetector);
+    private eventColorService: AppEventColorService,
+    protected amChartsService: AmChartsService) {
+    super(zone, changeDetector, amChartsService);
   }
+
 
   async ngAfterViewInit() {
 
-    this.chart = this.createChart();
+    this.chart = await this.createChart();
+
     await this.processChanges();
   }
 
@@ -177,8 +188,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         || simpleChanges.disableGrouping)) {
       this.destroyChart();
       this.activityCursorService.clear();
-      this.chart = this.createChart();
+      this.chart = await this.createChart();
     }
+
 
     if (simpleChanges.event
       || simpleChanges.selectedActivities
@@ -220,14 +232,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   }
 
-  protected createChart(): am4charts.XYChart {
+  protected async createChart(): Promise<am4charts.XYChart> {
+    const modules = await this.amChartsService.load();
+    this.core = modules.core;
+    this.charts = modules.charts;
+    this.annotationPlugin = await import('@amcharts/amcharts4/plugins/annotation');
+
     // @hack to 'fix' multisport
     if (this.event.isMultiSport()) {
       this.xAxisType = XAxisTypes.Time;
     }
-    am4core.options.onlyShowOnViewport = false;
-    am4core.options.queue = true;
-    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
+    // am4core options handled in service
+    const chart = await super.createChart(this.charts.XYChart) as am4charts.XYChart;
+
     chart.fontSize = '1em';
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
@@ -235,7 +252,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.durationFormatter.durationFormat = 'mm:ss';
 
     // Add scrollbar
-    chart.scrollbarX = new am4core.Scrollbar();
+    chart.scrollbarX = new this.core.Scrollbar();
+
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
     chart.scrollbarX.marginTop = 0;
@@ -252,7 +270,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Create a Legend
     this.attachChartLegendToChart(chart);
     // Create a cursor
-    chart.cursor = new am4charts.XYCursor();
+    chart.cursor = new this.charts.XYCursor();
+
 
     chart.cursor.interactions.hitOptions.hitTolerance = 20;
     chart.cursor.interactions.hitOptions.noFocus = true;
@@ -262,7 +281,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
     chart.zoomOutButton.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z'
-    const tempButton = new am4core.Button();
+    const tempButton = new this.core.Button();
+
 
     chart.zoomOutButton.background.fill = tempButton.background.fill;
     chart.zoomOutButton.icon.stroke = tempButton.label.stroke;
@@ -436,7 +456,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // chart.scrollbarX = new am4charts.XYChartScrollbar();
 
     // Add exporting options
-    chart.exporting.menu = this.getExportingMenu();
+    chart.exporting.menu = new this.core.ExportMenu();
 
     chart.exporting.extraSprites.push({
       'sprite': chart.legend.parent,
@@ -445,7 +465,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
 
     // Add the anotation
-    chart.plugins.push(new am4plugins_annotation.Annotation());
+    chart.plugins.push(new this.annotationPlugin.Annotation());
+
 
     // Attach events
     chart.events.on('validated', (ev) => {
@@ -602,7 +623,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.getSeriesRangeLabelContainer(series).deepInvalidate();
       }
 
-      series.yAxis.height = am4core.percent(100);
+      series.yAxis.height = this.core.percent(100);
+
       series.yAxis.invalidate();
       // series.yAxis.invalidateLayout()
       // series.yAxis.invalidateSeries()
@@ -637,10 +659,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   protected createYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     if ([DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
-      yAxis = new am4charts.DurationAxis();
+      yAxis = new this.charts.DurationAxis();
     } else {
-      yAxis = new am4charts.ValueAxis();
+      yAxis = new this.charts.ValueAxis();
     }
+
     return yAxis;
   }
 
@@ -736,7 +759,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.clearChart();
   }
 
-  protected destroyChart() {
+  protected async destroyChart() {
     this.destroyLegendParent();
     super.destroyChart();
   }
@@ -871,7 +894,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
 
     // Create a new series if not found
-    series = new am4charts.LineSeries();
+    series = new this.charts.LineSeries();
+
     series.showOnInit = false;
     series.id = this.getSeriesIDFromActivityAndStream(activity, stream);
     series.simplifiedProcessing = true;
@@ -890,7 +914,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`
       : `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
 
-    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name}[/]`;
+    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name}[/]`;
+
 
     series.adapter.add('fill', (fill, target) => {
       return this.getSeriesColor(target);
@@ -1070,13 +1095,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private createRangeLabelsContainer(chart: am4charts.XYChart): am4core.Container {
-    const rangeLabelsContainer = chart.chartContainer.createChild(am4core.Container);
+    const rangeLabelsContainer = chart.chartContainer.createChild(this.core.Container);
+
     rangeLabelsContainer.id = 'rangeLabelsContainer';
     rangeLabelsContainer.isMeasured = false;
-    rangeLabelsContainer.width = am4core.percent(100);
-    rangeLabelsContainer.height = am4core.percent(100);
+    rangeLabelsContainer.width = this.core.percent(100);
+    rangeLabelsContainer.height = this.core.percent(100);
     rangeLabelsContainer.x = 50;
-    rangeLabelsContainer.y = am4core.percent(90);
+    rangeLabelsContainer.y = this.core.percent(90);
+
     rangeLabelsContainer.layout = 'horizontal';
     // rangeLabelsContainer.align = 'right';
     // rangeLabelsContainer.verticalCenter = 'rop';
@@ -1086,15 +1113,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private createLabel(container: am4core.Container | am4charts.Chart, series: am4charts.Series, labelData: LabelData, hidden: boolean = false): am4core.Label {
-    const labelContainer = container.createChild(am4core.Container);
+    const labelContainer = container.createChild(this.core.Container);
+
     labelContainer.id = this.getSeriesRangeLabelContainerID(series);
     labelContainer.background.fillOpacity = 0.65;
-    labelContainer.background.fill = am4core.color('#000');
+    labelContainer.background.fill = this.core.color('#000');
     labelContainer.padding(15, 15, 15, 15);
-    // labelContainer.marginLeft = am4core.percent(0.5);
+    // labelContainer.marginLeft = this.core.percent(0.5);
     // labelContainer.horizontalCenter = 'right';
     labelContainer.verticalCenter = 'bottom';
-    labelContainer.background.stroke = am4core.color('#FFF');
+    labelContainer.background.stroke = this.core.color('#FFF');
+
     labelContainer.background.strokeOpacity = 0.6;
     labelContainer.background.strokeWidth = 0.65;
     labelContainer.zIndex = 2
@@ -1102,19 +1131,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // labelContainer.hidden = hidden;
 
 
-    const label = labelContainer.createChild(am4core.Label);
+    // labelContainer.hidden = hidden;
+
+
+    const label = labelContainer.createChild(this.core.Label);
     label.align = 'center';
     label.text = `
       [bold font-size: 1.1em ${series.stroke}]${labelData.name}[/]\n
-      ${this.event.getActivities().length !== 1 ? `[bold font-size: 1.0em ${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n` : ``}
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.average.value}[/][${am4core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.max.value}[/][${am4core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.min.value}[/][${am4core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${am4core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${am4core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${am4core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
-      [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.0em ${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${am4core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      ${this.event.getActivities().length !== 1 ? `[bold font-size: 1.0em ${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), series.dummyData.activity)).toString()}]${series.dummyData.activity.creator.name}[/]\n` : ``}
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Avg:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.average.value}[/][${this.core.color('#FFFFFF')}]${labelData.average.unit}[/]\n
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Max:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.max.value}[/][${this.core.color('#FFFFFF')}]${labelData.max.unit}[/]\n
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Min:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.min.value}[/][${this.core.color('#FFFFFF')}]${labelData.min.unit}[/]\n
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Diff:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${this.core.color('#FFFFFF')}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Gain:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${this.core.color('#FFFFFF')}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Loss:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${this.core.color('#FFFFFF')}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
+      [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]Gradient:[/] [bold font-size: 1.0em ${this.core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${this.core.color('#FFFFFF')}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
+
 
     // Important! disable it after the creation of the child label
     labelContainer.disabled = hidden;
@@ -1122,7 +1155,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private addZoomOrSelectButton(chart: am4charts.XYChart): am4core.Button {
-    const button = chart.plotContainer.createChild(am4core.Button);
+    const button = chart.plotContainer.createChild(this.core.Button);
+
     button.id = 'zoomOrSelectButton';
     button.label.text = chart.cursor.behavior === 'selectX' ? ' Selecting' : ' Zooming';
     button.padding(12, 12, 12, 12);
@@ -1146,7 +1180,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private addClearSelectionButton(chart: am4charts.XYChart): am4core.Button {
-    const button = chart.plotContainer.createChild(am4core.Button);
+    const button = chart.plotContainer.createChild(this.core.Button);
+
     button.id = 'clearSelectionButton';
     // button.label.text = 'Clear';
     button.padding(12, 12, 12, 12);
@@ -1157,8 +1192,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // button.marginLeft = 25;
     button.zIndex = 30;
     button.opacity = 0.8;
-    button.icon = new am4core.Sprite();
+    button.icon = new this.core.Sprite();
     button.icon.path = 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z';
+
 
 
     button.events.on('hit', (ev) => {
@@ -1289,15 +1325,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                   range = xAxis.axisRanges.create();
                   range.value = data[0].value;
                 }
-                range.grid.stroke = am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity));
+                range.grid.stroke = this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity));
+
                 range.grid.strokeWidth = 1.1;
                 range.grid.strokeOpacity = 1;
                 range.grid.strokeDasharray = '2,5';
 
                 range.grid.above = true;
                 range.grid.zIndex = 1;
-                range.grid.tooltipText = `[${am4core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
+                range.grid.tooltipText = `[${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
                 range.grid.tooltipPosition = 'pointer';
+
                 range.label.tooltipText = range.grid.tooltipText;
                 range.label.inside = true;
                 range.label.adapter.add('text', () => {
@@ -1354,7 +1392,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           range = serie.xAxis.createSeriesRange(serie);
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
-          range.contents.stroke = am4core.color('#969393');
+          range.contents.stroke = this.core.color('#969393');
+
           range.contents.strokeWidth = this.strokeWidth;
           range.contents.strokeOpacity = this.strokeOpacity;
           range.grid.above = true;
@@ -1385,7 +1424,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           const range = axis.axisRanges.create();
           range.date = new Date(activity.startDate.getTime() + stopEvent.getValue() * 1000);
           range.endDate = new Date(activity.startDate.getTime() + startEvent.getValue() * 1000)
-          range.axisFill.fill = am4core.color(AppColors.MediumGray);
+          range.axisFill.fill = this.core.color(AppColors.MediumGray);
+
           range.axisFill.fillOpacity = 0.2;
           range.grid.strokeOpacity = 0;
           range.grid.above = true;
@@ -1427,13 +1467,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     let xAxis;
     switch (xAxisType) {
       case XAxisTypes.Distance:
-        xAxis = chart.xAxes.push(new am4charts.ValueAxis());
+        xAxis = chart.xAxes.push(new this.charts.ValueAxis());
         // xAxis.extraMax = 0.01;
+
         xAxis.renderer.minGridDistance = 40;
         xAxis.strictMinMax = true;
 
-        xAxis.numberFormatter = new am4core.NumberFormatter();
+        xAxis.numberFormatter = new this.core.NumberFormatter();
         xAxis.numberFormatter.numberFormat = `#`;
+
         // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
         xAxis.renderer.labels.template.adapter.add('text', (text, target) => {
           if (!target.dataItem.value) {
@@ -1452,7 +1494,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         break;
       case XAxisTypes.Duration:
       case XAxisTypes.Time:
-        xAxis = chart.xAxes.push(new am4charts.DateAxis());
+        xAxis = chart.xAxes.push(new this.charts.DateAxis());
+
         if (!this.disableGrouping) {
           // this is true pixels
           // const screenPixes = Math.max(...[this.windowService.windowRef.screen.width, this.windowService.windowRef.screen.height]) * this.windowService.windowRef.devicePixelRatio;
@@ -1494,22 +1537,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private attachChartLegendToChart(chart) {
     return this.zone.runOutsideAngular(() => {
       // Create a Legend
-      chart.legend = new am4charts.Legend();
+      chart.legend = new this.charts.Legend();
       // legend.fontSize = '1em';
 
-      chart.legend.parent = am4core.create(this.legendDiv.nativeElement, am4core.Container);
+      chart.legend.parent = this.core.create(this.legendDiv.nativeElement, this.core.Container);
 
-      chart.legend.parent.width = am4core.percent(100);
-      chart.legend.parent.height = am4core.percent(100);
+      chart.legend.parent.width = this.core.percent(100);
+      chart.legend.parent.height = this.core.percent(100);
 
       chart.legend.useDefaultMarker = true;
       const marker = <am4core.RoundedRectangle>chart.legend.markers.template.children.getIndex(0);
       marker.cornerRadius(14, 14, 14, 14);
       marker.strokeWidth = 4;
       marker.strokeOpacity = 1;
-      marker.stroke = am4core.color('#0a97ee');
+      marker.stroke = this.core.color('#0a97ee');
 
     });
+
   }
 
   private destroyLegendParent() {
