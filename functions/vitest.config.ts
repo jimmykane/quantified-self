@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
 
 export default defineConfig({
+    root: resolve(__dirname),
     test: {
         globals: true,
         environment: 'node',
@@ -12,6 +14,6 @@ export default defineConfig({
             exclude: ['src/**/*.spec.ts', 'src/index.ts'],
         },
         // Mock firebase-admin and firebase-functions by default
-        setupFiles: ['./src/test-setup.ts'],
+        setupFiles: [resolve(__dirname, 'src/test-setup.ts')],
     },
 });
