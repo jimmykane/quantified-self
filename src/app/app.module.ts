@@ -41,7 +41,7 @@ import { AppUpdateService } from './services/app.update.service';
     {
       provide: ErrorHandler,
       useValue: Sentry.createErrorHandler({
-        showDialog: true,
+        showDialog: false,
       }),
     },
     provideHttpClient(withInterceptorsFromDi()),
