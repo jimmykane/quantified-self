@@ -1,9 +1,9 @@
 'use strict';
 
-import * as functions from 'firebase-functions'
-import * as cors from "cors";
+import * as functions from 'firebase-functions';
+import cors from 'cors';
 
-const corsRequest = cors({origin: true});
+const corsRequest = cors({ origin: true });
 
 const fetch = require('node-fetch');
 
@@ -29,8 +29,8 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
       method: 'GET',
       headers: {
         'Content-Type': req.get('Content-Type'),
-        'STTAuthorization': "42v8ds44tsim65b4bfog3e8jvfl2u9bj",
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36'
+        'STTAuthorization': '42v8ds44tsim65b4bfog3e8jvfl2u9bj',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36',
       },
     };
     console.log('Request:', url);
@@ -38,12 +38,12 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
 
 
     fetch(url, opts)
-      .then((r:any) => {
+      .then((r: any) => {
         if (!r.ok) {
           res.status(500);
         }
-        return r.buffer()
+        return r.buffer();
       })
-      .then((body:any) => res.send(body))
+      .then((body: any) => res.send(body));
   });
 });

@@ -1,28 +1,28 @@
 import { Request, Response } from 'firebase-functions';
-import * as admin from "firebase-admin";
+import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
 import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
 import {
   COROSAPIEventMetaData,
   GarminHealthAPIEventMetaData,
-  SuuntoAppEventMetaData
+  SuuntoAppEventMetaData,
 } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 import * as Pako from 'pako';
 import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
 import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
 import {
   CompressedJSONStreamInterface,
-  CompressionEncodings, CompressionMethods
+  CompressionEncodings, CompressionMethods,
 } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
-import * as crypto from 'crypto'
-import * as base58 from 'bs58'
+import * as crypto from 'crypto';
+import * as base58 from 'bs58';
 
-export function generateIDFromPartsOld(parts: string[]): string{
+export function generateIDFromPartsOld(parts: string[]): string {
   return base58.encode(Buffer.from(`${parts.join(':')}`));
 }
 
-export function generateIDFromParts(parts: string[], algorithm = 'sha256'): string{
+export function generateIDFromParts(parts: string[], algorithm = 'sha256'): string {
   return crypto.createHash(algorithm).update(parts.join(':')).digest('hex');
 }
 
@@ -43,7 +43,7 @@ export async function getUserIDFromFirebaseToken(req: Request ): Promise<string|
     console.log('Found "Authorization" header');
     // Read the ID Token from the Authorization header.
     idToken = req.headers.authorization.split('Bearer ')[1];
-  } else if(req.cookies) {
+  } else if (req.cookies) {
     console.log('Found "__session" cookie');
     // Read the ID Token from cookie.
     idToken = req.cookies.__session;
@@ -75,7 +75,7 @@ export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
 }
 
 export function isCorsAllowed(req: Request) {
-  return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1
+  return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1;
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData|COROSAPIEventMetaData) {
@@ -105,7 +105,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
                         .doc(<string>activity.getID())
                         .collection('streams')
                         .doc(stream.type)
-                        .set(StreamEncoder.compressStream(stream.toJSON())))
+                        .set(StreamEncoder.compressStream(stream.toJSON())));
             });
         });
     writePromises.push(admin.firestore()
@@ -117,7 +117,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
         await Promise.all(writePromises);
         console.log(`Wrote ${writePromises.length + 1} documents for event with id ${eventID}`);
         return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
-    } catch (e) {
+    } catch (e: any) {
         console.error(e);
         throw e;
         // Try to delete the parent entity and all subdata
@@ -143,8 +143,8 @@ export async function createFirebaseAccount(serviceUserID: string, accessToken: 
     await admin.auth().updateUser(uid, {
       displayName: serviceUserID,
       // photoURL: photoURL,
-    })
-  } catch (e) {
+    });
+  } catch (e: any) {
     if (e.code === 'auth/user-not-found') {
       await admin.auth().createUser({
         uid: uid,
@@ -170,23 +170,22 @@ export class StreamEncoder {
       encoding: CompressionEncodings.None,
       type: stream.type,
       data: JSON.stringify(stream.data),
-      compressionMethod: CompressionMethods.None
-    }
+      compressionMethod: CompressionMethods.None,
+    };
     // console.log(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
     // If we can fit it go on
     if (getSize(compressedStream.data) <= 1048487) {
-      return compressedStream
+      return compressedStream;
     }
     // Then try Pako (as the fastest)
     compressedStream.data = Buffer.from(Pako.gzip(JSON.stringify(stream.data)));
     compressedStream.encoding = CompressionEncodings.UInt8Array;
-    compressedStream.compressionMethod = CompressionMethods.Pako
+    compressedStream.compressionMethod = CompressionMethods.Pako;
     // console.log(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
     if (getSize(compressedStream.data) <= 1048487) {
-      return compressedStream
+      return compressedStream;
     }
     // Throw an error if smaller than a MB still
-    throw new Error(`Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(compressedStream.data)}`)
+    throw new Error(`Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(compressedStream.data)}`);
   }
-
 }

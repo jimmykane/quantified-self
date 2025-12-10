@@ -4,9 +4,9 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/
 import { getTokenData } from './tokens';
 import {
   SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
-  SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME
+  SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
 } from './suunto/constants';
-import * as requestPromise from 'request-promise-native';
+import * as requestPromise from './request-helper';
 import * as functions from 'firebase-functions';
 import { generateIDFromParts } from './utils';
 import { COROSAPIWorkoutQueueItemInterface, SuuntoAppWorkoutQueueItemInterface } from './queue/queue-item.interface';
@@ -16,11 +16,11 @@ import {
   COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
   PRODUCTION_URL,
   STAGING_URL,
-  USE_STAGING
+  USE_STAGING,
 } from './coros/constants';
 import {
   COROSAPIAuth2ServiceTokenInterface,
-  SuuntoAPIAuth2ServiceTokenInterface
+  SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
@@ -41,9 +41,9 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
 
     let workoutQueueItems: any;
     try {
-      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate)
-    } catch (e) {
-      console.log(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`)
+      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate);
+    } catch (e: any) {
+      console.log(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`);
       throw e;
     }
 
@@ -60,7 +60,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
     (Array(batchCount)).fill(null).forEach((justNull, index) => {
       const start = index * BATCH_SIZE;
       const end = (index + 1) * BATCH_SIZE;
-      batchesToProcess.push(workoutQueueItems.slice(start, end))
+      batchesToProcess.push(workoutQueueItems.slice(start, end));
     });
 
     console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
@@ -84,12 +84,11 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
           <UserServiceMetaInterface>{
             didLastHistoryImport: (new Date()).getTime(),
             processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount,
-          }, {merge: true});
+          }, { merge: true });
 
         await batch.commit();
         console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
-
-      } catch (e) {
+      } catch (e: any) {
         console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
         processedBatchesCount--;
         totalProcessedWorkoutsCount -= processedWorkoutsCount;
@@ -107,14 +106,14 @@ function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceNames): str
     default:
       throw new Error('Not implemented');
     case ServiceNames.SuuntoApp:
-      return SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME
+      return SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME;
     case ServiceNames.COROSAPI:
-      return COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME
+      return COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME;
   }
 }
 
 export function getServiceWorkoutQueueName(serviceName: ServiceNames, historyQueue = false): string {
-  if (historyQueue){
+  if (historyQueue) {
     return getServiceHistoryImportWorkoutQueueName(serviceName);
   }
   switch (serviceName) {
@@ -123,9 +122,9 @@ export function getServiceWorkoutQueueName(serviceName: ServiceNames, historyQue
     case ServiceNames.GarminHealthAPI:
       return GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME;
     case ServiceNames.SuuntoApp:
-      return SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME
+      return SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME;
     case ServiceNames.COROSAPI:
-      return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME
+      return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME;
   }
 }
 
@@ -139,11 +138,11 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
         headers: {
           'Authorization': serviceToken.accessToken,
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
-          json: true,
+          'json': true,
         },
         url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000&filter-by-modification-time=false`,
       });
-      result = JSON.parse(result)
+      result = JSON.parse(result);
       if (result.error) {
         throw new Error(result.error);
       }
@@ -151,36 +150,36 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
         // .filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate)
         .filter((item: any) => !!item.workoutKey)
         .map((item: any) => {
-        return {
-          id: generateIDFromParts([serviceToken.userName, item.workoutKey]),
-          dateCreated: new Date().getTime(),
-          userName: serviceToken.userName,
-          workoutID: item.workoutKey,
-          retryCount: 0, // So it can be re-processed
-          processed: false, //So it can be re-processed
-        }
-      })
+          return {
+            id: generateIDFromParts([serviceToken.userName, item.workoutKey]),
+            dateCreated: new Date().getTime(),
+            userName: serviceToken.userName,
+            workoutID: item.workoutKey,
+            retryCount: 0, // So it can be re-processed
+            processed: false, // So it can be re-processed
+          };
+        });
     case ServiceNames.COROSAPI:
       result = await requestPromise.get({
         headers: {
           json: true,
         },
-        url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${serviceToken.accessToken}&openId=${serviceToken.openId}&startDate=${startDate.toISOString().slice(0, 10).replace(/-/g, "")}&endDate=${endDate.toISOString().slice(0, 10).replace(/-/g, "")}`,
+        url: `${USE_STAGING ? STAGING_URL : PRODUCTION_URL}/v2/coros/sport/list?token=${serviceToken.accessToken}&openId=${serviceToken.openId}&startDate=${startDate.toISOString().slice(0, 10).replace(/-/g, '')}&endDate=${endDate.toISOString().slice(0, 10).replace(/-/g, '')}`,
       });
-      result = JSON.parse(result)
+      result = JSON.parse(result);
       if (result.message && result.message !== 'OK') {
         throw new Error(`COROS API Error with code ${result.result}`);
       }
-      return convertCOROSWorkoutsToQueueItems(result.data, (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId)
+      return convertCOROSWorkoutsToQueueItems(result.data, (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId);
   }
 }
 
 export async function isAllowedToDoHistoryImport(userID: string, serviceName: ServiceNames): Promise<boolean> {
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName).get();
   if (!userServiceMetaDocumentSnapshot.exists) {
-    return true
+    return true;
   }
   const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-  const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000));   // 7 days for  285,7142857143 per day
+  const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)); // 7 days for  285,7142857143 per day
   return !((nextHistoryImportAvailableDate > new Date()) && data.processedActivitiesFromLastHistoryImportCount !== 0);
 }

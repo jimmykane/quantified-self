@@ -1,9 +1,9 @@
 'use strict';
 
-import * as functions from 'firebase-functions'
-import * as admin from "firebase-admin";
-import * as requestPromise from "request-promise-native";
-import { getTokenData } from "../tokens";
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import * as requestPromise from '../request-helper';
+import { getTokenData } from '../tokens';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 import { SERVICE_NAME } from './constants';
 
@@ -14,10 +14,10 @@ import { SERVICE_NAME } from './constants';
 export const importActivityToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed`);
+    console.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
-    return
+    return;
   }
 
   setAccessControlHeadersOnResponse(req, res);
@@ -29,16 +29,16 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
   }
 
   const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID){
+  if (!userID) {
     res.status(403).send('Unauthorized');
     return;
   }
 
   if (!req.body) {
-    console.error(`No file provided'`);
+    console.error('No file provided\'');
     res.status(500);
     res.send();
-    return
+    return;
   }
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
@@ -48,7 +48,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
     let serviceToken;
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
-    } catch (e) {
+    } catch (e: any) {
       console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       res.status(500);
       res.send(e.name);
@@ -63,36 +63,36 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
           'Authorization': serviceToken.accessToken,
           'Content-Type': 'application/json',
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
-          json: true,
+          'json': true,
         },
         body: JSON.stringify({
           // description: "#qs",
           // comment: "",
-          notifyUser: true
+          notifyUser: true,
         }),
-        url: `https://cloudapi.suunto.com/v2/upload/`,
+        url: 'https://cloudapi.suunto.com/v2/upload/',
       });
       result = JSON.parse(result);
-    } catch (e) {
+    } catch (e: any) {
       console.error(`Could init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.name);
       return;
     }
 
-    let url = result.url
+    let url = result.url;
     try {
       result = await requestPromise.put({
         headers: {
-          "x-ms-blob-type": "BlockBlob",
+          'x-ms-blob-type': 'BlockBlob',
           // json: true,
         },
         url,
         formData: {
-          file: req.rawBody
-        }
+          file: req.rawBody,
+        },
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.message);
@@ -115,34 +115,34 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
           'Authorization': serviceToken.accessToken,
           'Content-Type': 'application/json',
           'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
-          json: true,
+          'json': true,
         },
         body: JSON.stringify({
           // description: "#qs",
           // comment: "",
-          notifyUser: true
+          notifyUser: true,
         }),
-        url: `https://cloudapi.suunto.com/v2/upload/`,
+        url: 'https://cloudapi.suunto.com/v2/upload/',
       });
       result = JSON.parse(result);
-    } catch (e) {
+    } catch (e: any) {
       console.error(`Could init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.name);
       return;
     }
 
-    url = result.url
+    url = result.url;
     try {
       result = await requestPromise.put({
         headers: {
-          "x-ms-blob-type": "BlockBlob",
+          'x-ms-blob-type': 'BlockBlob',
           // json: true,
         },
         url,
-        body: req.rawBody
+        body: req.rawBody,
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.message);
@@ -155,8 +155,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       res.send(result.error);
       return;
     }
-
   }
-  res.status(200)
+  res.status(200);
   res.send();
 });

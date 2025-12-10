@@ -1,11 +1,11 @@
 'use strict';
 
-import * as functions from 'firebase-functions'
+import * as functions from 'firebase-functions';
 import {
     getUserIDFromFirebaseToken,
     isCorsAllowed,
-    setAccessControlHeadersOnResponse
-} from "../utils";
+    setAccessControlHeadersOnResponse,
+} from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 
@@ -15,10 +15,10 @@ import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed`);
+    console.error('Not allowed');
     res.status(403);
     res.send();
-    return
+    return;
   }
 
   setAccessControlHeadersOnResponse(req, res);
@@ -30,7 +30,7 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
   }
 
   const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID){
+  if (!userID) {
     res.status(403).send('Unauthorized');
     return;
   }
@@ -39,7 +39,7 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
   const startDate = new Date(req.body.startDate);
   const endDate = new Date(req.body.endDate);
 
-  if (!startDate || !endDate){
+  if (!startDate || !endDate) {
     res.status(500).send('No start and/or end date');
     return;
   }
@@ -48,14 +48,13 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
   if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
     console.error(`User ${userID} tried todo history import while not allowed`);
     res.status(403);
-    res.send(`History import is not allowed`);
-    return
+    res.send('History import is not allowed');
+    return;
   }
 
   await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
 
   // Respond
   res.status(200);
-  res.send({result: 'History items added to queue'});
-
+  res.send({ result: 'History items added to queue' });
 });

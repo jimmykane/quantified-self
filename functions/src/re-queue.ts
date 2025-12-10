@@ -32,7 +32,7 @@ async function resetRetryCount(serviceName: ServiceNames, startDate: Date, endDa
   }
   try {
     await batch.commit();
-  } catch (e) {
+  } catch (e: any) {
     console.log(e)
   }
   console.log(`Parsed ${count} docs out of ${querySnapshot.size} and a total of writes`);

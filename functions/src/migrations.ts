@@ -27,7 +27,7 @@
 //   }
 //   try {
 //     await batch.commit();
-//   } catch (e) {
+//   } catch (e: any) {
 //     console.log(e)
 //   }
 //   console.log(`Parsed ${count} docs out of ${querySnapshot.size} and a total of writes`);
@@ -78,7 +78,7 @@
 //           statsToShow: eventStats
 //         });
 //         count++;
-//       } catch (e) {
+//       } catch (e: any) {
 //         console.error(e);
 //         continue; // 3cPQA91MbTn2CvY9jKagmebNAWiwZYYHYJAe36VusMuviz4
 //       }
@@ -86,7 +86,7 @@
 //
 //     try {
 //       await batch.commit();
-//     } catch (e) {
+//     } catch (e: any) {
 //       console.log(e)
 //     }
 //     console.log(`Parsed ${count} docs out of ${eventQuerySnapshot.size} and a total of writes`);
@@ -119,7 +119,7 @@
 //   }
 //   try {
 //     await batch.commit();
-//   } catch (e) {
+//   } catch (e: any) {
 //     console.log(e)
 //   }
 //   console.log(`Parsed ${count} docs out of ${querySnapshot.size} and a total of writes`);
