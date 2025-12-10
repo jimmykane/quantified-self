@@ -15,7 +15,7 @@ if (!environment.localhost) {
     dsn: 'https://e6aa6074f13d49c299f8c81bf162d88c@o147925.ingest.sentry.io/1194244',
     environment: environment.production ? 'Production' : environment.beta ? 'Beta' : 'Development',
     release: environment.appVersion,
-    debug: environment.production || environment.beta,
+    debug: false,
     integrations: [
       Sentry.browserTracingIntegration(),
     ],
