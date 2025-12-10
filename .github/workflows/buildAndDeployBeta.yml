@@ -41,7 +41,11 @@ jobs:
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Ffonts%2Fproxima-nova-regular.woff?alt=media&token=17c6e5ba-1a2f-4bdd-af56-b467b754f0be" --create-dirs -o dist/assets/fonts/proxima-nova-regular.woff
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Ffonts%2Fproxima-nova-regular.woff2?alt=media&token=8caf4bf3-4d07-4240-bfe7-5234f3f65408" --create-dirs -o dist/assets/fonts/proxima-nova-regular.woff2
 
+      - name: Create SA key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
+
       - name: Deploy to Firebase
         run: |
           npm install -g firebase-tools
-          firebase deploy --token "${{ secrets.FIREBASE_TOKEN }}" --only hosting:beta
+          export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
+          firebase deploy --only hosting:beta
