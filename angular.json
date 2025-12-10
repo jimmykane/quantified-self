@@ -37,6 +37,14 @@
             "namedChunks": true,
             "externalDependencies": [
               "jsdom"
+            ],
+            "allowedCommonJsDependencies": [
+              "@amcharts/amcharts4/core",
+              "@amcharts/amcharts4/charts",
+              "@amcharts/amcharts4/maps",
+              "@amcharts/amcharts4/themes/animated",
+              "@amcharts/amcharts4/themes/material",
+              "@amcharts/amcharts4/themes/dark"
             ]
           },
           "configurations": {
