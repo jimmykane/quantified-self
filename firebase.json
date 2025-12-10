@@ -2,7 +2,7 @@
   "hosting": [
     {
       "target": "production",
-      "public": "dist",
+      "public": "dist/browser",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -17,7 +17,7 @@
     },
     {
       "target": "beta",
-      "public": "dist",
+      "public": "dist/browser",
       "ignore": [
         "firebase.json",
         "**/.*",
@@ -38,9 +38,19 @@
     ],
     "source": "functions"
   },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
   "emulators": {
     "auth": {
       "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "firestore": {
+      "port": 8081
     },
     "ui": {
       "enabled": true,

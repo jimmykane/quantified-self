@@ -1,19 +1,19 @@
 'use strict';
 
-import * as functions from 'firebase-functions'
+import * as functions from 'firebase-functions';
 import { GarminHealthAPIAuth } from './auth';
-import * as requestPromise from 'request-promise-native';
+import * as requestPromise from '../../request-helper';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../index';
 import { getUserIDFromFirebaseToken } from '../../utils';
 import * as admin from 'firebase-admin';
-import * as crypto from "crypto";
+import * as crypto from 'crypto';
 
 
 // const OAUTH_SCOPES = 'workout';
-const REQUEST_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/request_token'
-const REQUEST_TOKEN_CONFIRMATION_URI = 'https://connect.garmin.com/oauthConfirm'
-const ACCESS_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/access_token'
-const DEREGISTRATION_URI = 'https://healthapi.garmin.com/wellness-api/rest/user/registration'
+const REQUEST_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/request_token';
+const REQUEST_TOKEN_CONFIRMATION_URI = 'https://connect.garmin.com/oauthConfirm';
+const ACCESS_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/access_token';
+const DEREGISTRATION_URI = 'https://healthapi.garmin.com/wellness-api/rest/user/registration';
 
 // Other
 const USER_ID_URI = 'https://healthapi.garmin.com/wellness-api/rest/user/id';
@@ -23,10 +23,10 @@ const USER_ID_URI = 'https://healthapi.garmin.com/wellness-api/rest/user/id';
 export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed`);
+    console.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
-    return
+    return;
   }
 
   setAccessControlHeadersOnResponse(req, res);
@@ -38,47 +38,47 @@ export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('e
   }
 
   const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID){
+  if (!userID) {
     res.status(403).send('Unauthorized');
     return;
   }
 
   const oAuth = GarminHealthAPIAuth();
 
-  let result
+  let result;
   result = await requestPromise.post({
     headers: oAuth.toHeader(oAuth.authorize({
       url: REQUEST_TOKEN_URI,
-      method: 'POST'
+      method: 'POST',
     })),
     url: REQUEST_TOKEN_URI,
   });
 
   const urlParams = new URLSearchParams(result);
 
-  const state = crypto.randomBytes(20).toString('hex')
+  const state = crypto.randomBytes(20).toString('hex');
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
     oauthToken: urlParams.get('oauth_token'),
     oauthTokenSecret: urlParams.get('oauth_token_secret'),
-    state: state
-  })
+    state: state,
+  });
 
   // Send the response wit hte prepeared stuff to the client and let him handle the state etc
   res.send({
     redirect_uri: REQUEST_TOKEN_CONFIRMATION_URI,
     oauthToken: urlParams.get('oauth_token'),
     state: state,
-  })
+  });
 });
 
 
 export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed`);
+    console.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
-    return
+    return;
   }
 
   setAccessControlHeadersOnResponse(req, res);
@@ -90,28 +90,28 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   }
 
   const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID){
+  if (!userID) {
     res.status(403).send('Unauthorized');
     return;
   }
 
-  const state = req.body.state
+  const state = req.body.state;
   const oauthVerifier = req.body.oauthVerifier;
 
-  if (!state || !oauthVerifier){
-    console.error(`Missing state or oauthVerifier`);
+  if (!state || !oauthVerifier) {
+    console.error('Missing state or oauthVerifier');
     res.status(500).send('Bad Request');
     return;
   }
 
   const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
-  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.state || !tokensDocumentSnapshotData.oauthToken || !tokensDocumentSnapshotData.oauthTokenSecret ){
+  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.state || !tokensDocumentSnapshotData.oauthToken || !tokensDocumentSnapshotData.oauthTokenSecret) {
     res.status(500).send('Bad request');
-    console.error('No token/state found')
+    console.error('No token/state found');
     return;
   }
 
-  if (state !== tokensDocumentSnapshotData.state){
+  if (state !== tokensDocumentSnapshotData.state) {
     console.error(`Invalid state ${state} vs ${tokensDocumentSnapshotData.state}`);
     res.status(403).send('Unauthorized');
     return;
@@ -119,7 +119,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
 
   const oAuth = GarminHealthAPIAuth();
 
-  let result
+  let result;
   try {
     result = await requestPromise.post({
       headers: oAuth.toHeader(oAuth.authorize({
@@ -127,15 +127,15 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
         method: 'POST',
         data: {
           oauth_verifier: oauthVerifier,
-        }
+        },
       }, {
         key: tokensDocumentSnapshotData.oauthToken,
-        secret: tokensDocumentSnapshotData.oauthTokenSecret
+        secret: tokensDocumentSnapshotData.oauthTokenSecret,
       })),
       url: ACCESS_TOKEN_URI,
     });
-  }catch (e) {
-    console.error(e)
+  } catch (e: any) {
+    console.error(e);
     res.status(500).send('Could not get access token for user');
     return;
   }
@@ -145,17 +145,17 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   try {
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({
-          url: USER_ID_URI,
-          method: 'get',
-        },
+        url: USER_ID_URI,
+        method: 'get',
+      },
         {
           key: urlParams.get('oauth_token'),
-          secret: urlParams.get('oauth_token_secret')
+          secret: urlParams.get('oauth_token_secret'),
         })),
       url: USER_ID_URI,
     });
-  }catch (e) {
-    console.error(e)
+  } catch (e: any) {
+    console.error(e);
     res.status(500).send('Could not get user for access token');
     return;
   }
@@ -164,10 +164,10 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
     accessToken: urlParams.get('oauth_token'),
     accessTokenSecret: urlParams.get('oauth_token_secret'),
     dateCreated: (new Date()).getTime(),
-    userID: JSON.parse(result).userId
-  })
+    userID: JSON.parse(result).userId,
+  });
 
-  console.log(`User ${userID} successfully connected to Garmin API`)
+  console.log(`User ${userID} successfully connected to Garmin API`);
   res.send();
 });
 
@@ -175,10 +175,10 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
 export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed`);
+    console.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
-    return
+    return;
   }
 
   setAccessControlHeadersOnResponse(req, res);
@@ -190,13 +190,13 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
   }
 
   const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID){
+  if (!userID) {
     res.status(403).send('Unauthorized');
     return;
   }
 
   const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
-  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret){
+  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
     res.status(500).send('Bad request');
     console.error('No token found');
     return;
@@ -209,13 +209,13 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
       headers: oAuth.toHeader(oAuth.authorize({
         url: DEREGISTRATION_URI,
         method: 'DELETE',
-      },{
+      }, {
         key: tokensDocumentSnapshotData.accessToken,
-        secret: tokensDocumentSnapshotData.accessTokenSecret
+        secret: tokensDocumentSnapshotData.accessTokenSecret,
       })),
       url: DEREGISTRATION_URI,
     });
-  }catch (e) {
+  } catch (e: any) {
     // Only if there is an api error in terms
     if (e.statusCode === 500) {
       console.error(e);
@@ -224,37 +224,36 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
     }
   }
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).delete();
-  res.status(200).send()
+  res.status(200).send();
 });
 
 
 export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  if (!req.body.deregistrations || !req.body.deregistrations.length){
+  if (!req.body.deregistrations || !req.body.deregistrations.length) {
     console.info(req.body);
-    res.status(200).send()
-    return
+    res.status(200).send();
+    return;
   }
   const deregistrations = req.body.deregistrations;
 
-  console.log(`Deauthorizing ${deregistrations.length} users`)
-  for (const deregistration of deregistrations){
-
+  console.log(`Deauthorizing ${deregistrations.length} users`);
+  for (const deregistration of deregistrations) {
     try {
       const tokenQuerySnapshots = await admin.firestore()
         .collection('garminHealthAPITokens')
-        .where("userID", "==", deregistration.userId)
-        .where("accessToken", "==", deregistration.userAccessToken)
+        .where('userID', '==', deregistration.userId)
+        .where('accessToken', '==', deregistration.userAccessToken)
         .get();
-      console.log(`Found ${tokenQuerySnapshots.size} to delete`)
+      console.log(`Found ${tokenQuerySnapshots.size} to delete`);
       for (const tokenQuerySnapshotsDocument of tokenQuerySnapshots.docs) {
-        await tokenQuerySnapshotsDocument.ref.delete()
+        await tokenQuerySnapshotsDocument.ref.delete();
       }
-    }catch (e) {
+    } catch (e: any) {
       console.error(e);
     }
   }
-  console.info(`Successfully deauthorized ${deregistrations.length}`)
-  res.status(200)
-  res.write('SUCCESS')
+  console.info(`Successfully deauthorized ${deregistrations.length}`);
+  res.status(200);
+  res.write('SUCCESS');
   res.send();
 });

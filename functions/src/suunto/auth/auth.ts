@@ -1,5 +1,5 @@
-import * as functions from "firebase-functions";
-import { AuthorizationCode } from "simple-oauth2";
+import * as functions from 'firebase-functions';
+import { AuthorizationCode } from 'simple-oauth2';
 
 /**
  * Creates a configured simple-oauth2 client for Suunto app.

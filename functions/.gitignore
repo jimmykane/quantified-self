@@ -1,4 +1,5 @@
 ## Compiled JavaScript files
+coverage/
 **/*.js
 **/*.js.map
 
@@ -7,3 +8,4 @@ typings/
 
 node_modules/
 .runtimeconfig.json
+service-account.json

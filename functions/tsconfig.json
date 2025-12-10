@@ -6,13 +6,23 @@
     "outDir": "lib",
     "sourceMap": true,
     "strict": true,
-    "target": "es2018",
+    "target": "es2020",
+    "lib": [
+      "es2020"
+    ],
     "allowJs": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
   "compileOnSave": true,
   "include": [
     "src",
     "src/**/*.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/*.spec.ts",
+    "src/test-setup.ts"
   ]
 }
