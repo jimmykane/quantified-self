@@ -1,6 +1,6 @@
 'use strict';
 
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import cors from 'cors';
 
 const corsRequest = cors({ origin: true });

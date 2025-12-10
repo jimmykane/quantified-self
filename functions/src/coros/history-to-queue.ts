@@ -1,10 +1,10 @@
 'use strict';
 
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import {
-    getUserIDFromFirebaseToken,
-    isCorsAllowed,
-    setAccessControlHeadersOnResponse,
+  getUserIDFromFirebaseToken,
+  isCorsAllowed,
+  setAccessControlHeadersOnResponse,
 } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
@@ -61,8 +61,8 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
   for (let i = 0; i < batchCount; i++) {
     const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
     const batchEndDate = batchStartDate.getTime() + (maxDeltaInMS) >= endDate.getTime() ?
-    endDate :
-    new Date(batchStartDate.getTime() + maxDeltaInMS);
+      endDate :
+      new Date(batchStartDate.getTime() + maxDeltaInMS);
 
     try {
       await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);

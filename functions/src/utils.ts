@@ -1,4 +1,6 @@
-import { Request, Response } from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
+type Request = functions.https.Request;
+type Response = functions.Response;
 import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
@@ -26,7 +28,7 @@ export function generateIDFromParts(parts: string[], algorithm = 'sha256'): stri
   return crypto.createHash(algorithm).update(parts.join(':')).digest('hex');
 }
 
-export async function getUserIDFromFirebaseToken(req: Request ): Promise<string|null> {
+export async function getUserIDFromFirebaseToken(req: Request): Promise<string | null> {
   console.log('Check if request is authorized with Firebase ID token');
 
   if ((!req.headers.authorization || !req.headers.authorization.startsWith('Bearer ')) &&
@@ -64,7 +66,7 @@ export async function getUserIDFromFirebaseToken(req: Request ): Promise<string|
 }
 
 export function determineRedirectURI(req: Request): string {
-    return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
+  return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
 }
 
 export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
@@ -78,51 +80,51 @@ export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1;
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData|GarminHealthAPIEventMetaData|COROSAPIEventMetaData) {
-    const writePromises: Promise<any>[] = [];
-    event.setID(eventID);
-    event.getActivities()
-        .forEach((activity: ActivityInterface, index: number) => {
-            activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
-            writePromises.push(
-                admin.firestore().collection('users')
-                    .doc(userID)
-                    .collection('events')
-                    .doc(<string>event.getID())
-                    .collection('activities')
-                    .doc(<string>activity.getID())
-                    .set(activity.toJSON()));
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData) {
+  const writePromises: Promise<any>[] = [];
+  event.setID(eventID);
+  event.getActivities()
+    .forEach((activity: ActivityInterface, index: number) => {
+      activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
+      writePromises.push(
+        admin.firestore().collection('users')
+          .doc(userID)
+          .collection('events')
+          .doc(<string>event.getID())
+          .collection('activities')
+          .doc(<string>activity.getID())
+          .set(activity.toJSON()));
 
-            activity.getAllExportableStreams().forEach((stream: StreamInterface) => {
-                // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
-                writePromises.push(
-                    admin.firestore()
-                        .collection('users')
-                        .doc(userID)
-                        .collection('events')
-                        .doc(<string>event.getID())
-                        .collection('activities')
-                        .doc(<string>activity.getID())
-                        .collection('streams')
-                        .doc(stream.type)
-                        .set(StreamEncoder.compressStream(stream.toJSON())));
-            });
-        });
-    writePromises.push(admin.firestore()
-        .collection('users')
-        .doc(userID)
-        .collection('events')
-        .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData.toJSON()));
-    try {
-        await Promise.all(writePromises);
-        console.log(`Wrote ${writePromises.length + 1} documents for event with id ${eventID}`);
-        return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
-    } catch (e: any) {
-        console.error(e);
-        throw e;
-        // Try to delete the parent entity and all subdata
-        // await this.deleteAllEventData(user, event.getID());
-    }
+      activity.getAllExportableStreams().forEach((stream: StreamInterface) => {
+        // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
+        writePromises.push(
+          admin.firestore()
+            .collection('users')
+            .doc(userID)
+            .collection('events')
+            .doc(<string>event.getID())
+            .collection('activities')
+            .doc(<string>activity.getID())
+            .collection('streams')
+            .doc(stream.type)
+            .set(StreamEncoder.compressStream(stream.toJSON())));
+      });
+    });
+  writePromises.push(admin.firestore()
+    .collection('users')
+    .doc(userID)
+    .collection('events')
+    .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData.toJSON()));
+  try {
+    await Promise.all(writePromises);
+    console.log(`Wrote ${writePromises.length + 1} documents for event with id ${eventID}`);
+    return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
+  } catch (e: any) {
+    console.error(e);
+    throw e;
+    // Try to delete the parent entity and all subdata
+    // await this.deleteAllEventData(user, event.getID());
+  }
 }
 
 /**

@@ -14,7 +14,7 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import * as requestPromise from './request-helper';
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';

@@ -12,7 +12,7 @@ import {
 } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 
 /**
  *

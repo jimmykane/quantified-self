@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import { AuthorizationCode } from 'simple-oauth2';
 import { PRODUCTION_URL, STAGING_URL, USE_STAGING } from '../constants';
 

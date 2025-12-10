@@ -1,6 +1,6 @@
 'use strict';
 
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import { GarminHealthAPIAuth } from './auth';
 import * as requestPromise from '../../request-helper';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../index';

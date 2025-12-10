@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import * as crypto from 'crypto';
 // import OAuth as OAuth from 'oauth-1.0a';
 const OAuth = require('oauth-1.0a');

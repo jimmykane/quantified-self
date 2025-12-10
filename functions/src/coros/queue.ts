@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import { addToQueueForCOROS, parseQueueItems } from '../queue';
 import { SERVICE_NAME } from './constants';
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';

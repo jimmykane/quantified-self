@@ -1,6 +1,6 @@
 'use strict';
 
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
 import {
