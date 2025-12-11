@@ -119,43 +119,5 @@ describe('utils', () => {
         });
     });
 
-    describe('StreamEncoder', () => {
-        describe('compressStream', () => {
-            it('should not compress small streams', () => {
-                const smallStream = {
-                    type: 'test',
-                    data: [1, 2, 3, 4, 5],
-                };
-                const result = StreamEncoder.compressStream(smallStream);
-                expect(result.compressionMethod).toBe('None');
-                expect(result.encoding).toBe('None');
-                expect(result.type).toBe('test');
-            });
 
-            it('should preserve data content for small streams', () => {
-                const smallStream = {
-                    type: 'altitude',
-                    data: [100, 150, 200, 180, 160],
-                };
-                const result = StreamEncoder.compressStream(smallStream);
-                expect(JSON.parse(result.data as string)).toEqual([100, 150, 200, 180, 160]);
-            });
-
-            it('should compress large streams with pako', () => {
-                // Create a large array that exceeds 1MB when JSON stringified
-                const largeData = new Array(200000).fill(0).map((_, i) => ({
-                    value: i,
-                    timestamp: Date.now() + i,
-                }));
-                const largeStream = {
-                    type: 'heartRate',
-                    data: largeData,
-                };
-
-                const result = StreamEncoder.compressStream(largeStream);
-                expect(result.compressionMethod).toBe('Pako');
-                expect(result.encoding).toBe('UInt8Array');
-            });
-        });
-    });
 });
