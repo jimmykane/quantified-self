@@ -1,13 +1,13 @@
 import * as functions from 'firebase-functions/v1';
 import * as crypto from 'crypto';
 // import OAuth as OAuth from 'oauth-1.0a';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const OAuth = require('oauth-1.0a');
+
+import OAuth from 'oauth-1.0a';
 /**
  * Creates a configured OAuth 1.0a for Garmin Health API.
  */
 export function GarminHealthAPIAuth() {
-  return OAuth({
+  return new OAuth({
     consumer: {
       key: functions.config().garminhealthapi.consumer_key,
       secret: functions.config().garminhealthapi.consumer_secret,

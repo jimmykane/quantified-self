@@ -148,8 +148,8 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
         method: 'get',
       },
         {
-          key: urlParams.get('oauth_token'),
-          secret: urlParams.get('oauth_token_secret'),
+          key: urlParams.get('oauth_token') || '',
+          secret: urlParams.get('oauth_token_secret') || '',
         })),
       url: USER_ID_URI,
     });
