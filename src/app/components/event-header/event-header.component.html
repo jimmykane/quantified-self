@@ -1,92 +1,78 @@
-<mat-card class="mat-elevation-z0">
-  <!-- Event details -->
-  <mat-card-header>
-    <div mat-card-avatar>
-      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
-    </div>
-    <mat-card-title>
-      <span>
-        <b>{{ event.startDate | date:"d" }}</b>
-      </span>
-      <span style="font-size: 1em">
-        {{ event.startDate | date:"MMM " }}
-      </span>
-      <span style="font-size: 0.8em">
-        <b>{{ event.startDate | date:"yyyy" }}</b>
-      </span>
-      <span style="font-size: 0.7em;">
-        at {{ event.startDate | date:"h:mm:ss a" }}
-      </span>
-    </mat-card-title>
+<!-- Event details -->
+<mat-card-header>
+  <div mat-card-avatar>
+    <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
+  </div>
+  <mat-card-title>
+    <span>
+      <b>{{ event.startDate | date:"d" }}</b>
+    </span>
+    <span style="font-size: 1em">
+      {{ event.startDate | date:"MMM " }}
+    </span>
+    <span style="font-size: 0.8em">
+      <b>{{ event.startDate | date:"yyyy" }}</b>
+    </span>
+    <span style="font-size: 0.7em;">
+      at {{ event.startDate | date:"h:mm:ss a" }}
+    </span>
+  </mat-card-title>
 
-    <mat-card-subtitle style="font-size: 1.0em;">
-      <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue(false, false)}}
-      and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
-    </mat-card-subtitle>
-
-
-    @if (isOwner) {
-      <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
-    }
-  </mat-card-header>
-
-  <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0; color: unset;">
-    <mat-form-field>
-      <input matInput
-        [disabled]="!isOwner"
-        [placeholder]="event.name ? 'Name': 'Add a name'"
-        (change)="saveEventName(event.name, event)"
-        (keydown.enter)='$event.target.blur()'
-        [(ngModel)]='event.name'
-        [type]="'text'">
-    </mat-form-field>
+  <mat-card-subtitle style="font-size: 1.0em;">
+    <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue(false, false)}}
+    and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
   </mat-card-subtitle>
-  @if (isOwner || event.description) {
-    <mat-card-subtitle style="margin-top: 0em; margin-bottom: 0; color: unset;">
-      <mat-form-field>
-        <textarea matInput rows="1"
-          [disabled]="!isOwner"
-          [placeholder]="event.description ? 'Description': 'Add a description'"
-          (change)="saveEventDescription(event.description, event)"
-          (keydown.enter)='$event.target.blur()'
-          [(ngModel)]='event.description'>
-        </textarea>
-      </mat-form-field>
-    </mat-card-subtitle>
-  }
 
-  @if (isOwner || feeling || rpe ) {
-    <mat-card-subtitle style="margin-bottom: 0; color: unset;">
-      @if (isOwner || feeling) {
-        <mat-form-field style="width: 50%; display: inline-block;">
-          <mat-select [disabled]="!isOwner"
-            (selectionChange)="saveEventFeeling(feeling, event)"
-            [(ngModel)]='feeling'
-            [placeholder]="'Feeling'">
-            @for (selectOption of feelings | keyvalue : returnZero; track selectOption) {
-              <mat-option [disabled]="!isOwner"
-                [value]="selectOption.value">
-                {{selectOption.key}}
-              </mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-      }
-      @if (rpe || isOwner) {
-        <mat-form-field style="width: 50%; display: inline-block;">
-          <mat-select [disabled]="!isOwner"
-            (selectionChange)="saveEventRPE(rpe, event)"
-            [(ngModel)]='rpe'
-            [placeholder]="'Rating of Perceived Exertion'">
-            @for (selectOption of rpeBorgCR10SCale | keyvalue : returnZero; track selectOption) {
-              <mat-option [disabled]="!isOwner"
-                [value]="selectOption.value">
-                {{selectOption.key}}
-              </mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-      }
-    </mat-card-subtitle>
+
+  @if (isOwner) {
+  <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
   }
-</mat-card>
+</mat-card-header>
+
+<mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0; color: unset;">
+  <mat-form-field>
+    <input matInput [disabled]="!isOwner" [placeholder]="event.name ? 'Name': 'Add a name'"
+      (change)="saveEventName(event.name, event)" (keydown.enter)='$event.target.blur()' [(ngModel)]='event.name'
+      [type]="'text'">
+  </mat-form-field>
+</mat-card-subtitle>
+@if (isOwner || event.description) {
+<mat-card-subtitle style="margin-top: 0em; margin-bottom: 0; color: unset;">
+  <mat-form-field>
+    <textarea matInput rows="1" [disabled]="!isOwner"
+      [placeholder]="event.description ? 'Description': 'Add a description'"
+      (change)="saveEventDescription(event.description, event)" (keydown.enter)='$event.target.blur()'
+      [(ngModel)]='event.description'>
+        </textarea>
+  </mat-form-field>
+</mat-card-subtitle>
+}
+
+@if (isOwner || feeling || rpe ) {
+<mat-card-subtitle style="margin-bottom: 0; color: unset;">
+  @if (isOwner || feeling) {
+  <mat-form-field style="width: 50%; display: inline-block;">
+    <mat-select [disabled]="!isOwner" (selectionChange)="saveEventFeeling(feeling, event)" [(ngModel)]='feeling'
+      [placeholder]="'Feeling'">
+      @for (selectOption of feelings | keyvalue : returnZero; track selectOption) {
+      <mat-option [disabled]="!isOwner" [value]="selectOption.value">
+        {{selectOption.key}}
+      </mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  }
+  @if (rpe || isOwner) {
+  <mat-form-field style="width: 50%; display: inline-block;">
+    <mat-select [disabled]="!isOwner" (selectionChange)="saveEventRPE(rpe, event)" [(ngModel)]='rpe'
+      [placeholder]="'Rating of Perceived Exertion'">
+      @for (selectOption of rpeBorgCR10SCale | keyvalue : returnZero; track selectOption) {
+      <mat-option [disabled]="!isOwner" [value]="selectOption.value">
+        {{selectOption.key}}
+      </mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  }
+</mat-card-subtitle>
+}

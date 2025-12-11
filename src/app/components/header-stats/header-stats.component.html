@@ -1,24 +1,19 @@
-<mat-card class="mat-elevation-z0" style="padding-bottom: 0;">
-  <!--  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;"-->
-  <!--            [ngStyle]="{'padding-top': activities.length > 1 ? '0' : '0'}">-->
-  <mat-card-subtitle>
-    <section>
-      @for (stat of stats; track stat) {
-        <mat-card class="mat-elevation-z0 item">
-          <mat-card-header class="no-margin">
-            <div mat-card-avatar>
-              <app-data-type-icon [size]="'24px'" [vAlign]="'top'"
-              [dataType]="stat.getType()"></app-data-type-icon>
-            </div>
-            <mat-card-subtitle>
-              {{stat.getDisplayType()}}
-            </mat-card-subtitle>
-            <mat-card-title>
-              {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
-            </mat-card-title>
-          </mat-card-header>
-        </mat-card>
-      }
-    </section>
-  </mat-card-subtitle>
-</mat-card>
+<mat-card-subtitle>
+  <section>
+    @for (stat of stats; track stat) {
+    <mat-card class="mat-elevation-z0 item">
+      <mat-card-header class="no-margin">
+        <div mat-card-avatar>
+          <app-data-type-icon [size]="'24px'" [vAlign]="'top'" [dataType]="stat.getType()"></app-data-type-icon>
+        </div>
+        <mat-card-subtitle>
+          {{stat.getDisplayType()}}
+        </mat-card-subtitle>
+        <mat-card-title>
+          {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
+        </mat-card-title>
+      </mat-card-header>
+    </mat-card>
+    }
+  </section>
+</mat-card-subtitle>

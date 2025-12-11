@@ -1,38 +1,31 @@
-<mat-card class="mat-elevation-z0">
-  <mat-accordion>
-    <mat-expansion-panel class="mat-elevation-z0">
-      <mat-expansion-panel-header style="padding: 0 16px 0 0">
-        <mat-panel-title>
-          <mat-icon>device_hub</mat-icon>
-        </mat-panel-title>
-        <mat-panel-description style="align-items: flex-end;">
-          Connected devices info
-        </mat-panel-description>
-      </mat-expansion-panel-header>
-      @for (activity of selectedActivities; track activity) {
-        <app-activity-toggle
-          [event]="event"
-          [showToggle]="false"
-          [showDate]="false"
-          [showStats]="false"
-          [activity]="activity">
-        </app-activity-toggle>
-        @if (selectedActivities.length > 1) {
-          <mat-divider [inset]="true"></mat-divider>
-        }
-        @if (getData(activity).data.length) {
-          <mat-table [dataSource]="getData(activity)">
-            @for (column of getColumns(activity); track column) {
-              <ng-container [matColumnDef]="column">
-                <mat-header-cell *matHeaderCellDef><app-data-type-icon [dataType]="column"></app-data-type-icon></mat-header-cell>
-                <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
-              </ng-container>
-            }
-            <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
-            <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
-          </mat-table>
-        }
+<mat-accordion>
+  <mat-expansion-panel class="mat-elevation-z0">
+    <mat-expansion-panel-header style="padding: 0 16px 0 0">
+      <mat-panel-title>
+        <mat-icon style="margin-right: 16px;">device_hub</mat-icon>
+        Connected devices info
+      </mat-panel-title>
+    </mat-expansion-panel-header>
+    @for (activity of selectedActivities; track activity) {
+    <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
+      [activity]="activity">
+    </app-activity-toggle>
+    @if (selectedActivities.length > 1) {
+    <mat-divider [inset]="true"></mat-divider>
+    }
+    @if (getData(activity).data.length) {
+    <mat-table [dataSource]="getData(activity)">
+      @for (column of getColumns(activity); track column) {
+      <ng-container [matColumnDef]="column">
+        <mat-header-cell *matHeaderCellDef><app-data-type-icon
+            [dataType]="column"></app-data-type-icon></mat-header-cell>
+        <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+      </ng-container>
       }
-    </mat-expansion-panel>
-  </mat-accordion>
-</mat-card>
+      <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
+      <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
+    </mat-table>
+    }
+    }
+  </mat-expansion-panel>
+</mat-accordion>
