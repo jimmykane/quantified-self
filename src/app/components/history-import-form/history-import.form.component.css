@@ -28,45 +28,41 @@ button {
   margin-top: 1.5em;
 }
 
-::ng-deep .mat-checkbox-layout {
-  white-space: normal !important;
-}
+/* Removed ::ng-deep .mat-checkbox-layout override */
 
 mat-error {
   margin-top: 0.5em;
 }
 
-section{
+section {
   text-align: center;
 }
 
-mat-icon{
+mat-icon {
   vertical-align: middle;
   font-size: 1.6em;
 }
 
-.smaller{
+.smaller {
   font-size: 0.90em;
   line-height: 0.90em;
 }
 
 
-.no-margin{
+.no-margin {
   margin: 0;
 }
 
-form{
+form {
   height: 100%;
 }
 
-p{
+p {
   font-size: 0.9em;
 }
 
-mat-hint{
+mat-hint {
   font-size: 0.9em;
 }
 
-:host ::ng-deep .mat-horizontal-content-container {
-  padding:0 !important;
-}
+/* Removed ::ng-deep .mat-horizontal-content-container override */

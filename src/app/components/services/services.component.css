@@ -1,6 +1,16 @@
-.tab-content{
+.tab-content {
   display: flex;
   flex-direction: column;
-  /*height: 60vh;*/
 }
 
+mat-icon.large-svg-icon {
+  width: 80px;
+  height: 36px;
+  font-size: 36px;
+}
+
+mat-icon.large-svg-icon-coros {
+  width: 100px;
+  height: 36px;
+  font-size: 36px;
+}

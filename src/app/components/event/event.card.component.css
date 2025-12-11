@@ -1,51 +1,16 @@
-mat-card.outer{
-  padding: 0;
-  margin: 0;
+/* Cleaned up Event Card Styles */
+
+mat-card.outer {
+  /* Rely on material card padding */
   border-radius: 0;
-  border: 0;
-  padding-top: 0.8em;
-  padding-bottom: 0.8em;
-  padding-left: 4px;
-  padding-right: 4px;
   min-height: 100vh;
-}
-
-
-mat-card {
-  /*margin-top: 0.0em;*/
-  /*margin-bottom: 0.8em;*/
-  /*margin-left: 0.8em;*/
-  /*margin-right: 0.8em;*/
-  /*padding: 16px 0 0;*/
-  /*min-height: calc(30vh);*/
-}
-
-.mat-card-avatar{
-  text-align: center;
-  height: auto;
-  width: auto;
-  /*padding-top: 12px;*/
-}
-
-
-mat-card-content{
-  /*max-height: 20vh;*/
 }
 
 mat-card-header mat-icon {
   vertical-align: middle;
 }
 
-::ng-deep .mat-card-header-text{
-  width: 100%;
-}
-
-::ng-deep .mat-expansion-panel-body{
-  padding: 0!important;
-}
-app-event-stats-table{
-  /*height: 50vh;*/
-}
+/* Removed ::ng-deep for card header text and expansion panel body */
 
 .title {
   display: flex;

@@ -1,0 +1,7 @@
+/* Allow list items to row for multiple lines */
+mat-list-item {
+    height: auto !important;
+    min-height: 4em;
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+}

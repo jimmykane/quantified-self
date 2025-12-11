@@ -1,44 +1,25 @@
 mat-card {
-  /*margin-top: 0.0em;*/
-  /*margin-bottom: 0.8em;*/
-  /*margin-left: 0.8em;*/
-  /*margin-right: 0.8em;*/
-  /*padding: 16px 0 0;*/
-  /*min-height: calc(30vh);*/
   padding-top: 0;
   padding-bottom: 0;
 }
-mat-card-subtitle{
+
+mat-card-subtitle {
   margin-bottom: 0;
-  color: unset !important;
+  /* color: unset !important; */
 }
 
-.mat-card-avatar{
+.mat-card-avatar {
   text-align: center;
   height: auto;
   width: auto;
 }
 
-mat-card-header .mat-card-title{
+mat-card-header .mat-card-title {
   /*font-size: 1.3em;*/
 }
 
-mat-form-field{
+mat-form-field {
   width: 100%;
 }
 
-::ng-deep .mat-form-field-disabled .mat-form-field-underline{
-  display: none;
-}
-
-::ng-deep .mat-form-field-disabled .mat-select-arrow {
-  visibility: hidden;
-}
-
-::ng-deep .mat-input-element {
-  color: unset !important;
-}
-
-::ng-deep .mat-select-disabled .mat-select-value {
-  color: unset !important;
-}
+/* Removed ::ng-deep overrides for disabled form fields and inputs */

@@ -1,8 +1,8 @@
-mat-form-field{
-  width: calc(50% - 0.8em);
+mat-form-field {
+  width: 100%;
 }
 
-mat-option{
+mat-option {
   font-size: 14px !important;
   line-height: 3em !important;
   height: 3em !important;

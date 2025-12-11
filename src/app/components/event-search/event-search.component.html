@@ -1,10 +1,9 @@
 @if (searchFormGroup) {
 <form [formGroup]="searchFormGroup" autocomplete="off">
   <app-shade [isActive]="isLoading"></app-shade>
-  <section [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'block' : 'none' }">
+  <section class="filters-row" [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'flex' : 'none' }">
     @if (searchFormGroup) {
-    <mat-form-field [ngStyle]="{display: showDatePicker ? 'inline-block' : 'none' }" style=" margin-right: 1em;"
-      class="big">
+    <mat-form-field [ngStyle]="{display: showDatePicker ? 'inline-block' : 'none' }" class="big">
       <mat-label>Select date range</mat-label>
       <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
         (click)="setCustomDateRange($event); picker.open()">

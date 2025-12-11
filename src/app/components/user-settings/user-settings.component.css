@@ -1,4 +1,3 @@
-
 form {
   width: 100%;
   /*padding: 1%;*/
@@ -15,40 +14,34 @@ mat-form-field {
   margin-bottom: 1em;
 }
 
-.mat-radio-button{
+.mat-radio-button {
   margin-top: 1em;
   margin-right: 1em;
 }
 
-button{
+button {
   width: 100%;
   margin-top: 1em;
 }
 
-::ng-deep .mat-checkbox-layout {
-  white-space: normal !important;
-}
+/* Removed ::ng-deep .mat-checkbox-layout override */
 
-.checkbox{
+.checkbox {
   text-align: right;
 }
 
-mat-card{
+mat-card {
   padding-left: 0;
   padding-right: 0;
   /*margin-bottom: 1em;*/
 }
 
-mat-slide-toggle{
+mat-slide-toggle {
   display: block;
 }
-.smaller{
+
+.smaller {
   font-size: 75%;
 }
 
-::ng-deep .mat-tab-label{
-  padding: 0;
-  min-width: 18vw !important;
-  /*text-align: left;*/
-  /*justify-content: left;*/
-}
+/* Removed ::ng-deep .mat-tab-label override */

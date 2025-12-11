@@ -1,15 +1,6 @@
-mat-cell,
-.mat-header-cell {
-  overflow: visible;
-  min-width: 68px;
-}
+/* Consolidated and cleaned up styles for event table */
 
-.mat-cell {
-  font-size: 0.85em;
-  padding-left: 0.5em;
-  padding-right: 0.5em;
-}
-
+/* Keep basic layout but remove fighting against Material */
 .container {
   width: 100%;
   display: flex;
@@ -23,85 +14,29 @@ mat-cell,
   align-items: center;
 }
 
+/* Allow columns to size naturally or use flex */
 .mat-column-Privacy,
 .mat-column-Actions {
-  min-width: 20px;
-  max-width: 20px;
-  width: 20px;
+  width: 50px;
+  /* Minimal constraint */
 }
 
 .mat-column-Checkbox {
-  min-width: 40px;
-  max-width: 40px;
-  width: 40px;
+  width: 50px;
 }
 
-.mat-column-Average-Speed {
-  width: 10vw;
-  max-width: 10vw;
-}
-
-.mat-column-Description {
-  min-width: 10vw;
-}
-
-
-td.mat-cell:last-of-type,
-td.mat-footer-cell:last-of-type,
-th.mat-header-cell:last-of-type {
-  padding-right: 0;
-}
-
-
-.mat-column-Checkbox {
-  justify-content: flex-start;
-  padding-left: 0.2em !important;
-  /*padding-right:  1em !important;*/
-}
-
-.mat-column-Checkbox {
-  /*padding-left: 0.2em;*/
-}
-
-.mat-header-cell.mat-column-Checkbox {
-  /*padding-left: 0.5em;*/
-}
-
-.mat-column-Actions {
-  justify-content: flex-end;
-  padding-right: 2em !important;
-  padding-left: 0.2em;
-  /*padding-left:  1em !important;*/
-}
+/* Remove forced paddings and justifications that break theme */
+/* Standard material table styles should apply */
 
 .mat-row {
-  min-height: 50px;
-}
-
-.mat-header-cell.mat-sort-header-sorted {
-  color: black;
+  /* Let material decide row height */
 }
 
 mat-icon {
   vertical-align: middle;
-  /*font-size: 22px;*/
-  /*height: 22px;*/
-  /*width: 22px;*/
 }
-
-.mat-header-row,
-.mat-row {
-  /*padding: 0;*/
-}
-
-/*td.mat-cell, th.mat-header-cell{*/
-
-/*}*/
 
 mat-card {
-  /*min-height: 90vh;*/
-  /*margin-bottom: 1vh;*/
-  /*padding: 0.5em;*/
   margin: 0;
   padding: 0;
 }
@@ -110,18 +45,7 @@ mat-card {
   opacity: 0.7;
 }
 
-::ng-deep .mat-paginator-container {
-  justify-content: flex-start !important;
-}
-
-::ng-deep .mat-checkbox-inner-container-no-side-margin {
-  width: 17px !important;
-  height: 17px !important;
-}
-
-::ng-deep .mat-checkbox-frame {
-  border-radius: 1px !important;
-}
+/* Removed ::ng-deep overrides for paginator and checkbox */
 
 .table-container {
   overflow: auto;
@@ -134,21 +58,11 @@ table {
 }
 
 tr.mat-row:hover td:not(.mat-table-sticky) {
-  background: rgba(239, 239, 239, 0.4);
+  background: rgba(0, 0, 0, 0.04);
+  /* Standard hover effect */
   cursor: pointer;
 }
 
-
 tr.mat-row:focus {
-  outline-width: 0;
-}
-
-tr.mat-row.normal-row td {
-  /*border-bottom-width: 0;*/
-}
-
-
-
-th.mat-header-cell .mat-sort-header-container.mat-sort-header-sorted .mat-sort-header-arrow {
-  opacity: 1 !important;
+  outline: none;
 }

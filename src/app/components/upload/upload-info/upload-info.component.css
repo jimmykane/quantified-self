@@ -1,20 +1,19 @@
-mat-card{
+mat-card {
   /*margin-top: 2em;*/
 }
-mat-progress-bar{
+
+mat-progress-bar {
   /*margin-bottom: 2em;*/
 }
 
-mat-list{
+mat-list {
   padding: 0;
   margin: 0;
 }
 
-mat-card-title{
+mat-card-title {
   text-align: center;
-  font-size: 1.2em !important;
+  /* font-size: 1.2em !important; */
 }
 
-::ng-deep .mat-card-header-text{
-  width: 100%;
-}
+/* Removed ::ng-deep .mat-card-header-text override */

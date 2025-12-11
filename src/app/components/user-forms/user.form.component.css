@@ -1,6 +1,5 @@
 form {
   width: 100%;
-
   padding: 1%;
   position: relative;
 }
@@ -14,22 +13,19 @@ mat-form-field {
   margin-bottom: 1em;
 }
 
-.mat-radio-button{
+.mat-radio-button {
   margin-top: 1em;
   margin-right: 1em;
 }
 
-button{
+button {
   width: 100%;
   margin-top: 1em;
 }
 
-::ng-deep .mat-checkbox-layout {
-  white-space: normal !important;
-}
+/* Removed ::ng-deep .mat-checkbox-layout */
 
-.checkbox{
+.checkbox {
   text-align: right;
   margin-top: 2em;
 }
-

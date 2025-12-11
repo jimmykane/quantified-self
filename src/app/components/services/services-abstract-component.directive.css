@@ -1,4 +1,4 @@
-mat-card.service-card{
+mat-card.service-card {
   /*width: 100%;*/
   min-height: calc(100vh - 28px);
 }
@@ -8,31 +8,37 @@ mat-form-field {
   width: 100%;
 }
 
-button{
-  width: 49%;
+button {
+  /* Standard button sizing */
+  margin-right: 1em;
+}
+
+button:last-child {
+  margin-right: 0;
 }
 
 button.margin-left {
-  margin-left: 1%;
+  margin-left: 0;
 }
 
-button.big{
+button.big {
   width: 100%;
   margin-top: 1em;
+  margin-right: 0;
 }
 
 
 
-mat-icon{
+mat-icon {
   vertical-align: middle;
   font-size: 1.6em;
 }
 
-.smaller{
+.smaller {
   font-size: 0.75em;
 }
 
-.button-block{
+.button-block {
   display: block;
   margin-bottom: 2em;
 }

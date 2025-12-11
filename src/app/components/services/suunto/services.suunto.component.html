@@ -1,7 +1,7 @@
 <mat-card class="mat-elevation-z0 service-card">
   <mat-card-header>
     <mat-card-subtitle>
-      Suunto is a trusted companion for athletes and adventurers.<br/>
+      Suunto is a trusted companion for athletes and adventurers.<br />
       The durable and precise sports watches are tested in the toughest conditions and built to last in
       adventures
       from the deepest oceans to the highest mountains.
@@ -11,59 +11,53 @@
   <mat-tab-group [dynamicHeight]="true">
 
     @if (user && !isGuest) {
-      <mat-tab label="Sync" [disabled]="!user || isGuest">
-        <ng-template matTabLabel>
-          <mat-icon matTooltip="Sync settings">sync</mat-icon>
-        </ng-template>
-        <ng-template matTabContent>
-          <mat-card class="mat-elevation-z0">
-            <mat-card-header>
-              @if (!isConnectedToService()) {
-                <mat-card-subtitle>
-                  Connect to Suunto app
-                  <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                    info
-                  </mat-icon>
-                </mat-card-subtitle>
-              }
-              @if (isConnectedToService()) {
-                <mat-card-subtitle>Connected</mat-card-subtitle>
-              }
-            </mat-card-header>
-            <mat-divider></mat-divider>
-            @if (isConnectedToService()) {
-              <mat-list>
-                <div mat-subheader>Accounts</div>
-                @for (serviceToken of serviceTokens; track serviceToken; let i = $index) {
-                  <mat-list-item style="text-align: left"
-                    >
-                    <mat-icon mat-list-icon (click)="clicks = clicks+1">account_circle</mat-icon>
-                    <div mat-line>{{ serviceToken.userName }} </div>
-                    <div mat-line>Connected at {{serviceToken.dateCreated  | date:'medium'}}</div>
-                  </mat-list-item>
-                }
-              </mat-list>
-            }
-            @if (!isConnectedToService() || clicks > 10) {
-              <button mat-stroked-button
-                class="big"
-                mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                (click)="connectWithService($event)">Connect
-              </button>
+    <mat-tab label="Sync" [disabled]="!user || isGuest">
+      <ng-template matTabLabel>
+        <mat-icon matTooltip="Sync settings">sync</mat-icon>
+      </ng-template>
+      <ng-template matTabContent>
+        <mat-card class="mat-elevation-z0">
+          <mat-card-header>
+            @if (!isConnectedToService()) {
+            <mat-card-subtitle>
+              Connect to Suunto app
+              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+                info
+              </mat-icon>
+            </mat-card-subtitle>
             }
             @if (isConnectedToService()) {
-              <button class="big"
-                mat-flat-button color="warn"
-                (click)="deauthorizeService($event)">Diconnect
-              </button>
+            <mat-card-subtitle>Connected</mat-card-subtitle>
             }
-          </mat-card>
-        </ng-template>
-      </mat-tab>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+          @if (isConnectedToService()) {
+          <mat-list>
+            <div mat-subheader>Accounts</div>
+            @for (serviceToken of serviceTokens; track serviceToken; let i = $index) {
+            <mat-list-item>
+              <mat-icon mat-list-icon (click)="clicks = clicks+1">account_circle</mat-icon>
+              <div mat-line>{{ serviceToken.userName }} </div>
+              <div mat-line>Connected at {{serviceToken.dateCreated | date:'medium'}}</div>
+            </mat-list-item>
+            }
+          </mat-list>
+          }
+          @if (!isConnectedToService() || clicks > 10) {
+          <button mat-stroked-button class="big" mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+            (click)="connectWithService($event)">Connect
+          </button>
+          }
+          @if (isConnectedToService()) {
+          <button class="big" mat-flat-button color="warn" (click)="deauthorizeService($event)">Diconnect
+          </button>
+          }
+        </mat-card>
+      </ng-template>
+    </mat-tab>
     }
 
-    <mat-tab label="History import"
-      [disabled]="!isConnectedToService()">
+    <mat-tab label="History import" [disabled]="!isConnectedToService()">
       <ng-template matTabLabel>
         <mat-icon matTooltip="History import">history</mat-icon>
       </ng-template>
@@ -76,7 +70,8 @@
             </mat-card-subtitle>
           </mat-card-header>
           <mat-divider></mat-divider>
-          <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"></app-history-import-form>
+          <app-history-import-form [serviceName]="serviceName"
+            [userMetaForService]="serviceMeta"></app-history-import-form>
         </mat-card>
       </ng-template>
     </mat-tab>
@@ -93,17 +88,16 @@
             </mat-card-subtitle>
           </mat-card-header>
           <mat-divider></mat-divider>
-          <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()"
-            autocomplete="off">
+          <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
             <mat-form-field>
               <label>
                 <input matInput placeholder="Link" formControlName="input">
               </label>
               <mat-hint>Paste a Suunto app link that is public</mat-hint>
               @if (hasError('input')) {
-                <mat-error>
-                  This cannot be empty
-                </mat-error>
+              <mat-error>
+                This cannot be empty
+              </mat-error>
               }
             </mat-form-field>
             <section>
@@ -111,9 +105,9 @@
                 Download
               </button>
               @if (user) {
-                <button class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
-                  Import
-                </button>
+              <button class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
+                Import
+              </button>
               }
             </section>
           </form>
@@ -129,7 +123,7 @@
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             <mat-card-subtitle>
-              You can upload a FIT file to your Suunto app as an activity<br/>
+              You can upload a FIT file to your Suunto app as an activity<br />
               You will receive a notification at your Suunto app.
             </mat-card-subtitle>
           </mat-card-header>
@@ -155,10 +149,9 @@
               </mat-icon>
             </mat-card-subtitle>
             @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 3) {
-              <mat-card-subtitle
-                >
-                {{serviceMeta.uploadedRoutesCount}} routes uploaded
-              </mat-card-subtitle>
+            <mat-card-subtitle>
+              {{serviceMeta.uploadedRoutesCount}} routes uploaded
+            </mat-card-subtitle>
             }
           </mat-card-header>
           <mat-divider></mat-divider>

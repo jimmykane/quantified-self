@@ -1,22 +1,12 @@
 // Use prebuilt Angular Material theme
 @use '@angular/material/prebuilt-themes/indigo-pink.css';
 
-// Dark theme support via CSS class (basic colors override)
+// Dark theme support via CSS class - relying on standard material overrides where possible
+// reduced to minimal background setting if needed, but for now removing the manual variable overrides
+// to let the theme handle itself or be cleaner.
 .dark-theme {
-  --mat-theme-surface: #303030;
-  --mat-theme-background: #303030;
-  --mat-theme-on-surface: #fff;
-  --mat-card-background-color: #424242;
   background-color: #303030;
   color: #fff;
-}
-
-.mat-header-cell {
-  color: black !important;
-}
-
-.dark-theme .mat-header-cell {
-  color: white !important;
 }
 
 @font-face {
@@ -74,9 +64,6 @@ body {
   width: 40px;
   height: 40px;
   position: relative;
-  //width: 40px;
-  //height: 40px;
-  //margin: 100px auto;
 }
 
 .sk-cube-grid .sk-cube {
@@ -163,26 +150,8 @@ body {
   }
 }
 
-
-mat-icon.large-svg-icon {
-  padding-bottom: 2px !important;
-  padding-top: 2px !important;
-  width: 80px !important;
-  height: 36px !important;
-  font-size: 1em !important;
-}
-
-mat-icon.large-svg-icon-coros {
-  padding-bottom: 2px !important;
-  height: 36px !important;
-  font-size: 1em !important;
-  padding-top: 10px !important;
-  width: 100px !important;
-}
-
-
 .dark-theme section.component-container {
-  background: #424242;
+  background: #303030;
 }
 
 .white-theme section.component-container {}
@@ -194,11 +163,6 @@ section.component-container {
 
 mat-card.component-container {
   border-radius: 0;
-}
-
-
-.mat-tab-label.mat-tab-label-active {
-  opacity: 1 !important;
 }
 
 .avatar {
