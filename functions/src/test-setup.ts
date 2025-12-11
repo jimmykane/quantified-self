@@ -25,7 +25,7 @@ const mockConfig = vi.hoisted(() => ({
 }));
 
 // Mock firebase-functions - this will be hoisted
-vi.mock('firebase-functions', () => {
+vi.mock('firebase-functions/v1', () => {
     const config = () => ({
         suuntoapp: {
             client_id: 'test-suunto-client-id',
