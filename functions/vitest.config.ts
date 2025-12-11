@@ -14,6 +14,10 @@ export default defineConfig({
             exclude: ['src/**/*.spec.ts', 'src/index.ts'],
         },
         // Mock firebase-admin and firebase-functions by default
+        // Mock firebase-admin and firebase-functions by default
         setupFiles: [resolve(__dirname, 'src/test-setup.ts')],
+        alias: {
+            'firebase-functions/v1': 'firebase-functions',
+        },
     },
 });
