@@ -1,9 +1,31 @@
-/* Cleaned up Event Card Styles */
+/* Dashboard Layout Styles */
 
-mat-card.outer {
-  /* Rely on material card padding */
-  border-radius: 0;
-  min-height: 100vh;
+.event-dashboard-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Standard material gap */
+  padding: 16px;
+  max-width: 1600px;
+  /* Prevent it from getting too wide on huge screens */
+  margin: 0 auto;
+}
+
+.dashboard-card {
+  /* Restore standard padding for content readability */
+  padding: 16px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Specific section tweaks if needed */
+.header-section {
+  /* maybe some specific styling */
+}
+
+/* Map should typically be full bleed */
+.map-section {
+  padding: 0;
 }
 
 mat-card-header mat-icon {
