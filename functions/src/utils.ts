@@ -85,6 +85,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     }
   });
 
+
   const adapter: FirestoreAdapter = {
     setDoc: async (path: string[], data: any) => {
       // path is ['users', userID, 'events', eventID, ...]
@@ -166,6 +167,8 @@ export async function createFirebaseAccount(serviceUserID: string) {
   console.log('Created Custom token for UID "', uid, '" Token:', token);
   return token;
 }
+
+
 
 
 
