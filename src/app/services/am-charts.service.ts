@@ -31,6 +31,7 @@ export class AmChartsService {
                 this.zone.runOutsideAngular(() => {
                     // Global Options
                     core.options.commercialLicense = true;
+                    core.options.autoSetClassName = true; // Enable CSS class names for better theming control
                     // core.options.queue = true; // Optional: Enable if you want queued rendering
                     // core.options.onlyShowOnViewport = true; // Optional: Performance boost
                 });
