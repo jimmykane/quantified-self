@@ -3,8 +3,8 @@
 // Firebase Setup
 import * as admin from 'firebase-admin';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
   const serviceAccount = require('../service-account.json');
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),

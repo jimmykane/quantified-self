@@ -61,9 +61,11 @@ async function request(urlOrOptions: string | any, options: any = {}) {
         try {
             err.error = await response.text();
             try {
- err.error = JSON.parse(err.error);
-} catch { }
-        } catch { }
+                err.error = JSON.parse(err.error);
+            } catch { // ignore
+            }
+        } catch { // ignore
+        }
         throw err;
     }
 
