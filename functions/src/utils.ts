@@ -134,7 +134,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
  *
  * @returns {Promise<string>} The Firebase custom auth token in a promise.
  */
-export async function createFirebaseAccount(serviceUserID: string, accessToken: string) {
+export async function createFirebaseAccount(serviceUserID: string) {
   // The UID we'll assign to the user.
   const uid = generateIDFromParts(['suuntoApp', serviceUserID]);
 
