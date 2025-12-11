@@ -80,12 +80,12 @@ vi.mock('firebase-admin', () => {
             docs: [],
             size: 0,
         }),
-        where: function() {
- return this;
-},
-        limit: function() {
- return this;
-},
+        where: function () {
+            return this;
+        },
+        limit: function () {
+            return this;
+        },
     };
 
     const mockFirestore = () => ({
@@ -132,11 +132,11 @@ vi.mock('simple-oauth2', () => ({
     AuthorizationCode: class MockAuthorizationCode {
         constructor(config: any) { }
         authorizeURL(params: any) {
- return 'https://mock-auth-url.com';
-}
+            return 'https://mock-auth-url.com';
+        }
         getToken(params: any) {
- return Promise.resolve({ token: {} });
-}
+            return Promise.resolve({ token: {} });
+        }
         createToken(token: any) {
             return {
                 expired: () => false,
