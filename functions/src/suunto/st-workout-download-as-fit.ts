@@ -5,7 +5,7 @@ import cors from 'cors';
 
 const corsRequest = cors({ origin: true });
 
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 
 export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onRequest((req, res) => {
   corsRequest(req, res, () => {
