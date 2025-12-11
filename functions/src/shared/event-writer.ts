@@ -1,0 +1,114 @@
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
+import {
+    CompressedJSONStreamInterface,
+    CompressionEncodings,
+    CompressionMethods,
+} from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import * as Pako from 'pako';
+
+export interface FirestoreAdapter {
+    setDoc(path: string[], data: any): Promise<void>;
+    createBlob(data: Uint8Array): any;
+    generateID(): string;
+}
+
+export class EventWriter {
+    constructor(private adapter: FirestoreAdapter) { }
+
+    public async writeAllEventData(userID: string, event: EventInterface): Promise<void> {
+        const writePromises: Promise<void>[] = [];
+
+        // Ensure Event ID
+        if (!event.getID()) {
+            event.setID(this.adapter.generateID());
+        }
+
+        try {
+            for (const activity of event.getActivities()) {
+                // Ensure Activity ID
+                if (!activity.getID()) {
+                    activity.setID(this.adapter.generateID());
+                }
+
+                const activityJSON = activity.toJSON();
+                delete (activityJSON as any).streams;
+
+                // Write Activity
+                writePromises.push(
+                    this.adapter.setDoc(
+                        ['users', userID, 'events', <string>event.getID(), 'activities', <string>activity.getID()],
+                        activityJSON
+                    )
+                );
+
+                // Write Streams
+                for (const stream of activity.getAllExportableStreams()) {
+                    try {
+                        const compressedStream = this.compressStream(stream.toJSON());
+                        writePromises.push(
+                            this.adapter.setDoc(
+                                [
+                                    'users',
+                                    userID,
+                                    'events',
+                                    <string>event.getID(),
+                                    'activities',
+                                    <string>activity.getID(),
+                                    'streams',
+                                    stream.type,
+                                ],
+                                compressedStream
+                            )
+                        );
+                    } catch (e: any) {
+                        throw new Error(`Failed to write stream ${stream.type}: ${e.message}`);
+                    }
+                }
+            }
+
+            // Write Event
+            const eventJSON = event.toJSON();
+            delete (eventJSON as any).activities;
+            writePromises.push(
+                this.adapter.setDoc(['users', userID, 'events', <string>event.getID()], eventJSON)
+            );
+
+            await Promise.all(writePromises);
+        } catch (e: any) {
+            console.error(e);
+            throw new Error('Could not write event data: ' + e.message);
+        }
+    }
+
+    private compressStream(stream: StreamJSONInterface): CompressedJSONStreamInterface {
+        const compressedStream: CompressedJSONStreamInterface = {
+            encoding: CompressionEncodings.None,
+            type: stream.type,
+            data: JSON.stringify(stream.data),
+            compressionMethod: CompressionMethods.None,
+        };
+
+        // If we can fit it go on (1MB limit approx)
+        if (getSize(compressedStream.data) <= 1048487) {
+            return compressedStream;
+        }
+
+        // Then try Pako
+        compressedStream.data = this.adapter.createBlob(Pako.gzip(JSON.stringify(stream.data)));
+        compressedStream.encoding = CompressionEncodings.UInt8Array;
+        compressedStream.compressionMethod = CompressionMethods.Pako;
+
+        if (getSize(compressedStream.data) <= 1048487) {
+            return compressedStream;
+        }
+
+        // Throw an error if smaller than a MB still
+        throw new Error(
+            `Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(
+                compressedStream.data
+            )}`
+        );
+    }
+}

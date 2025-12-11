@@ -20,6 +20,8 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
+import { Bytes } from 'firebase/firestore';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
@@ -197,39 +199,25 @@ export class AppEventService implements OnDestroy {
   }
 
   public async writeAllEventData(user: User, event: EventInterface) {
-    const writePromises: Promise<void>[] = [];
-    // createId replacement: use a random doc ref
-    const newEventId = event.getID() || doc(collection(this.firestore, 'users', user.uid, 'events')).id;
-    event.setID(newEventId);
-    // We want to debug that so instrad of promise all do a for loop or something with more controll to figure out what promise fails
-    try {
-      for (const activity of event.getActivities()) {
-        const newActivityId = activity.getID() || doc(collection(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities')).id;
-        activity.setID(newActivityId);
-
-        const activityJSON = activity.toJSON();
-        delete activityJSON.streams;
-
-
-        await setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID()), activityJSON);
-
-        for (const stream of activity.getAllExportableStreams()) {
-          try {
-            await setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID(), 'streams', stream.type), StreamEncoder.compressStream(stream.toJSON()));
-          } catch (e: any) {
-            throw new Error(`Failed to write stream ${stream.type}: ${e.message}`);
-          }
-        }
+    const adapter: FirestoreAdapter = {
+      setDoc: (path: string[], data: any) => {
+        // Construct the full path from the array parts
+        // The first part is 'users', then uid, etc.
+        // path example: ['users', userID, 'events', eventID]
+        // collection(firestore, path[0], path[1], ...) seems wrong if it mixes coll/doc
+        // doc() takes (firestore, path...)
+        return setDoc(doc(this.firestore, ...path as [string, ...string[]]), data);
+      },
+      createBlob: (data: Uint8Array) => {
+        return Bytes.fromUint8Array(data);
+      },
+      generateID: () => {
+        return doc(collection(this.firestore, 'users')).id;
       }
-      const eventJSON = event.toJSON()
-      delete eventJSON.activities;
-      await setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), eventJSON);
-    } catch (e: any) {
-      console.error(e)
-      // Try to delete the parent entity and all subdata
-      await this.deleteAllEventData(user, event.getID());
-      throw new Error('Could not parse event' + e.message);
-    }
+    };
+
+    const writer = new EventWriter(adapter);
+    await writer.writeAllEventData(user.uid, event);
   }
 
   public async setEvent(user: User, event: EventInterface) {

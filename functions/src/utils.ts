@@ -4,21 +4,11 @@ type Response = functions.Response;
 import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import {
-  COROSAPIEventMetaData,
-  GarminHealthAPIEventMetaData,
-  SuuntoAppEventMetaData,
-} from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
-import * as Pako from 'pako';
-import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
-import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import {
-  CompressedJSONStreamInterface,
-  CompressionEncodings, CompressionMethods,
-} from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
+import { EventWriter, FirestoreAdapter } from './shared/event-writer';
+
 
 export function generateIDFromPartsOld(parts: string[]): string {
   return base58.encode(Buffer.from(`${parts.join(':')}`));
@@ -81,53 +71,61 @@ export function isCorsAllowed(req: Request) {
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData) {
-  const writePromises: Promise<any>[] = [];
   event.setID(eventID);
-  event.getActivities()
-    .forEach((activity: ActivityInterface, index: number) => {
+
+  // Pre-assign Activity IDs to match legacy behavior (deterministic IDs)
+  event.getActivities().forEach((activity: ActivityInterface, index: number) => {
+    if (!activity.getID()) {
       activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
-      activity.getAllExportableStreams().forEach((stream: StreamInterface) => {
-        // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
-        writePromises.push(
-          admin.firestore()
-            .collection('users')
-            .doc(userID)
-            .collection('events')
-            .doc(<string>event.getID())
-            .collection('activities')
-            .doc(<string>activity.getID())
-            .collection('streams')
-            .doc(stream.type)
-            .set(StreamEncoder.compressStream(stream.toJSON())));
-      });
-      const activityJSON = activity.toJSON();
-      delete (activityJSON as any).streams;
-      writePromises.push(
-        admin.firestore().collection('users')
-          .doc(userID)
-          .collection('events')
-          .doc(<string>event.getID())
-          .collection('activities')
-          .doc(<string>activity.getID())
-          .set(activityJSON));
-    });
-  writePromises.push(admin.firestore()
+    }
+  });
+
+  const adapter: FirestoreAdapter = {
+    setDoc: async (path: string[], data: any) => {
+      // path is ['users', userID, 'events', eventID, ...]
+      let ref: any = admin.firestore();
+      for (const part of path) {
+        if (ref.collection) {
+          ref = ref.collection(part);
+        } else {
+          ref = ref.doc(part);
+        }
+      }
+      // ref should be a DocumentReference now
+      // Iterate path to build reference is tricky with mix of col/doc.
+      // Better way:
+      // data is strictly set()
+      // admin.firestore().doc(path.join('/')) works for simple paths but might fail if IDs have slashes?
+      // Our IDs might be base58 or hashes, so safe-ish.
+      // Safer to chain:
+      // admin.firestore().collection(p0).doc(p1).collection(p2).doc(p3)
+
+      let docRef = admin.firestore().collection(path[0]).doc(path[1]);
+      for (let i = 2; i < path.length; i += 2) {
+        docRef = docRef.collection(path[i]).doc(path[i + 1]);
+      }
+      await docRef.set(data);
+    },
+    createBlob: (data: Uint8Array) => {
+      return Buffer.from(data);
+    },
+    generateID: () => {
+      return admin.firestore().collection('dummy').doc().id;
+    }
+  };
+
+  const writer = new EventWriter(adapter);
+  await writer.writeAllEventData(userID, event);
+
+  // Write Metadata (not handled by EventWriter)
+  await admin.firestore()
     .collection('users')
     .doc(userID)
     .collection('events')
-    .doc(<string>event.getID()).collection('metaData').doc(metaData.serviceName).set(metaData.toJSON()));
-  try {
-    await Promise.all(writePromises);
-    console.log(`Wrote ${writePromises.length + 1} documents for event with id ${eventID}`);
-    const eventJSON = event.toJSON();
-    delete (eventJSON as any).activities
-    return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(eventJSON);
-  } catch (e: any) {
-    console.error(e);
-    throw e;
-    // Try to delete the parent entity and all subdata
-    // await this.deleteAllEventData(user, event.getID());
-  }
+    .doc(<string>event.getID())
+    .collection('metaData')
+    .doc(metaData.serviceName)
+    .set(metaData.toJSON());
 }
 
 /**
@@ -165,32 +163,4 @@ export async function createFirebaseAccount(serviceUserID: string, accessToken: 
 }
 
 
-export class StreamEncoder {
-  /**
-   * Make sure this is in sync with the functions based one
-   * @param stream
-   */
-  static compressStream(stream: StreamJSONInterface): CompressedJSONStreamInterface {
-    const compressedStream: CompressedJSONStreamInterface = {
-      encoding: CompressionEncodings.None,
-      type: stream.type,
-      data: JSON.stringify(stream.data),
-      compressionMethod: CompressionMethods.None,
-    };
-    // console.log(`[ORIGINAL] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
-    // If we can fit it go on
-    if (getSize(compressedStream.data) <= 1048487) {
-      return compressedStream;
-    }
-    // Then try Pako (as the fastest)
-    compressedStream.data = Buffer.from(Pako.gzip(JSON.stringify(stream.data)));
-    compressedStream.encoding = CompressionEncodings.UInt8Array;
-    compressedStream.compressionMethod = CompressionMethods.Pako;
-    // console.log(`[COMPRESSED ${CompressionMethods.Pako}] ${stream.type} = ${getSizeFormated(compressedStream.data)}`)
-    if (getSize(compressedStream.data) <= 1048487) {
-      return compressedStream;
-    }
-    // Throw an error if smaller than a MB still
-    throw new Error(`Cannot compress stream ${stream.type} its more than 1048487 bytes  ${getSize(compressedStream.data)}`);
-  }
-}
+
