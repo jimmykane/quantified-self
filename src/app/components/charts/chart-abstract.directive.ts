@@ -39,8 +39,8 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     const { core, charts } = await this.amChartsService.load();
 
     // Config options set in service, but we can override or use core here
-    return this.zone.runOutsideAngular(() => {
-      this.setChartThemes(this.chartTheme, this.useAnimations, core);
+    return this.zone.runOutsideAngular(async () => {
+      await this.setChartThemes(this.chartTheme, this.useAnimations, core);
       const chart = core.create(this.chartDiv.nativeElement, chartType || charts.XYChart) as am4charts.Chart;
       chart.preloader.disabled = true;
 
@@ -63,20 +63,50 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     am4core.unuseAllThemes();
 
     let themeModule;
-    switch (chartTheme) {
-      case 'material': themeModule = await import('@amcharts/amcharts4/themes/material'); break;
-      case 'frozen': themeModule = await import('@amcharts/amcharts4/themes/frozen'); break;
-      case 'dataviz': themeModule = await import('@amcharts/amcharts4/themes/dataviz'); break;
-      case 'dark': themeModule = await import('@amcharts/amcharts4/themes/dark'); break;
-      case 'amcharts': themeModule = await import('@amcharts/amcharts4/themes/amcharts'); break;
-      case 'amchartsdark': themeModule = await import('@amcharts/amcharts4/themes/amchartsdark'); break;
-      case 'moonrisekingdom': themeModule = await import('@amcharts/amcharts4/themes/moonrisekingdom'); break;
-      case 'spiritedaway': themeModule = await import('@amcharts/amcharts4/themes/spiritedaway'); break;
-      case 'kelly': themeModule = await import('@amcharts/amcharts4/themes/kelly'); break;
-      default: themeModule = await import('@amcharts/amcharts4/themes/material'); break;
+    console.log(`[Antigravity] Setting chart theme to: ${chartTheme}`);
+    try {
+      switch (chartTheme) {
+        case 'material': themeModule = await import('@amcharts/amcharts4/themes/material'); break;
+        case 'frozen': themeModule = await import('@amcharts/amcharts4/themes/frozen'); break;
+        case 'dataviz': themeModule = await import('@amcharts/amcharts4/themes/dataviz'); break;
+        case 'dark': themeModule = await import('@amcharts/amcharts4/themes/dark'); break;
+        case 'amcharts': themeModule = await import('@amcharts/amcharts4/themes/amcharts'); break;
+        case 'amchartsdark': themeModule = await import('@amcharts/amcharts4/themes/amchartsdark'); break;
+        case 'moonrisekingdom': themeModule = await import('@amcharts/amcharts4/themes/moonrisekingdom'); break;
+        case 'spiritedaway': themeModule = await import('@amcharts/amcharts4/themes/spiritedaway'); break;
+        case 'kelly': themeModule = await import('@amcharts/amcharts4/themes/kelly'); break;
+        default:
+          console.warn(`[Antigravity] Unknown theme '${chartTheme}', defaulting to material.`);
+          themeModule = await import('@amcharts/amcharts4/themes/material');
+          break;
+      }
+
+      if (themeModule && themeModule.default) {
+        console.log(`[Antigravity] Applying theme module for ${chartTheme}`);
+        am4core.useTheme(themeModule.default);
+      } else {
+        console.error(`[Antigravity] Theme module for ${chartTheme} did not load correctly.`, themeModule);
+      }
+    } catch (e) {
+      console.error(`[Antigravity] Error loading theme ${chartTheme}:`, e);
     }
 
-    am4core.useTheme(themeModule.default);
+    // Programmatically enforce dark tooltip styles for dark themes to prevent "white on white" issues
+    if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
+      const customDarkTooltipTheme = (target: any) => {
+        if (target instanceof am4core.Tooltip) {
+          if (target.background) {
+            target.background.fill = am4core.color("#303030");
+            target.background.stroke = am4core.color("#303030");
+          }
+          if (target.label) {
+            target.label.fill = am4core.color("#ffffff");
+          }
+          target.getFillFromObject = false;
+        }
+      };
+      am4core.useTheme(customDarkTooltipTheme);
+    }
 
     if (useAnimations === true) {
       const animated = await import('@amcharts/amcharts4/themes/animated');
