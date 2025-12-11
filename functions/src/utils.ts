@@ -4,6 +4,11 @@ type Response = functions.Response;
 import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {
+  COROSAPIEventMetaData,
+  GarminHealthAPIEventMetaData,
+  SuuntoAppEventMetaData
+} from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
 
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
