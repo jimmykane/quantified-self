@@ -86,15 +86,6 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   event.getActivities()
     .forEach((activity: ActivityInterface, index: number) => {
       activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
-      writePromises.push(
-        admin.firestore().collection('users')
-          .doc(userID)
-          .collection('events')
-          .doc(<string>event.getID())
-          .collection('activities')
-          .doc(<string>activity.getID())
-          .set(activity.toJSON()));
-
       activity.getAllExportableStreams().forEach((stream: StreamInterface) => {
         // console.log(`Stream ${stream.type} has size of GZIP ${getSize(Buffer.from((Pako.gzip(JSON.stringify(stream.data), {to: 'string'})), 'binary'))}`);
         writePromises.push(
@@ -109,6 +100,16 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
             .doc(stream.type)
             .set(StreamEncoder.compressStream(stream.toJSON())));
       });
+      const activityJSON = activity.toJSON();
+      delete (activityJSON as any).streams;
+      writePromises.push(
+        admin.firestore().collection('users')
+          .doc(userID)
+          .collection('events')
+          .doc(<string>event.getID())
+          .collection('activities')
+          .doc(<string>activity.getID())
+          .set(activityJSON));
     });
   writePromises.push(admin.firestore()
     .collection('users')
@@ -118,7 +119,9 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   try {
     await Promise.all(writePromises);
     console.log(`Wrote ${writePromises.length + 1} documents for event with id ${eventID}`);
-    return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(event.toJSON());
+    const eventJSON = event.toJSON();
+    delete (eventJSON as any).activities
+    return admin.firestore().collection('users').doc(userID).collection('events').doc(<string>event.getID()).set(eventJSON);
   } catch (e: any) {
     console.error(e);
     throw e;
