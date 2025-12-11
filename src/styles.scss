@@ -71,6 +71,20 @@ body {
 
   background-color: mat.m2-get-color-from-palette($dark-bg, background) !important;
   color: mat.m2-get-color-from-palette($dark-fg, text) !important;
+
+  // Force SVG text to be light in dark mode for amCharts
+  text,
+  tspan,
+  .amcharts-Label {
+    fill: mat.m2-get-color-from-palette($dark-fg, text) !important;
+  }
+
+  // Ensure tooltips have dark background
+  .amcharts-Tooltip-bg {
+    fill: mat.m2-get-color-from-palette($dark-bg, background) !important;
+    stroke: mat.m2-get-color-from-palette($dark-fg, text) !important;
+    fill-opacity: 0.9 !important;
+  }
 }
 
 // ... existing code ...
