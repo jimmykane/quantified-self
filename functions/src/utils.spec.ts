@@ -4,7 +4,6 @@ import {
     generateIDFromPartsOld,
     isCorsAllowed,
     determineRedirectURI,
-    StreamEncoder,
 } from './utils';
 
 describe('utils', () => {
