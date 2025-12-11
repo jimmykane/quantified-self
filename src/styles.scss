@@ -199,15 +199,10 @@ section.component-container {
   }
 }
 
-.dark-theme section.component-container {
-  background: #303030;
-}
-
-.white-theme section.component-container {}
 
 section.component-container {
   position: relative;
-  background: white;
+  // background: white; // Removed to allow theme inheritance
 }
 
 mat-card.component-container {
