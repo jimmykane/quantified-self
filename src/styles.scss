@@ -47,19 +47,38 @@ $app-dark-theme: mat.m2-define-dark-theme((color: (primary: $app-primary,
   font-style: normal;
 }
 
+
+// ... (existing imports)
+
+// Apply global background and color based on theme
+html,
 body {
+  height: 100%;
   margin: 0;
-  font-family: '"QSFont", Roboto, sans-serif;', sans-serif;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
-body::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE and Edge */
 body {
-  -ms-overflow-style: none;
+  $light-bg: map.get($app-light-theme, background);
+  $light-fg: map.get($app-light-theme, foreground);
+
+  background-color: mat.m2-get-color-from-palette($light-bg, background);
+  color: mat.m2-get-color-from-palette($light-fg, text);
+}
+
+.dark-theme {
+  $dark-bg: map.get($app-dark-theme, background);
+  $dark-fg: map.get($app-dark-theme, foreground);
+
+  background-color: mat.m2-get-color-from-palette($dark-bg, background) !important;
+  color: mat.m2-get-color-from-palette($dark-fg, text) !important;
+}
+
+// ... existing code ...
+
+section.component-container {
+  position: relative;
+  background: inherit;
+  /* Allow it to inherit the theme background */
 }
 
 @keyframes FadeIn {
