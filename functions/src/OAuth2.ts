@@ -112,8 +112,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
  */
 export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
   const serviceConfig = getServiceConfig(serviceName);
-  let results: AccessToken;
-  results = await serviceConfig.oauth2Client.getToken({
+  const results: AccessToken = await serviceConfig.oauth2Client.getToken({
     code: code,
     scope: serviceConfig.oAuthScopes,
     redirect_uri: redirectUri,

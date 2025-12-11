@@ -45,8 +45,7 @@ export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('e
 
   const oAuth = GarminHealthAPIAuth();
 
-  let result;
-  result = await requestPromise.post({
+  const result = await requestPromise.post({
     headers: oAuth.toHeader(oAuth.authorize({
       url: REQUEST_TOKEN_URI,
       method: 'POST',

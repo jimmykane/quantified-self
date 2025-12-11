@@ -80,8 +80,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     return increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, new Error('No tokens found'), 20);
   }
 
-  let serviceToken;
-  serviceToken = tokenQuerySnapshots.docs[0].data();
+  const serviceToken = tokenQuerySnapshots.docs[0].data();
 
   const oAuth = GarminHealthAPIAuth();
 
