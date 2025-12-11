@@ -37,7 +37,7 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
     console.log('opts:', opts);
 
 
-    fetch(url, opts)
+    fetch(url, opts as any)
       .then((r: any) => {
         if (!r.ok) {
           res.status(500);
