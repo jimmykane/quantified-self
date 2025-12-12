@@ -238,6 +238,10 @@ export class AppEventService implements OnDestroy {
           payload = new Blob([data], { type: 'text/plain' });
         }
         await uploadBytes(fileRef, payload);
+      },
+      getBucketName: () => {
+        // Return the Firebase Storage bucket name from config
+        return 'quantified-self-io.appspot.com';
       }
     }
 

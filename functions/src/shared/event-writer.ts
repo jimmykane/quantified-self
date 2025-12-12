@@ -1,4 +1,3 @@
-import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 
 
@@ -10,10 +9,11 @@ export interface FirestoreAdapter {
 
 export interface StorageAdapter {
     uploadFile(path: string, data: any, metadata?: any): Promise<void>;
+    getBucketName?(): string;  // Optional: some adapters may provide bucket name
 }
 
 export class EventWriter {
-    constructor(private adapter: FirestoreAdapter, private storageAdapter?: StorageAdapter) { }
+    constructor(private adapter: FirestoreAdapter, private storageAdapter?: StorageAdapter, private bucketName?: string) { }
 
     public async writeAllEventData(userID: string, event: EventInterface, originalFile?: { data: any, extension: string }): Promise<void> {
         console.log('[EventWriter] writeAllEventData called', { userID, eventID: event.getID(), hasOriginalFile: !!originalFile, adapterPresent: !!this.storageAdapter });
@@ -80,7 +80,8 @@ export class EventWriter {
                 console.log('[EventWriter] Upload complete. Adding metadata to eventJSON');
                 (eventJSON as any).originalFile = {
                     path: filePath,
-                    bucket: admin.storage().bucket().name,
+                    // Get bucket name from adapter if available, otherwise from constructor param
+                    bucket: this.storageAdapter.getBucketName?.() || this.bucketName,
                 };
             } else {
                 console.warn('[EventWriter] Skipping file upload. originalFile:', !!originalFile, 'storageAdapter:', !!this.storageAdapter);
