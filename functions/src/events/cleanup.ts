@@ -1,10 +1,10 @@
 
-import * as functions from 'firebase-functions';
+import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 
 export const cleanupEventFile = functions.firestore
     .document('users/{userId}/events/{eventId}')
-    .onDelete(async (snap, context) => {
+    .onDelete(async (snap: functions.firestore.QueryDocumentSnapshot, context: functions.EventContext) => {
         const deletedData = snap.data();
         const eventId = context.params.eventId;
         const userId = context.params.userId;
