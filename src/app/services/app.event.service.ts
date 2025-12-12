@@ -22,7 +22,12 @@ import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
 import { EventWriter, FirestoreAdapter, StorageAdapter } from '../../../functions/src/shared/event-writer';
 import { Bytes } from 'firebase/firestore';
-import { Storage, ref, uploadBytes } from '@angular/fire/storage';
+import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
+import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
+import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
+import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
+import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
@@ -318,6 +323,39 @@ export class AppEventService implements OnDestroy {
    * @private
    */
   public attachStreamsToEventWithActivities(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
+    // Check if we have an original file to parse instead of fetching from Firestore
+    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!(event as any).originalFile);
+    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!(event as any).originalFile);
+    console.log('[AppEventService] Event props:', JSON.stringify(event));
+    console.log('[AppEventService] Event keys:', Object.keys(event));
+    console.log('[AppEventService] originalFile via bracket:', (event as any)['originalFile']);
+    console.log('[AppEventService] originalFile descriptor:', Object.getOwnPropertyDescriptor(event, 'originalFile'));
+
+    if ((event as any).originalFile && (event as any).originalFile.path) {
+      console.log('[AppEventService] Using client-side parsing for', event.getID());
+      return from(this.caclulateStreamsFromOriginalFile(event)).pipe(
+        map((fullEvent) => {
+          if (!fullEvent) return event;
+          // Merge logic: Copy activities/streams from fullEvent to event
+          // We assume the file is the source of truth.
+          const existingID = event.getID();
+          // Keep the ID and other metadata from Firestore, but replace activities
+          event.clearActivities();
+          event.addActivities(fullEvent.getActivities());
+          return event;
+        }),
+        catchError((e) => {
+          console.error('Failed to parse original file, falling back to legacy streams', e);
+          return this.attachStreamsLegacy(user, event, streamTypes);
+        })
+      );
+    }
+
+    console.log('[AppEventService] Fallback to legacy streams for', event.getID());
+    return this.attachStreamsLegacy(user, event, streamTypes);
+  }
+
+  private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
     // Get all the streams for all activities and subscribe to them with latest emition for all streams
     return combineLatest(
       event.getActivities().map((activity) => {
@@ -334,6 +372,55 @@ export class AppEventService implements OnDestroy {
       })).pipe(map(([newEvent]) => {
         return newEvent;
       }));
+  }
+
+  private async caclulateStreamsFromOriginalFile(event: EventInterface): Promise<EventInterface> {
+    console.log('Calculating streams from original file for event', event.getID());
+    const originalFile = (event as any).originalFile;
+    if (!originalFile || !originalFile.path) {
+      console.warn('Original file path missing', originalFile);
+      return null;
+    }
+
+    try {
+      const fileRef = ref(this.storage, originalFile.path);
+      console.log('Fetching file bytes from', originalFile.path);
+      const arrayBuffer = await getBytes(fileRef);
+      console.log('File bytes fetched, size:', arrayBuffer.byteLength);
+
+      // Determine extension. using path or explicit extension if we had it
+      // path is user/uid/events/id/original.fit
+      const parts = originalFile.path.split('.');
+      const extension = parts[parts.length - 1].toLowerCase();
+      console.log('Parsing file with extension:', extension);
+
+      let newEvent: EventInterface;
+
+      if (extension === 'fit') {
+        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer);
+      } else if (extension === 'gpx') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterGPX.getFromString(text);
+      } else if (extension === 'tcx') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'));
+      } else if (extension === 'json') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        const json = JSON.parse(text);
+        const { sanitizedJson } = EventJSONSanitizer.sanitize(json);
+        newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson));
+      } else if (extension === 'sml') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterSuuntoSML.getFromXML(text);
+      } else {
+        throw new Error(`Unsupported original file extension: ${extension}`);
+      }
+      console.log('File parsed successfully');
+      return newEvent;
+    } catch (e) {
+      console.error('Error in caclulateStreamsFromOriginalFile', e);
+      throw e;
+    }
   }
 
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
