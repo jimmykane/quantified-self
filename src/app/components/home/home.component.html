@@ -121,25 +121,31 @@
     </mat-list>
   </mat-card>
   <mat-card class="mat-elevation-z0 footer">
-    <mat-icon class="firebase" svgIcon="jetbrains_logo"
-      onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"></mat-icon>
-    <br />
-    <mat-icon class="firebase" svgIcon="firebase"
-      onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
-    <mat-icon class="amcharts" svgIcon="amcharts"
-      onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
-    <mat-divider [inset]="true"></mat-divider>
-    <mat-icon class="large-svg-icon" svgIcon="suunto"
-      (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"></mat-icon>
-    <mat-icon class="large-svg-icon-coros" svgIcon="coros"
-      (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"></mat-icon>
-    <mat-icon class="large-svg-icon" svgIcon="garmin"
-      (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"></mat-icon>
-    <mat-divider [inset]="true"></mat-divider>
-    <br />
-    <mat-list-item routerLink="/policies">
+    <div class="footer-row">
+      <mat-icon class="firebase" svgIcon="jetbrains_logo"
+        onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"></mat-icon>
+      <mat-icon class="firebase" svgIcon="firebase"
+        onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
+      <mat-icon class="amcharts" svgIcon="amcharts"
+        onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
+    </div>
+
+    <mat-divider [inset]="true" style="width: 80%; margin: 10px 0;"></mat-divider>
+
+    <div class="footer-row">
+      <mat-icon class="large-svg-icon" svgIcon="suunto"
+        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"></mat-icon>
+      <mat-icon class="large-svg-icon-coros" svgIcon="coros"
+        (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"></mat-icon>
+      <mat-icon class="large-svg-icon" svgIcon="garmin"
+        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"></mat-icon>
+    </div>
+
+    <mat-divider [inset]="true" style="width: 80%; margin: 10px 0;"></mat-divider>
+
+    <div class="footer-row" style="cursor: pointer; margin-top: 10px;" routerLink="/policies">
       <mat-icon>policy</mat-icon>
-      <span>Privacy & Policies</span><span class="fill-space"></span>
-    </mat-list-item>
+      <span style="margin-left: 8px;">Privacy & Policies</span>
+    </div>
   </mat-card>
 </section>
