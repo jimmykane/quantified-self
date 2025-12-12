@@ -3,7 +3,7 @@
 import * as functions from 'firebase-functions/v1';
 import { GarminHealthAPIAuth } from './auth';
 import * as requestPromise from '../../request-helper';
-import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../index';
+import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../utils';
 import { getUserIDFromFirebaseToken } from '../../utils';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
