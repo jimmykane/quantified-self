@@ -11,7 +11,7 @@ export const environment = {
     authDomain: 'quantified-self.io',
     databaseURL: 'https://quantified-self-io.firebaseio.com',
     projectId: 'quantified-self-io',
-    storageBucket: 'quantified-self-io.appspot.com',
+    storageBucket: 'quantified-self-io',
     messagingSenderId: '242713487388',
     appId: '1:242713487388:web:af0b3e931f2e96ed',
     measurementId: 'G-F8YB8P8091'
