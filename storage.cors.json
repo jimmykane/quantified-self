@@ -1,0 +1,17 @@
+[
+    {
+        "origin": [
+            "http://localhost:4200",
+            "http://localhost:4201",
+            "https://localhost:4200",
+            "https://localhost:4201",
+            "https://quantified-self.io",
+            "https://www.quantified-self.io",
+            "https://beta.quantified-self.io"
+        ],
+        "method": [
+            "GET"
+        ],
+        "maxAgeSeconds": 3600
+    }
+]
