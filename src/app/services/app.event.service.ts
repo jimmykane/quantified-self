@@ -227,8 +227,12 @@ export class AppEventService implements OnDestroy {
     const storageAdapter: StorageAdapter = {
       uploadFile: async (path: string, data: any) => {
         const fileRef = ref(this.storage, path);
-        // data can be Blob, Uint8Array or ArrayBuffer
-        await uploadBytes(fileRef, data);
+        // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
+        let payload = data;
+        if (typeof data === 'string') {
+          payload = new Blob([data], { type: 'text/plain' });
+        }
+        await uploadBytes(fileRef, payload);
       }
     }
 
