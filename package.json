@@ -13,7 +13,7 @@
     "firebase-hosting-production": "firebase deploy --only hosting:production",
     "build-and-deploy-beta": "npm run clean && npm run build-beta && npm run firebase-hosting-beta",
     "build-prod-and-deploy-beta": "npm run clean && npm run build-production && npm run firebase-hosting-beta",
-    "build-and-deploy-prod": "npm run clean && npm run build-production && npm run firebase-hosting-production",
+    "build-and-deploy-prod": "npm run clean && npm run build-production && firebase deploy --only hosting:production,storage",
     "test": "vitest",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
