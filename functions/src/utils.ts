@@ -12,7 +12,7 @@ import {
 
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
-import { EventWriter, FirestoreAdapter } from './shared/event-writer';
+import { EventWriter, FirestoreAdapter, StorageAdapter } from './shared/event-writer';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -75,7 +75,7 @@ export function isCorsAllowed(req: Request) {
   return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1;
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string }) {
   event.setID(eventID);
 
   // Pre-assign Activity IDs to match legacy behavior (deterministic IDs)
@@ -120,8 +120,16 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     }
   };
 
-  const writer = new EventWriter(adapter);
-  await writer.writeAllEventData(userID, event);
+  const storageAdapter: StorageAdapter = {
+    uploadFile: async (path: string, data: any) => {
+      const bucket = admin.storage().bucket('quantified-self-io');
+      const file = bucket.file(path);
+      await file.save(data);
+    }
+  };
+
+  const writer = new EventWriter(adapter, storageAdapter);
+  await writer.writeAllEventData(userID, event, originalFile);
 
   // Write Metadata (not handled by EventWriter)
   await admin.firestore()

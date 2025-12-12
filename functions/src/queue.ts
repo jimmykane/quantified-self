@@ -264,13 +264,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.COROSAPI: {
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
           const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
-          await setEvent(parentID, generateIDFromParts([corosWorkoutQueueItem.openId, corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.FITFileURI]), event, corosMetaData);
+          await setEvent(parentID, generateIDFromParts([corosWorkoutQueueItem.openId, corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.FITFileURI]), event, corosMetaData, { data: result, extension: 'fit' });
           break;
         }
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
-          await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData);
+          await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData, { data: result, extension: 'fit' });
         }
       }
       console.timeEnd('InsertEvent');

@@ -20,8 +20,9 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
-import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
+import { EventWriter, FirestoreAdapter, StorageAdapter } from '../../../functions/src/shared/event-writer';
 import { Bytes } from 'firebase/firestore';
+import { Storage, ref, uploadBytes } from '@angular/fire/storage';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
@@ -32,6 +33,7 @@ import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 export class AppEventService implements OnDestroy {
 
   private firestore = inject(Firestore);
+  private storage = inject(Storage);
 
   constructor(
     private windowService: AppWindowService) {
@@ -198,7 +200,7 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: EventInterface) {
+  public async writeAllEventData(user: User, event: EventInterface, originalFile?: { data: any, extension: string }) {
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
         // Construct the full path from the array parts
@@ -216,8 +218,16 @@ export class AppEventService implements OnDestroy {
       }
     };
 
-    const writer = new EventWriter(adapter);
-    await writer.writeAllEventData(user.uid, event);
+    const storageAdapter: StorageAdapter = {
+      uploadFile: async (path: string, data: any) => {
+        const fileRef = ref(this.storage, path);
+        // data can be Blob, Uint8Array or ArrayBuffer
+        await uploadBytes(fileRef, data);
+      }
+    }
+
+    const writer = new EventWriter(adapter, storageAdapter);
+    await writer.writeAllEventData(user.uid, event, originalFile);
   }
 
   public async setEvent(user: User, event: EventInterface) {
