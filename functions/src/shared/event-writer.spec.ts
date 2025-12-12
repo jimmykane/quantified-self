@@ -26,6 +26,7 @@ describe('EventWriter', () => {
         };
         storageAdapter = {
             uploadFile: vi.fn().mockResolvedValue(undefined),
+            getBucketName: vi.fn().mockReturnValue('quantified-self-io'),
         };
         writer = new EventWriter(adapter, storageAdapter);
 
