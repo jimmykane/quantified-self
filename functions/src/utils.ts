@@ -122,7 +122,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
 
   const storageAdapter: StorageAdapter = {
     uploadFile: async (path: string, data: any) => {
-      const bucket = admin.storage().bucket('quantified-self-io');
+      const bucket = admin.storage().bucket();
       const file = bucket.file(path);
       await file.save(data);
     }

@@ -8,12 +8,28 @@ try {
   const serviceAccount = require('../service-account.json');
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
+    let storageBucket = 'quantified-self-io';
+    if(process.env.FIREBASE_CONFIG) {
+    try {
+      const firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+      if (firebaseConfig.storageBucket) {
+        storageBucket = firebaseConfig.storageBucket;
+      }
+    } catch (e) {
+      console.warn('Could not parse FIREBASE_CONFIG, using default bucket');
+    }
+  }
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
     databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
+    storageBucket: storageBucket,
   });
 } catch (e) {
   console.warn('Service account not found, initializing with default credentials');
   admin.initializeApp({
     databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
+    storageBucket: 'quantified-self-io',
   });
 }
 

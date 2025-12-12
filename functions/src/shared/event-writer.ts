@@ -79,7 +79,7 @@ export class EventWriter {
                 console.log('[EventWriter] Upload complete. Adding metadata to eventJSON');
                 (eventJSON as any).originalFile = {
                     path: filePath,
-                    bucket: 'quantified-self-io',
+                    bucket: admin.storage().bucket().name,
                 };
             } else {
                 console.warn('[EventWriter] Skipping file upload. originalFile:', !!originalFile, 'storageAdapter:', !!this.storageAdapter);

@@ -1,5 +1,5 @@
 import * as functions from 'firebase-functions/v1';
-// import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { setEvent } from './utils';
 import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
@@ -43,7 +43,7 @@ export const testEventUpload = functions.region('europe-west2').https.onRequest(
         res.status(200).send({
             message: 'Upload successful',
             path: `users/${userID}/events/${eventID}/original.fit`,
-            bucket: 'quantified-self-io'
+            bucket: admin.storage().bucket().name
         });
     } catch (error: any) {
         console.error('Test upload failed:', error);
