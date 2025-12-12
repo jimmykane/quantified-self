@@ -15,6 +15,7 @@ export class EventWriter {
     constructor(private adapter: FirestoreAdapter, private storageAdapter?: StorageAdapter) { }
 
     public async writeAllEventData(userID: string, event: EventInterface, originalFile?: { data: any, extension: string }): Promise<void> {
+        console.log('[EventWriter] writeAllEventData called', { userID, eventID: event.getID(), hasOriginalFile: !!originalFile, adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
 
         // Ensure Event ID

@@ -103,6 +103,8 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           reject(e);
           return;
         }
+
+        console.log('Successfully uploaded event. ID:', newEvent.getID());
         resolve(newEvent);
       };
       // Read it depending on the extension
