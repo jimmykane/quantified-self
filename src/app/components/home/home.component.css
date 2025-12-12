@@ -74,7 +74,23 @@ app-home-live-chart{
   height: 100%;
 }
 
-mat-card.footer{
+mat-card.footer {
   margin: 0;
   text-align: center;
+  flex-basis: 100% !important; /* Force full width */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2em;
+}
+
+.footer-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
 }
