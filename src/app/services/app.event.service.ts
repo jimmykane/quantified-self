@@ -108,7 +108,7 @@ export class AppEventService implements OnDestroy {
    * @param eventID
    * @param streamTypes
    */
-  public getEventActivitiesAndSomeStreams(user: User, eventID, streamTypes: string[]) {
+  public getEventActivitiesAndSomeStreams(user: User, eventID: string, streamTypes: string[]) {
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID, streamTypes);
   }
 
@@ -117,7 +117,7 @@ export class AppEventService implements OnDestroy {
    * @param user
    * @param eventID
    */
-  public getEventActivitiesAndAllStreams(user: User, eventID) {
+  public getEventActivitiesAndAllStreams(user: User, eventID: string) {
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID);
   }
 
@@ -269,7 +269,7 @@ export class AppEventService implements OnDestroy {
     return deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType));
   }
 
-  public async deleteAllStreams(user: User, eventID, activityID): Promise<number> {
+  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
     const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
 
