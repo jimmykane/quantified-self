@@ -12,6 +12,7 @@ import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
+import { provideStorage, getStorage } from '@angular/fire/storage';
 import * as Sentry from '@sentry/angular';
 import { MaterialModule } from './modules/material.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
@@ -57,6 +58,7 @@ import { AppUpdateService } from './services/app.update.service';
       const firestore = getFirestore();
       return firestore;
     }),
+    provideStorage(() => getStorage()),
     provideFunctions(() => getFunctions(undefined, 'europe-west2')),
     providePerformance(() => getPerformance()),
     provideAnalytics(() => getAnalytics()),
