@@ -73,11 +73,15 @@ export class EventWriter {
 
             if (originalFile && this.storageAdapter) {
                 const filePath = `users/${userID}/events/${event.getID()}/original.${originalFile.extension}`;
+                console.log('[EventWriter] Uploading file to', filePath);
                 await this.storageAdapter.uploadFile(filePath, originalFile.data);
+                console.log('[EventWriter] Upload complete. Adding metadata to eventJSON');
                 (eventJSON as any).originalFile = {
                     path: filePath,
                     bucket: 'quantified-self-io',
                 };
+            } else {
+                console.warn('[EventWriter] Skipping file upload. originalFile:', !!originalFile, 'storageAdapter:', !!this.storageAdapter);
             }
 
             writePromises.push(

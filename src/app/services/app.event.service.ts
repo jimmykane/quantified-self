@@ -47,21 +47,27 @@ export class AppEventService implements OnDestroy {
       docData(eventDoc).pipe(
         map(eventSnapshot => {
           if (!eventSnapshot) return null;
+          console.log('[AppEventService] getEventAndActivities snapshot:', JSON.stringify(eventSnapshot));
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
           if (unknownTypes.length > 0) {
             Sentry.captureMessage('Unknown Data Types in getEventAndActivities', { extra: { types: unknownTypes, eventID } });
           }
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
+          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
+          if ((eventSnapshot as any).originalFile) {
+            Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+            console.log('[AppEventService] Patch applied in getEventAndActivities for', eventID, 'Has it?', !!(event as any).originalFile);
+          }
+          return event;
         })),
       this.getActivities(user, eventID),
     ]).pipe(catchError((error) => {
       if (error && error.code && error.code === 'permission-denied') {
-        return of([null, null])
+        return of([null, null] as [EventInterface | null, ActivityInterface[] | null]);
       }
       console.error('Error fetching event or activities:', error);
       Sentry.captureException(error);
 
-      return of([null, null]) // @todo fix this
+      return of([null, null] as [EventInterface | null, ActivityInterface[] | null]); // @todo fix this
     })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
       if (!event) {
         return null;
@@ -371,11 +377,19 @@ export class AppEventService implements OnDestroy {
 
     return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.map((eventSnapshot) => {
+        console.log('[AppEventService] _getEvents snapshot:', JSON.stringify(eventSnapshot));
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
           Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
         }
-        return EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
+        if ((eventSnapshot as any).originalFile) {
+          // Force assignment using Object.assign or defineProperty in case of sealed keys?
+          // (event as any).originalFile = (eventSnapshot as any).originalFile;
+          Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+          console.log('[AppEventService] Patch applied in _getEvents for', eventSnapshot.id, 'Has it?', !!(event as any).originalFile);
+        }
+        return event;
       })
     }));
   }
@@ -389,11 +403,17 @@ export class AppEventService implements OnDestroy {
         if (unknownTypes.length > 0) {
           Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
         }
-        events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id));
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
+        if ((eventSnapshot as any).originalFile) {
+          Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+          console.log('[AppEventService] Patch applied in _getEvents for', eventSnapshot.id, 'Has it?', !!(event as any).originalFile);
+        }
+        events.push(event);
         return events;
       }, []);
     })).pipe(switchMap((events: EventInterface[]) => {
-      if (!events.length) {
+      console.log('[AppEventService] _getEventsAndActivities events:', events.length);
+      if (events.length === 0) {
         return of([]);
       }
       return combineLatest(events.map((event) => {
