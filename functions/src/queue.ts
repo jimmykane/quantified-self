@@ -297,6 +297,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
-  await queueItemDocument.set(queueItem);
+  await queueItemDocument.set(Object.assign(queueItem, {
+    expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)),
+  }));
   return queueItemDocument;
 }
