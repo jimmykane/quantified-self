@@ -75,7 +75,16 @@ describe('tokens', () => {
 
         mockToken = {
             expired: vi.fn().mockReturnValue(false),
-            refresh: vi.fn(),
+            refresh: vi.fn().mockResolvedValue({
+                token: {
+                    access_token: 'default-access',
+                    refresh_token: 'default-refresh',
+                    expires_at: new Date(),
+                    user: 'default-user',
+                    token_type: 'Bearer',
+                    scope: 'default-scope',
+                }
+            }),
             token: {
                 access_token: 'new-access',
                 refresh_token: 'new-refresh',
