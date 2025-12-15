@@ -10,11 +10,11 @@ import {
   SimpleChanges
 } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
 import * as moment from 'moment';

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit, inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 

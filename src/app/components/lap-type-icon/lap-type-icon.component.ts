@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import {DataDistance} from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { LapTypes } from '@sports-alliance/sports-lib';
 
 
 @Component({

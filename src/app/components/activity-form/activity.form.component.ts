@@ -1,5 +1,5 @@
 import {Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {EventInterface} from '@sports-alliance/sports-lib';
 import {AppEventService} from '../../services/app.event.service';
 import {
   UntypedFormBuilder,
@@ -12,16 +12,16 @@ import {
 import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import {ActivityInterface} from '@sports-alliance/sports-lib';
+import {User} from '@sports-alliance/sports-lib';
 
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import {DataDeviceNames} from '@sports-alliance/sports-lib/lib/data/data.device-names';
-import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
-import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {DataActivityTypes} from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
+import {DataDistance} from '@sports-alliance/sports-lib';
+import {DataDeviceNames} from '@sports-alliance/sports-lib';
+import {DataAscent} from '@sports-alliance/sports-lib';
+import {DataDescent} from '@sports-alliance/sports-lib';
+import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib';
+import {DataActivityTypes} from '@sports-alliance/sports-lib';
+import { DataEnergy } from '@sports-alliance/sports-lib';
 
 
 @Component({

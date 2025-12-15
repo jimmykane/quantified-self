@@ -19,12 +19,12 @@ import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { SummariesChartDataInterface } from '../../summaries/summaries.component';
 import { ChartHelper } from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-timeline-chart',

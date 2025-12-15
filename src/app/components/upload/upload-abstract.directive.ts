@@ -1,5 +1,5 @@
 import { Directive, Input, OnInit } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
 import { UPLOAD_STATUS } from './upload-status/upload.status';
 import * as Sentry from '@sentry/browser';

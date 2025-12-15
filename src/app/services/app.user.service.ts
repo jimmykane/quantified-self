@@ -1,22 +1,22 @@
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { Observable, from, firstValueFrom } from 'rxjs';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { User } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
 import { catchError, map, take } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+} from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   DataTypeSettings,
   UserChartSettingsInterface,
   XAxisTypes
-} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
+} from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   DaysOfTheWeek,
   GradeAdjustedPaceUnits,
@@ -28,17 +28,17 @@ import {
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
-} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { Auth, deleteUser } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import * as Sentry from '@sentry/browser';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
   TableSettings,
   UserDashboardSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+} from '@sports-alliance/sports-lib';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -48,41 +48,41 @@ import {
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+} from '@sports-alliance/sports-lib';
+import { DataDuration } from '@sports-alliance/sports-lib';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
 import {
   MapThemes,
   MapTypes,
   UserMapSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import { UserExportToCsvSettingsInterface } from '@sports-alliance/sports-lib/lib/users/user.export-to-csv.settings.interface';
-import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
-import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.summaries.settings.interface';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+} from '@sports-alliance/sports-lib';
+import { LapTypes } from '@sports-alliance/sports-lib';
+import { isNumber } from '@sports-alliance/sports-lib';
+import { UserExportToCsvSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataAltitude } from '@sports-alliance/sports-lib';
+import { DataHeartRate } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
-import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.my-tracks.settings.interface';
-import { DataDescription } from '@sports-alliance/sports-lib/lib/data/data.description';
-import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
-import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
-import { DataDeviceNames } from '@sports-alliance/sports-lib/lib/data/data.device-names';
-import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
-import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.peak-training-effect';
-import { DataEPOC } from '@sports-alliance/sports-lib/lib/data/data.epoc';
-import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data-aerobic-training-effect';
-import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataDescription } from '@sports-alliance/sports-lib';
+import { DataActivityTypes } from '@sports-alliance/sports-lib';
+import { DataDescent } from '@sports-alliance/sports-lib';
+import { DataEnergy } from '@sports-alliance/sports-lib';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib';
+import { DataPowerAvg } from '@sports-alliance/sports-lib';
+import { DataVO2Max } from '@sports-alliance/sports-lib';
+import { DataDeviceNames } from '@sports-alliance/sports-lib';
+import { DataPowerMax } from '@sports-alliance/sports-lib';
+import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib';
+import { DataEPOC } from '@sports-alliance/sports-lib';
+import { DataPeakEPOC } from '@sports-alliance/sports-lib';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
 
 

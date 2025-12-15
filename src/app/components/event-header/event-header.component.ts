@@ -1,12 +1,12 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {EventInterface} from '@sports-alliance/sports-lib';
+import {User} from '@sports-alliance/sports-lib';
+import {Privacy} from '@sports-alliance/sports-lib';
 import {AppEventService} from '../../services/app.event.service';
 import {MatSnackBar} from '@angular/material/snack-bar';
-import {DataFeeling, Feelings} from '@sports-alliance/sports-lib/lib/data/data.feeling';
-import {isNumber} from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib/lib/data/data.rpe';
+import {DataFeeling, Feelings} from '@sports-alliance/sports-lib';
+import {isNumber} from '@sports-alliance/sports-lib';
+import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib';
 import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
 
 @Component({

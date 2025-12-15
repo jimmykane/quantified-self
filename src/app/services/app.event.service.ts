@@ -1,33 +1,33 @@
 import { inject, Injectable, OnDestroy } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { EventImporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/json/importer.json';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, DocumentData, CollectionReference } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
-import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
-import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import { EventJSONInterface } from '@sports-alliance/sports-lib';
+import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { StreamInterface } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/browser';
-import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { EventExporterJSON } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import {
   EventMetaDataInterface,
   ServiceNames
-} from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
+} from '@sports-alliance/sports-lib';
+import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { StreamEncoder } from '../helpers/stream.encoder';
-import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib';
 import { EventWriter, FirestoreAdapter, StorageAdapter } from '../../../functions/src/shared/event-writer';
 import { Bytes } from 'firebase/firestore';
 import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
-import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
-import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
-import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
-import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
+import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
+import { EventImporterFIT } from '@sports-alliance/sports-lib';
+import { EventImporterTCX } from '@sports-alliance/sports-lib';
+import { EventImporterGPX } from '@sports-alliance/sports-lib';
+import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';

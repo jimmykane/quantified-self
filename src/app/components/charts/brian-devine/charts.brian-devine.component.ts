@@ -18,10 +18,10 @@ import type { AxisRendererCircular, CategoryAxis, DateAxis, RadarColumn } from '
 
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { isNumber } from '@sports-alliance/sports-lib';
+import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-brian-devine-chart',

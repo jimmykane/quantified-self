@@ -1,13 +1,13 @@
 import * as Pako from 'pako';
 import { Bytes } from 'firebase/firestore';
-import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import { StreamJSONInterface } from '@sports-alliance/sports-lib/lib/streams/stream';
+import { getSize } from '@sports-alliance/sports-lib';
+import { StreamJSONInterface } from '@sports-alliance/sports-lib';
 
 import {
   CompressedJSONStreamInterface,
   CompressionEncodings,
   CompressionMethods
-} from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+} from '@sports-alliance/sports-lib';
 
 export class StreamEncoder {
 

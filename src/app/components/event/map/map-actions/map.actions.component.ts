@@ -5,7 +5,7 @@ import {
   OnChanges,
   Output,
 } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 

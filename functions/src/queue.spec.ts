@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock firebase-functions first (needed by auth modules at load time)
 vi.mock('firebase-functions', () => ({

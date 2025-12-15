@@ -3,8 +3,8 @@ import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';

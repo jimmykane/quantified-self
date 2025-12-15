@@ -5,9 +5,9 @@ import { SummariesChartDataInterface } from '../summaries/summaries.component';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes, TimeIntervals
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
+} from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataInterface } from '@sports-alliance/sports-lib';
 
 import { AmChartsService } from '../../services/am-charts.service';
 

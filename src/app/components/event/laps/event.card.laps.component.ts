@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataTableAbstractDirective } from '../../data-table/data-table-abstract.directive';
-import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { LapTypes } from '@sports-alliance/sports-lib';
+import { DataHeartRateMax } from '@sports-alliance/sports-lib';
+import { isNumber } from '@sports-alliance/sports-lib';
 
 @Component({
     selector: 'app-event-card-laps',

@@ -3,7 +3,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import { UserAgreementFormComponent } from '../user-forms/user-agreement.form.component';
@@ -12,7 +12,7 @@ import * as Sentry from '@sentry/browser';
 import { Auth, signInWithCustomToken, authState } from '@angular/fire/auth';
 import { PhoneFormComponent } from './phone-form/phone.form.component';
 import { Analytics, logEvent } from '@angular/fire/analytics';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 
 

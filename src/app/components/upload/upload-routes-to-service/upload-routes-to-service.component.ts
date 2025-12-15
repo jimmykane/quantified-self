@@ -9,9 +9,9 @@ import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as Pako from 'pako';
-import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { getSize } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-upload-route-to-service',

@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 
 

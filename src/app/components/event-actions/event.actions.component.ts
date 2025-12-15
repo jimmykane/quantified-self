@@ -1,24 +1,24 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppFileService } from '../../services/app.file.service';
 import { EventFormComponent } from '../event-form/event.form.component';
-import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
-import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { EventExporterJSON } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppSharingService } from '../../services/app.sharing.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ActivityFormComponent } from '../activity-form/activity.form.component';
 import { take } from 'rxjs/operators';
-import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import { EventUtilities } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
 import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
@@ -27,10 +27,10 @@ import {
   COROSAPIEventMetaDataInterface, GarminHealthAPIEventMetaDataInterface,
   ServiceNames,
   SuuntoAppEventMetaDataInterface
-} from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
-import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
-import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+} from '@sports-alliance/sports-lib';
+import { EventExporterGPX } from '@sports-alliance/sports-lib';
+import { DataStartPosition } from '@sports-alliance/sports-lib';
+import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { AppWindowService } from '../../services/app.window.service';
 
 @Component({

@@ -1,11 +1,11 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import {DataAscent} from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import {DataDescent} from '@sports-alliance/sports-lib/lib/data/data.descent';
-import {DataHeartRateAvg} from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import {EventInterface} from '@sports-alliance/sports-lib';
+import {ActivityInterface} from '@sports-alliance/sports-lib';
+import {DataDistance} from '@sports-alliance/sports-lib';
+import {DataAscent} from '@sports-alliance/sports-lib';
+import {DataDescent} from '@sports-alliance/sports-lib';
+import {DataHeartRateAvg} from '@sports-alliance/sports-lib';
 
 @Component({
     selector: 'app-event-card-devices',

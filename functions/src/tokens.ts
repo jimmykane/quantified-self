@@ -5,8 +5,8 @@ import {
   Auth2ServiceTokenInterface,
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
-} from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+} from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceConfig } from './OAuth2';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;

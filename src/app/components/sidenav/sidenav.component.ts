@@ -1,11 +1,11 @@
 import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppSideNavService } from '../../services/side-nav/app-side-nav.service';
-import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { AppWindowService } from '../../services/app.window.service';

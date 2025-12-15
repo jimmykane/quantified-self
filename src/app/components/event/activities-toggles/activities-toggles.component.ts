@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 
 @Component({
     selector: 'app-activities-toggles',

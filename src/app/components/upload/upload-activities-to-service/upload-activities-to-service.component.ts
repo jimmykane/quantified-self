@@ -9,8 +9,8 @@ import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { getSize } from '@sports-alliance/sports-lib';
 
 
 @Component({

@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, inject } from '@angular/core';
-import { XAxisTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { XAxisTypes } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
 import { Analytics, logEvent } from '@angular/fire/analytics';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-event-card-chart-actions',

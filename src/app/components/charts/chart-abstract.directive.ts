@@ -2,8 +2,8 @@ import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Dir
 import * as Sentry from '@sentry/browser';
 // import * as am4charts from '@amcharts/amcharts4/charts'; // Removed static import
 import { Subscription } from 'rxjs';
-import { DataPaceMinutesPerMile, DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
-import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { DataPaceMinutesPerMile, DataPace } from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 
 
 // Chart Themes

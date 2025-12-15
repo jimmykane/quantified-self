@@ -16,13 +16,13 @@ import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4plugins_regression from '@amcharts/amcharts4/plugins/regression';
 
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 
 import { AppColors } from '../../../services/color/app.colors';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
 
 
 @Component({

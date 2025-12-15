@@ -2,13 +2,13 @@ import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 import {
   COROSAPIEventMetaData,
   GarminHealthAPIEventMetaData,
   SuuntoAppEventMetaData
-} from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+} from '@sports-alliance/sports-lib';
 
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';

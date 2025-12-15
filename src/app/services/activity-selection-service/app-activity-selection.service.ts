@@ -1,6 +1,6 @@
 import {Injectable} from '@angular/core';
 import {SelectionModel} from '@angular/cdk/collections';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import {ActivityInterface} from '@sports-alliance/sports-lib';
 
 @Injectable({
   providedIn: 'root',

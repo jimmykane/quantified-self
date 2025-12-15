@@ -14,13 +14,13 @@ import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 
 
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
-import { DataHeartRate } from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import { DataPower } from '@sports-alliance/sports-lib/lib/data/data.power';
-import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
+import { DataHeartRate } from '@sports-alliance/sports-lib';
+import { DataPower } from '@sports-alliance/sports-lib';
+import { DataSpeed } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { convertIntensityZonesStatsToChartData } from '../../../helpers/intensity-zones-chart-data-helper';
 import { AppDataColors } from '../../../services/color/app.data.colors';

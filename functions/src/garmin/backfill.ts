@@ -3,8 +3,8 @@ import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnRes
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://healthapi.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;

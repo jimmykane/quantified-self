@@ -4,7 +4,7 @@ import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Auth, authState, signInWithRedirect, signInWithPopup, getRedirectResult, signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signOut, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, getAuth } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { Analytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';

@@ -1,37 +1,37 @@
 import { Component, Input, OnChanges, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
-import { UserSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.settings.interface';
+import { UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   UserChartSettingsInterface,
   XAxisTypes,
-} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+} from '@sports-alliance/sports-lib';
+import { AppThemes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import {
   PaceUnits,
   SpeedUnits,
   SwimPaceUnits,
   UserUnitSettingsInterface,
   VerticalSpeedUnits
-} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { UserDashboardSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { LapTypesHelper } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+} from '@sports-alliance/sports-lib';
+import { UserDashboardSettingsInterface } from '@sports-alliance/sports-lib';
+import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { Analytics, logEvent } from '@angular/fire/analytics';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   MapThemes,
   MapTypes,
   UserMapSettingsInterface
-} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+} from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-user-settings',

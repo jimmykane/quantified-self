@@ -1,6 +1,6 @@
-import { StatsClassInterface } from '@sports-alliance/sports-lib/lib/stats/stats.class.interface';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+import { StatsClassInterface } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
 export function convertIntensityZonesStatsToChartData(statsClassInstances: StatsClassInterface[]): any[] {
   const statsTypeMap = ActivityUtilities.getIntensityZonesStatsAggregated(statsClassInstances).reduce((map, stat) => {

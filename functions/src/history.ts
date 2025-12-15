@@ -1,6 +1,6 @@
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as admin from 'firebase-admin';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import {
   SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
@@ -21,7 +21,7 @@ import {
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
-} from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+} from '@sports-alliance/sports-lib';
 import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 

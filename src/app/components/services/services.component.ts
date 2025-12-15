@@ -6,12 +6,12 @@ import { AppFileService } from '../../services/app.file.service';
 import { Subscription } from 'rxjs';
 import { AppEventService } from '../../services/app.event.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppUserService } from '../../services/app.user.service';
 import { AppWindowService } from '../../services/app.window.service';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
 @Component({

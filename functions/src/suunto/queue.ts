@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import { addToQueueForSuunto, parseQueueItems } from '../queue';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = '4GB';

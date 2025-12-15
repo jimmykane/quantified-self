@@ -8,13 +8,13 @@ import {
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 
 import { AppUserService } from '../../services/app.user.service';
-import { UserServiceMetaInterface } from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { Analytics, logEvent } from '@angular/fire/analytics';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
 @Component({

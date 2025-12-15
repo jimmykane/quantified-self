@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';

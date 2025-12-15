@@ -1,14 +1,14 @@
 import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppCoachingService } from '../../services/app.coaching.service';
 import { of, Subscription } from 'rxjs';
 import { switchMap, take } from 'rxjs/operators';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { DateRanges } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-athletes',

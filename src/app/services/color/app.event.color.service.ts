@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
 import { AppDeviceColors } from './app.device.colors';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import type * as am4core from '@amcharts/amcharts4/core';
 import { AppColors } from './app.colors';

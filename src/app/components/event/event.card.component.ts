@@ -2,31 +2,31 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDes
 import { combineLatest, of, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { StreamInterface } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   XAxisTypes
-} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
-import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataSpeed } from '@sports-alliance/sports-lib';
+import { DataDistance } from '@sports-alliance/sports-lib';
 import { switchMap } from 'rxjs/operators';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 
 
 @Component({

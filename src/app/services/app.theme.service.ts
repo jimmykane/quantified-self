@@ -1,10 +1,10 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from './app.user.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { User } from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../authentication/app.auth.service';
 
 

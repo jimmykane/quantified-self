@@ -1,4 +1,4 @@
-import { ActivityTypeGroups } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypeGroups } from '@sports-alliance/sports-lib';
 
 export const AppActivityTypeGroupColors: { [key in ActivityTypeGroups]: string } = {
   [ActivityTypeGroups.Running]: '#FDD300',

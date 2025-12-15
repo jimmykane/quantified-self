@@ -11,8 +11,8 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 import type { AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
@@ -20,25 +20,25 @@ import { AmChartsService } from '../../../services/am-charts.service';
 
 import { Subscription } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
-import { DataAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude';
+import { DataAltitude } from '@sports-alliance/sports-lib';
 import { debounceTime } from 'rxjs/operators';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib/lib/data/data.pace';
+import { StreamInterface } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   XAxisTypes
-} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+} from '@sports-alliance/sports-lib';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { DataSwimPace, DataSwimPaceMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import { DataSwimPaceMaxMinutesPer100Yard } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-max';
-import { DataGPSAltitude } from '@sports-alliance/sports-lib/lib/data/data.altitude-gps';
-import { DataAccumulatedPower } from '@sports-alliance/sports-lib/lib/data/data.accumulated-power';
-import { DataTemperature } from '@sports-alliance/sports-lib/lib/data/data.temperature';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { isNumber } from '@sports-alliance/sports-lib';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { DataSwimPace, DataSwimPaceMinutesPer100Yard } from '@sports-alliance/sports-lib';
+import { DataSwimPaceMaxMinutesPer100Yard } from '@sports-alliance/sports-lib';
+import { DataGPSAltitude } from '@sports-alliance/sports-lib';
+import { DataAccumulatedPower } from '@sports-alliance/sports-lib';
+import { DataTemperature } from '@sports-alliance/sports-lib';
 import {
   DataSpeed,
   DataSpeedFeetPerMinute,
@@ -47,11 +47,11 @@ import {
   DataSpeedKnots,
   DataSpeedMetersPerMinute,
   DataSpeedMilesPerHour
-} from '@sports-alliance/sports-lib/lib/data/data.speed';
-import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+} from '@sports-alliance/sports-lib';
+import { LapTypes } from '@sports-alliance/sports-lib';
 import { AppDataColors } from '../../../services/color/app.data.colors';
 import { AppWindowService } from '../../../services/app.window.service';
-import { DataStrydSpeed } from '@sports-alliance/sports-lib/lib/data/data.stryd-speed';
+import { DataStrydSpeed } from '@sports-alliance/sports-lib';
 import {
   DataVerticalSpeed,
   DataVerticalSpeedFeetPerHour,
@@ -61,30 +61,30 @@ import {
   DataVerticalSpeedMetersPerHour,
   DataVerticalSpeedMetersPerMinute,
   DataVerticalSpeedMilesPerHour
-} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
-import { DataPower } from '@sports-alliance/sports-lib/lib/data/data.power';
-import { DataPowerRight } from '@sports-alliance/sports-lib/lib/data/data.power-right';
-import { DataPowerLeft } from '@sports-alliance/sports-lib/lib/data/data.power-left';
-import { DataLeftBalance } from '@sports-alliance/sports-lib/lib/data/data.left-balance';
-import { DataRightBalance } from '@sports-alliance/sports-lib/lib/data/data.right-balance';
-import { DataStrydDistance } from '@sports-alliance/sports-lib/lib/data/data.stryd-distance';
-import { DataEHPE } from '@sports-alliance/sports-lib/lib/data/data.ehpe';
-import { DataSeaLevelPressure } from '@sports-alliance/sports-lib/lib/data/data.sea-level-pressure';
-import { DataStrydAltitude } from '@sports-alliance/sports-lib/lib/data/data.stryd-altitude';
-import { DataEVPE } from '@sports-alliance/sports-lib/lib/data/data.evpe';
-import { DataAbsolutePressure } from '@sports-alliance/sports-lib/lib/data/data.absolute-pressure';
+} from '@sports-alliance/sports-lib';
+import { DataPower } from '@sports-alliance/sports-lib';
+import { DataPowerRight } from '@sports-alliance/sports-lib';
+import { DataPowerLeft } from '@sports-alliance/sports-lib';
+import { DataLeftBalance } from '@sports-alliance/sports-lib';
+import { DataRightBalance } from '@sports-alliance/sports-lib';
+import { DataStrydDistance } from '@sports-alliance/sports-lib';
+import { DataEHPE } from '@sports-alliance/sports-lib';
+import { DataSeaLevelPressure } from '@sports-alliance/sports-lib';
+import { DataStrydAltitude } from '@sports-alliance/sports-lib';
+import { DataEVPE } from '@sports-alliance/sports-lib';
+import { DataAbsolutePressure } from '@sports-alliance/sports-lib';
 import { ChartHelper, LabelData } from './chart-helper';
 import type * as am4plugins_annotation from '@amcharts/amcharts4/plugins/annotation';
 
-import { DataAirPower } from '@sports-alliance/sports-lib/lib/data/data.air-power';
+import { DataAirPower } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppChartSettingsLocalStorageService } from '../../../services/storage/app.chart.settings.local.storage.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import {
   DataGradeAdjustedPace,
   DataGradeAdjustedPaceMinutesPerMile
-} from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
+} from '@sports-alliance/sports-lib';
 import {
   DataGradeAdjustedSpeed,
   DataGradeAdjustedSpeedFeetPerMinute,
@@ -93,12 +93,12 @@ import {
   DataGradeAdjustedSpeedKnots,
   DataGradeAdjustedSpeedMetersPerMinute,
   DataGradeAdjustedSpeedMilesPerHour
-} from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+} from '@sports-alliance/sports-lib';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppColors } from '../../../services/color/app.colors';
-import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;

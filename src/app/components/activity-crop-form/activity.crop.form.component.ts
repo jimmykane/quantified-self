@@ -1,17 +1,17 @@
 import { Component, Inject, OnInit } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { UntypedFormBuilder, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn, Validators, } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { EventUtilities } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
 
 @Component({

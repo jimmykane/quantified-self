@@ -11,15 +11,15 @@ import {
 } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
 import { Subscription } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { User } from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
-import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DataActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
@@ -30,12 +30,12 @@ import {
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+} from '@sports-alliance/sports-lib';
+import { isNumber } from '@sports-alliance/sports-lib';
 import { MatDialog } from '@angular/material/dialog';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import equal from 'fast-deep-equal';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import { DataAscent } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber'
 import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
 

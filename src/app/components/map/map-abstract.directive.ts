@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Directive } from '@angular/core';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { DataPositionInterface } from '@sports-alliance/sports-lib';
+import { MapThemes } from '@sports-alliance/sports-lib';
 // import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
 
 declare function require(moduleName: string): any;

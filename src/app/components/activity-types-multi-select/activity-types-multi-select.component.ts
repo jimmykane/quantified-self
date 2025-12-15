@@ -11,7 +11,7 @@ import {
 import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { map, startWith } from 'rxjs/operators';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 
 export class ActivityTypeSelectionModel {

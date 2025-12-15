@@ -1,4 +1,4 @@
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 
 
 export interface FirestoreAdapter {

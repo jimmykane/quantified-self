@@ -3,8 +3,8 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes, TimeIntervals
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 
 @Component({

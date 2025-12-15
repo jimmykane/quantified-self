@@ -4,7 +4,7 @@
 import { enableProdMode } from '@angular/core';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 import { environment } from './environments/environment';
-import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
 
 

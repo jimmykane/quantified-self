@@ -2,9 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
 import { logEvent } from '@angular/fire/analytics';
-import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 
 

@@ -1,4 +1,4 @@
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 export const STAGING_URL = 'https://opentest.coros.com';
 export const PRODUCTION_URL = 'https://open.coros.com';

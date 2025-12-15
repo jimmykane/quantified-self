@@ -4,7 +4,7 @@ import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 import { AmChartsService } from '../../../services/am-charts.service';
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppDataColors } from '../../../services/color/app.data.colors';

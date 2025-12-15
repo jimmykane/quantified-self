@@ -1,12 +1,12 @@
 import { Injectable, inject } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { Firestore, collection, collectionData } from '@angular/fire/firestore';
 import { map, switchMap } from 'rxjs/operators';
 import { combineLatest, Observable } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { AppEventService } from './app.event.service';
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DateRanges } from '@sports-alliance/sports-lib';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
 

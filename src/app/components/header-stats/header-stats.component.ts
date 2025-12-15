@@ -1,7 +1,7 @@
 import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} from '@angular/core';
-import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
+import {DataInterface} from '@sports-alliance/sports-lib';
+import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib';
+import {DynamicDataLoader} from '@sports-alliance/sports-lib';
 
 @Component({
     selector: 'app-header-stats',

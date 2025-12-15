@@ -1,8 +1,8 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { setEvent } from './utils';
-import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib';
 
 export const testEventUpload = functions.region('europe-west2').https.onRequest(async (req, res) => {
     try {

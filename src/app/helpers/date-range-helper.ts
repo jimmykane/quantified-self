@@ -1,5 +1,5 @@
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DateRanges } from '@sports-alliance/sports-lib';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 
 export interface DateRangeStartDateAndEndDate {
   startDate: Date;

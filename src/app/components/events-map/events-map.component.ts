@@ -11,21 +11,21 @@ import {
   OnInit
 } from '@angular/core';
 import { GoogleMap, MapMarker } from '@angular/google-maps';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { MapThemes, MapTypes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
-import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { MapThemes, MapTypes } from '@sports-alliance/sports-lib';
+import { DataPositionInterface } from '@sports-alliance/sports-lib';
+import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
 import MarkerClusterer from '@googlemaps/markerclustererplus';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DatePipe } from '@angular/common';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { take } from 'rxjs/operators';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
 
 @Component({

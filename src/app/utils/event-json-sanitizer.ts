@@ -1,5 +1,5 @@
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 
 export class EventJSONSanitizer {
 

@@ -14,15 +14,15 @@ import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 
 
 @Component({

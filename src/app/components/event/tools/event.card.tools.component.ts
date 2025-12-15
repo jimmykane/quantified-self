@@ -3,13 +3,13 @@ import {
 } from '@angular/core';
 import {MatSnackBar} from '@angular/material/snack-bar';
 import {AppEventService} from '../../../services/app.event.service';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {DataHeartRate} from '@sports-alliance/sports-lib/lib/data/data.heart-rate';
-import {IBIData} from '@sports-alliance/sports-lib/lib/data/ibi/data.ibi';
+import {EventInterface} from '@sports-alliance/sports-lib';
+import {ActivityInterface} from '@sports-alliance/sports-lib';
+import {DataHeartRate} from '@sports-alliance/sports-lib';
+import {IBIData} from '@sports-alliance/sports-lib';
 import {take} from 'rxjs/operators';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {DataIBI} from '@sports-alliance/sports-lib/lib/data/data.ibi';
+import {User} from '@sports-alliance/sports-lib';
+import {DataIBI} from '@sports-alliance/sports-lib';
 
 @Component({
     selector: 'app-event-card-tools',

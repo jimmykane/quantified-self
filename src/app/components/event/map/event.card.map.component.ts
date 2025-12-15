@@ -13,21 +13,21 @@ import {
 } from '@angular/core';
 import { GoogleMap, MapPolyline, MapMarker } from '@angular/google-maps';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { LapInterface } from '@sports-alliance/sports-lib/lib/laps/lap.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { LapInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription } from 'rxjs';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { User } from '@sports-alliance/sports-lib';
+import { LapTypes } from '@sports-alliance/sports-lib';
+import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
-import { GeoLibAdapter } from '@sports-alliance/sports-lib/lib/geodesy/adapters/geolib.adapter';
+import { GeoLibAdapter } from '@sports-alliance/sports-lib';
 import { debounceTime } from 'rxjs/operators';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
+import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
+import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
 
 @Component({

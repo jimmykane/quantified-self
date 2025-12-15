@@ -7,17 +7,17 @@ import {
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent } from './utils';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './history';
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
-} from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+} from '@sports-alliance/sports-lib';
 import * as requestPromise from './request-helper';
 import * as functions from 'firebase-functions/v1';
 import { getTokenData } from './tokens';
-import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
-import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib/lib/meta-data/meta-data';
+import { EventImporterFIT } from '@sports-alliance/sports-lib';
+import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 
 export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, serviceName: ServiceNames, error: Error, incrementBy = 1) {
   if (!queueItem.ref) {

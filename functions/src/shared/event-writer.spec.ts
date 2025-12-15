@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventWriter, FirestoreAdapter } from './event-writer';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import { CompressedJSONStreamInterface, CompressionMethods } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { StreamInterface } from '@sports-alliance/sports-lib';
+import { CompressedJSONStreamInterface, CompressionMethods } from '@sports-alliance/sports-lib';
 
 // Mock Pako since it's used internally
 vi.mock('pako', () => ({

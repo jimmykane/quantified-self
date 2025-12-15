@@ -1,4 +1,4 @@
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPIAuth } from './coros/auth/auth';
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
@@ -9,7 +9,7 @@ import { AccessToken, AuthorizationCode } from 'simple-oauth2';
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
-} from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+} from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
 import * as functions from 'firebase-functions/v1';

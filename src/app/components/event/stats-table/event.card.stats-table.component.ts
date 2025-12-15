@@ -1,18 +1,18 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
 import { MatTableDataSource } from '@angular/material/table';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { DataInterface } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
-import { DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
-import { DataVerticalSpeed } from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
-import { DataSwimPace } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataSpeed } from '@sports-alliance/sports-lib';
+import { DataPace } from '@sports-alliance/sports-lib';
+import { DataVerticalSpeed } from '@sports-alliance/sports-lib';
+import { DataSwimPace } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
+import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-event-stats-table',

@@ -2,7 +2,7 @@
 
 import * as functions from 'firebase-functions/v1';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../../utils';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   deauthorizeServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,

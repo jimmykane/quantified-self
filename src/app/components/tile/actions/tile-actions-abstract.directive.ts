@@ -1,11 +1,11 @@
 import {
   TileSettingsInterface, TileTypes,
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Input, Directive, inject } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {

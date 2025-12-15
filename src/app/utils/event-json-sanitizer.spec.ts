@@ -1,7 +1,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EventJSONSanitizer } from './event-json-sanitizer';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 
 // Mock Data class
 class MockData {

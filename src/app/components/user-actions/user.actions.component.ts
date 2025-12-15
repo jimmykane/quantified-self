@@ -2,9 +2,9 @@ import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} fr
 import {Router} from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import {Privacy} from '@sports-alliance/sports-lib';
 import {AppSharingService} from '../../services/app.sharing.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import {User} from '@sports-alliance/sports-lib';
 import {AppUserService} from '../../services/app.user.service';
 import {UserFormComponent} from '../user-forms/user.form.component';
 import { Clipboard } from '@angular/cdk/clipboard';
