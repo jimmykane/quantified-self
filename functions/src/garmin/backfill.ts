@@ -49,24 +49,40 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
     return;
   }
 
+  try {
+    await processGarminBackfill(userID, startDate, endDate);
+  } catch (e: any) {
+    if (e.message.includes('History import cannot happen')) {
+      res.status(403).send(e.message);
+      return;
+    }
+    console.error(e);
+    res.status(500).send(e.message);
+    return;
+  }
+
+  res.status(200);
+  res.send();
+});
+
+export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date) {
   // First check last history import
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminHealthAPI).get();
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-    const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000)); // 3 days
-    if ((nextHistoryImportAvailableDate > new Date())) {
-      console.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
-      res.status(403);
-      res.send(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
-      return;
+    if (data.didLastHistoryImport) {
+      const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000)); // 3 days
+      if ((nextHistoryImportAvailableDate > new Date())) {
+        console.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
+        throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
+      }
     }
   }
 
   const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
-    res.status(500).send('Bad request');
     console.error('No token found');
-    return;
+    throw new Error('Bad request: No token found');
   }
 
   const oAuth = GarminHealthAPIAuth();
@@ -96,8 +112,7 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
       // Only if there is an api error in terms
       if (e.statusCode === 500) {
         console.error(e);
-        res.status(500).send(`Could not import history for dates ${batchStartDate} to ${batchEndDate}`);
-        return;
+        throw new Error(`Could not import history for dates ${batchStartDate} to ${batchEndDate}`);
       }
     }
   }
@@ -113,7 +128,5 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
     console.error(e);
     // noop all is sent to garmin
   }
+}
 
-  res.status(200);
-  res.send();
-});
