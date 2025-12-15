@@ -1,70 +1,69 @@
 <mat-card class="mat-elevation-z0 service-card">
-  <mat-card-header>
-    <mat-card-subtitle>
-      COROS is a performance sports technology company that helps athletes train to be their best.<br/>
-      For COROS it’s all about outdoors, mountains, and a passionate active lifestyle.<br/>
-      We combine high grade hardware with innovative technology to provide endurance athletes with the gear they rely on in the world’s most extreme environments.
-    </mat-card-subtitle>
-  </mat-card-header>
+  <mat-card-content>
+    <p class="description-text">
+      COROS is a performance sports technology company that helps athletes train to be their best. For COROS it’s all
+      about outdoors, mountains, and a passionate active lifestyle. We combine high grade hardware with innovative
+      technology to provide endurance athletes with the gear they rely on in the world’s most extreme environments.
+    </p>
+  </mat-card-content>
+
   <mat-tab-group [dynamicHeight]="true">
     <mat-tab label="Sync" [disabled]="!user || isGuest">
       <ng-template matTabLabel>
         <mat-icon matTooltip="Sync settings">sync</mat-icon>
       </ng-template>
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             @if (!isConnectedToService()) {
-              <mat-card-subtitle>
-                Connect to COROS API
-                <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                  info
-                </mat-icon>
-              </mat-card-subtitle>
+            <mat-card-subtitle class="tab-subtitle">
+              <span>Connect to COROS API</span>
+              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+                info
+              </mat-icon>
+            </mat-card-subtitle>
             }
             @if (isConnectedToService()) {
-              <mat-card-subtitle>Connected</mat-card-subtitle>
+            <mat-card-subtitle>Connected</mat-card-subtitle>
             }
           </mat-card-header>
           <mat-divider></mat-divider>
 
           @if (isConnectedToService()) {
-            <mat-list>
-              <div mat-subheader>Accounts</div>
-              <mat-list-item style="text-align: left">
-                <mat-icon mat-list-icon>account_circle</mat-icon>
-                <div mat-line>{{ serviceTokens[0].openId }} </div>
-                <div mat-line>Connected at {{serviceTokens[0].dateCreated  | date:'medium'}}</div>
-              </mat-list-item>
-            </mat-list>
+          <mat-list>
+            <div mat-subheader>Accounts</div>
+            <mat-list-item style="text-align: left">
+              <mat-icon mat-list-icon>account_circle</mat-icon>
+              <div mat-line>{{ serviceTokens[0].openId }} </div>
+              <div mat-line>Connected at {{serviceTokens[0].dateCreated | date:'medium'}}</div>
+            </mat-list-item>
+          </mat-list>
           }
 
           @if (isConnectedToService()) {
-            <button class="big"
-              mat-flat-button color="warn"
-              (click)="deauthorizeService($event)">Disconnect
-            </button>
+          <button class="big" mat-flat-button color="warn" [disabled]="isLoading"
+            (click)="deauthorizeService($event)">Disconnect
+          </button>
           }
 
           @if (!isConnectedToService()) {
-            <button mat-stroked-button
-              class="big"
-              mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-              (click)="connectWithService($event)">
-              Connect with COROS
-            </button>
+          <button mat-stroked-button class="big" mat-flat-button color="primary"
+            [disabled]="!user || this.isGuest || isLoading" (click)="connectWithService($event)">
+            Connect with COROS
+          </button>
           }
         </mat-card>
       </ng-template>
     </mat-tab>
 
-    <mat-tab label="History import"
-      [disabled]="isGuest || !isConnectedToService()">
+    <mat-tab label="History import" [disabled]="isGuest || !isConnectedToService()">
       <ng-template matTabLabel>
         <mat-icon matTooltip="History import">history</mat-icon>
       </ng-template>
 
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             <mat-card-subtitle>
@@ -72,7 +71,8 @@
             </mat-card-subtitle>
           </mat-card-header>
           <mat-divider></mat-divider>
-          <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"></app-history-import-form>
+          <app-history-import-form [serviceName]="serviceName"
+            [userMetaForService]="serviceMeta"></app-history-import-form>
         </mat-card>
       </ng-template>
     </mat-tab>

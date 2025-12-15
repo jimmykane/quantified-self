@@ -39,6 +39,7 @@ export class AppEventService implements OnDestroy {
 
   private firestore = inject(Firestore);
   private storage = inject(Storage);
+  private static reportedUnknownTypes = new Set<string>();
 
   constructor(
     private windowService: AppWindowService) {
@@ -55,7 +56,11 @@ export class AppEventService implements OnDestroy {
           console.log('[AppEventService] getEventAndActivities snapshot:', JSON.stringify(eventSnapshot));
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
           if (unknownTypes.length > 0) {
-            Sentry.captureMessage('Unknown Data Types in getEventAndActivities', { extra: { types: unknownTypes, eventID } });
+            const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+            if (newUnknownTypes.length > 0) {
+              newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+              Sentry.captureMessage('Unknown Data Types in getEventAndActivities', { extra: { types: newUnknownTypes, eventID } });
+            }
           }
           const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
           if ((eventSnapshot as any).originalFile) {
@@ -149,7 +154,11 @@ export class AppEventService implements OnDestroy {
             };
             const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(safeActivityData);
             if (unknownTypes.length > 0) {
-              Sentry.captureMessage('Unknown Data Types in getActivities', { extra: { types: unknownTypes, eventID, activityID: activitySnapshot.id } });
+              const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+              if (newUnknownTypes.length > 0) {
+                newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+                Sentry.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
+              }
             }
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
           } catch (e) {
@@ -475,7 +484,11 @@ export class AppEventService implements OnDestroy {
         console.log('[AppEventService] _getEvents snapshot:', JSON.stringify(eventSnapshot));
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
-          Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
+          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          if (newUnknownTypes.length > 0) {
+            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+            Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+          }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
         if ((eventSnapshot as any).originalFile) {
@@ -496,7 +509,11 @@ export class AppEventService implements OnDestroy {
       return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
-          Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
+          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          if (newUnknownTypes.length > 0) {
+            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+            Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+          }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
         if ((eventSnapshot as any).originalFile) {

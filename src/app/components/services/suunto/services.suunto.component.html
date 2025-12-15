@@ -1,12 +1,9 @@
 <mat-card class="mat-elevation-z0 service-card">
-  <mat-card-header>
-    <mat-card-subtitle>
-      Suunto is a trusted companion for athletes and adventurers.<br />
-      The durable and precise sports watches are tested in the toughest conditions and built to last in
-      adventures
-      from the deepest oceans to the highest mountains.
-    </mat-card-subtitle>
-  </mat-card-header>
+  <mat-card-content>
+    <p class="description-text">
+      Suunto is a trusted companion for athletes and adventurers. The durable and precise sports watches are tested in the toughest conditions and built to last in adventures from the deepest oceans to the highest mountains.
+    </p>
+  </mat-card-content>
 
   <mat-tab-group [dynamicHeight]="true">
 
@@ -16,11 +13,12 @@
         <mat-icon matTooltip="Sync settings">sync</mat-icon>
       </ng-template>
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             @if (!isConnectedToService()) {
-            <mat-card-subtitle>
-              Connect to Suunto app
+            <mat-card-subtitle class="tab-subtitle">
+              <span>Connect to Suunto app</span>
               <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
                 info
               </mat-icon>
@@ -44,12 +42,12 @@
           </mat-list>
           }
           @if (!isConnectedToService() || clicks > 10) {
-          <button mat-stroked-button class="big" mat-flat-button color="primary" [disabled]="!user || this.isGuest"
+          <button mat-stroked-button class="big" mat-flat-button color="primary" [disabled]="!user || this.isGuest || isLoading"
             (click)="connectWithService($event)">Connect
           </button>
           }
           @if (isConnectedToService()) {
-          <button class="big" mat-flat-button color="warn" (click)="deauthorizeService($event)">Diconnect
+          <button class="big" mat-flat-button color="warn" [disabled]="isLoading" (click)="deauthorizeService($event)">Diconnect
           </button>
           }
         </mat-card>
@@ -63,6 +61,7 @@
       </ng-template>
 
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             <mat-card-subtitle>
@@ -81,6 +80,7 @@
         <mat-icon matTooltip="Download">cloud_download</mat-icon>
       </ng-template>
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             <mat-card-subtitle>
@@ -101,11 +101,11 @@
               }
             </mat-form-field>
             <section>
-              <button class="big" mat-flat-button color="primary" (click)="onSubmit()">
+              <button class="big" mat-flat-button color="primary" [disabled]="isLoading" (click)="onSubmit()">
                 Download
               </button>
               @if (user) {
-              <button class="big" mat-flat-button color="accent" (click)="onImportAndOpen()">
+              <button class="big" mat-flat-button color="accent" [disabled]="isLoading" (click)="onImportAndOpen()">
                 Import
               </button>
               }
@@ -120,6 +120,7 @@
         <mat-icon matTooltip="Upload a FIT file to your Suunto app">cloud_upload</mat-icon>
       </ng-template>
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
             <mat-card-subtitle>
@@ -139,10 +140,11 @@
       </ng-template>
 
       <ng-template matTabContent>
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
         <mat-card class="mat-elevation-z0">
           <mat-card-header>
-            <mat-card-subtitle>
-              You can upload a GPX file to your Suunto app
+            <mat-card-subtitle class="tab-subtitle">
+              <span>You can upload a GPX file to your Suunto app</span>
               <mat-icon
                 matTooltip="NOTE: Route sync needs Suunto app Android 4.20 and higher. For iOS there is no Suunto app version that supports this">
                 info
