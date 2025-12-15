@@ -33,34 +33,70 @@ if (admin.apps.length === 0) {
   }
 }
 
-// export * from './suunto/st-workout-download-as-fit';
-// export * from './suunto/auth/wrapper';
-// export * from './garmin/auth/wrapper';
-// export * from './coros/auth/wrapper';
-// export * from './tokens';
-// export * from "./delete-old-user-tokens"
-// export * from './suunto/queue';
-// export * from './suunto/history-to-queue';
-// export * from './suunto/routes';
-// export * from './suunto/activities';
-// export * from './suunto/get-suunto-fit-file';
-// export * from './garmin/queue';
-// export * from './garmin/backfill';
-// export * from './coros/history-to-queue';
-// export * from './coros/queue';
-// export * from "./re-queue"
-// export * from "./migrations"
+// Coros Auth
+export {
+  getCOROSAPIAuthRequestTokenRedirectURI,
+  requestAndSetCOROSAPIAccessToken,
+  deauthorizeCOROSAPI,
+} from './coros/auth/wrapper';
 
+// Suunto Auth
+export {
+  getSuuntoAPIAuthRequestTokenRedirectURI,
+  requestAndSetSuuntoAPIAccessToken,
+  deauthorizeSuuntoApp,
+} from './suunto/auth/wrapper';
 
-// @todo perhaps this is not a good place to add these
-// export { determineRedirectURI } from './utils';
-// export { isCorsAllowed } from './utils';
-// export { setAccessControlHeadersOnResponse } from './utils';
-// export { setEvent } from './utils';
-// export { updateToProcessed } from './queue';
-// export { increaseRetryCountForQueueItem } from './queue';
-// export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
-// export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
-// export { testEventUpload } from './test-upload';
+// Garmin Auth
+export {
+  deauthorizeGarminHealthAPI,
+  getGarminHealthAPIAuthRequestTokenRedirectURI,
+  requestAndSetGarminHealthAPIAccessToken,
+} from './garmin/auth/wrapper';
+
+// Coros Queue & History
+export {
+  addCOROSAPIHistoryToQueue,
+} from './coros/history-to-queue';
+
+export {
+  insertCOROSAPIWorkoutDataToQueue,
+  parseCOROSAPIHistoryImportWorkoutQueue,
+  parseCOROSAPIWorkoutQueue,
+} from './coros/queue';
+
+// Suunto Queue & History
+export {
+  addSuuntoAppHistoryToQueue,
+} from './suunto/history-to-queue';
+
+export {
+  insertSuuntoAppActivityToQueue,
+  parseSuuntoAppActivityQueue,
+  parseSuuntoAppHistoryImportActivityQueue,
+} from './suunto/queue';
+
+// Garmin Queue & Backfill
+export {
+  insertGarminHealthAPIActivityFileToQueue,
+  parseGarminHealthAPIActivityQueue,
+} from './garmin/queue';
+
+export {
+  backfillHealthAPIActivities,
+} from './garmin/backfill';
+
+// Tokens
+export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
+export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
+
+// Suunto Utils
+export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';
+
+// Events
 export { cleanupEventFile } from './events/cleanup';
+
+// Missing / Deleted Functions (Not Exported)
+// - addCookieAndRedirect
+// - getSuuntoAPIAuthCode
 
