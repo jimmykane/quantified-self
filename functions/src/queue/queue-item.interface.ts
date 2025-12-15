@@ -9,21 +9,22 @@ export interface QueueItemInterface {
   retryCount: number,
   totalRetryCount?: number,
   errors?: QueueItemError[],
-  processedAt?: number
+  processedAt?: number,
+  expireAt?: admin.firestore.Timestamp | Date,
 }
 
-export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface{
+export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface {
   workoutID: string,
   userName: string,
 }
 
-export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface{
+export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
   workoutID: string,
   openId: string,
   FITFileURI: string,
 }
 
-export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface{
+export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface {
   userID: string
   startTimeInSeconds: number,
   manual: boolean,
