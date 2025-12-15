@@ -13,5 +13,10 @@
         ]
       }
     }
+  },
+  "etags": {
+    "quantified-self-io": {
+      "extensionInstances": {}
+    }
   }
 }

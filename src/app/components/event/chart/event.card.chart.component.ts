@@ -447,7 +447,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     // Add watermark
-    chart.plotContainer.children.push(ChartHelper.getWaterMark(this.waterMark));
+    chart.plotContainer.children.push(await ChartHelper.getWaterMark(this.waterMark));
 
     // watermark.fontWeight = 'bold';
 

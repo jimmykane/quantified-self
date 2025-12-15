@@ -12,6 +12,7 @@ vi.mock('pako', () => ({
 
 describe('EventWriter', () => {
     let adapter: FirestoreAdapter;
+    let storageAdapter: any;
     let writer: EventWriter;
     let eventMock: any;
     let activityMock: any;
@@ -23,7 +24,11 @@ describe('EventWriter', () => {
             createBlob: vi.fn((data) => data), // Simple pass-through for mock
             generateID: vi.fn().mockReturnValue('generated-id'),
         };
-        writer = new EventWriter(adapter);
+        storageAdapter = {
+            uploadFile: vi.fn().mockResolvedValue(undefined),
+            getBucketName: vi.fn().mockReturnValue('quantified-self-io'),
+        };
+        writer = new EventWriter(adapter, storageAdapter);
 
         streamMock = {
             type: 'heartrate',
@@ -59,15 +64,40 @@ describe('EventWriter', () => {
         );
 
         // 2. Stream write
-        expect(setDocFn).toHaveBeenCalledWith(
-            ['users', 'user-1', 'events', 'event-1', 'activities', 'activity-1', 'streams', 'heartrate'],
-            expect.objectContaining({ type: 'heartrate', compressionMethod: expect.anything() })
+        // 2. Stream write - SHOULD NOT BE CALLED ANYMORE
+        expect(setDocFn).not.toHaveBeenCalledWith(
+            expect.arrayContaining(['streams']),
+            expect.anything()
         );
 
         // 3. Event write
         expect(setDocFn).toHaveBeenCalledWith(
             ['users', 'user-1', 'events', 'event-1'],
             expect.objectContaining({ id: 'event-1' })
+        );
+    });
+
+    it('should upload original file if provided', async () => {
+        const originalFile = {
+            data: Buffer.from('test'),
+            extension: 'fit'
+        };
+        await writer.writeAllEventData('user-1', eventMock, originalFile);
+
+        expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
+            'users/user-1/events/event-1/original.fit',
+            originalFile.data
+        );
+
+        const setDocFn = adapter.setDoc as any;
+        expect(setDocFn).toHaveBeenCalledWith(
+            ['users', 'user-1', 'events', 'event-1'],
+            expect.objectContaining({
+                originalFile: {
+                    path: 'users/user-1/events/event-1/original.fit',
+                    bucket: 'quantified-self-io',
+                }
+            })
         );
     });
 
@@ -82,18 +112,12 @@ describe('EventWriter', () => {
         expect(activityMock.setID).toHaveBeenCalledWith('generated-id');
     });
 
-    it('should handle large streams by compressing them', async () => {
-        // Mock large data logic if needed, but the basic test covers the flow.
-        // The class uses Pako for compression.
+    it('should NOT write streams even if large', async () => {
+        // Streams are no longer written, so this test just ensures no stream writes occur
         await writer.writeAllEventData('user-1', eventMock);
         const setDocFn = adapter.setDoc as any;
         const streamCall = setDocFn.mock.calls.find(call => call[0].includes('streams'));
-        expect(streamCall).toBeTruthy();
-        const streamData = streamCall[1];
-        // Since our mock data is small, it won't be compressed with Pako unless we force it or data is large.
-        // The current logic checks size <= 1048487. 
-        // Small data returns uncompressed (CompressionEncodings.None).
-        expect(streamData.encoding).toBe('None');
+        expect(streamCall).toBeUndefined();
     });
 
     it('should strip streams from activity document', async () => {

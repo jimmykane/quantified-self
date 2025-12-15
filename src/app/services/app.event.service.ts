@@ -20,8 +20,14 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
 import { StreamEncoder } from '../helpers/stream.encoder';
 import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
-import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
+import { EventWriter, FirestoreAdapter, StorageAdapter } from '../../../functions/src/shared/event-writer';
 import { Bytes } from 'firebase/firestore';
+import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
+import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.json';
+import { EventImporterFIT } from '@sports-alliance/sports-lib/lib/events/adapters/importers/fit/importer.fit';
+import { EventImporterTCX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/tcx/importer.tcx';
+import { EventImporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/importers/gpx/importer.gpx';
+import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib/lib/events/adapters/importers/suunto/importer.suunto.sml';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
@@ -32,6 +38,7 @@ import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 export class AppEventService implements OnDestroy {
 
   private firestore = inject(Firestore);
+  private storage = inject(Storage);
 
   constructor(
     private windowService: AppWindowService) {
@@ -45,21 +52,27 @@ export class AppEventService implements OnDestroy {
       docData(eventDoc).pipe(
         map(eventSnapshot => {
           if (!eventSnapshot) return null;
+          console.log('[AppEventService] getEventAndActivities snapshot:', JSON.stringify(eventSnapshot));
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
           if (unknownTypes.length > 0) {
             Sentry.captureMessage('Unknown Data Types in getEventAndActivities', { extra: { types: unknownTypes, eventID } });
           }
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
+          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
+          if ((eventSnapshot as any).originalFile) {
+            Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+            console.log('[AppEventService] Patch applied in getEventAndActivities for', eventID, 'Has it?', !!(event as any).originalFile);
+          }
+          return event;
         })),
       this.getActivities(user, eventID),
     ]).pipe(catchError((error) => {
       if (error && error.code && error.code === 'permission-denied') {
-        return of([null, null])
+        return of([null, null] as [EventInterface | null, ActivityInterface[] | null]);
       }
       console.error('Error fetching event or activities:', error);
       Sentry.captureException(error);
 
-      return of([null, null]) // @todo fix this
+      return of([null, null] as [EventInterface | null, ActivityInterface[] | null]); // @todo fix this
     })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
       if (!event) {
         return null;
@@ -106,7 +119,7 @@ export class AppEventService implements OnDestroy {
    * @param eventID
    * @param streamTypes
    */
-  public getEventActivitiesAndSomeStreams(user: User, eventID, streamTypes: string[]) {
+  public getEventActivitiesAndSomeStreams(user: User, eventID: string, streamTypes: string[]) {
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID, streamTypes);
   }
 
@@ -115,7 +128,7 @@ export class AppEventService implements OnDestroy {
    * @param user
    * @param eventID
    */
-  public getEventActivitiesAndAllStreams(user: User, eventID) {
+  public getEventActivitiesAndAllStreams(user: User, eventID: string) {
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID);
   }
 
@@ -198,7 +211,7 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: EventInterface) {
+  public async writeAllEventData(user: User, event: EventInterface, originalFile?: { data: any, extension: string }) {
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
         // Construct the full path from the array parts
@@ -216,8 +229,24 @@ export class AppEventService implements OnDestroy {
       }
     };
 
-    const writer = new EventWriter(adapter);
-    await writer.writeAllEventData(user.uid, event);
+    const storageAdapter: StorageAdapter = {
+      uploadFile: async (path: string, data: any) => {
+        const fileRef = ref(this.storage, path);
+        // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
+        let payload = data;
+        if (typeof data === 'string') {
+          payload = new Blob([data], { type: 'text/plain' });
+        }
+        await uploadBytes(fileRef, payload);
+      },
+      getBucketName: () => {
+        // Return the Firebase Storage bucket name from config
+        return 'quantified-self-io.appspot.com';
+      }
+    }
+
+    const writer = new EventWriter(adapter, storageAdapter);
+    await writer.writeAllEventData(user.uid, event, originalFile);
   }
 
   public async setEvent(user: User, event: EventInterface) {
@@ -259,7 +288,7 @@ export class AppEventService implements OnDestroy {
     return deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType));
   }
 
-  public async deleteAllStreams(user: User, eventID, activityID): Promise<number> {
+  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
     const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
 
@@ -298,6 +327,39 @@ export class AppEventService implements OnDestroy {
    * @private
    */
   public attachStreamsToEventWithActivities(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
+    // Check if we have an original file to parse instead of fetching from Firestore
+    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!(event as any).originalFile);
+    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!(event as any).originalFile);
+    console.log('[AppEventService] Event props:', JSON.stringify(event));
+    console.log('[AppEventService] Event keys:', Object.keys(event));
+    console.log('[AppEventService] originalFile via bracket:', (event as any)['originalFile']);
+    console.log('[AppEventService] originalFile descriptor:', Object.getOwnPropertyDescriptor(event, 'originalFile'));
+
+    if ((event as any).originalFile && (event as any).originalFile.path) {
+      console.log('[AppEventService] Using client-side parsing for', event.getID());
+      return from(this.caclulateStreamsFromOriginalFile(event)).pipe(
+        map((fullEvent) => {
+          if (!fullEvent) return event;
+          // Merge logic: Copy activities/streams from fullEvent to event
+          // We assume the file is the source of truth.
+          const existingID = event.getID();
+          // Keep the ID and other metadata from Firestore, but replace activities
+          event.clearActivities();
+          event.addActivities(fullEvent.getActivities());
+          return event;
+        }),
+        catchError((e) => {
+          console.error('Failed to parse original file, falling back to legacy streams', e);
+          return this.attachStreamsLegacy(user, event, streamTypes);
+        })
+      );
+    }
+
+    console.log('[AppEventService] Fallback to legacy streams for', event.getID());
+    return this.attachStreamsLegacy(user, event, streamTypes);
+  }
+
+  private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
     // Get all the streams for all activities and subscribe to them with latest emition for all streams
     return combineLatest(
       event.getActivities().map((activity) => {
@@ -314,6 +376,55 @@ export class AppEventService implements OnDestroy {
       })).pipe(map(([newEvent]) => {
         return newEvent;
       }));
+  }
+
+  private async caclulateStreamsFromOriginalFile(event: EventInterface): Promise<EventInterface> {
+    console.log('Calculating streams from original file for event', event.getID());
+    const originalFile = (event as any).originalFile;
+    if (!originalFile || !originalFile.path) {
+      console.warn('Original file path missing', originalFile);
+      return null;
+    }
+
+    try {
+      const fileRef = ref(this.storage, originalFile.path);
+      console.log('Fetching file bytes from', originalFile.path);
+      const arrayBuffer = await getBytes(fileRef);
+      console.log('File bytes fetched, size:', arrayBuffer.byteLength);
+
+      // Determine extension. using path or explicit extension if we had it
+      // path is user/uid/events/id/original.fit
+      const parts = originalFile.path.split('.');
+      const extension = parts[parts.length - 1].toLowerCase();
+      console.log('Parsing file with extension:', extension);
+
+      let newEvent: EventInterface;
+
+      if (extension === 'fit') {
+        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer);
+      } else if (extension === 'gpx') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterGPX.getFromString(text);
+      } else if (extension === 'tcx') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'));
+      } else if (extension === 'json') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        const json = JSON.parse(text);
+        const { sanitizedJson } = EventJSONSanitizer.sanitize(json);
+        newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson));
+      } else if (extension === 'sml') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterSuuntoSML.getFromXML(text);
+      } else {
+        throw new Error(`Unsupported original file extension: ${extension}`);
+      }
+      console.log('File parsed successfully');
+      return newEvent;
+    } catch (e) {
+      console.error('Error in caclulateStreamsFromOriginalFile', e);
+      throw e;
+    }
   }
 
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
@@ -361,11 +472,19 @@ export class AppEventService implements OnDestroy {
 
     return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.map((eventSnapshot) => {
+        console.log('[AppEventService] _getEvents snapshot:', JSON.stringify(eventSnapshot));
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
           Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
         }
-        return EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
+        if ((eventSnapshot as any).originalFile) {
+          // Force assignment using Object.assign or defineProperty in case of sealed keys?
+          // (event as any).originalFile = (eventSnapshot as any).originalFile;
+          Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+          console.log('[AppEventService] Patch applied in _getEvents for', eventSnapshot.id, 'Has it?', !!(event as any).originalFile);
+        }
+        return event;
       })
     }));
   }
@@ -379,11 +498,17 @@ export class AppEventService implements OnDestroy {
         if (unknownTypes.length > 0) {
           Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: unknownTypes, eventID: eventSnapshot.id } });
         }
-        events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id));
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
+        if ((eventSnapshot as any).originalFile) {
+          Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+          console.log('[AppEventService] Patch applied in _getEvents for', eventSnapshot.id, 'Has it?', !!(event as any).originalFile);
+        }
+        events.push(event);
         return events;
       }, []);
     })).pipe(switchMap((events: EventInterface[]) => {
-      if (!events.length) {
+      console.log('[AppEventService] _getEventsAndActivities events:', events.length);
+      if (events.length === 0) {
         return of([]);
       }
       return combineLatest(events.map((event) => {

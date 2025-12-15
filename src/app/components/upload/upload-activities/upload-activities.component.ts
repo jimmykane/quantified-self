@@ -94,12 +94,17 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           return;
         }
         try {
-          await this.eventService.writeAllEventData(this.user, newEvent);
+          await this.eventService.writeAllEventData(this.user, newEvent, {
+            data: fileReaderResult as any, // ArrayBuffer or string
+            extension: file.extension
+          });
         } catch (e) {
           this.snackBar.open(`Could not upload ${file.filename}, reason: ${e.message}`);
           reject(e);
           return;
         }
+
+        console.log('Successfully uploaded event. ID:', newEvent.getID());
         resolve(newEvent);
       };
       // Read it depending on the extension

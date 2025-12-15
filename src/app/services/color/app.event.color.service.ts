@@ -1,16 +1,19 @@
-import {Injectable} from '@angular/core';
-import {AppDeviceColors} from './app.device.colors';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { Injectable } from '@angular/core';
+import { AppDeviceColors } from './app.device.colors';
+import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {AppActivityTypeGroupColors} from './app.activity-type-group.colors';
-import * as am4core from '@amcharts/amcharts4/core';
+import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
+import type * as am4core from '@amcharts/amcharts4/core';
 import { AppColors } from './app.colors';
+import { AmChartsService } from '../am-charts.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AppEventColorService {
+
+  constructor(private amChartsService: AmChartsService) { }
 
   public getColorByNumber(number: number): string {
     // Return fixed random
@@ -49,19 +52,26 @@ export class AppEventColorService {
     return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
   }
 
-  getColorForZone(zone: string): am4core.Color {
+  getColorForZone(zone: string): am4core.Color | null {
+    // Get the cached core module from the service (it will be loaded when charts are initialized)
+    const core = this.amChartsService.getCachedCore();
+    if (!core) {
+      console.warn('amCharts core not loaded yet');
+      return null;
+    }
+
     switch (zone) {
       case `Zone 5`:
-        return am4core.color(AppColors.LightRed);
+        return core.color(AppColors.LightRed);
       case `Zone 4`:
-        return am4core.color(AppColors.Yellow);
+        return core.color(AppColors.Yellow);
       case `Zone 3`:
-        return am4core.color(AppColors.Green);
+        return core.color(AppColors.Green);
       case `Zone 2`:
-        return am4core.color(AppColors.Blue);
+        return core.color(AppColors.Blue);
       case `Zone 1`:
       default:
-        return am4core.color(AppColors.LightBlue);
+        return core.color(AppColors.LightBlue);
     }
   }
 }

@@ -14,6 +14,7 @@ export interface AmChartsModules {
 })
 export class AmChartsService {
     private loader: Promise<AmChartsModules> | null = null;
+    private cachedModules: AmChartsModules | null = null;
 
     constructor(private zone: NgZone) { }
 
@@ -36,9 +37,20 @@ export class AmChartsService {
                     // core.options.onlyShowOnViewport = true; // Optional: Performance boost
                 });
 
-                return { core, charts };
+                const modules = { core, charts };
+                this.cachedModules = modules;
+                return modules;
             });
         }
         return this.loader;
     }
+
+    /**
+     * Returns the cached core module if already loaded, otherwise null.
+     * Should only be called after load() has been called and awaited.
+     */
+    getCachedCore(): typeof Am4Core | null {
+        return this.cachedModules?.core ?? null;
+    }
 }
+

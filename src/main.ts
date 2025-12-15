@@ -1,6 +1,5 @@
 // Buffer (dependency of FIT parser) uses global to check against typed arrays
 (window as any).global = window;
-import '@amcharts/amcharts4/core';
 
 import { enableProdMode } from '@angular/core';
 import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
