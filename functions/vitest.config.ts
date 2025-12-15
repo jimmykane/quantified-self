@@ -8,7 +8,8 @@ export default defineConfig({
         environment: 'node',
         include: ['src/**/*.spec.ts'],
         alias: {
-            '@sports-alliance/sports-lib': resolve(__dirname, 'node_modules/@sports-alliance/sports-lib/lib/esm/index.js'),
+            // Force resolution to ESM entry point for sports-lib
+            '@sports-alliance/sports-lib': resolve('./node_modules/@sports-alliance/sports-lib/lib/esm/index.js'),
         },
         coverage: {
             provider: 'v8',
