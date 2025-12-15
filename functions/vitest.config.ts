@@ -7,6 +7,9 @@ export default defineConfig({
         globals: true,
         environment: 'node',
         include: ['src/**/*.spec.ts'],
+        alias: {
+            '@sports-alliance/sports-lib': resolve(__dirname, 'node_modules/@sports-alliance/sports-lib/lib/esm/index.js'),
+        },
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],
