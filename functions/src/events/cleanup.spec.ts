@@ -31,7 +31,7 @@ vi.mock('firebase-admin', () => {
 let cleanupEventFile: any;
 
 // Mock firebase-functions to return the handler directly
-vi.mock('firebase-functions', () => {
+vi.mock('firebase-functions/v1', () => {
     return {
         firestore: {
             document: vi.fn(() => ({
