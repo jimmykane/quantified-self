@@ -108,8 +108,10 @@ describe('importActivityToSuuntoApp', () => {
             headers: { 'x-ms-blob-type': 'BlockBlob', 'Custom-Header': 'Value' }
         }));
 
-        // Mock status check (GET)
-        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'test-workout-key' }));
+        // Mock status check (GET) - Polling simulation
+        requestMocks.get
+            .mockResolvedValueOnce(JSON.stringify({ status: 'NEW' }))
+            .mockResolvedValueOnce(JSON.stringify({ status: 'PROCESSED', workoutKey: 'test-workout-key' }));
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});

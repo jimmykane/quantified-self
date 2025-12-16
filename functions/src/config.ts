@@ -1,3 +1,8 @@
+import * as dotenv from 'dotenv';
+
+// Load .env file automatically for local development/deployment analysis
+dotenv.config();
+
 /**
  * Centralized configuration module
  * Replaces deprecated functions.config() calls with process.env
@@ -37,17 +42,23 @@ function getEnvVar(name: string): string {
 }
 
 export const config: AppConfig = {
-    suuntoapp: {
-        client_id: getEnvVar('SUUNTOAPP_CLIENT_ID'),
-        client_secret: getEnvVar('SUUNTOAPP_CLIENT_SECRET'),
-        subscription_key: getEnvVar('SUUNTOAPP_SUBSCRIPTION_KEY'),
+    get suuntoapp() {
+        return {
+            client_id: getEnvVar('SUUNTOAPP_CLIENT_ID'),
+            client_secret: getEnvVar('SUUNTOAPP_CLIENT_SECRET'),
+            subscription_key: getEnvVar('SUUNTOAPP_SUBSCRIPTION_KEY'),
+        };
     },
-    corosapi: {
-        client_id: getEnvVar('COROSAPI_CLIENT_ID'),
-        client_secret: getEnvVar('COROSAPI_CLIENT_SECRET'),
+    get corosapi() {
+        return {
+            client_id: getEnvVar('COROSAPI_CLIENT_ID'),
+            client_secret: getEnvVar('COROSAPI_CLIENT_SECRET'),
+        };
     },
-    garminhealthapi: {
-        consumer_key: getEnvVar('GARMINHEALTHAPI_CONSUMER_KEY'),
-        consumer_secret: getEnvVar('GARMINHEALTHAPI_CONSUMER_SECRET'),
+    get garminhealthapi() {
+        return {
+            consumer_key: getEnvVar('GARMINHEALTHAPI_CONSUMER_KEY'),
+            consumer_secret: getEnvVar('GARMINHEALTHAPI_CONSUMER_SECRET'),
+        };
     },
 };

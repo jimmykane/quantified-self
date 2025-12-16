@@ -8,6 +8,7 @@
     "blob": "^0.1.0",
     "bs58": "^4.0.1",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "firebase-admin": "^13.6.0",
     "firebase-functions": "^6.6.0",
     "node-fetch": "^2.7.0",

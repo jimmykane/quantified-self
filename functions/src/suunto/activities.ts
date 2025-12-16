@@ -13,6 +13,7 @@ import { SERVICE_NAME } from './constants';
  * Uploads an activity to Suunto app
  */
 export const importActivityToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
+  console.log('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     console.error('Not allowed');
@@ -39,6 +40,17 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
     console.error('No file provided\'');
     res.status(500);
     res.send();
+    return;
+  }
+
+  // Debugging file content
+  const isBuffer = Buffer.isBuffer(req.rawBody);
+  const size = isBuffer ? req.rawBody.length : 0;
+  console.log(`Received upload request. rawBody isBuffer=${isBuffer}, size=${size} bytes`);
+
+  if (!isBuffer || size === 0) {
+    console.error('File content is empty or not a buffer');
+    res.status(400).send('File content missing or invalid');
     return;
   }
 
@@ -103,17 +115,39 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
     }
 
     // Check the upload status
-    try {
-      const statusResult = await requestPromise.get({
-        headers: {
-          'Authorization': serviceToken.accessToken,
-          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-        },
-        url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
-      });
-      console.log(`Upload status for user ${userID}, id ${uploadId}: ${statusResult}`);
-    } catch (e: any) {
-      console.error(`Could not check upload status for ${uploadId} for user ${userID}`, e);
+    // Check the upload status with polling
+    let status = 'NEW';
+    let attempts = 0;
+    const maxAttempts = 10; // 20 seconds total wait
+
+    while ((status === 'NEW' || status === 'ACCEPTED') && attempts < maxAttempts) {
+      attempts++;
+      // Wait 2 seconds before checking (skip wait on first attempt if you prefer, but usually good to wait after upload)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      try {
+        const statusResponse = await requestPromise.get({
+          headers: {
+            'Authorization': serviceToken.accessToken,
+            'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+          },
+          url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
+        });
+
+        const statusJson = JSON.parse(statusResponse);
+        status = statusJson.status;
+        console.log(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
+
+        if (status === 'PROCESSED') {
+          console.log(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
+          break;
+        } else if (status === 'ERROR') {
+          console.error(`Suunto processing failed for user ${userID}: ${statusJson.message}`);
+          // We might want to throw here or just log and exit
+        }
+      } catch (e: any) {
+        console.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, e);
+      }
     }
 
     if (result && result.error) {
