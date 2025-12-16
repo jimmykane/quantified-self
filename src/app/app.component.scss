@@ -1,88 +1,91 @@
+/* Main App Layout */
 mat-sidenav-container {
   min-height: 100vh;
+  /* background-color: #fafafa;  Optional: Light background for the whole app */
 }
 
-mat-card{
-  margin: 0.5em;
-}
-
-.mat-tab-link{
-  min-width: 5%;
-  //padding-right: 1em;
-  //font-size: 1.3em;
-  //font-weight: 400;
-}
-
-mat-sidenav{
-  min-width: 300px;
+mat-sidenav {
+  min-width: 250px;
+  /* Standard sidebar width */
   max-width: 300px;
-  //padding: 1vw;
-  //border-right: 1px solid rgba(0,0,0,.12);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-mat-icon{
-  vertical-align: middle;
+/* Top Navigation Bar Styling */
+nav[mat-tab-nav-bar] {
+  display: flex !important;
+  /* Force flex */
+  align-items: center;
+  height: 64px;
+  /* Standard toolbar height */
+  padding: 0 16px;
+  background-color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  /* Subtle shadow for depth */
+  z-index: 10;
+  /* Ensure it sits above content */
+  overflow: hidden;
 }
 
-.icon-theme{
-  font-size: 1.3em;
+/* Navigation Items */
+.mat-tab-link {
+  min-width: auto !important;
+  /* Override default tab width */
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
 }
 
+.mat-tab-link:hover {
+  opacity: 1;
+}
+
+.mat-tab-link mat-icon {
+  margin: 0;
+  color: #5f6368;
+  /* Standard icon color */
+}
+
+/* Utilities */
 .fill-space {
   flex: 1 1 auto;
 }
 
-.right{
-  margin-right: 1.0em;
+/* Right-side Actions */
+.right {
+  margin-left: 12px;
+  /* Consistent spacing */
 }
 
-mat-icon.larger_icon{
-  //margin-right: 1em;
-  padding: 0;
-  font-size: 28px;
-  height: 28px;
-  width: 28px;
+/* Buttons inside nav */
+nav button[mat-flat-button],
+nav button[mat-stroked-button] {
+  border-radius: 20px;
+  /* Rounded pill shape */
+  padding: 0 24px;
+  height: 40px;
+  line-height: 40px;
+  font-weight: 500;
+  box-shadow: none !important;
+  /* Cleaner look */
 }
 
-button{
-  font-size: 1em;
-}
-
-.theme{
-  margin: 0;
-  padding: 0;
-  margin-right: 0.5em;
-}
-
-.mat-tab-link{
-}
-
-
-nav button{
-  margin-bottom: 6px;
-  margin-top: 6px;
-}
-
-nav app-upload-activities{
-  margin-bottom: 6px;
-  margin-top: 6px;
-}
-
-
-nav{
-  height: 59px;
+/* Specific styling for the Upload Activities component if it appears in nav */
+nav app-upload-activities {
+  display: flex;
   align-items: center;
+  margin-left: 12px;
 }
 
-
-.mat-drawer-container {
-  overflow: visible;
-}
-
-
-mat-progress-bar{
+mat-progress-bar {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 10000;
+  width: 100%;
+  z-index: 10001;
+  /* Highest priority */
 }
