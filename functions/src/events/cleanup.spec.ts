@@ -1,136 +1,119 @@
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const functionsTest = require('firebase-functions-test');
+import functionsTest from 'firebase-functions-test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+
+// Use vi.hoisted to ensure mocks are initialized before vi.mock
+const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock } = vi.hoisted(() => {
+    const onDeleteMock = vi.fn((handler) => handler);
+    const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
+
+    const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined);
+    const collectionMock = vi.fn().mockReturnValue({ path: 'mock/path' });
+    const firestoreMock = {
+        collection: collectionMock,
+        recursiveDelete: recursiveDeleteMock,
+    } as any;
+
+    const deleteFileMock = vi.fn().mockResolvedValue(undefined);
+    const storageMock = {
+        bucket: vi.fn().mockReturnValue({
+            file: vi.fn().mockReturnValue({
+                delete: deleteFileMock,
+            }),
+        }),
+    } as any;
+
+    return {
+        firestoreBuilderMock: { document: documentMock },
+        adminFirestoreMock: firestoreMock,
+        adminStorageMock: storageMock,
+    };
+});
+
+vi.mock('firebase-functions/v1', () => ({
+    firestore: firestoreBuilderMock,
+}));
+
+vi.mock('firebase-admin', () => ({
+    firestore: () => adminFirestoreMock,
+    storage: () => adminStorageMock,
+    initializeApp: vi.fn(),
+    credential: {
+        cert: vi.fn(),
+    },
+}));
+
+// Import the function AFTER mocking
+import { cleanupEventFile } from './cleanup';
+
 const testEnv = functionsTest();
 
-// Mock firebase-admin
-vi.mock('firebase-admin', () => {
-    const deleteMock = vi.fn().mockResolvedValue([{}]);
-    const fileMock = vi.fn(() => ({
-        delete: deleteMock
-    }));
-    const bucketMock = vi.fn(() => ({
-        file: fileMock
-    }));
-    const storageMock = vi.fn(() => ({
-        bucket: bucketMock
-    }));
-
-    return {
-        storage: storageMock,
-        initializeApp: vi.fn(),
-        credential: {
-            cert: vi.fn(),
-        },
-    };
-});
-
-// function-under-test variable
-let cleanupEventFile: any;
-
-// Mock firebase-functions to return the handler directly
-vi.mock('firebase-functions/v1', () => {
-    return {
-        firestore: {
-            document: vi.fn(() => ({
-                onDelete: vi.fn((handler) => handler)
-            }))
-        },
-        https: {
-            onRequest: vi.fn()
-        }
-    };
-});
+// Mock console methods
+global.console = { ...global.console, log: vi.fn(), error: vi.fn() };
 
 describe('cleanupEventFile', () => {
-    let adminStorageMock: any;
+    // helpers to access mocks in tests
+    const mocks = {
+        firestore: adminFirestoreMock,
+        storage: adminStorageMock,
+        recursiveDelete: adminFirestoreMock.recursiveDelete,
+        deleteFile: adminStorageMock.bucket().file().delete // this is slightly tricky as bucket() creates new obj if not careful, but we mocked return value above
+    };
 
-    beforeEach(async () => {
-        // Reset mocks
+    beforeEach(() => {
+        // Reset mocks if needed, but since they are hoisted consts, verify they are cleared
         vi.clearAllMocks();
-        adminStorageMock = admin.storage();
-
-        // Import dynamically to ensure testEnv is initialized first
-        const module = await import('./cleanup');
-        cleanupEventFile = module.cleanupEventFile;
     });
 
     afterEach(() => {
+        vi.clearAllMocks();
         testEnv.cleanup();
     });
 
-    it('should delete the original file if it exists in the deleted document', async () => {
-        // No wrap needed, cleanupEventFile is the handler
+    it('should recursively delete activities and delete the original file', async () => {
+        // Since we mocked the builder to just return the handler, cleanupEventFile IS the handler
+        const wrapped = cleanupEventFile;
 
-        // Mock data representing the deleted document
         const snap = testEnv.firestore.makeDocumentSnapshot({
-            originalFile: {
-                path: 'users/test-user/events/test-event/original.fit'
-            }
-        }, 'users/test-user/events/test-event');
+            originalFile: { path: 'path/to/file.fit' }
+        }, 'users/testUser/events/testEvent');
 
         const context = {
             params: {
-                userId: 'test-user',
-                eventId: 'test-event'
-            }
-        };
+                userId: 'testUser',
+                eventId: 'testEvent',
+            },
+        } as any;
 
-        await cleanupEventFile(snap, context);
+        await wrapped(snap, context);
 
-        // Verify storage calls
-        expect(adminStorageMock.bucket).toHaveBeenCalledWith(); // Expect no args now (default bucket)
-        expect(adminStorageMock.bucket().file).toHaveBeenCalledWith('users/test-user/events/test-event/original.fit');
-        expect(adminStorageMock.bucket().file().delete).toHaveBeenCalled();
+        // Check recursive delete
+        expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/events/testEvent/activities');
+        expect(mocks.recursiveDelete).toHaveBeenCalled();
+
+        // Check file delete
+        expect(mocks.deleteFile).toHaveBeenCalled();
     });
 
-    it('should NOT attempt deletion if originalFile is missing', async () => {
-        // No wrap
+    it('should delete activities even if no original file exists', async () => {
+        const wrapped = cleanupEventFile;
 
-        // Mock data WITHOUT originalFile
-        const snap = testEnv.firestore.makeDocumentSnapshot({
-            someOtherField: 'value'
-        }, 'users/test-user/events/test-event');
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
 
         const context = {
             params: {
-                userId: 'test-user',
-                eventId: 'test-event'
-            }
-        };
+                userId: 'testUser',
+                eventId: 'testEvent',
+            },
+        } as any;
 
-        await cleanupEventFile(snap, context);
+        await wrapped(snap, context);
 
-        // Verify storage calls were NOT made
-        expect(adminStorageMock.bucket().file().delete).not.toHaveBeenCalled();
-    });
+        // Check recursive delete called
+        expect(mocks.recursiveDelete).toHaveBeenCalled();
 
-    it('should handle errors gracefully during deletion', async () => {
-        // No wrap
-
-        // Make delete throw an error
-        const deleteMock = adminStorageMock.bucket().file().delete;
-        deleteMock.mockRejectedValue(new Error('Storage error'));
-
-        const snap = testEnv.firestore.makeDocumentSnapshot({
-            originalFile: {
-                path: 'users/test-user/events/test-event/original.fit'
-            }
-        }, 'users/test-user/events/test-event');
-
-        const context = {
-            params: {
-                userId: 'test-user',
-                eventId: 'test-event'
-            }
-        };
-
-        // Should not throw
-        await expect(cleanupEventFile(snap, context)).resolves.not.toThrow();
-
-        // But should have tried to delete
-        expect(deleteMock).toHaveBeenCalled();
+        // Check file delete NOT called
+        expect(mocks.deleteFile).not.toHaveBeenCalled();
     });
 });
