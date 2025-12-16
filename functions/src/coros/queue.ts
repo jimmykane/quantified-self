@@ -3,6 +3,7 @@ import { addToQueueForCOROS, parseQueueItems } from '../queue';
 import { SERVICE_NAME } from './constants';
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { generateIDFromParts } from '../utils';
+import { config } from '../config';
 
 
 const TIMEOUT_IN_SECONDS = 300;
@@ -26,8 +27,8 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
     return;
   }
   //
-  if (!(req.get('Client') === functions.config().corosapi.client_id &&
-    req.get('Secret') === functions.config().corosapi.client_secret)) {
+  if (!(req.get('Client') === config.corosapi.client_id &&
+    req.get('Secret') === config.corosapi.client_secret)) {
     console.info('Client Cred error return just 200'); // as status check
     res.status(200).send(SUCCESS_RESPONSE);
     return;

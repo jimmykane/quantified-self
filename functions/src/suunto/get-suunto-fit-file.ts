@@ -6,6 +6,7 @@ import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 import { SERVICE_NAME } from './constants';
+import { config } from '../config';
 
 /**
  * Downloads the original file
@@ -92,7 +93,7 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
     result = await requestPromise.get({
       headers: {
         'Authorization': serviceTokenToUse.accessToken,
-        'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
+        'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
       },
       encoding: null,
       // gzip: true,

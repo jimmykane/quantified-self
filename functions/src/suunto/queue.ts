@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import { addToQueueForSuunto, parseQueueItems } from '../queue';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { config } from '../config';
 
 const TIMEOUT_IN_SECONDS = 540;
 const MEMORY = '4GB';
@@ -10,7 +11,7 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
   memory: '256MB',
 }).https.onRequest(async (req, res) => {
   // Check Auth first
-  const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
+  const authentication = `Basic ${Buffer.from(`${config.suuntoapp.client_id}:${config.suuntoapp.client_secret}`).toString('base64')}`;
   if (authentication !== req.headers.authorization) {
     console.error(new Error(`Not authorised to post here received: ${req.headers.authorization}`));
     res.status(403);

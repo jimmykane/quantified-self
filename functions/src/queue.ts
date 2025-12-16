@@ -14,7 +14,7 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import * as requestPromise from './request-helper';
-import * as functions from 'firebase-functions/v1';
+import { config } from './config';
 import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
@@ -170,7 +170,7 @@ export function getWorkoutForService(
       return requestPromise.get({
         headers: {
           'Authorization': (serviceToken as SuuntoAPIAuth2ServiceTokenInterface).accessToken,
-          'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
         },
         encoding: null,
         // gzip: true,

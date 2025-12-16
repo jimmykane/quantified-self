@@ -12,7 +12,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
-import * as functions from 'firebase-functions/v1';
+import { config } from './config';
 
 /**
  *
@@ -154,7 +154,7 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
           headers: {
             'Authorization': `Bearer ${serviceToken.accessToken}`,
           },
-          url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${functions.config().suuntoapp.client_id}`,
+          url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
         });
         console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
         break;

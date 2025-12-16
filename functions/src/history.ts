@@ -7,7 +7,7 @@ import {
   SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
 } from './suunto/constants';
 import * as requestPromise from './request-helper';
-import * as functions from 'firebase-functions/v1';
+import { config } from './config';
 import { generateIDFromParts } from './utils';
 import { COROSAPIWorkoutQueueItemInterface, SuuntoAppWorkoutQueueItemInterface } from './queue/queue-item.interface';
 import { getServiceConfig } from './OAuth2';
@@ -137,7 +137,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
       result = await requestPromise.get({
         headers: {
           'Authorization': serviceToken.accessToken,
-          'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           'json': true,
         },
         url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000&filter-by-modification-time=false`,

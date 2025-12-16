@@ -9,3 +9,7 @@ typings/
 node_modules/
 .runtimeconfig.json
 service-account.json
+
+# Environment files with secrets
+.env
+.env.local

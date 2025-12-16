@@ -7,6 +7,7 @@ import { getTokenData } from '../tokens';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 import * as Pako from 'pako';
 import { SERVICE_NAME } from './constants';
+import { config } from '../config';
 
 
 /**
@@ -61,7 +62,7 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
         headers: {
           'Authorization': serviceToken.accessToken,
           'Content-Type': 'application/gpx+xml',
-          'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           // json: true,
         },
         body: Pako.ungzip(Buffer.from(req.body, 'base64'), { to: 'string' }),

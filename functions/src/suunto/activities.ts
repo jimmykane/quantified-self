@@ -1,6 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
+import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
@@ -62,7 +63,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
         headers: {
           'Authorization': serviceToken.accessToken,
           'Content-Type': 'application/json',
-          'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           'json': true,
         },
         body: JSON.stringify({
@@ -81,6 +82,9 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
     }
 
     const url = result.url;
+    const uploadId = result.id;
+    console.log(`Init response for user ${userID}: url=${url}, id=${uploadId}, headers=${JSON.stringify(result.headers)}`);
+
     try {
       // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
       // We must use the headers provided by the init-upload response to match the signed URL signature
@@ -90,11 +94,26 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
         url,
         body: req.rawBody,
       });
+      console.log(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
     } catch (e: any) {
       console.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.message);
       return;
+    }
+
+    // Check the upload status
+    try {
+      const statusResult = await requestPromise.get({
+        headers: {
+          'Authorization': serviceToken.accessToken,
+          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+        },
+        url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
+      });
+      console.log(`Upload status for user ${userID}, id ${uploadId}: ${statusResult}`);
+    } catch (e: any) {
+      console.error(`Could not check upload status for ${uploadId} for user ${userID}`, e);
     }
 
     if (result && result.error) {

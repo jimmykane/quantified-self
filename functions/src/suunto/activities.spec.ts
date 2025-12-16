@@ -7,15 +7,18 @@ import * as admin from 'firebase-admin';
 const requestMocks = {
     post: vi.fn(),
     put: vi.fn(),
+    get: vi.fn(),
 };
 
 vi.mock('../request-helper', () => ({
     default: {
         post: (...args: any[]) => requestMocks.post(...args),
         put: (...args: any[]) => requestMocks.put(...args),
+        get: (...args: any[]) => requestMocks.get(...args),
     },
     post: (...args: any[]) => requestMocks.post(...args),
     put: (...args: any[]) => requestMocks.put(...args),
+    get: (...args: any[]) => requestMocks.get(...args),
 }));
 
 const utilsMocks = {
@@ -100,9 +103,13 @@ describe('importActivityToSuuntoApp', () => {
 
         // Mock init upload (POST)
         requestMocks.post.mockResolvedValue(JSON.stringify({
+            id: 'test-upload-id',
             url: 'https://storage.suunto.com/upload-url',
             headers: { 'x-ms-blob-type': 'BlockBlob', 'Custom-Header': 'Value' }
         }));
+
+        // Mock status check (GET)
+        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'test-workout-key' }));
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});

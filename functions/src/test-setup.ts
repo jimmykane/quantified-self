@@ -7,41 +7,17 @@ process.env.FIREBASE_CONFIG = JSON.stringify({
     databaseURL: 'https://test-project.firebaseio.com',
 });
 
-// Use vi.hoisted to create config that's available to mocks
-const mockConfig = vi.hoisted(() => ({
-    suuntoapp: {
-        client_id: 'test-suunto-client-id',
-        client_secret: 'test-suunto-client-secret',
-        subscription_key: 'test-suunto-subscription-key',
-    },
-    corosapi: {
-        client_id: 'test-coros-client-id',
-        client_secret: 'test-coros-client-secret',
-    },
-    garminhealth: {
-        consumer_key: 'test-garmin-consumer-key',
-        consumer_secret: 'test-garmin-consumer-secret',
-    },
-}));
+// Set environment variables for config module
+process.env.SUUNTOAPP_CLIENT_ID = 'test-suunto-client-id';
+process.env.SUUNTOAPP_CLIENT_SECRET = 'test-suunto-client-secret';
+process.env.SUUNTOAPP_SUBSCRIPTION_KEY = 'test-suunto-subscription-key';
+process.env.COROSAPI_CLIENT_ID = 'test-coros-client-id';
+process.env.COROSAPI_CLIENT_SECRET = 'test-coros-client-secret';
+process.env.GARMINHEALTHAPI_CONSUMER_KEY = 'test-garmin-consumer-key';
+process.env.GARMINHEALTHAPI_CONSUMER_SECRET = 'test-garmin-consumer-secret';
 
 // Mock firebase-functions - this will be hoisted
 vi.mock('firebase-functions/v1', () => {
-    const config = () => ({
-        suuntoapp: {
-            client_id: 'test-suunto-client-id',
-            client_secret: 'test-suunto-client-secret',
-            subscription_key: 'test-suunto-subscription-key',
-        },
-        corosapi: {
-            client_id: 'test-coros-client-id',
-            client_secret: 'test-coros-client-secret',
-        },
-        garminhealth: {
-            consumer_key: 'test-garmin-consumer-key',
-            consumer_secret: 'test-garmin-consumer-secret',
-        },
-    });
-
     const regionFn = () => ({
         https: { onRequest: () => { } },
         runWith: () => ({
@@ -56,10 +32,8 @@ vi.mock('firebase-functions/v1', () => {
 
     return {
         default: {
-            config,
             region: regionFn,
         },
-        config,
         region: regionFn,
     };
 });
