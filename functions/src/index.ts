@@ -92,6 +92,7 @@ export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
 
 // Suunto Utils
 export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';
+export { importActivityToSuuntoApp } from './suunto/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
