@@ -139,7 +139,8 @@ describe('importActivityToSuuntoApp', () => {
             url: 'https://storage.suunto.com/upload-url',
             body: fileContent,
             headers: expect.objectContaining({
-                'x-ms-blob-type': 'BlockBlob'
+                'x-ms-blob-type': 'BlockBlob',
+                'Content-Type': 'application/octet-stream'
             })
         }));
 

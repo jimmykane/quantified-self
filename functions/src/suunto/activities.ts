@@ -86,6 +86,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       result = await requestPromise.put({
         headers: {
           'x-ms-blob-type': 'BlockBlob',
+          'Content-Type': 'application/octet-stream',
           // json: true,
         },
         url,
