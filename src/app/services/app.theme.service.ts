@@ -25,9 +25,9 @@ export class AppThemeService implements OnDestroy {
     private userService: AppUserService,
     private authService: AppAuthService,
   ) {
-    this.appTheme.next(this.getAppThemeFromStorage());
-    this.chartTheme.next(this.getChartThemeFromStorage());
-    this.mapTheme.next(this.getMapThemeFromStorage());
+    this.setAppTheme(this.getAppThemeFromStorage());
+    this.setChartTheme(this.getChartThemeFromStorage());
+    this.setMapTheme(this.getMapThemeFromStorage());
     this.userSubscription = this.authService.user$.subscribe(user => {
       this.user = user;
       if (this.user) {
