@@ -94,11 +94,11 @@ export class AppThemeService implements OnDestroy {
   }
 
   private getAppThemeFromStorage(): AppThemes {
-    return localStorage.getItem('appThemes') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appThemes'))] : AppUserService.getDefaultAppTheme();
+    return localStorage.getItem('appTheme') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appTheme'))] : AppUserService.getDefaultAppTheme();
   }
 
   private getMapThemeFromStorage(): MapThemes {
-    return localStorage.getItem('mapThemes') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapThemes'))] : AppUserService.getDefaultMapTheme();
+    return localStorage.getItem('mapTheme') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapTheme'))] : AppUserService.getDefaultMapTheme();
   }
 
   private getChartThemeFromStorage(): ChartThemes {
