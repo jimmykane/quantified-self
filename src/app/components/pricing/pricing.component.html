@@ -9,11 +9,15 @@
       <mat-card-content>
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
-            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }} 
+            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }}
             <span *ngIf="price.recurring">/ {{ price.recurring.interval }}</span>
           </h3>
-          <button mat-flat-button color="primary" (click)="subscribe(price.id)">
+          <button mat-flat-button color="primary" (click)="subscribe(price.id)" [disabled]="isLoading">
+            @if (loadingPriceId === price.id) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
             {{ price.recurring ? 'Subscribe' : 'Buy Now' }}
+            }
           </button>
         </div>
       </mat-card-content>

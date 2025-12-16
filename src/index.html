@@ -15,13 +15,7 @@
       }
     }
   </script>
-  <script>
-    const theme = localStorage.getItem('appTheme');
-    console.log('Quantified Self Theme Check:', theme);
-    if (theme === 'Dark') {
-      document.body.classList.add('dark-theme');
-    }
-  </script>
+
 
   <!-- View Port -->
   <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0" />
@@ -81,6 +75,13 @@
     <!-- Up to here -->
   </app-root>
   <noscript>Please enable JavaScript</noscript>
+  <script>
+    const theme = localStorage.getItem('appTheme');
+    console.log('Quantified Self Theme Check:', theme);
+    if (theme === 'Dark') {
+      document.body.classList.add('dark-theme');
+    }
+  </script>
 </body>
 
 </html>

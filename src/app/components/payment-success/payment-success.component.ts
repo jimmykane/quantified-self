@@ -1,29 +1,38 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterModule } from '@angular/router';
+import { Auth } from '@angular/fire/auth';
 
 @Component({
-    selector: 'app-payment-success',
-    standalone: true,
-    imports: [CommonModule, MatCardModule, MatButtonModule, RouterModule],
-    template: `
+  selector: 'app-payment-success',
+  standalone: true,
+  imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, RouterModule],
+  template: `
     <div class="container">
       <mat-card>
         <mat-card-header>
           <mat-card-title>Payment Successful!</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <p>Thank you for your purchase. Your subscription is now active.</p>
+          @if (isRefreshing) {
+            <p>Activating your subscription...</p>
+            <mat-spinner diameter="40"></mat-spinner>
+          } @else {
+            <p>Thank you for your purchase. Your subscription is now active.</p>
+          }
         </mat-card-content>
         <mat-card-actions>
-          <button mat-raised-button color="primary" routerLink="/dashboard">Go to Dashboard</button>
+          <button mat-raised-button color="primary" routerLink="/dashboard" [disabled]="isRefreshing">
+            Go to Dashboard
+          </button>
         </mat-card-actions>
       </mat-card>
     </div>
   `,
-    styles: [`
+  styles: [`
     .container {
       display: flex;
       justify-content: center;
@@ -38,8 +47,26 @@ import { Router, RouterModule } from '@angular/router';
     mat-card-actions {
         justify-content: center;
     }
+    mat-spinner {
+        margin: 20px auto;
+    }
   `]
 })
-export class PaymentSuccessComponent {
-    constructor() { }
+export class PaymentSuccessComponent implements OnInit {
+  private auth = inject(Auth);
+  isRefreshing = true;
+
+  async ngOnInit(): Promise<void> {
+    // Force refresh the ID token to get updated custom claims (stripeRole)
+    const user = this.auth.currentUser;
+    if (user) {
+      try {
+        await user.getIdToken(true); // Force refresh
+        console.log('Token refreshed with new claims');
+      } catch (error) {
+        console.error('Failed to refresh token:', error);
+      }
+    }
+    this.isRefreshing = false;
+  }
 }
