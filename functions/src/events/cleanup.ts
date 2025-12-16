@@ -2,7 +2,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 
-export const cleanupEventFile = functions.firestore
+export const cleanupEventFile = functions.region('europe-west1').firestore
     .document('users/{userId}/events/{eventId}')
     .onDelete(async (snap: functions.firestore.QueryDocumentSnapshot, context: functions.EventContext) => {
         const deletedData = snap.data();
