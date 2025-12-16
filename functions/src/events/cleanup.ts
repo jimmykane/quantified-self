@@ -11,6 +11,16 @@ export const cleanupEventFile = functions.firestore
 
         console.log(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
 
+        // Delete subcollections (activities, streams, etc.)
+        try {
+            const path = `users/${userId}/events/${eventId}/activities`;
+            console.log(`[Cleanup] Recursively deleting activities at ${path}`);
+            await admin.firestore().recursiveDelete(admin.firestore().collection(path));
+            console.log(`[Cleanup] Successfully deleted activities for event ${eventId}`);
+        } catch (error) {
+            console.error(`[Cleanup] Failed to delete activities for event ${eventId}`, error);
+        }
+
         if (deletedData && deletedData.originalFile && deletedData.originalFile.path) {
             const filePath = deletedData.originalFile.path;
             console.log(`[Cleanup] Found original file at ${filePath}. Deleting...`);

@@ -272,36 +272,8 @@ export class AppEventService implements OnDestroy {
   }
 
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
-    const activityDeletePromises: Promise<boolean>[] = [];
-    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities');
-    const queryDocumentSnapshots = await getDocs(activitiesCollection);
-
-    queryDocumentSnapshots.docs.forEach((queryDocumentSnapshot) => {
-      activityDeletePromises.push(this.deleteAllActivityData(user, eventID, queryDocumentSnapshot.id))
-    });
     await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID));
-
-    await Promise.all(activityDeletePromises);
     return true;
-  }
-
-  public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
-    // @todo add try catch etc
-    await this.deleteAllStreams(user, eventID, activityID);
-    await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID));
-
-    return true;
-  }
-
-  public deleteStream(user: User, eventID, activityID, streamType: string) {
-    return deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType));
-  }
-
-  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
-    const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
-    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
-
-    return numberOfStreamsDeleted
   }
 
   public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
