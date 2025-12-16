@@ -1,45 +1,46 @@
-<mat-card>
-  <app-shade [isActive]="isLoading"></app-shade>
-  <mat-grid-list [cols]="getColumnsToDisplayDependingOnScreenSize()" [rowHeight]="'fit'">
-    <mat-grid-tile>
-      <button mat-raised-button (click)="signInWithProvider(signInProviders.Anonymous)">
-        <mat-icon>visibility</mat-icon>
-        Sign in as guest
-      </button>
-    </mat-grid-tile>
-    <mat-grid-tile>
-      <button mat-raised-button (click)="signInWithProvider(signInProviders.Google)">
-        <mat-icon class="google-icon"
-          svgIcon="google_logo_light"></mat-icon>
-        <span style="font-family: 'QSFont', 'Roboto'">Sign in with Google</span>
-      </button>
-    </mat-grid-tile>
-    <mat-grid-tile>
-      <button mat-raised-button  (click)="signInWithProvider(signInProviders.Facebook)">
-        <mat-icon svgIcon="facebook_logo"></mat-icon>
-        Sign in with Facebook
-      </button>
-    </mat-grid-tile>
-    <mat-grid-tile>
-      <button mat-raised-button (click)="signInWithProvider(signInProviders.Twitter)">
-        <mat-icon svgIcon="twitter_logo"></mat-icon>
-        Sign in with Twitter
-      </button>
-    </mat-grid-tile>
-    <mat-grid-tile>
-      <button mat-raised-button (click)="signInWithProvider(signInProviders.PhoneNumber)">
-        <mat-icon>phonelink</mat-icon>
-        Sign in with SMS
-      </button>
-    </mat-grid-tile>
-    <mat-grid-tile>
-      <button mat-raised-button  (click)="signInWithProvider(signInProviders.GitHub)">
-        <mat-icon svgIcon="github_logo"></mat-icon>
-        Sign in with GitHub
-      </button>
-    </mat-grid-tile>
-    <!--    <mat-grid-tile>-->
-    <!--      <button mat-stroked-button color="primary" (click)="suuntoAppLogin()">Login with Suunto App<br/><span class="mat-small">if you have a Suunto App account</span></button>-->
-    <!--    </mat-grid-tile>-->
-  </mat-grid-list>
-</mat-card>
+<div class="login-container">
+  <mat-card class="login-card">
+    <app-shade [isActive]="isLoading"></app-shade>
+
+    <div class="login-content">
+
+      <!-- Email Link Sign In -->
+      <div class="email-section">
+        <h2 class="title">Sign In</h2>
+        <p class="subtitle">Enter your email to receive a secure sign-in link.</p>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email Address</mat-label>
+          <input matInput [(ngModel)]="email" type="email" placeholder="name@example.com"
+            (keyup.enter)="email ? sendEmailLink(email) : null" required>
+          <mat-icon matSuffix>email</mat-icon>
+          <mat-hint>We'll send you a magic link to sign in instantly.</mat-hint>
+        </mat-form-field>
+
+        <button mat-raised-button color="primary" (click)="sendEmailLink(email)" [disabled]="!email || isLoading"
+          class="action-button">
+          Send Magic Link
+        </button>
+      </div>
+
+      <div class="divider-container">
+        <div class="divider-line"></div>
+        <span class="divider-text">OR</span>
+        <div class="divider-line"></div>
+      </div>
+
+      <!-- Other Providers -->
+      <div class="social-section">
+        <button mat-stroked-button (click)="signInWithProvider(signInProviders.Google)" class="social-button">
+          <mat-icon class="google-icon" svgIcon="google_logo_light"></mat-icon>
+          Sign in with Google
+        </button>
+
+        <button mat-stroked-button (click)="signInWithProvider(signInProviders.PhoneNumber)" class="social-button">
+          <mat-icon>phonelink</mat-icon>
+          Sign in with SMS
+        </button>
+      </div>
+    </div>
+  </mat-card>
+</div>
