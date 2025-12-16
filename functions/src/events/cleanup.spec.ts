@@ -33,6 +33,9 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock } = vi.hoiste
 
 vi.mock('firebase-functions/v1', () => ({
     firestore: firestoreBuilderMock,
+    region: vi.fn().mockImplementation(() => ({
+        firestore: firestoreBuilderMock
+    })),
 }));
 
 vi.mock('firebase-admin', () => ({
