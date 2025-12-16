@@ -16,7 +16,9 @@
     }
   </script>
   <script>
-    if (localStorage.getItem('appTheme') === 'Dark') {
+    const theme = localStorage.getItem('appTheme');
+    console.log('Quantified Self Theme Check:', theme);
+    if (theme === 'Dark') {
       document.body.classList.add('dark-theme');
     }
   </script>
