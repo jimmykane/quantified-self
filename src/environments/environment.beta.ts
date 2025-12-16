@@ -19,7 +19,8 @@ export const environment = {
     storageBucket: 'quantified-self-io',
     messagingSenderId: '242713487388',
     appId: '1:242713487388:web:df287e1940b40a90',
-    measurementId: 'G-6YE27NNKDT'
+    measurementId: 'G-6YE27NNKDT',
+    recaptchaSiteKey: '6LfOOS0sAAAAAOqqukfJOPGUGC-h5REYwGTqPGpM'
   },
   functions: {
     deauthorizeSuuntoApp: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeSuuntoApp',

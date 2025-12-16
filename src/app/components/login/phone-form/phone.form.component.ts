@@ -16,6 +16,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppWindowService } from '../../../services/app.window.service';
 import { Auth, RecaptchaVerifier, signInWithPhoneNumber } from '@angular/fire/auth';
+import { environment } from '../../../../environments/environment';
 
 
 @Component({
@@ -67,14 +68,6 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     // @ts-ignore
     this.windowRef.recaptchaVerifier = new RecaptchaVerifier(this.auth, 'recaptcha-container', {
       'size': 'normal',
-      // 'callback': (response) => {
-      // reCAPTCHA solved, allow signInWithPhoneNumber.
-      // ...
-      // },
-      // 'expired-callback': () => {
-      // Response expired. Ask user to solve reCAPTCHA again.
-      // ...
-      // }
     });
     this.windowRef.recaptchaWidgetId = await this.windowRef.recaptchaVerifier.render();
     this.windowRef.recaptchaVerifier.verify().then(() => {
@@ -96,7 +89,13 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     this.isLoading = true;
     this.changeDetector.detectChanges();
     try {
-      this.windowRef.confirmationResult = await signInWithPhoneNumber(this.auth, this.phoneNumberFormGroup.get('phoneNumber').value, this.windowRef.recaptchaVerifier);
+      const storedPhoneNumber = this.phoneNumberFormGroup.get('phoneNumber').value;
+      const formattedPhoneNumber = storedPhoneNumber.startsWith('+')
+        ? storedPhoneNumber
+        : '+' + storedPhoneNumber;
+      const cleanPhoneNumber = formattedPhoneNumber.replace(/\+{2,}/g, '+');
+
+      this.windowRef.confirmationResult = await signInWithPhoneNumber(this.auth, cleanPhoneNumber, this.windowRef.recaptchaVerifier);
     } catch (e) {
       this.snackBar.open(`Could not verify login number due to ${e.message}`, null, {
         duration: 2000,

@@ -1,22 +1,45 @@
-form {
+.phone-dialog-content {
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  /* Fixed smaller width */
+  padding-top: 8px;
+  /* Reduced top padding */
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Reduced gap */
+}
+
+.dialog-instruction {
+  margin: 0 0 12px 0;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 13px;
+  /* Slightly smaller font */
+}
+
+.full-width {
   width: 100%;
-  padding: 1%;
 }
 
-mat-form-field {
-  width: 100%;
+.recaptcha-container {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+  /* Reduced margin */
+  min-height: 78px;
+  transform: scale(0.9);
+  /* Slightly scale down recaptcha if possible */
+  transform-origin: center;
 }
 
-.radio-container {
-  margin-bottom: 1em;
-}
-
-.mat-radio-button{
-  margin-top: 1em;
-  margin-right: 1em;
-}
-
-button{
-  width: 100%;
-  margin-top: 1em;
+mat-dialog-actions {
+  padding: 8px 16px;
+  /* Reduced padding */
+  margin: 0;
+  min-height: auto;
+  /* Allow height to shrink */
 }
