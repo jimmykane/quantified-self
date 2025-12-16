@@ -99,7 +99,10 @@ describe('importActivityToSuuntoApp', () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST)
-        requestMocks.post.mockResolvedValue(JSON.stringify({ url: 'https://storage.suunto.com/upload-url' }));
+        requestMocks.post.mockResolvedValue(JSON.stringify({
+            url: 'https://storage.suunto.com/upload-url',
+            headers: { 'x-ms-blob-type': 'BlockBlob', 'Custom-Header': 'Value' }
+        }));
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});
@@ -140,8 +143,9 @@ describe('importActivityToSuuntoApp', () => {
             body: fileContent,
             headers: expect.objectContaining({
                 'x-ms-blob-type': 'BlockBlob',
-                'Content-Type': 'application/octet-stream'
-            })
+                'Custom-Header': 'Value'
+            }),
+            json: false
         }));
 
         // 3. Success Response

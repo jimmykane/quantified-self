@@ -83,12 +83,10 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
     const url = result.url;
     try {
       // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
+      // We must use the headers provided by the init-upload response to match the signed URL signature
       result = await requestPromise.put({
-        headers: {
-          'x-ms-blob-type': 'BlockBlob',
-          'Content-Type': 'application/octet-stream',
-          // json: true,
-        },
+        headers: result.headers || {},
+        json: false,
         url,
         body: req.rawBody,
       });
