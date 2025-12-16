@@ -276,6 +276,25 @@ export class AppEventService implements OnDestroy {
     return true;
   }
 
+  public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
+    // @todo add try catch etc
+    await this.deleteAllStreams(user, eventID, activityID);
+    await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID));
+
+    return true;
+  }
+
+  public deleteStream(user: User, eventID, activityID, streamType: string) {
+    return deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType));
+  }
+
+  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
+    const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
+    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
+
+    return numberOfStreamsDeleted
+  }
+
   public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
     const jsonString = await new EventExporterJSON().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
     return (new Blob(
