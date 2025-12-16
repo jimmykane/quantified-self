@@ -26,6 +26,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   isLoading: boolean;
   signInProviders = SignInProviders;
+  email: string = '';
   private userSubscription: Subscription;
   private auth = inject(Auth);
   private analytics = inject(Analytics);
@@ -51,26 +52,25 @@ export class LoginComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.isLoading = true;
 
-    // Handle redirect result from OAuth providers
-    console.log('[Auth Debug] ngOnInit - checking for redirect result...');
-    try {
-      const redirectResult = await this.authService.getRedirectResult();
-      console.log('[Auth Debug] getRedirectResult returned:', redirectResult);
-      if (redirectResult && redirectResult.user) {
-        console.log('[Auth Debug] Redirect result has user, processing...');
-        await this.redirectOrShowDataPrivacyDialog(redirectResult);
-        return;
-      } else {
-        console.log('[Auth Debug] No redirect result or no user in result');
+    // Check for email link sign-in
+    if (this.authService.isSignInWithEmailLink(window.location.href)) {
+      let email = this.authService.localStorageService.getItem('emailForSignIn');
+      if (!email) {
+        // User opened the link on a different device. To prevent session fixation, ask the user to provide the associated email again.
+        email = window.prompt('Please provide your email for confirmation');
       }
-    } catch (e: any) {
-      console.error('[Auth Debug] getRedirectResult error:', e);
-      // Ignore "missing initial state" error - this happens when:
-      // 1. Switching from redirect to popup auth (old pending redirect)
-      // 2. Storage partitioning in cross-origin scenario
-      if (e?.code !== 'auth/missing-initial-state') {
-        console.error('Redirect result error:', e);
-        Sentry.captureException(e);
+
+      if (email) {
+        this.isLoading = true;
+        this.authService.signInWithEmailLink(email, window.location.href)
+          .then((result) => {
+            this.redirectOrShowDataPrivacyDialog(result);
+          })
+          .catch((error) => {
+            this.isLoading = false;
+            console.error('Error signing in with email link', error);
+            this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
+          });
       }
     }
 
@@ -97,6 +97,19 @@ export class LoginComponent implements OnInit, OnDestroy {
   }
 
 
+  async sendEmailLink(email: string) {
+    if (!email) {
+      this.snackBar.open('Please enter a valid email address.', 'Close', { duration: 3000 });
+      return;
+    }
+    this.isLoading = true;
+    const success = await this.authService.sendEmailLink(email);
+    this.isLoading = false;
+    if (success) {
+      this.snackBar.open('Magic link sent! Check your inbox.', 'Close', { duration: 5000 });
+    }
+  }
+
   signInWithProvider(provider: SignInProviders) {
     this.isLoading = true;
 
@@ -118,29 +131,9 @@ export class LoginComponent implements OnInit, OnDestroy {
     };
 
     switch (provider) {
-      case SignInProviders.Anonymous:
-        this.authService.anonymousLogin()
-          .then(handleResult)
-          .catch(handleError);
-        break;
       case SignInProviders.Google:
         // Call synchronously (no await before popup) to avoid Safari blocking
         this.authService.googleLogin()
-          .then(handleResult)
-          .catch(handleError);
-        break;
-      case SignInProviders.Facebook:
-        this.authService.facebookLogin()
-          .then(handleResult)
-          .catch(handleError);
-        break;
-      case SignInProviders.Twitter:
-        this.authService.twitterLogin()
-          .then(handleResult)
-          .catch(handleError);
-        break;
-      case SignInProviders.GitHub:
-        this.authService.githubLogin()
           .then(handleResult)
           .catch(handleError);
         break;
@@ -215,11 +208,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
 
 export enum SignInProviders {
-  Anonymous,
   Google,
-  Facebook,
-  Twitter,
-  SuuntoApp,
-  GitHub,
   PhoneNumber,
+  Email
 }
