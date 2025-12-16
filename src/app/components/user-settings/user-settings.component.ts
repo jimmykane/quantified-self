@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppPaymentService } from '../../services/app.payment.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
@@ -44,6 +45,7 @@ export class UserSettingsComponent implements OnChanges {
   @Input() user: User;
   public isSaving: boolean;
   public errorSaving;
+  public isManagingSubscription = false;
   public xAxisTypes = XAxisTypes;
 
 
@@ -76,6 +78,7 @@ export class UserSettingsComponent implements OnChanges {
 
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
   private analytics = inject(Analytics);
+  private paymentService = inject(AppPaymentService);
 
 
   constructor(private authService: AppAuthService,
@@ -84,6 +87,21 @@ export class UserSettingsComponent implements OnChanges {
     private router: Router,
     private snackBar: MatSnackBar,
     private dialog: MatDialog) {
+  }
+
+  async manageSubscription(): Promise<void> {
+    this.isManagingSubscription = true;
+    try {
+      await this.paymentService.manageSubscriptions();
+    } catch (error) {
+      console.error('Error opening customer portal:', error);
+      this.snackBar.open('Could not open subscription management. Please try again.', null, {
+        duration: 3000,
+      });
+      Sentry.captureException(error);
+    } finally {
+      this.isManagingSubscription = false;
+    }
   }
 
   ngOnChanges(): void {

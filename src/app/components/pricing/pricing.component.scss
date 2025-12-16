@@ -1,0 +1,36 @@
+.pricing-container {
+  padding: 40px;
+  text-align: center;
+
+  h1 {
+    margin-bottom: 40px;
+    font-size: 2.5rem;
+  }
+
+  .products-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+  }
+
+  .product-card {
+    width: 300px;
+    text-align: left;
+    
+    mat-card-header {
+      margin-bottom: 20px;
+    }
+
+    .price-section {
+      margin-top: 20px;
+      text-align: center;
+
+      .price {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+    }
+  }
+}

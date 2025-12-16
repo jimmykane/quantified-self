@@ -520,6 +520,18 @@ export class AppUserService implements OnDestroy {
     })));
   }
 
+  public async getSubscriptionRole(): Promise<string | null> {
+    const user = this.auth.currentUser;
+    if (!user) return null;
+    const tokenResult = await user.getIdTokenResult(true);
+    return (tokenResult.claims['stripeRole'] as string) || null;
+  }
+
+  public async isPremium(): Promise<boolean> {
+    const role = await this.getSubscriptionRole();
+    return role === 'premium'; // Adjust based on your role config
+  }
+
   public async deleteAllUserData(user: User) {
     const serviceTokens = [
       { [ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise() },

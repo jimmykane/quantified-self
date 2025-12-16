@@ -442,6 +442,35 @@
         </mat-card>
 
       </mat-tab>
+
+      <mat-tab label="Subscription Settings">
+        <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
+        <ng-template matTabLabel>
+          <mat-icon matTooltip="Subscription settings">credit_card</mat-icon>
+        </ng-template>
+
+        <mat-card class="mat-elevation-z0">
+
+          <mat-card-header>
+            <mat-card-subtitle>
+              Subscription
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+
+          <mat-card-content>
+            <p>Manage your subscription, update payment methods, or cancel your plan via the Stripe Customer Portal.</p>
+            <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isManagingSubscription">
+              @if (isManagingSubscription) {
+                <mat-spinner diameter="20"></mat-spinner>
+              } @else {
+                Manage Subscription
+              }
+            </button>
+          </mat-card-content>
+        </mat-card>
+
+      </mat-tab>
     </mat-tab-group>
 
     @if (!hasError()) {

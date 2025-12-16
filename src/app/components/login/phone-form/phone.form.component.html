@@ -1,52 +1,70 @@
-<h2 mat-dialog-title>Sign In with Phone</h2>
-<mat-dialog-content class="phone-dialog-content">
-  <app-shade [isActive]="isLoading"></app-shade>
-
-  <!-- Step 1: Phone Number Entry -->
-  <form [formGroup]="phoneNumberFormGroup" [hidden]="windowRef.confirmationResult" (submit)="sendLoginCode($event)"
-    class="dialog-form">
-    <p class="dialog-instruction">Please enter your phone number with country code (e.g., +1 for USA).</p>
-
-    <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Phone Number</mat-label>
-      <input matInput placeholder="+1 555-555-5555" type="tel" formControlName="phoneNumber">
-      <mat-icon matSuffix>phone</mat-icon>
-      @if (hasError(phoneNumberFormGroup, 'phoneNumber')) {
-      <mat-error>Invalid phone number</mat-error>
-      }
-    </mat-form-field>
-
-    <div id="recaptcha-container" class="recaptcha-container"></div>
-  </form>
-
-  <!-- Step 2: Verification Code Entry -->
-  <form [formGroup]="verificationCodeFormGroup" [hidden]="!windowRef.confirmationResult"
-    (submit)="verifyLoginCode($event)" class="dialog-form">
-    <p class="dialog-instruction">Enter the 6-digit code sent to your phone.</p>
-
-    <mat-form-field appearance="outline" class="full-width">
-      <mat-label>Verification Code</mat-label>
-      <input matInput placeholder="123456" type="text" formControlName="verificationCode" autocomplete="one-time-code">
-      <mat-icon matSuffix>lock</mat-icon>
-      @if (hasError(verificationCodeFormGroup, 'verificationCode')) {
-      <mat-error>Invalid code</mat-error>
-      }
-    </mat-form-field>
-  </form>
-</mat-dialog-content>
-
-<mat-dialog-actions align="end">
-  <button mat-button (click)="close($event)">Cancel</button>
-
-  @if (!windowRef.confirmationResult) {
-  <button mat-flat-button color="primary" (click)="sendLoginCode($event)"
-    [disabled]="!phoneNumberFormGroup.valid || isLoading">
-    Send Code
-  </button>
-  } @else {
-  <button mat-flat-button color="primary" (click)="verifyLoginCode($event)"
-    [disabled]="!verificationCodeFormGroup.valid || isLoading">
-    Verify
-  </button>
+<div class="phone-auth-container">
+  @if (isLoading) {
+  <mat-progress-bar mode="indeterminate" class="auth-progress"></mat-progress-bar>
   }
-</mat-dialog-actions>
+
+  <h2 mat-dialog-title>
+    {{ !windowRef.confirmationResult ? 'Sign in with Phone' : 'Verify Code' }}
+  </h2>
+
+  <mat-dialog-content>
+    <!-- Step 1: Phone Number -->
+    @if (!windowRef.confirmationResult) {
+    <form [formGroup]="phoneNumberFormGroup" (submit)="sendLoginCode($event)" class="auth-form">
+      <p class="instruction-text">
+        Enter your phone number to receive a verification code.
+      </p>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Phone Number</mat-label>
+        <span matTextPrefix class="prefix-margin">+ &nbsp;</span>
+        <input matInput placeholder="Example: 1 555 555 5555" type="tel" formControlName="phoneNumber"
+          (keyup.enter)="sendLoginCode($event)">
+        <mat-icon matSuffix class="field-icon">phone_iphone</mat-icon>
+        @if (phoneNumberFormGroup.get('phoneNumber').hasError('required')) {
+        <mat-error>Phone number is required</mat-error>
+        }
+      </mat-form-field>
+
+      <div class="recaptcha-wrapper">
+        <div id="recaptcha-container"></div>
+      </div>
+    </form>
+    }
+
+    <!-- Step 2: Verification Code -->
+    @if (windowRef.confirmationResult) {
+    <form [formGroup]="verificationCodeFormGroup" (submit)="verifyLoginCode($event)" class="auth-form">
+      <p class="instruction-text">
+        Enter the 6-digit code sent to <strong>{{ phoneNumberFormGroup.get('phoneNumber').value }}</strong>
+      </p>
+
+      <mat-form-field appearance="outline" class="full-width code-input">
+        <mat-label>Verification Code</mat-label>
+        <input matInput placeholder="123456" type="text" formControlName="verificationCode" autocomplete="one-time-code"
+          maxlength="6" (keyup.enter)="verifyLoginCode($event)">
+        <mat-icon matSuffix class="field-icon">lock</mat-icon>
+        @if (verificationCodeFormGroup.get('verificationCode').hasError('required')) {
+        <mat-error>Code is required</mat-error>
+        }
+      </mat-form-field>
+    </form>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="close($event)" [disabled]="isLoading">Cancel</button>
+
+    @if (!windowRef.confirmationResult) {
+    <button mat-flat-button color="primary" (click)="sendLoginCode($event)"
+      [disabled]="phoneNumberFormGroup.invalid || isLoading">
+      Send Code
+    </button>
+    } @else {
+    <button mat-flat-button color="primary" (click)="verifyLoginCode($event)"
+      [disabled]="verificationCodeFormGroup.invalid || isLoading">
+      Verify
+    </button>
+    }
+  </mat-dialog-actions>
+</div>

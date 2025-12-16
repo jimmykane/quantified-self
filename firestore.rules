@@ -8,15 +8,34 @@ service cloud.firestore {
      function isCoach() {
        return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
       }
+      
+      function isPremium() {
+        // Stripe extension adds 'stripeRole' claim. Adjust 'premium' to your specific role name.
+        return request.auth.token.stripeRole == 'premium';
+      }
 
       allow read: if resource.data.privacy == 'public';
       allow read: if isCoach() == true;
       allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
+      
+      // Stripe Extension Collections
+      match /checkout_sessions/{id} {
+        allow read, write: if request.auth.uid == userID;
+      }
+      match /subscriptions/{id} {
+        allow read: if request.auth.uid == userID;
+      }
+      match /payments/{id} {
+        allow read: if request.auth.uid == userID;
+      }
 
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
           allow read: if isCoach() == true;
+          // RESTRICTED ACCESS: Must be owner AND Premium (Example of Paywall)
+          // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
+          // allow read, write: if request.auth.uid == userID && isPremium();
           allow read, write: if request.auth.uid == userID;
           function eventData() {
             return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
@@ -42,6 +61,28 @@ service cloud.firestore {
         match /meta/{document=**} {
           allow read: if request.auth.uid == userID;
         }
+    }
+
+    match /customers/{userID} {
+      match /checkout_sessions/{id} {
+        allow read, write: if request.auth.uid == userID;
+      }
+      match /subscriptions/{id} {
+        allow read: if request.auth.uid == userID;
+      }
+      match /payments/{id} {
+        allow read: if request.auth.uid == userID;
+      }
+    }
+    
+    match /products/{id} {
+      allow read: if true;
+      match /prices/{id} {
+        allow read: if true;
+      }
+      match /tax_rates/{id} {
+        allow read: if true;
+      }
     }
 
 

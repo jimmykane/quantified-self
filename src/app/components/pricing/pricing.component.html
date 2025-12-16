@@ -1,0 +1,25 @@
+<div class="pricing-container">
+  <h1>Choose Your Plan</h1>
+  <div class="products-grid" *ngIf="products$ | async as products; else loading">
+    <mat-card *ngFor="let product of products" class="product-card">
+      <mat-card-header>
+        <mat-card-title>{{ product.name }}</mat-card-title>
+        <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngFor="let price of product.prices" class="price-section">
+          <h3 class="price">
+            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }} 
+            <span *ngIf="price.recurring">/ {{ price.recurring.interval }}</span>
+          </h3>
+          <button mat-flat-button color="primary" (click)="subscribe(price.id)">
+            {{ price.recurring ? 'Subscribe' : 'Buy Now' }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+  <ng-template #loading>
+    <p>Loading plans...</p>
+  </ng-template>
+</div>

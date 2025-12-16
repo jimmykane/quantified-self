@@ -89,3 +89,25 @@ mat-progress-bar {
   z-index: 10001;
   /* Highest priority */
 }
+
+/* Dark Theme Overrides */
+:host-context(.dark-theme) {
+  nav[mat-tab-nav-bar] {
+    background-color: #424242;
+    /* Standard Material Dark Surface */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .mat-tab-link mat-icon {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .mat-tab-link:hover mat-icon {
+    color: #ffffff;
+  }
+
+  mat-sidenav {
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
+}
