@@ -55,7 +55,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       return;
     }
 
-    // First init the upload
+    // Initialize the upload
     let result: any;
     try {
       result = await requestPromise.post({
@@ -74,66 +74,15 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       });
       result = JSON.parse(result);
     } catch (e: any) {
-      console.error(`Could init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      console.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.name);
       return;
     }
 
-    let url = result.url;
+    const url = result.url;
     try {
-      result = await requestPromise.put({
-        headers: {
-          'x-ms-blob-type': 'BlockBlob',
-          // json: true,
-        },
-        url,
-        formData: {
-          file: req.rawBody,
-        },
-      });
-    } catch (e: any) {
-      console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
-      res.status(500);
-      res.send(e.message);
-      return;
-    }
-
-    if (result.error) {
-      console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
-      res.status(500);
-      res.send(result.error);
-      return;
-    }
-
-    // 2nd attempt due to some reasons some fit files are not parsed and need raw body
-
-    // First init the upload again
-    try {
-      result = await requestPromise.post({
-        headers: {
-          'Authorization': serviceToken.accessToken,
-          'Content-Type': 'application/json',
-          'Ocp-Apim-Subscription-Key': functions.config().suuntoapp.subscription_key,
-          'json': true,
-        },
-        body: JSON.stringify({
-          // description: "#qs",
-          // comment: "",
-          notifyUser: true,
-        }),
-        url: 'https://cloudapi.suunto.com/v2/upload/',
-      });
-      result = JSON.parse(result);
-    } catch (e: any) {
-      console.error(`Could init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
-      res.status(500);
-      res.send(e.name);
-      return;
-    }
-
-    url = result.url;
-    try {
+      // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
       result = await requestPromise.put({
         headers: {
           'x-ms-blob-type': 'BlockBlob',
@@ -143,14 +92,14 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
         body: req.rawBody,
       });
     } catch (e: any) {
-      console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      console.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.message);
       return;
     }
 
-    if (result.error) {
-      console.error(`Could upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
+    if (result && result.error) {
+      console.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
       res.status(500);
       res.send(result.error);
       return;
