@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { getApp } from '@angular/fire/app';
+import { MatDialog } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
 import { Firestore, collection, collectionData, addDoc, doc, docData, query, where, orderBy } from '@angular/fire/firestore';
-import { Functions, httpsCallable, getFunctions } from '@angular/fire/functions';
+import { Functions, httpsCallable } from '@angular/fire/functions';
 import { Auth } from '@angular/fire/auth';
 import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
 import { AppWindowService } from './app.window.service';
@@ -45,6 +46,7 @@ export class AppPaymentService {
     private firestore = inject(Firestore);
     private functions = inject(Functions);
     private auth = inject(Auth);
+    private dialog = inject(MatDialog);
 
     constructor(private windowService: AppWindowService) { }
 
@@ -93,12 +95,36 @@ export class AppPaymentService {
             const activeSubs = await snapshot.toPromise();
 
             if (activeSubs && activeSubs.length > 0) {
-                console.warn('User already has an active subscription. Redirecting to portal.');
-                const confirmManage = confirm('You already have an active subscription. Would you like to manage it instead?');
-                if (confirmManage) {
+                console.warn('User already has an active subscription. Opening management dialog.');
+
+                const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+                    data: {
+                        title: 'Active Subscription',
+                        message: 'You already have an active subscription. Would you like to manage it instead?',
+                        confirmText: 'Manage Subscription',
+                        cancelText: 'Cancel'
+                    }
+                });
+
+                // Convert Observable to Promise
+                // We use firstValueFrom roughly equivalent to toPromise here, or simple subscription logic wrapped in Promise
+                // Since this file uses 'rxjs', let's stick to simple promise wrapper or import firstValueFrom if available (it wasn't imported before but 'take' was).
+                // Let's use a simple promise wrapper to avoid adding imports if possible, or just add firstValueFrom to imports.
+                // Actually, I can just await a custom promise helper or standard rxjs way.
+                // Let's assume toPromise or firstValueFrom. I'll check imports. 
+                // The file has: import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
+                // I should add firstValueFrom to imports in a separate edit or use a one-off promise wrapper inline.
+                // Inline wrapper to be safe and avoid multi-step import fix if strict.
+
+                const confirmed = await new Promise<boolean>(resolve => {
+                    dialogRef.afterClosed().pipe(take(1)).subscribe(result => resolve(!!result));
+                });
+
+                if (confirmed) {
                     await this.manageSubscriptions();
-                    return;
+                    return; // Successfully handed off to manage portal
                 } else {
+                    // Explicitly throw a known error for cancellation so UI can stop loading
                     throw new Error('User cancelled redirection to portal.');
                 }
             }
@@ -178,11 +204,9 @@ export class AppPaymentService {
     async manageSubscriptions(): Promise<void> {
         const returnUrl = `${this.windowService.currentDomain}/settings`;
 
-        const app = getApp();
-        const functionsInstance = getFunctions(app, environment.stripeExtensionRegion);
         const createPortalLink = httpsCallable<{ returnUrl: string }, { url: string }>(
-            functionsInstance,
-            'ext-firestore-stripe-payments-createPortalLink'
+            this.functions,
+            environment.functions.createPortalLink
         );
 
         try {
@@ -190,6 +214,28 @@ export class AppPaymentService {
             window.location.assign(result.data.url);
         } catch (error) {
             console.error('Error creating portal link:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Restores purchases by force-refreshing the user's claims.
+     */
+    async restorePurchases(): Promise<void> {
+        const restoreUserClaims = httpsCallable<void, { success: boolean, role: string }>(
+            this.functions,
+            environment.functions.restoreUserClaims
+        );
+
+        try {
+            await restoreUserClaims();
+            // Force token refresh to pick up new claims
+            const user = this.auth.currentUser;
+            if (user) {
+                await user.getIdToken(true);
+            }
+        } catch (error) {
+            console.error('Error restoring purchases:', error);
             throw error;
         }
     }

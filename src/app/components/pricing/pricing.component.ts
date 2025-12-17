@@ -40,8 +40,13 @@ export class PricingComponent implements OnInit {
         try {
             await this.paymentService.appendCheckoutSession(priceId);
         } catch (error) {
-            console.error('Error starting checkout:', error);
-            alert('Failed to start checkout. Please try again.');
+            if (error.message === 'User cancelled redirection to portal.') {
+                // User cancelled the dialog, just stop loading
+                console.log('User cancelled subscription management.');
+            } else {
+                console.error('Error starting checkout:', error);
+                alert('Failed to start checkout. Please try again.');
+            }
             this.isLoading = false;
             this.loadingPriceId = null;
         }
@@ -54,6 +59,22 @@ export class PricingComponent implements OnInit {
         } catch (error) {
             console.error('Error managing subscription:', error);
             alert('Failed to redirect to subscription management. Please try again.');
+            this.isLoading = false;
+        }
+    }
+
+    // New property for template
+    activeSubscriptions$ = this.paymentService.getUserSubscriptions();
+
+    async restorePurchases() {
+        this.isLoading = true;
+        try {
+            await this.paymentService.restorePurchases();
+            // Reload window to reflect new state
+            window.location.reload();
+        } catch (error) {
+            console.error('Error restoring purchases:', error);
+            alert('Failed to restore purchases. Please contact support.');
             this.isLoading = false;
         }
     }

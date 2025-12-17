@@ -24,6 +24,8 @@ export const environment = {
     recaptchaSiteKey: '6LfOOS0sAAAAAOqqukfJOPGUGC-h5REYwGTqPGpM'
   },
   functions: {
+    createPortalLink: 'https://europe-west3-quantified-self-io.cloudfunctions.net/ext-firestore-stripe-payments-createPortalLink',
+    restoreUserClaims: 'http://localhost:5000/quantified-self-io/europe-west2/restoreUserClaims',
     deauthorizeSuuntoApp: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
     uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRouteToSuuntoApp',
     uploadActivity: 'http://localhost:5000/quantified-self-io/europe-west2/importActivityToSuuntoApp',

@@ -1,6 +1,19 @@
 <div class="pricing-container">
   <h1>{{ isPremium ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
 
+  <div *ngIf="!isPremium && (activeSubscriptions$ | async) as subs" class="restore-section">
+    <div *ngIf="subs.length > 0" class="restore-alert">
+      <p>We found an active subscription, but your account hasn't been updated yet.</p>
+      <button mat-stroked-button color="accent" (click)="restorePurchases()" [disabled]="isLoading">
+        @if (isLoading) {
+        <mat-spinner diameter="20"></mat-spinner>
+        } @else {
+        Restore Access
+        }
+      </button>
+    </div>
+  </div>
+
   @if (isPremium) {
   <div class="manage-subscription-container">
     <mat-card class="product-card">

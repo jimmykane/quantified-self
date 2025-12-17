@@ -96,6 +96,7 @@ export { importActivityToSuuntoApp } from './suunto/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
+export { restoreUserClaims } from './stripe/claims';
 export { disconnectExpiredServices } from './schedule/cleanup';
 
 // Missing / Deleted Functions (Not Exported)
