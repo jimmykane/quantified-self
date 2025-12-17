@@ -111,3 +111,30 @@ mat-progress-bar {
     border-right: 1px solid rgba(255, 255, 255, 0.12);
   }
 }
+
+/* Initial App Loading */
+.app-loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  width: 100vw;
+  background-color: #fafafa;
+  z-index: 9999;
+
+  p {
+    margin-top: 16px;
+    font-family: 'Inter', sans-serif;
+    color: #5f6368;
+    font-weight: 500;
+  }
+}
+
+:host-context(.dark-theme) .app-loading-container {
+  background-color: #303030;
+
+  p {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}

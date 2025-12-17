@@ -1,59 +1,68 @@
-<ng-container *ngIf="!showOnboarding; else onboardingTemplate">
-  @if (loading) {
-  <mat-progress-bar color="primary" mode="query">
-  </mat-progress-bar>
-  }
-  <nav mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar">
-    <a matTabLink (click)="sidenav.toggle()">
-      <mat-icon class="larger_icon">menu</mat-icon>
-    </a>
-
-    <span class="fill-space"></span>
-
-    @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
-    <button mat-flat-button class="right" color="accent" disabled>
-      Loading
-    </button>
+<ng-container *ngIf="authState !== null; else loadingApp">
+  <ng-container *ngIf="!showOnboarding; else onboardingTemplate">
+    @if (loading) {
+    <mat-progress-bar color="primary" mode="query">
+    </mat-progress-bar>
     }
-    @if (authState === true && title && title !== 'Dashboard') {
-    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
-      My dashboard
-    </button>
-    }
-    @if (authState === false && title && title !== 'Login') {
-    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
-      Login or Register
-    </button>
-    }
+    <nav mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar">
+      <a matTabLink (click)="sidenav.toggle()">
+        <mat-icon class="larger_icon">menu</mat-icon>
+      </a>
 
-    @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
-    <app-upload-activities class="right" [user]="user">
-    </app-upload-activities>
-    }
+      <span class="fill-space"></span>
 
-  </nav>
+      @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
+      <button mat-flat-button class="right" color="accent" disabled>
+        Loading
+      </button>
+      }
+      @if (authState === true && title && title !== 'Dashboard') {
+      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
+        My dashboard
+      </button>
+      }
+      @if (authState === false && title && title !== 'Login') {
+      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
+        Login or Register
+      </button>
+      }
 
-  <mat-sidenav-container class="mat-typography">
+      @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+      <app-upload-activities class="right" [user]="user">
+      </app-upload-activities>
+      }
 
-    <mat-sidenav [fixedInViewport]="true" #sidenav mode="slide" [autoFocus]="false">
-      <app-sidenav></app-sidenav>
-    </mat-sidenav>
+    </nav>
+
+    <mat-sidenav-container class="mat-typography">
+
+      <mat-sidenav [fixedInViewport]="true" #sidenav mode="slide" [autoFocus]="false">
+        <app-sidenav></app-sidenav>
+      </mat-sidenav>
 
 
-    <!--<mat-card>-->
-    <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
-    <!--</mat-card>-->
-    <!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
-    <!--        && routerOutlet.activatedRouteData['animation']">-->
-    <mat-tab-nav-panel #tabPanel>
-      <router-outlet #routerOutlet="outlet"></router-outlet>
-    </mat-tab-nav-panel>
-    <!--  </div>-->
+      <!--<mat-card>-->
+      <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
+      <!--</mat-card>-->
+      <!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
+      <!--        && routerOutlet.activatedRouteData['animation']">-->
+      <mat-tab-nav-panel #tabPanel>
+        <router-outlet #routerOutlet="outlet"></router-outlet>
+      </mat-tab-nav-panel>
+      <!--  </div>-->
 
-  </mat-sidenav-container>
+    </mat-sidenav-container>
 
+  </ng-container>
 </ng-container>
 
 <ng-template #onboardingTemplate>
-  <app-onboarding [user]="authService.user$ | async"></app-onboarding>
+  <app-onboarding [user]="currentUser"></app-onboarding>
+</ng-template>
+
+<ng-template #loadingApp>
+  <div class="app-loading-container">
+    <mat-spinner diameter="50"></mat-spinner>
+    <p>Loading application...</p>
+  </div>
 </ng-template>
