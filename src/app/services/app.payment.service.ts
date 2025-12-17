@@ -3,7 +3,11 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
 import { Firestore, collection, collectionData, addDoc, doc, docData, query, where, orderBy } from '@angular/fire/firestore';
-import { Functions, httpsCallable } from '@angular/fire/functions';
+import { Functions, httpsCallable, httpsCallableFromURL } from '@angular/fire/functions';
+
+// ... (other imports)
+
+
 import { Auth } from '@angular/fire/auth';
 import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
 import { AppWindowService } from './app.window.service';
@@ -204,7 +208,7 @@ export class AppPaymentService {
     async manageSubscriptions(): Promise<void> {
         const returnUrl = `${this.windowService.currentDomain}/settings`;
 
-        const createPortalLink = httpsCallable<{ returnUrl: string }, { url: string }>(
+        const createPortalLink = httpsCallableFromURL<{ returnUrl: string }, { url: string }>(
             this.functions,
             environment.functions.createPortalLink
         );
@@ -222,7 +226,7 @@ export class AppPaymentService {
      * Restores purchases by force-refreshing the user's claims.
      */
     async restorePurchases(): Promise<void> {
-        const restoreUserClaims = httpsCallable<void, { success: boolean, role: string }>(
+        const restoreUserClaims = httpsCallableFromURL<void, { success: boolean, role: string }>(
             this.functions,
             environment.functions.restoreUserClaims
         );

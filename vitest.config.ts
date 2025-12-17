@@ -7,6 +7,11 @@ export default defineConfig({
         tsconfig: './src/tsconfig.spec.json',
     })],
     test: {
+        server: {
+            deps: {
+                inline: ['rxfire', '@angular/fire', 'firebase']
+            }
+        },
         globals: true,
         environment: 'jsdom',
         setupFiles: ['src/test-setup.ts'],

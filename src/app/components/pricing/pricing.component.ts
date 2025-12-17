@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { AppPaymentService, StripeProduct } from '../../services/app.payment.service';
+import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Observable } from 'rxjs';
 
@@ -28,6 +28,7 @@ export class PricingComponent implements OnInit {
     async ngOnInit(): Promise<void> {
         this.products$ = this.paymentService.getProducts();
         this.isPremium = await this.userService.isPremium();
+        this.activeSubscriptions$ = this.paymentService.getUserSubscriptions();
     }
 
     async subscribe(priceId: string) {
@@ -64,7 +65,7 @@ export class PricingComponent implements OnInit {
     }
 
     // New property for template
-    activeSubscriptions$ = this.paymentService.getUserSubscriptions();
+    activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
 
     async restorePurchases() {
         this.isLoading = true;

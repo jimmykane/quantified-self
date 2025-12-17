@@ -1,4 +1,23 @@
 {
-    "indexes": [],
+    "indexes": [
+        {
+            "collectionGroup": "subscriptions",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "status",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "created",
+                    "order": "DESCENDING"
+                },
+                {
+                    "fieldPath": "__name__",
+                    "order": "DESCENDING"
+                }
+            ]
+        }
+    ],
     "fieldOverrides": []
 }

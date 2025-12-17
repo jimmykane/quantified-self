@@ -16,7 +16,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
   console.log('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    console.error(`Not allowed. Origin: ${req.get('origin')}, Method: ${req.method}`);
     res.status(403);
     res.send('Unauthorized');
     return;

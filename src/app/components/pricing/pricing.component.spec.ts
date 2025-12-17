@@ -1,11 +1,21 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
+import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService } from '../../services/app.payment.service';
 import { of } from 'rxjs';
 
 class MockAppPaymentService {
     getProducts() {
         return of([]);
+    }
+    getUserSubscriptions() {
+        return of([]);
+    }
+}
+
+class MockAppUserService {
+    isPremium() {
+        return Promise.resolve(false);
     }
 }
 
@@ -17,7 +27,8 @@ describe('PricingComponent', () => {
         await TestBed.configureTestingModule({
             imports: [PricingComponent],
             providers: [
-                { provide: AppPaymentService, useClass: MockAppPaymentService }
+                { provide: AppPaymentService, useClass: MockAppPaymentService },
+                { provide: AppUserService, useClass: MockAppUserService }
             ]
         }).compileComponents();
 
