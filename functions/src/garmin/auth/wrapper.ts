@@ -194,11 +194,21 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
     return;
   }
 
+  try {
+    await deauthorizeGarminHealthAPIForUser(userID);
+  } catch (e) {
+    res.status(500).send('Bad request or internal error');
+    return;
+  }
+
+  res.status(200).send();
+});
+
+export async function deauthorizeGarminHealthAPIForUser(userID: string) {
   const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
-    res.status(500).send('Bad request');
     console.error('No token found');
-    return;
+    throw new Error('No token found');
   }
 
   const oAuth = GarminHealthAPIAuth();
@@ -218,13 +228,11 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
     // Only if there is an api error in terms
     if (e.statusCode === 500) {
       console.error(e);
-      res.status(500).send();
-      return;
+      throw e;
     }
   }
   await admin.firestore().collection('garminHealthAPITokens').doc(userID).delete();
-  res.status(200).send();
-});
+}
 
 
 export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').https.onRequest(async (req, res) => {

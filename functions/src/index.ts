@@ -96,8 +96,8 @@ export { importActivityToSuuntoApp } from './suunto/activities';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
+export { disconnectExpiredServices } from './schedule/cleanup';
 
 // Missing / Deleted Functions (Not Exported)
 // - addCookieAndRedirect
 // - getSuuntoAPIAuthCode
-
