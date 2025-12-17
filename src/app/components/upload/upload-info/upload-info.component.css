@@ -16,4 +16,28 @@ mat-card-title {
   /* font-size: 1.2em !important; */
 }
 
+.upload-info-container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upload-info-title {
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--mat-sys-on-surface);
+}
+
+.upload-info-progress {
+  width: 100%;
+}
+
 /* Removed ::ng-deep .mat-card-header-text override */

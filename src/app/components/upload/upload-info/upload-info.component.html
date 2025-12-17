@@ -1,20 +1,21 @@
-<mat-card class="mat-elevation-z0">
+<div class="upload-info-container">
   @if (getFilesBeingProcessed()[0]) {
-    <mat-list>
-      <mat-list-item>
-        <mat-icon mat-list-icon>insert_drive_file</mat-icon>
-        <div mat-line>{{ getFilesBeingProcessed()[0]?.filename }}.{{ getFilesBeingProcessed()[0]?.extension }}</div>
-      </mat-list-item>
-    </mat-list>
+  <mat-list>
+    <mat-list-item>
+      <mat-icon mat-list-icon>insert_drive_file</mat-icon>
+      <div mat-line>{{ getFilesBeingProcessed()[0]?.filename }}.{{ getFilesBeingProcessed()[0]?.extension }}</div>
+    </mat-list-item>
+  </mat-list>
   }
-  <mat-card-header>
-    <mat-card-title>
-      Processing <b>{{ getProcessedFiles().length + 1 }}</b> of <b>{{ files.length }}</b> files with <b>{{ getFailedActivities().length }}</b>
+  <div class="upload-info-content">
+    <div class="upload-info-title">
+      Processing <b>{{ getProcessedFiles().length + 1 }}</b> of <b>{{ files.length }}</b> files with <b>{{
+        getFailedActivities().length }}</b>
       errors
       so far
-    </mat-card-title>
-    <mat-card-subtitle>
+    </div>
+    <div class="upload-info-progress">
       <mat-progress-bar mode="buffer" [value]="getOverallProgress()"></mat-progress-bar>
-    </mat-card-subtitle>
-  </mat-card-header>
-</mat-card>
+    </div>
+  </div>
+</div>

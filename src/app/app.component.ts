@@ -42,7 +42,11 @@ declare function require(moduleName: string): any;
 })
 
 export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
-  @ViewChild('sidenav', { static: true }) sideNav: MatSidenav;
+  @ViewChild('sidenav') set sidenav(sidenav: MatSidenav) {
+    if (sidenav) {
+      this.sideNavService.setSidenav(sidenav);
+    }
+  }
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
@@ -70,7 +74,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.currentUser = user;
       this.updateOnboardingState();
     });
-    this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
