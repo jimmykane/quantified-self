@@ -1,4 +1,6 @@
-import { Component, Input, ViewChild, inject, OnInit } from '@angular/core';
+import { Component, Input, ViewChild, inject, OnInit, AfterViewInit, OnChanges, SimpleChanges } from '@angular/core';
+import { Auth } from '@angular/fire/auth';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,6 +13,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { PricingComponent } from '../pricing/pricing.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
+import { MatDividerModule } from '@angular/material/divider';
 
 @Component({
     selector: 'app-onboarding',
@@ -25,12 +28,13 @@ import { MatCardModule } from '@angular/material/card';
         MatCheckboxModule,
         PricingComponent,
         MatIconModule,
-        MatCardModule
+        MatCardModule,
+        MatDividerModule
     ],
     templateUrl: './onboarding.component.html',
     styleUrls: ['./onboarding.component.scss']
 })
-export class OnboardingComponent implements OnInit {
+export class OnboardingComponent implements OnInit, AfterViewInit {
     @Input() user: User;
     @ViewChild('stepper') stepper: MatStepper;
 
@@ -38,24 +42,55 @@ export class OnboardingComponent implements OnInit {
     isPremium = false;
 
     private userService = inject(AppUserService);
+    private auth = inject(Auth);
+    private router = inject(Router);
     private _formBuilder = inject(FormBuilder);
 
     ngOnInit() {
+        // Guard against null user input
+        const user = this.user || {} as User;
+
         this.termsFormGroup = this._formBuilder.group({
-            acceptPrivacyPolicy: [this.user.acceptedPrivacyPolicy, Validators.requiredTrue],
-            acceptDataPolicy: [this.user.acceptedDataPolicy, Validators.requiredTrue],
-            acceptTrackingPolicy: [this.user.acceptedTrackingPolicy, Validators.requiredTrue],
-            acceptDiagnosticsPolicy: [this.user.acceptedDiagnosticsPolicy, Validators.requiredTrue],
+            acceptPrivacyPolicy: [user.acceptedPrivacyPolicy || false, Validators.requiredTrue],
+            acceptDataPolicy: [user.acceptedDataPolicy || false, Validators.requiredTrue],
+            acceptTrackingPolicy: [user.acceptedTrackingPolicy || false, Validators.requiredTrue],
+            acceptDiagnosticsPolicy: [user.acceptedDiagnosticsPolicy || false, Validators.requiredTrue],
         });
 
         this.checkPremiumStatus();
     }
 
+    ngAfterViewInit() {
+        this.checkAndAdvance();
+    }
+
+    ngOnChanges(changes: SimpleChanges) {
+        if (changes['user'] && !changes['user'].firstChange) {
+            this.checkAndAdvance();
+        }
+    }
+
+    private async checkAndAdvance() {
+        if (this.user) {
+            // Re-check premium status whenever user data changes
+            this.isPremium = await this.userService.isPremium();
+
+            const termsAccepted = this.user.acceptedPrivacyPolicy === true &&
+                this.user.acceptedDataPolicy === true &&
+                this.user.acceptedTrackingPolicy === true &&
+                this.user.acceptedDiagnosticsPolicy === true;
+
+            if (termsAccepted && this.stepper && this.stepper.selectedIndex === 0) {
+                // Use setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
+                setTimeout(() => {
+                    this.stepper.selectedIndex = 1;
+                });
+            }
+        }
+    }
+
     async checkPremiumStatus() {
         this.isPremium = await this.userService.isPremium();
-        // If user has already accepted terms but is here (maybe due to reload or partial state),
-        // and we want to enforce pricing check, we can auto-advance or let them see terms again.
-        // For now, let's respect the form state.
     }
 
     async onTermsSubmit() {
@@ -65,33 +100,43 @@ export class OnboardingComponent implements OnInit {
             this.user.acceptedTrackingPolicy = true;
             this.user.acceptedDiagnosticsPolicy = true;
 
+            // Don't save to DB yet, just update local state and move to next step.
+            // If we save now, AppComponent might hide the onboarding flow prematurely
+            // depending on the exact logic. However, since we added 'onboardingCompleted' check,
+            // we COULD save here, but let's save everything at the end for atomicity/clarity if desired.
+            // ACTUALLY: We MUST save terms if we want them persisted even if user drops off.
+            // But we do NOT set 'onboardingCompleted' yet.
+
             try {
+                // Determine if we should save now or later. 
+                // Let's save now to be safe, so terms are recorded. 
+                // Because we updated AppComponent to check for 'onboardingCompleted', 
+                // this save will NOT cause the component to disappear.
                 await this.userService.updateUser(this.user);
                 this.stepper.next();
             } catch (error) {
                 console.error('Error updating user terms:', error);
-                // Handle error (maybe show snackbar, but sticking to basics for now)
             }
         } else {
             this.termsFormGroup.markAllAsTouched();
         }
     }
 
-    finishOnboarding() {
-        // We can rely on AppComponent to check the state again, or emit an event.
-        // Since AppComponent checks 'acceptedPrivacyPolicy' etc., and we just saved it,
-        // we need a way to tell AppComponent to re-evaluate or "un-show" this component.
-        // However, AppComponent likely uses an observable or simple *ngIf. 
-        // If it's *ngIf="!showOnboarding", we need to signal completion.
-        // Actually, simply reloading the page or triggering a user emission would work.
-        // But better: we set a local "completed" flag on user if we added one, 
-        // OR just rely on the fact that once 'acceptedPrivacyPolicy' is true, 
-        // the condition in AppComponent (if reactive) will hide this.
-        // BUT we want to show Pricing step AFTER terms.
+    async logout() {
+        await this.auth.signOut();
+        this.router.navigate(['/login']);
+    }
 
-        // So AppComponent logic will be: 
-        // showOnboarding = !user.acceptedPrivacyPolicy || (!user.isPremium && !user.onboardingCompleted) ??
-        // actually, let's just reload for now to keep it robust, OR we can inject a service to signal.
-        window.location.reload();
+    async finishOnboarding() {
+        // Mark onboarding as completed
+        (this.user as any).onboardingCompleted = true;
+
+        try {
+            await this.userService.updateUser(this.user);
+            // The AppComponent listener will detect the change and hide the onboarding.
+            // We don't need to reload or navigate manually necessarily, but let's be safe.
+        } catch (error) {
+            console.error('Error completing onboarding:', error);
+        }
     }
 }

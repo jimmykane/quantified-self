@@ -505,7 +505,14 @@ export class AppUserService implements OnDestroy {
   }
 
   public async updateUser(user: User) {
-    return updateDoc(doc(this.firestore, 'users', user.uid), user.toJSON());
+    const data = typeof user.toJSON === 'function' ? user.toJSON() : { ...user };
+    // Start of the week is a special case, we need to convert it to a number
+    // if (data.settings && data.settings.unitSettings && data.settings.unitSettings.startOfTheWeek) {
+    //   data.settings.unitSettings.startOfTheWeek = parseInt(data.settings.unitSettings.startOfTheWeek.toString(), 10);
+    // }
+    // Use setDoc with merge: true to handle both update and create (upsert) scenarios
+    // This is critical for the "synthetic user" flow in onboarding where the doc might not exist yet.
+    return setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true });
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {

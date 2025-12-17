@@ -9,22 +9,71 @@
                         <p>Please review and accept our policies to continue.</p>
 
                         <div class="checkbox-group">
-                            <mat-checkbox formControlName="acceptPrivacyPolicy">
-                                I accept the Privacy Policy
-                            </mat-checkbox>
-                            <mat-checkbox formControlName="acceptDataPolicy">
-                                I accept the Data Policy
-                            </mat-checkbox>
-                            <mat-checkbox formControlName="acceptTrackingPolicy">
-                                I accept the Tracking Policy
-                            </mat-checkbox>
-                            <mat-checkbox formControlName="acceptDiagnosticsPolicy">
-                                I accept the Diagnostics Policy
-                            </mat-checkbox>
+                            <span class="mat-subheader">Please examine the following agreements carefully</span>
+
+                            <!-- Privacy Policy -->
+                            <section class="policy-item">
+                                <h3>Privacy Policy & Data Ownership</h3>
+                                <p class="policy-text">
+                                    Your personal data is encrypted and stored securely on Google Cloud.
+                                    You retain full ownership and control over your privacy settings; your profile and
+                                    data remain private by default unless you explicitly choose to make them public.
+                                    We strictly do not sell, trade, or transfer your private data to third parties.
+                                </p>
+                                <mat-checkbox formControlName="acceptPrivacyPolicy">
+                                    I accept the Privacy Policy and acknowledge my data ownership rights.
+                                </mat-checkbox>
+                            </section>
+                            <mat-divider></mat-divider>
+
+                            <!-- Data Policy -->
+                            <section class="policy-item">
+                                <h3>Data Availability Policy</h3>
+                                <p class="policy-text">
+                                    We employ industry-standard practices to ensure service availability and data
+                                    integrity.
+                                    However, you acknowledge that you are responsible for maintaining your own backups
+                                    of critical data, as we cannot guarantee uninterrupted access or data permanence
+                                    under all circumstances.
+                                </p>
+                                <mat-checkbox formControlName="acceptDataPolicy">
+                                    I acknowledge the Data Availability Policy.
+                                </mat-checkbox>
+                            </section>
+                            <mat-divider></mat-divider>
+
+                            <!-- Tracking Policy -->
+                            <section class="policy-item">
+                                <h3>Analytics & Tracking Policy</h3>
+                                <p class="policy-text">
+                                    We collect anonymized identifiers (including IP address and User ID) to analyze
+                                    usage patterns (e.g., visits by country, active user counts) via Google Analytics.
+                                    This data is strictly compiled for internal service improvement and is never shared
+                                    with third parties in a non-anonymized form.
+                                </p>
+                                <mat-checkbox formControlName="acceptTrackingPolicy">
+                                    I consent to the collection of anonymized usage data for analytics.
+                                </mat-checkbox>
+                            </section>
+                            <mat-divider></mat-divider>
+
+                            <!-- Diagnostics Policy -->
+                            <section class="policy-item">
+                                <h3>Diagnostics Policy</h3>
+                                <p class="policy-text">
+                                    To assist in maintaining application stability and performance, your browser may
+                                    automatically report anonymized error data when technical issues occur.
+                                </p>
+                                <mat-checkbox formControlName="acceptDiagnosticsPolicy">
+                                    I consent to the automated reporting of anonymous diagnostic data.
+                                </mat-checkbox>
+                            </section>
+                            <mat-divider></mat-divider>
                         </div>
 
                         <div class="actions">
                             <button mat-flat-button color="primary" (click)="onTermsSubmit()">Next</button>
+                            <button mat-stroked-button color="warn" (click)="logout()">Logout</button>
                         </div>
                     </div>
                 </form>
@@ -36,7 +85,8 @@
                     <app-pricing></app-pricing>
 
                     <div class="actions">
-                        <button mat-stroked-button (click)="finishOnboarding()">Continue to Dashboard</button>
+                        <button mat-stroked-button *ngIf="isPremium" (click)="finishOnboarding()">Continue to
+                            Dashboard</button>
                     </div>
                 </div>
             </mat-step>

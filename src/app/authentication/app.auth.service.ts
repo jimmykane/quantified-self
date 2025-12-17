@@ -2,7 +2,7 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, authState, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from '@angular/fire/auth';
+import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
@@ -29,19 +29,24 @@ export class AppAuthService {
     private snackBar: MatSnackBar,
     public localStorageService: LocalStorageService
   ) {
-    // Use modular authState to stay in injection context
-    this.user$ = authState(this.auth).pipe(
+    // Use modular user observable to react to token refreshes too
+    this.user$ = user(this.auth).pipe(
       switchMap(user => {
         if (user) {
           return new Observable<User | null>(observer => {
             const userDoc = doc(this.firestore, `users/${user.uid}`);
-            const unsubscribe = onSnapshot(userDoc, (snap) => {
+            const unsubscribe = onSnapshot(userDoc, async (snap) => {
+              // Get current claims
+              const tokenResult = await user.getIdTokenResult();
+              const stripeRole = tokenResult.claims['stripeRole'] as string || null;
+
               const dbUser = snap.data() as User;
               if (dbUser) {
                 // Update local user object with metadata from Firebase Auth
                 dbUser.creationDate = new Date(user.metadata.creationTime);
                 dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
                 (dbUser as any).isAnonymous = user.isAnonymous;
+                (dbUser as any).stripeRole = stripeRole;
                 // Fill missing settings using the now public helper
                 dbUser.settings = this.userService.fillMissingAppSettings(dbUser);
                 this.zone.run(() => {
@@ -50,9 +55,29 @@ export class AppAuthService {
                   });
                 });
               } else {
+                // User exists in Auth but not in Firestore (yet).
+                // Return a synthetic user object so the app can load and show onboarding.
+                const syntheticUser = {
+                  uid: user.uid,
+                  displayName: user.displayName,
+                  email: user.email,
+                  photoURL: user.photoURL,
+                  emailVerified: user.emailVerified,
+                  settings: this.userService.fillMissingAppSettings({} as any),
+                  // Explicitly set policy flags to false for safety
+                  acceptedPrivacyPolicy: false,
+                  acceptedDataPolicy: false,
+                  acceptedTrackingPolicy: false,
+                  acceptedDiagnosticsPolicy: false,
+                  isAnonymous: user.isAnonymous,
+                  stripeRole: stripeRole,
+                  creationDate: new Date(user.metadata.creationTime),
+                  lastSignInDate: new Date(user.metadata.lastSignInTime)
+                } as unknown as User;
+
                 this.zone.run(() => {
                   runInInjectionContext(this.injector, () => {
-                    observer.next(null);
+                    observer.next(syntheticUser);
                   });
                 });
               }
@@ -135,7 +160,7 @@ export class AppAuthService {
     try {
       await sendSignInLinkToEmail(this.auth, email, actionCodeSettings);
       this.localStorageService.setItem('emailForSignIn', email);
-      this.snackBar.open(`Magic link sent to ${email}`, 'Close', {
+      this.snackBar.open(`Magic link sent to ${email} `, 'Close', {
         duration: 5000
       });
       return true;
@@ -202,7 +227,7 @@ export class AppAuthService {
   // If error, console log and notify user
   private handleError(error: Error) {
     console.error(error);
-    this.snackBar.open(`Could not login due to error ${error.message}`, null, {
+    this.snackBar.open(`Could not login due to error ${error.message} `, null, {
       duration: 2000
     });
   }

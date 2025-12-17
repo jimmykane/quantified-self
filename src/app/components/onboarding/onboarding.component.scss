@@ -28,8 +28,35 @@
 .checkbox-group {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 25px; // Increased gap for better separation of sections
     margin: 20px 0;
+}
+
+// New styles for the clean policy design
+.policy-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-bottom: 5px;
+
+    h3 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: rgba(0,0,0,0.87);
+    }
+
+    .policy-text {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: rgba(0,0,0,0.6);
+        max-width: 850px; // Ensure readable line length
+    }
+    
+    mat-checkbox {
+        margin-top: 5px;
+    }
 }
 
 .pricing-step {
@@ -47,5 +74,6 @@
 .actions {
     display: flex;
     justify-content: flex-end;
+    gap: 10px; // Spacing between Next and Logout
     margin-top: 20px;
 }

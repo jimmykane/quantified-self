@@ -48,7 +48,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private routerEventSubscription: Subscription;
   public loading: boolean;
   public authState: boolean | null = null;
-  public showOnboarding = false;
+  public showOnboarding = true;
+  private currentUser: any = null;
 
   constructor(
     public authService: AppAuthService,
@@ -64,18 +65,16 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
-    this.authService.user$.subscribe(async user => {
+    this.authService.user$.subscribe(user => {
       this.authState = !!user;
-      if (user) {
-        const isPremium = await this.userService.isPremium();
-        const termsAccepted = user.acceptedPrivacyPolicy && user.acceptedDataPolicy && user.acceptedTrackingPolicy && user.acceptedDiagnosticsPolicy;
-        this.showOnboarding = !termsAccepted || !isPremium;
-      } else {
-        this.showOnboarding = false;
-      }
+      this.currentUser = user;
+      this.updateOnboardingState();
     });
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events.subscribe((event) => {
+      if (event instanceof NavigationEnd) {
+        this.updateOnboardingState();
+      }
       switch (true) {
         case event instanceof RoutesRecognized:
           this.title = (<RoutesRecognized>event).state.root.firstChild.data['title'];
@@ -94,6 +93,57 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         }
       }
     });
+  }
+
+  private updateOnboardingState() {
+    const user = this.currentUser;
+    if (user) {
+      // Strict check for true
+      const termsAccepted = user.acceptedPrivacyPolicy === true &&
+        user.acceptedDataPolicy === true &&
+        user.acceptedTrackingPolicy === true &&
+        user.acceptedDiagnosticsPolicy === true;
+
+      // Check explicit subscription requirement
+      let hasSubscribedOnce = (user.hasSubscribedOnce === true);
+      const isPremium = user.stripeRole === 'premium' || user.isPremium === true; // Simplify check
+
+      // If user IS premium now, they definitely "subscribed once".
+      // Mark it persistenty if not already marked.
+      if (isPremium && !hasSubscribedOnce) {
+        hasSubscribedOnce = true;
+        // Fire and forget update to persist this fact for future (e.g. if they cancel)
+        this.userService.updateUserProperties(user, { hasSubscribedOnce: true }).catch(err => console.error('Failed to persist hasSubscribedOnce', err));
+      }
+
+      const url = this.router.url;
+      const isPaymentPath = url.includes('payment/');
+
+      // A user is "onboarded" if they have accepted terms AND (have subscribed once OR are currently premium)
+      const shouldShowOnboarding = !isPaymentPath && (!termsAccepted || (!hasSubscribedOnce && !isPremium));
+
+      console.log('[AppComponent] Onboarding State Update:', {
+        uid: user.uid,
+        termsAccepted,
+        hasSubscribedOnce,
+        isPremium,
+        role: user.stripeRole,
+        isPaymentPath,
+        currentUrl: url,
+        shouldShowOnboarding
+      });
+
+      // Check if we just finished onboarding (transition from true to false)
+      if (this.showOnboarding && !shouldShowOnboarding) {
+        // If we are currently on the login page (or root), go to dashboard
+        if (url.includes('/login') || url === '/') this.router.navigate(['/dashboard']);
+      }
+      this.showOnboarding = shouldShowOnboarding;
+    } else {
+      // Not logged in, so no onboarding needed (Login page handles auth)
+      this.showOnboarding = false;
+    }
+    this.changeDetectorRef.detectChanges();
   }
 
   private addIconsToRegistry() {
