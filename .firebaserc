@@ -16,7 +16,9 @@
   },
   "etags": {
     "quantified-self-io": {
-      "extensionInstances": {}
+      "extensionInstances": {
+        "firestore-stripe-payments": "464639e27d23dc66952a2b4615cbde63874dc3319877058ba5ffeaf71556d843"
+      }
     }
   }
 }
