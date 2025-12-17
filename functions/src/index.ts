@@ -98,6 +98,8 @@ export { importActivityToSuuntoApp } from './suunto/activities';
 export { cleanupEventFile } from './events/cleanup';
 export { restoreUserClaims } from './stripe/claims';
 export { disconnectExpiredServices } from './schedule/cleanup';
+export { cleanupUserAccounts } from './users/cleanup';
+export { deleteSelf } from './user/user';
 
 // Missing / Deleted Functions (Not Exported)
 // - addCookieAndRedirect

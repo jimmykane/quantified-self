@@ -9,7 +9,7 @@ import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
-import { provideFunctions, getFunctions } from '@angular/fire/functions';
+import { provideFunctions, getFunctions, httpsCallable } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
 import { provideStorage, getStorage } from '@angular/fire/storage';
@@ -20,6 +20,7 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
 import { AppUpdateService } from './services/app.update.service';
+import { OnboardingComponent } from './components/onboarding/onboarding.component';
 
 @NgModule({
   declarations: [
@@ -34,7 +35,8 @@ import { AppUpdateService } from './services/app.update.service';
     AppRoutingModule,
     ClipboardModule,
     MaterialModule,
-    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production })
+    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production }),
+    OnboardingComponent
   ],
   providers: [
     ScreenTrackingService,

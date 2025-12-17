@@ -1,0 +1,45 @@
+<div class="onboarding-container">
+    <mat-card class="onboarding-card">
+        <mat-horizontal-stepper [linear]="true" #stepper>
+            <!-- Step 1: Terms & Conditions -->
+            <mat-step [stepControl]="termsFormGroup" label="Agreements">
+                <form [formGroup]="termsFormGroup">
+                    <div class="step-content">
+                        <h2>Welcome to Quantified Self</h2>
+                        <p>Please review and accept our policies to continue.</p>
+
+                        <div class="checkbox-group">
+                            <mat-checkbox formControlName="acceptPrivacyPolicy">
+                                I accept the Privacy Policy
+                            </mat-checkbox>
+                            <mat-checkbox formControlName="acceptDataPolicy">
+                                I accept the Data Policy
+                            </mat-checkbox>
+                            <mat-checkbox formControlName="acceptTrackingPolicy">
+                                I accept the Tracking Policy
+                            </mat-checkbox>
+                            <mat-checkbox formControlName="acceptDiagnosticsPolicy">
+                                I accept the Diagnostics Policy
+                            </mat-checkbox>
+                        </div>
+
+                        <div class="actions">
+                            <button mat-flat-button color="primary" (click)="onTermsSubmit()">Next</button>
+                        </div>
+                    </div>
+                </form>
+            </mat-step>
+
+            <!-- Step 2: Pricing -->
+            <mat-step label="Plan">
+                <div class="step-content pricing-step">
+                    <app-pricing></app-pricing>
+
+                    <div class="actions">
+                        <button mat-stroked-button (click)="finishOnboarding()">Continue to Dashboard</button>
+                    </div>
+                </div>
+            </mat-step>
+        </mat-horizontal-stepper>
+    </mat-card>
+</div>

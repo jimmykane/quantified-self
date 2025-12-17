@@ -6,9 +6,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
-import { UserAgreementFormComponent } from '../user-forms/user-agreement.form.component';
 import * as Sentry from '@sentry/browser';
-
 import { Auth, signInWithCustomToken, authState } from '@angular/fire/auth';
 import { PhoneFormComponent } from './phone-form/phone.form.component';
 import { Analytics, logEvent } from '@angular/fire/analytics';
@@ -147,35 +145,18 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
-      if (databaseUser) {
-        logEvent(this.analytics, 'login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
-        await this.router.navigate(['/dashboard']);
-        this.snackBar.open(`Welcome back ${databaseUser.displayName || 'Guest'} `, undefined, {
-          duration: 5000,
-        });
-        return;
-      }
-      this.showUserAgreementFormDialog(new User(loginServiceUser.user.uid, loginServiceUser.user.displayName, loginServiceUser.user.photoURL), loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Anonymous')
+      logEvent(this.analytics, 'login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
+      await this.router.navigate(['/dashboard']);
+      this.snackBar.open(`Welcome back ${databaseUser?.displayName || 'Guest'} `, undefined, {
+        duration: 5000,
+      });
     } catch (e) {
       Sentry.captureException(e);
       this.isLoading = false;
     }
   }
 
-  private showUserAgreementFormDialog(user: User, signInMethod: string) {
-    const dialogRef = this.dialog.open(UserAgreementFormComponent, {
-      minWidth: '80vw',
-      disableClose: true,
-      data: {
-        user: user,
-        signInMethod: signInMethod,
-      },
-    });
 
-    dialogRef.afterClosed().subscribe(result => {
-      this.isLoading = false;
-    });
-  }
 
   @HostListener('window:resize', ['$event'])
   getColumnsToDisplayDependingOnScreenSize(event?) {

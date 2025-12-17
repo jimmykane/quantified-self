@@ -84,6 +84,7 @@ import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
+import { getFunctions, httpsCallable, httpsCallableFromURL, Functions } from '@angular/fire/functions';
 
 
 /**
@@ -96,6 +97,7 @@ export class AppUserService implements OnDestroy {
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
+  private functions = inject(Functions);
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -547,25 +549,10 @@ export class AppUserService implements OnDestroy {
   }
 
   public async deleteAllUserData(user: User) {
-    const serviceTokens = [
-      { [ServiceNames.SuuntoApp]: await this.getServiceTokens(user, ServiceNames.SuuntoApp).pipe(take(1)).toPromise() },
-      { [ServiceNames.COROSAPI]: await this.getServiceTokens(user, ServiceNames.COROSAPI).pipe(take(1)).toPromise() },
-      { [ServiceNames.GarminHealthAPI]: await this.getGarminHealthAPITokens(user).pipe(take(1)).toPromise() }
-    ].filter((serviceToken) => serviceToken[Object.keys(serviceToken)[0]]);
-    for (const serviceToken of serviceTokens) {
-      try {
-        await this.deauthorizeService(<ServiceNames>Object.keys(serviceToken)[0]);
-      } catch (e) {
-        Sentry.captureException(e);
-        console.error(`Could not deauthorize ${ServiceNames.SuuntoApp}`);
-      }
-    }
-
     try {
-      const currentUser = this.auth.currentUser;
-      if (currentUser) {
-        return deleteUser(currentUser);
-      }
+      const deleteSelf = httpsCallableFromURL(this.functions, environment.functions.deleteSelf);
+      await deleteSelf();
+      await this.auth.signOut();
     } catch (e) {
       Sentry.captureException(e);
       throw e;

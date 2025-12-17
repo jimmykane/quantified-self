@@ -20,6 +20,7 @@ import {
   RoutesRecognized
 } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
+import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { DomSanitizer, Title } from '@angular/platform-browser';
 import { slideInAnimation } from './animations/animations';
@@ -47,9 +48,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private routerEventSubscription: Subscription;
   public loading: boolean;
   public authState: boolean | null = null;
+  public showOnboarding = false;
 
   constructor(
     public authService: AppAuthService,
+    private userService: AppUserService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     private sideNavService: AppSideNavService,
@@ -61,8 +64,15 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
-    this.authService.user$.subscribe(user => {
+    this.authService.user$.subscribe(async user => {
       this.authState = !!user;
+      if (user) {
+        const isPremium = await this.userService.isPremium();
+        const termsAccepted = user.acceptedPrivacyPolicy && user.acceptedDataPolicy && user.acceptedTrackingPolicy && user.acceptedDiagnosticsPolicy;
+        this.showOnboarding = !termsAccepted || !isPremium;
+      } else {
+        this.showOnboarding = false;
+      }
     });
     this.sideNavService.setSidenav(this.sideNav);
     this.routerEventSubscription = this.router.events.subscribe((event) => {
