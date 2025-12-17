@@ -57,16 +57,50 @@ export class PaymentSuccessComponent implements OnInit {
   isRefreshing = true;
 
   async ngOnInit(): Promise<void> {
-    // Force refresh the ID token to get updated custom claims (stripeRole)
+    this.isRefreshing = true;
     const user = this.auth.currentUser;
-    if (user) {
+
+    if (!user) {
+      console.error('PaymentSuccess: No current user found!');
+      this.isRefreshing = false;
+      return;
+    }
+
+    const maxAttempts = 10;
+    let attempt = 0;
+    let hasPremiumClaim = false;
+
+    console.log('PaymentSuccess: Starting claim polling...');
+
+    while (!hasPremiumClaim && attempt < maxAttempts) {
+      attempt++;
       try {
-        await user.getIdToken(true); // Force refresh
-        console.log('Token refreshed with new claims');
+        console.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
+        // Force refresh
+        const tokenResult = await user.getIdTokenResult(true);
+        const role = tokenResult.claims['stripeRole'];
+
+        console.log('PaymentSuccess: Claims:', tokenResult.claims);
+
+        if (role) {
+          console.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
+          hasPremiumClaim = true;
+        } else {
+          console.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
+          // Wait 2 seconds before next try
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       } catch (error) {
-        console.error('Failed to refresh token:', error);
+        console.error('PaymentSuccess: Error refreshing token:', error);
+        // Wait even on error, so we don't spam
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
+
+    if (!hasPremiumClaim) {
+      console.error('PaymentSuccess: Timeout waiting for stripeRole. User might need to re-login or wait longer.');
+    }
+
     this.isRefreshing = false;
   }
 }

@@ -522,14 +522,28 @@ export class AppUserService implements OnDestroy {
 
   public async getSubscriptionRole(): Promise<string | null> {
     const user = this.auth.currentUser;
-    if (!user) return null;
-    const tokenResult = await user.getIdTokenResult(true);
-    return (tokenResult.claims['stripeRole'] as string) || null;
+    if (!user) {
+      console.warn('AppUserService: getSubscriptionRole - No current user');
+      return null;
+    }
+    try {
+      // Force refresh to ensure we have latest claims
+      const tokenResult = await user.getIdTokenResult(true);
+      const role = (tokenResult.claims['stripeRole'] as string) || null;
+      console.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}, Claims:`, tokenResult.claims);
+      return role;
+    } catch (e) {
+      console.error('AppUserService: getSubscriptionRole - Error getting token result', e);
+      return null;
+    }
   }
 
   public async isPremium(): Promise<boolean> {
+    console.log('AppUserService: Checking isPremium...');
     const role = await this.getSubscriptionRole();
-    return role === 'premium'; // Adjust based on your role config
+    const isPremium = role === 'premium';
+    console.log(`AppUserService: isPremium result: ${isPremium} (Role: ${role})`);
+    return isPremium;
   }
 
   public async deleteAllUserData(user: User) {

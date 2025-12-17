@@ -7,7 +7,8 @@ const routes: Routes = [
   {
     path: 'services',
     loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule),
-    data: { title: 'Services', animation: 'Services' }
+    data: { title: 'Services', animation: 'Services' },
+    canMatch: [authGuard, premiumGuard]
   },
   {
     path: '',

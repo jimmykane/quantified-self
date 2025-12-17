@@ -1,7 +1,5 @@
 <mat-toolbar class="mat-nav-list">
-  <mat-toolbar-row
-    class="mat-elevation-z0 mat-list-item mat-app-background"
-    (click)="sideNav.close();">
+  <mat-toolbar-row class="mat-elevation-z0 mat-list-item mat-app-background" (click)="sideNav.close();">
     <mat-icon class="app-icon" svgIcon="logo"></mat-icon>
     Quantified Self &nbsp;
     <span style="font-size: 0.6em;">{{appVersion}}</span>
@@ -11,67 +9,55 @@
 
 <mat-nav-list>
   @if (!user) {
-    <mat-list-item
-      routerLinkActive="active"
-      routerLink="/"
-      (click)="sideNav.close();">
-      <mat-icon>home</mat-icon>
-      <span>Home</span>
-    </mat-list-item>
+  <mat-list-item routerLinkActive="active" routerLink="/" (click)="sideNav.close();">
+    <mat-icon>home</mat-icon>
+    <span>Home</span>
+  </mat-list-item>
   }
 
   @if (user) {
-    <mat-list-item
-      routerLinkActive="active"
-      routerLink="/dashboard"
-      (click)="sideNav.close();">
-      <mat-icon>dashboard</mat-icon>
-      <span>Dashboard</span>
-    </mat-list-item>
+  <mat-list-item routerLinkActive="active" routerLink="/dashboard" (click)="sideNav.close();">
+    <mat-icon>dashboard</mat-icon>
+    <span>Dashboard</span>
+  </mat-list-item>
   }
 
   @if (!user) {
-    <mat-list-item
-      routerLinkActive="active"
-      routerLink="/login" (click)="sideNav.close();">
-      <mat-icon>assignment_ind</mat-icon>
-      <span>Login</span>
-    </mat-list-item>
+  <mat-list-item routerLinkActive="active" routerLink="/login" (click)="sideNav.close();">
+    <mat-icon>assignment_ind</mat-icon>
+    <span>Login</span>
+  </mat-list-item>
   }
 
   @if (user) {
-    <mat-list-item
-      routerLinkActive="active"
-      routerLink="/mytracks" (click)="sideNav.close();">
-      <mat-icon svgIcon="heat-map"></mat-icon>
-      <span>My Tracks <span class="mat-small">(Beta)</span></span>
-    </mat-list-item>
+  <mat-list-item routerLinkActive="active" routerLink="/mytracks" (click)="sideNav.close();">
+    <mat-icon svgIcon="heat-map"></mat-icon>
+    <span>My Tracks <span class="mat-small">(Beta)</span></span>
+  </mat-list-item>
   }
 
   @if (user && user.isCoach) {
-    <mat-list-item
-      routerLinkActive="active"
-      routerLink="/coaching" (click)="sideNav.close();">
-      <mat-icon>sports</mat-icon>
-      <span>Coaching</span>
-    </mat-list-item>
+  <mat-list-item routerLinkActive="active" routerLink="/coaching" (click)="sideNav.close();">
+    <mat-icon>sports</mat-icon>
+    <span>Coaching</span>
+  </mat-list-item>
   }
 
-  <mat-list-item
-    routerLinkActive="active"
-    routerLink="/services" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" routerLink="/services" (click)="sideNav.close();">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
   </mat-list-item>
 
   @if (user) {
-    <mat-list-item
-      routerLinkActive=" active"
-      [routerLink]="'/settings'"
-      (click)="sideNav.close();">
-      <mat-icon>settings_applications</mat-icon>
-      Settings
-    </mat-list-item>
+  <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="sideNav.close();">
+    <mat-icon>settings_applications</mat-icon>
+    Settings
+  </mat-list-item>
+
+  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="sideNav.close();">
+    <mat-icon>card_membership</mat-icon>
+    Subscription
+  </mat-list-item>
   }
 
   <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
@@ -80,10 +66,7 @@
       Dark theme
     </span>
     <span class="fill-space"></span>
-    <mat-slide-toggle
-      [disabled]="!appTheme"
-      [color]="'accent'"
-      [checked]="appTheme === appThemes.Dark">
+    <mat-slide-toggle [disabled]="!appTheme" [color]="'accent'" [checked]="appTheme === appThemes.Dark">
     </mat-slide-toggle>
   </mat-list-item>
 
@@ -111,49 +94,47 @@
   <!--    <mat-icon svgIcon="paypal"></mat-icon>-->
   <!--    <span>Donate via PayPal </span><span class="fill-space"></span>-->
   <!--    <mat-icon>open_in_new</mat-icon>-->
-<!--  </mat-list-item>-->
+  <!--  </mat-list-item>-->
 
-<mat-divider></mat-divider>
+  <mat-divider></mat-divider>
 
-<mat-list-item onclick="window.open('https://www.facebook.com/groups/361026511083969/')">
-  <mat-icon>forum</mat-icon>
-  <span>Forum</span><span class="fill-space"></span>
-  <mat-icon>open_in_new</mat-icon>
-</mat-list-item>
+  <mat-list-item onclick="window.open('https://www.facebook.com/groups/361026511083969/')">
+    <mat-icon>forum</mat-icon>
+    <span>Forum</span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
 
-<mat-list-item onclick="window.open('mailto:support@quantified-self.io')">
-  <mat-icon>email</mat-icon>
-  <span>Contact</span><span class="fill-space"></span>
-  <mat-icon>open_in_new</mat-icon>
-</mat-list-item>
+  <mat-list-item onclick="window.open('mailto:support@quantified-self.io')">
+    <mat-icon>email</mat-icon>
+    <span>Contact</span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
 
-<mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
-  <mat-icon>bug_report</mat-icon>
-  <span>File a bug</span><span class="fill-space"></span>
-  <mat-icon>open_in_new</mat-icon>
-</mat-list-item>
+  <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
+    <mat-icon>bug_report</mat-icon>
+    <span>File a bug</span><span class="fill-space"></span>
+    <mat-icon>open_in_new</mat-icon>
+  </mat-list-item>
 
 
-<mat-divider></mat-divider>
+  <mat-divider></mat-divider>
 
-<mat-list-item routerLink="/policies">
-  <mat-icon>policy</mat-icon>
-  <span>Policies</span><span class="fill-space"></span>
-</mat-list-item>
+  <mat-list-item routerLink="/policies">
+    <mat-icon>policy</mat-icon>
+    <span>Policies</span><span class="fill-space"></span>
+  </mat-list-item>
 
-<mat-divider></mat-divider>
+  <mat-divider></mat-divider>
 
-@if (user) {
-  <mat-list-item (click)="logout()"
-    >
+  @if (user) {
+  <mat-list-item (click)="logout()">
     <mat-icon>power_settings_new</mat-icon>
     <span>Logout</span>
   </mat-list-item>
-}
+  }
 
-@if (user) {
+  @if (user) {
   <mat-divider></mat-divider>
-}
+  }
 
 </mat-nav-list>
-

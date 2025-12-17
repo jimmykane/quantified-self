@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
+import { getApp } from '@angular/fire/app';
+import { environment } from '../../environments/environment';
 import { Firestore, collection, collectionData, addDoc, doc, docData, query, where, orderBy } from '@angular/fire/firestore';
-import { Functions, httpsCallable } from '@angular/fire/functions';
+import { Functions, httpsCallable, getFunctions } from '@angular/fire/functions';
 import { Auth } from '@angular/fire/auth';
 import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
 import { AppWindowService } from './app.window.service';
@@ -82,6 +84,36 @@ export class AppPaymentService {
             throw new Error('User must be authenticated to create a checkout session.');
         }
 
+        // Check for existing active subscriptions first
+        const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
+        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
+
+        try {
+            const snapshot = from(collectionData(activeQuery).pipe(take(1)));
+            const activeSubs = await snapshot.toPromise();
+
+            if (activeSubs && activeSubs.length > 0) {
+                console.warn('User already has an active subscription. Redirecting to portal.');
+                const confirmManage = confirm('You already have an active subscription. Would you like to manage it instead?');
+                if (confirmManage) {
+                    await this.manageSubscriptions();
+                    return;
+                } else {
+                    throw new Error('User cancelled redirection to portal.');
+                }
+            }
+        } catch (e) {
+            // If error checking subs, we might want to proceed or stop. 
+            // For now, if it's the specific "cancelled" error, rethrow. 
+            // Otherwise, log and proceed with caution or block.
+            if (e.message === 'User cancelled redirection to portal.') {
+                return;
+            }
+            console.error('Error checking existing subscriptions:', e);
+            // Proceeding might be risky if we failed to check, but let's assume loose fail-open for now 
+            // or clearer: block if unsure? Let's log.
+        }
+
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
 
@@ -146,8 +178,10 @@ export class AppPaymentService {
     async manageSubscriptions(): Promise<void> {
         const returnUrl = `${this.windowService.currentDomain}/settings`;
 
+        const app = getApp();
+        const functionsInstance = getFunctions(app, environment.stripeExtensionRegion);
         const createPortalLink = httpsCallable<{ returnUrl: string }, { url: string }>(
-            this.functions,
+            functionsInstance,
             'ext-firestore-stripe-payments-createPortalLink'
         );
 

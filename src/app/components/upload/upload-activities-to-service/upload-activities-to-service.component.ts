@@ -51,14 +51,14 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           if (getSize(fileReader.result) > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
-          const formData = new FormData();
-          formData.append('file', file.file, file.name);
+          // Send the raw binary content directly
           await this.http.post(environment.functions.uploadActivity,
-            formData,
+            fileReader.result, // Send the ArrayBuffer directly
             {
               headers:
                 new HttpHeaders({
-                  'Authorization': `Bearer ${idToken}`
+                  'Authorization': `Bearer ${idToken}`,
+                  'Content-Type': 'application/octet-stream'
                 })
             }).toPromise();
         } catch (e) {

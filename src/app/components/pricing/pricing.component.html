@@ -1,5 +1,26 @@
 <div class="pricing-container">
-  <h1>Choose Your Plan</h1>
+  <h1>{{ isPremium ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
+
+  @if (isPremium) {
+  <div class="manage-subscription-container">
+    <mat-card class="product-card">
+      <mat-card-header>
+        <mat-card-title>Premium Membership</mat-card-title>
+        <mat-card-subtitle>You are currently subscribed.</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content class="manage-content">
+        <p>Thank you for supporting Quantified Self!</p>
+        <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
+          @if (isLoading) {
+          <mat-spinner diameter="20"></mat-spinner>
+          } @else {
+          Manage Subscription
+          }
+        </button>
+      </mat-card-content>
+    </mat-card>
+  </div>
+  } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     <mat-card *ngFor="let product of products" class="product-card">
       <mat-card-header>
@@ -26,4 +47,5 @@
   <ng-template #loading>
     <p>Loading plans...</p>
   </ng-template>
+  }
 </div>
