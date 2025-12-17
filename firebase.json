@@ -60,6 +60,7 @@
     }
   },
   "extensions": {
-    "delete-user-data": "firebase/delete-user-data@0.1.5"
+    "delete-user-data": "firebase/delete-user-data@0.1.5",
+    "firestore-stripe-payments": "invertase/firestore-stripe-payments@0.3.12"
   }
 }
