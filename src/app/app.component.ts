@@ -17,6 +17,7 @@ import {
   NavigationError,
   NavigationStart,
   Router, RouterEvent,
+  RouterOutlet,
   RoutesRecognized
 } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
@@ -52,7 +53,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private routerEventSubscription: Subscription;
   public loading: boolean;
   public authState: boolean | null = null;
-  public showOnboarding = true;
+  public isOnboardingRoute = false;
+  public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   private currentUser: any = null;
 
   constructor(
@@ -60,7 +62,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private userService: AppUserService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
-    private sideNavService: AppSideNavService,
+    public sideNavService: AppSideNavService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
     private titleService: Title) {
@@ -100,51 +102,29 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   private updateOnboardingState() {
     const user = this.currentUser;
+    const url = this.router.url;
+    this.isOnboardingRoute = url.includes('onboarding');
+
     if (user) {
-      // Strict check for true
       const termsAccepted = user.acceptedPrivacyPolicy === true &&
         user.acceptedDataPolicy === true &&
         user.acceptedTrackingPolicy === true &&
         user.acceptedDiagnosticsPolicy === true;
 
-      // Check explicit subscription requirement
-      let hasSubscribedOnce = (user.hasSubscribedOnce === true);
-      const isPremium = user.stripeRole === 'premium' || user.isPremium === true; // Simplify check
+      const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
+      const isPremium = user.stripeRole === 'premium' || user.isPremium === true;
+
+      this.onboardingCompleted = termsAccepted && (isPremium || hasSubscribedOnce);
 
       // If user IS premium now, they definitely "subscribed once".
-      // Mark it persistenty if not already marked.
+      // Mark it persistently if not already marked.
       if (isPremium && !hasSubscribedOnce) {
-        hasSubscribedOnce = true;
         // Fire and forget update to persist this fact for future (e.g. if they cancel)
         this.userService.updateUserProperties(user, { hasSubscribedOnce: true }).catch(err => console.error('Failed to persist hasSubscribedOnce', err));
       }
-
-      const url = this.router.url;
-      const isPaymentPath = url.includes('payment/');
-
-      // A user is "onboarded" if they have accepted terms AND (have subscribed once OR are currently premium)
-      const shouldShowOnboarding = !isPaymentPath && (!termsAccepted || (!hasSubscribedOnce && !isPremium));
-
-      console.log('[AppComponent] Onboarding State Update:', {
-        uid: user.uid,
-        termsAccepted,
-        hasSubscribedOnce,
-        isPremium,
-        role: user.stripeRole,
-        isPaymentPath,
-        currentUrl: url,
-        shouldShowOnboarding
-      });
-
-      // Check if we just finished onboarding (transition from true to false)
-      if (this.showOnboarding && !shouldShowOnboarding) {
-        // If we are currently on the login page (or root), go to dashboard
-        if (url.includes('/login') || url === '/') this.router.navigate(['/dashboard']);
-      }
-      this.showOnboarding = shouldShowOnboarding;
     } else {
-      // Not logged in, so no onboarding needed (Login page handles auth)
-      this.showOnboarding = false;
+      // Not logged in - show chrome (login/landing page)
+      this.onboardingCompleted = true;
     }
     this.changeDetectorRef.detectChanges();
   }
@@ -312,8 +292,16 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     );
   }
 
+  public toggleSidenav() {
+    this.sideNavService.toggle();
+  }
+
   ngAfterViewInit() {
 
+  }
+
+  prepareRoute(outlet: RouterOutlet) {
+    return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
   }
 
   /**

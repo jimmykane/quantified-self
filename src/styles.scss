@@ -138,6 +138,10 @@ section.component-container {
   animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
 }
 
+.dark-theme .sk-cube-grid .sk-cube {
+  background-color: #eee;
+}
+
 .sk-cube-grid .sk-cube1 {
   -webkit-animation-delay: 0.2s;
   animation-delay: 0.2s;

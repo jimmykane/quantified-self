@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { User, Privacy } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
 import { PricingComponent } from '../pricing/pricing.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
@@ -41,23 +42,36 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     termsFormGroup: FormGroup;
     isPremium = false;
 
+    private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
     private auth = inject(Auth);
     private router = inject(Router);
     private _formBuilder = inject(FormBuilder);
 
     ngOnInit() {
-        // Guard against null user input
-        const user = this.user || {} as User;
+        // If user wasn't passed via Input (routing), get it from service
+        if (!this.user) {
+            this.authService.user$.subscribe(user => {
+                if (user) {
+                    this.user = user;
+                    this.initForm();
+                    this.checkAndAdvance();
+                }
+            });
+        }
 
+        this.initForm();
+        this.checkPremiumStatus();
+    }
+
+    private initForm() {
+        const user = this.user || {} as User;
         this.termsFormGroup = this._formBuilder.group({
             acceptPrivacyPolicy: [user.acceptedPrivacyPolicy || false, Validators.requiredTrue],
             acceptDataPolicy: [user.acceptedDataPolicy || false, Validators.requiredTrue],
             acceptTrackingPolicy: [user.acceptedTrackingPolicy || false, Validators.requiredTrue],
             acceptDiagnosticsPolicy: [user.acceptedDiagnosticsPolicy || false, Validators.requiredTrue],
         });
-
-        this.checkPremiumStatus();
     }
 
     ngAfterViewInit() {
@@ -80,7 +94,14 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
                 this.user.acceptedTrackingPolicy === true &&
                 this.user.acceptedDiagnosticsPolicy === true;
 
+            console.log('[OnboardingComponent] checkAndAdvance:', {
+                termsAccepted,
+                isPremium: this.isPremium,
+                selectedIndex: this.stepper?.selectedIndex
+            });
+
             if (termsAccepted && this.stepper && this.stepper.selectedIndex === 0) {
+                console.log('[OnboardingComponent] Terms accepted, auto-advancing to pricing step.');
                 // Use setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
                 setTimeout(() => {
                     this.stepper.selectedIndex = 1;
@@ -128,13 +149,13 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     }
 
     async finishOnboarding() {
-        // Mark onboarding as completed
-        (this.user as any).onboardingCompleted = true;
-
         try {
-            await this.userService.updateUser(this.user);
-            // The AppComponent listener will detect the change and hide the onboarding.
-            // We don't need to reload or navigate manually necessarily, but let's be safe.
+            // Mark onboarding as completed in the database
+            await this.userService.updateUserProperties(this.user, { onboardingCompleted: true });
+
+            // Navigate to dashboard. The OnboardingGuard will now allow this.
+            console.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');
+            this.router.navigate(['/dashboard']);
         } catch (error) {
             console.error('Error completing onboarding:', error);
         }

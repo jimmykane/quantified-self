@@ -41,26 +41,20 @@ export class AppAuthService {
               const stripeRole = tokenResult.claims['stripeRole'] as string || null;
 
               const dbUser = snap.data() as User;
+              let emittedUser: User | null = null;
               if (dbUser) {
-                // Update local user object with metadata from Firebase Auth
-                dbUser.creationDate = new Date(user.metadata.creationTime);
-                dbUser.lastSignInDate = new Date(user.metadata.lastSignInTime);
-                (dbUser as any).isAnonymous = user.isAnonymous;
+                // Attach the uid to the object
+                dbUser.uid = user.uid;
+                // Merge the stripe role from the token claims
                 (dbUser as any).stripeRole = stripeRole;
-                // Fill missing settings using the now public helper
-                dbUser.settings = this.userService.fillMissingAppSettings(dbUser);
-                this.zone.run(() => {
-                  runInInjectionContext(this.injector, () => {
-                    observer.next(dbUser);
-                  });
-                });
+                emittedUser = dbUser;
               } else {
-                // User exists in Auth but not in Firestore (yet).
-                // Return a synthetic user object so the app can load and show onboarding.
-                const syntheticUser = {
+                // If the user doesn't exist in Firestore yet, create a synthetic object
+                // to avoid breaking the rest of the app that expects a User object.
+                emittedUser = {
                   uid: user.uid,
-                  displayName: user.displayName,
                   email: user.email,
+                  displayName: user.displayName,
                   photoURL: user.photoURL,
                   emailVerified: user.emailVerified,
                   settings: this.userService.fillMissingAppSettings({} as any),
@@ -74,13 +68,12 @@ export class AppAuthService {
                   creationDate: new Date(user.metadata.creationTime),
                   lastSignInDate: new Date(user.metadata.lastSignInTime)
                 } as unknown as User;
-
-                this.zone.run(() => {
-                  runInInjectionContext(this.injector, () => {
-                    observer.next(syntheticUser);
-                  });
-                });
               }
+              this.zone.run(() => {
+                runInInjectionContext(this.injector, () => {
+                  observer.next(emittedUser);
+                });
+              });
             }, error => observer.error(error));
 
             return () => unsubscribe();
