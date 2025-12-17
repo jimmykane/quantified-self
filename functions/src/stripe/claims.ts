@@ -1,12 +1,16 @@
-import * as functions from 'firebase-functions/v1';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { ALLOWED_CORS_ORIGINS } from '../utils';
 
-export const restoreUserClaims = functions.region('europe-west2').https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
+export const restoreUserClaims = onCall({
+    region: 'europe-west2',
+    cors: ALLOWED_CORS_ORIGINS
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
 
-    const uid = context.auth.uid;
+    const uid = request.auth.uid;
     const subscriptionsRef = admin.firestore().collection(`customers/${uid}/subscriptions`);
 
     // Check for any active or trialing subscription
@@ -17,11 +21,11 @@ export const restoreUserClaims = functions.region('europe-west2').https.onCall(a
         .get();
 
     if (snapshot.empty) {
-        throw new functions.https.HttpsError('not-found', 'No active subscription found.');
+        throw new HttpsError('not-found', 'No active subscription found.');
     }
 
     const subData = snapshot.docs[0].data();
-    const role = subData.role || 'premium'; // Default to premium if not set, or read from metadata
+    const role = subData.role || 'premium';
 
     // Set custom user claims on this specific user
     await admin.auth().setCustomUserClaims(uid, { stripeRole: role });

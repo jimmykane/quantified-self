@@ -71,8 +71,20 @@ export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
   return res;
 }
 
+export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
+  'https://quantified-self.io',
+  'https://beta.quantified-self.io',
+  /https?:\/\/localhost:\d+/
+];
+
 export function isCorsAllowed(req: Request) {
-  return ['http://localhost:4200', 'https://quantified-self.io', 'https://beta.quantified-self.io'].indexOf(<string>req.get('origin')) !== -1;
+  const origin = <string>req.get('origin') || '';
+  return ALLOWED_CORS_ORIGINS.some(allowed => {
+    if (allowed instanceof RegExp) {
+      return allowed.test(origin);
+    }
+    return allowed === origin;
+  });
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string }) {
