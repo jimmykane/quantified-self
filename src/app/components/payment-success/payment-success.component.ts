@@ -12,20 +12,37 @@ import { Auth } from '@angular/fire/auth';
   imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, RouterModule],
   template: `
     <div class="container">
-      <mat-card>
+      <mat-card class="success-card">
         <mat-card-header>
           <mat-card-title>Payment Successful!</mat-card-title>
         </mat-card-header>
+        
         <mat-card-content>
-          @if (isRefreshing) {
-            <p>Activating your subscription...</p>
-            <mat-spinner diameter="40"></mat-spinner>
-          } @else {
-            <p>Thank you for your purchase. Your subscription is now active.</p>
-          }
+          <div class="content-wrapper">
+            @if (isRefreshing) {
+              <div class="loader-container">
+                <mat-spinner diameter="60"></mat-spinner>
+                <p>Activating your subscription...</p>
+              </div>
+            } @else {
+              <div class="checkmark-wrapper">
+                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                  <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+                  <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+              </div>
+              
+              <h2 class="welcome-text">Welcome to Premium!</h2>
+              <p class="description">
+                Thank you for your purchase. Your subscription is now active. 
+                You now have full access to all premium features and performance analytics.
+              </p>
+            }
+          </div>
         </mat-card-content>
+        
         <mat-card-actions>
-          <button mat-raised-button color="primary" routerLink="/dashboard" [disabled]="isRefreshing">
+          <button mat-flat-button color="primary" routerLink="/dashboard" [disabled]="isRefreshing">
             Go to Dashboard
           </button>
         </mat-card-actions>
@@ -33,22 +50,105 @@ import { Auth } from '@angular/fire/auth';
     </div>
   `,
   styles: [`
+    :host {
+      display: block;
+      height: 100vh;
+      width: 100%;
+    }
+
     .container {
       display: flex;
       justify-content: center;
       align-items: center;
-      height: 80vh;
-    }
-    mat-card {
-      max-width: 400px;
-      text-align: center;
+      height: 100%;
       padding: 20px;
     }
-    mat-card-actions {
-        justify-content: center;
+
+    .success-card {
+      max-width: 450px;
+      width: 100%;
+      text-align: center;
+      padding: 24px;
     }
-    mat-spinner {
-        margin: 20px auto;
+
+    mat-card-header {
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .content-wrapper {
+      padding: 16px 0;
+    }
+
+    .loader-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    /* Simple Checkmark Animation */
+    .checkmark-wrapper {
+      width: 60px;
+      height: 60px;
+      margin: 0 auto 20px;
+    }
+
+    .checkmark {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: block;
+      stroke-width: 3;
+      stroke: #4caf50;
+      stroke-miterlimit: 10;
+      animation: fill .4s ease-in-out .4s forwards;
+    }
+
+    .checkmark__circle {
+      stroke-dasharray: 166;
+      stroke-dashoffset: 166;
+      stroke-width: 3;
+      stroke-miterlimit: 10;
+      stroke: #4caf50;
+      fill: none;
+      animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+    }
+
+    .checkmark__check {
+      transform-origin: 50% 50%;
+      stroke-dasharray: 48;
+      stroke-dashoffset: 48;
+      animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+    }
+
+    @keyframes stroke {
+      100% { stroke-dashoffset: 0; }
+    }
+
+    @keyframes fill {
+      100% { box-shadow: inset 0px 0px 0px 30px rgba(76, 175, 80, 0.1); }
+    }
+
+    .welcome-text {
+      margin: 0 0 12px;
+      font-weight: 500;
+    }
+
+    .description {
+      color: rgba(0, 0, 0, 0.6);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    mat-card-actions {
+      justify-content: center;
+    }
+
+    button {
+      padding: 0 32px !important;
+      height: 44px !important;
+      border-radius: 22px !important;
     }
   `]
 })
