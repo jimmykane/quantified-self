@@ -29,7 +29,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { Auth, deleteUser } from '@angular/fire/auth';
+import { Auth, deleteUser, authState } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import * as Sentry from '@sentry/browser';
@@ -521,7 +521,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async getSubscriptionRole(): Promise<string | null> {
-    const user = this.auth.currentUser;
+    const user = await firstValueFrom(authState(this.auth).pipe(take(1)));
     if (!user) {
       console.warn('AppUserService: getSubscriptionRole - No current user');
       return null;

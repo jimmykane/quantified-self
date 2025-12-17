@@ -1,36 +1,134 @@
 .pricing-container {
-  padding: 40px;
-  text-align: center;
+  padding: 40px 20px;
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* subtle background gradient if desired, or keep it clean */
+  background: radial-gradient(circle at center, rgba(var(--primary-rgb), 0.05) 0%, transparent 70%);
 
   h1 {
-    margin-bottom: 40px;
+    margin-bottom: 50px;
     font-size: 2.5rem;
+    font-weight: 300;
+    text-align: center;
+    letter-spacing: 0.5px;
   }
 
-  .products-grid {
+  .restore-section {
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 30px;
+    
+    .restore-alert {
+      background: rgba(var(--accent-rgb), 0.1);
+      border: 1px solid rgba(var(--accent-rgb), 0.3);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+
+      p {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+    }
+  }
+
+  .products-grid, .manage-subscription-container {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 20px;
+    gap: 30px;
+    width: 100%;
+    max-width: 1200px;
+  }
+  
+  /* Use grid for products if we want stricer columns, but flex is good for centering few items */
+  .products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 350px));
+    justify-content: center;
   }
 
   .product-card {
-    width: 300px;
-    text-align: left;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border-radius: 16px;
+    overflow: hidden;
+    /* ensure mat-card has some depth */
+    
+    &:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+      z-index: 1;
+    }
 
     mat-card-header {
-      margin-bottom: 20px;
+      padding: 24px 24px 0;
+      flex-direction: column; /* Center header content */
+      align-items: center;
+      text-align: center;
+      margin-bottom: 16px;
+
+      mat-card-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      mat-card-subtitle {
+        font-size: 0.9rem;
+        opacity: 0.8;
+      }
+    }
+
+    mat-card-content {
+      padding: 0 24px 24px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between; /* Push button to bottom if content varies */
+      text-align: center;
     }
 
     .price-section {
-      margin-top: 20px;
+      margin-top: auto; /* force to bottom of content area */
+      width: 100%;
       text-align: center;
+      padding-top: 20px;
+      border-top: 1px solid rgba(0,0,0,0.05);
 
       .price {
-        font-size: 2rem;
-        font-weight: bold;
-        margin-bottom: 10px;
+        font-size: 2.2rem;
+        font-weight: 700;
+        margin: 0 0 16px;
+        color: var(--primary-color, inherit); 
+
+        span {
+          font-size: 1rem;
+          font-weight: 400;
+          opacity: 0.7;
+        }
+      }
+
+      button {
+        width: 100%;
+        padding: 8px 0;
+        border-radius: 24px;
+        font-size: 1rem;
+        letter-spacing: 0.5px;
       }
     }
+  }
+
+  .manage-subscription-container .product-card {
+    max-width: 400px;
+    border: 2px solid rgba(var(--primary-rgb), 0.5);
   }
 }

@@ -3,7 +3,7 @@
 
   <div *ngIf="!isPremium && (activeSubscriptions$ | async) as subs" class="restore-section">
     <div *ngIf="subs.length > 0" class="restore-alert">
-      <p>We found an active subscription, but your account hasn't been updated yet.</p>
+      <p>We found an active subscription pending update.</p>
       <button mat-stroked-button color="accent" (click)="restorePurchases()" [disabled]="isLoading">
         @if (isLoading) {
         <mat-spinner diameter="20"></mat-spinner>
@@ -19,28 +19,33 @@
     <mat-card class="product-card">
       <mat-card-header>
         <mat-card-title>Premium Membership</mat-card-title>
-        <mat-card-subtitle>You are currently subscribed.</mat-card-subtitle>
+        <mat-card-subtitle>Active & Verified</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content class="manage-content">
-        <p>Thank you for supporting Quantified Self!</p>
-        <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
-          @if (isLoading) {
-          <mat-spinner diameter="20"></mat-spinner>
-          } @else {
-          Manage Subscription
-          }
-        </button>
+        <p>Thank you for being a premium member. You have full access to all features.</p>
+        <div class="price-section">
+            <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
+            @if (isLoading) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Manage Subscription
+            }
+            </button>
+        </div>
       </mat-card-content>
     </mat-card>
   </div>
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
-    <mat-card *ngFor="let product of products" class="product-card">
+    @for (product of products; track product.id) {
+    <mat-card class="product-card">
       <mat-card-header>
         <mat-card-title>{{ product.name }}</mat-card-title>
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
+        <!-- If there are features list, they would go here -->
+         <div style="flex-grow: 1;"></div>
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }}
@@ -56,9 +61,13 @@
         </div>
       </mat-card-content>
     </mat-card>
+    }
   </div>
   <ng-template #loading>
-    <p>Loading plans...</p>
+    <div class="loading-state">
+        <mat-spinner diameter="40"></mat-spinner>
+        <p>Loading plans...</p>
+    </div>
   </ng-template>
   }
 </div>
