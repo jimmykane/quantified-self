@@ -25,7 +25,11 @@ export const restoreUserClaims = onCall({
     }
 
     const subData = snapshot.docs[0].data();
-    const role = subData.role || 'premium';
+    const role = subData.role;
+
+    if (!role) {
+        throw new HttpsError('failed-precondition', 'Subscription found but no role defined in metadata.');
+    }
 
     // Set custom user claims on this specific user
     await admin.auth().setCustomUserClaims(uid, { stripeRole: role });
