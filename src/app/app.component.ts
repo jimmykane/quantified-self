@@ -113,11 +113,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
       const stripeRole = user.stripeRole;
-      const hasPaidAccess = stripeRole === 'premium' || stripeRole === 'basic' || user.isPremium === true;
+      const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || user.isPro === true;
 
       this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
-      // If user HAS premium access now, they definitely "subscribed once".
+      // If user HAS pro access now, they definitely "subscribed once".
       // Mark it persistently if not already marked.
       if (hasPaidAccess && !hasSubscribedOnce) {
         // Fire and forget update to persist this fact for future (e.g. if they cancel)
@@ -135,7 +135,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       return false;
     }
     // Requirement: Hide sidenav/toolbar if user has NO product (undefined role) AND is on pricing page
-    // If they have 'free', 'basic', or 'premium', they are good.
+    // If they have 'free', 'basic', or 'pro', they are good.
     if (this.currentUser && this.router.url.includes('pricing')) {
       const stripeRole = (this.currentUser as any).stripeRole;
       // If stripeRole is undefined or null, they haven't been assigned a product yet (even free).

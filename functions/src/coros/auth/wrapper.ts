@@ -1,7 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertPremiumServiceAccess } from '../../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertProServiceAccess } from '../../utils';
 import {
   deauthorizeServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
@@ -34,11 +34,11 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions.region('europe-w
     return;
   }
 
-  // Enforce Premium Access
+  // Enforce Pro Access
   try {
-    await assertPremiumServiceAccess(userID);
+    await assertProServiceAccess(userID);
   } catch (e: any) {
-    console.warn(`Blocking COROS Auth for non-premium user ${userID}: ${e.message}`);
+    console.warn(`Blocking COROS Auth for non-pro user ${userID}: ${e.message}`);
     res.status(403).send(e.message);
     return;
   }
@@ -77,11 +77,11 @@ export const requestAndSetCOROSAPIAccessToken = functions.region('europe-west2')
     return;
   }
 
-  // Enforce Premium Access
+  // Enforce Pro Access
   try {
-    await assertPremiumServiceAccess(userID);
+    await assertProServiceAccess(userID);
   } catch (e: any) {
-    console.warn(`Blocking COROS Token Set for non-premium user ${userID}: ${e.message}`);
+    console.warn(`Blocking COROS Token Set for non-pro user ${userID}: ${e.message}`);
     res.status(403).send(e.message);
     return;
   }
@@ -144,5 +144,3 @@ export const deauthorizeCOROSAPI = functions.region('europe-west2').https.onRequ
   }
   res.status(200).send({ result: 'Deauthorized' });
 });
-
-

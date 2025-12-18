@@ -46,61 +46,31 @@
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
-        <!-- If there are features list, they would go here -->
         <div style="flex-grow: 1;"></div>
+        <!-- Since we split into virtual products, each product has exactly 1 price usually -->
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }}
             <span *ngIf="price.recurring">/ {{ price.recurring.interval }}</span>
           </h3>
 
-
-          <!-- Current Plan Check -->
+          <!-- Current Plan Indicator -->
           @if (currentRole && product.metadata.role === currentRole) {
           <button mat-stroked-button disabled class="current-plan-btn">Current Plan</button>
           }
 
-          <!-- No Plan (Null) Case - Everything is buyable -->
-          @else if (!currentRole) {
-          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
-            @if (loadingPriceId === price.id) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            {{ price.recurring ? 'Subscribe' : 'Buy Now' }}
-            }
-          </button>
-          }
-
-          <!-- Upgrade Checks -->
-          @else if (currentRole === 'free' && (product.metadata.role === 'basic' || product.metadata.role ===
-          'premium')) {
-          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
-            @if (loadingPriceId === price.id) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            {{ price.recurring ? 'Upgrade' : 'Buy Now' }}
-            }
-          </button>
-          }
-          @else if (currentRole === 'basic' && product.metadata.role === 'premium') {
-          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading">
-            @if (loadingPriceId === price.id) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            Upgrade
-            }
-          </button>
-          }
-
-          <!-- Downgrade / Other Checks -->
-          @else if (currentRole === 'premium' && (product.metadata.role === 'basic' || product.metadata.role ===
-          'free')) {
-          <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">Downgrade</button>
-          }
-          @else if (currentRole === 'basic' && product.metadata.role === 'free') {
+          <!-- Manage/Downgrade for Premium Users looking at Basic -->
+          @else if (currentRole === 'premium' && product.metadata.role === 'basic') {
           <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">Downgrade</button>
           }
 
+          <!-- Upgrade/Buy Logic -->
+          @else {
+          <!-- Use 'Upgrade' if we are Basic looking at Premium -->
+          @if (currentRole === 'basic' && product.metadata.role === 'premium') {
+          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading">Upgrade</button>
+          }
+          <!-- Otherwise 'Subscribe' (for new users or Free users upgrading to anything) -->
           @else {
           <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
             @if (loadingPriceId === price.id) {
@@ -109,6 +79,7 @@
             {{ price.recurring ? 'Subscribe' : 'Buy Now' }}
             }
           </button>
+          }
           }
 
         </div>

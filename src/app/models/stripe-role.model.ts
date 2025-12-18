@@ -1,1 +1,1 @@
-export type StripeRole = 'free' | 'basic' | 'premium';
+export type StripeRole = 'free' | 'basic' | 'pro';

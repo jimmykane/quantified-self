@@ -26,9 +26,9 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
-            const hasPaidAccess = stripeRole === 'premium' || stripeRole === 'basic' || (user as any).isPremium === true;
+            const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
 
-            // User must have accepted terms AND (be premium OR have subscribed once)
+            // User must have accepted terms AND (be pro OR have subscribed once)
             const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
             console.log('[OnboardingGuard] User Assessment:', {

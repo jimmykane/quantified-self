@@ -33,11 +33,11 @@ import { Auth } from '@angular/fire/auth';
               </div>
               
               @switch (assignedRole) {
-                @case ('premium') {
-                  <h2 class="welcome-text">Welcome to Premium!</h2>
+                @case ('pro') {
+                  <h2 class="welcome-text">Welcome to Pro!</h2>
                   <p class="description">
                     Thank you for your purchase. Your subscription is now active. 
-                    You now have full access to all premium features and performance analytics.
+                    You now have full access to all pro features and performance analytics.
                   </p>
                 }
                 @case ('basic') {

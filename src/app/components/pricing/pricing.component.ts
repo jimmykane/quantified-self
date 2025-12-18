@@ -40,9 +40,9 @@ export class PricingComponent implements OnInit {
 
     async subscribe(price: any) {
         // Double-Billing Protection:
-        // If user already has a Paid Role (Basic/Premium), they CANNOT checkout again.
+        // If user already has a Paid Role (Basic/Pro), they CANNOT checkout again.
         // They must manage/swap their existing subscription via the Portal.
-        if (this.currentRole === 'premium' || this.currentRole === 'basic') {
+        if (this.currentRole === 'pro' || this.currentRole === 'basic') {
             await this.manageSubscription();
             return;
         }

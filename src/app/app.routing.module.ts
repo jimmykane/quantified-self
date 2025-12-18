@@ -1,7 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { authGuard } from './authentication/app.auth.guard';
-import { premiumGuard } from './authentication/premium.guard';
+import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 
 const routes: Routes = [
@@ -38,7 +38,7 @@ const routes: Routes = [
     path: 'services',
     loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule),
     data: { title: 'Services', animation: 'Services' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard]
+    canMatch: [authGuard, onboardingGuard, proGuard]
   },
   {
     path: 'dashboard',

@@ -217,8 +217,8 @@ export class UsageLimitExceededError extends Error {
 export async function checkEventUsageLimit(userID: string): Promise<void> {
   const role = await getUserRole(userID);
 
-  // Premium: Unlimited
-  if (role === 'premium') return;
+  // Pro: Unlimited
+  if (role === 'pro') return;
 
   const limits: { [key: string]: number } = {
     'free': 10,
@@ -239,10 +239,10 @@ export async function checkEventUsageLimit(userID: string): Promise<void> {
   }
 }
 
-export async function assertPremiumServiceAccess(userID: string): Promise<void> {
+export async function assertProServiceAccess(userID: string): Promise<void> {
   const role = await getUserRole(userID);
-  if (role !== 'premium') {
-    throw new Error(`Service sync is a Premium feature. Your current role is: ${role}. Please upgrade to Premium.`);
+  if (role !== 'pro') {
+    throw new Error(`Service sync is a Pro feature. Your current role is: ${role}. Please upgrade to Pro.`);
   }
 }
 

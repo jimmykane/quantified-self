@@ -20,6 +20,9 @@ import {
   GarminHealthAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+interface RequestError extends Error {
+  statusCode?: number;
+}
 
 
 const GARMIN_ACTIVITY_URI = 'https://apis.garmin.com/wellness-api/rest/activityFile';
@@ -51,7 +54,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           token: activityFileToken || 'No token',
         });
       queueItemRefs.push(queueItemDocumentReference);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
       res.status(500).send();
       return;
@@ -66,7 +69,7 @@ export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2'
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
   maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
+}).pubsub.schedule('every 20 minutes').onRun(async () => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 
@@ -103,7 +106,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     });
     console.timeEnd('DownloadFile');
     console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
-  } catch (e: any) {
+  } catch (error: unknown) {
+    const e = error as RequestError;
     if (e.statusCode === 400) {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
@@ -127,7 +131,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       case 'GPX':
         try {
           event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
-        } catch (e: any) {
+        } catch {
           console.error('Could not decode as GPX trying as FIT');
         }
         if (!event) {
@@ -170,7 +174,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);
-  } catch (e: any) {
+  } catch (e: unknown) {
     // @todo should delete meta etc
     console.error(e);
     if (e instanceof UsageLimitExceededError) {
@@ -178,8 +182,9 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
       return;
     }
-    console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${e.message}`));
-    await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
+    await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, err);
   }
 }
 

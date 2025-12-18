@@ -9,12 +9,12 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.stripeRole == 'basic';
     }
 
-    function isPremium() {
-      return request.auth != null && request.auth.token.stripeRole == 'premium';
+    function isPro() {
+      return request.auth != null && request.auth.token.stripeRole == 'pro';
     }
 
     function isSubscribed() {
-      return request.auth != null && request.auth.token.stripeRole in ['free', 'basic', 'premium'];
+      return request.auth != null && request.auth.token.stripeRole in ['free', 'basic', 'pro'];
     }
 
     function isFree() {

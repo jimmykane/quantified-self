@@ -33,6 +33,7 @@ export interface StripePrice {
     interval: 'day' | 'month' | 'week' | 'year' | null;
     interval_count: number | null;
     trial_period_days: number | null;
+    metadata?: { [key: string]: string };
 }
 
 export interface StripeSubscription {
@@ -56,30 +57,89 @@ export class AppPaymentService {
 
     /**
      * Fetches all active products with their prices.
+     * Transforms Single-Product-Multi-Price model into Virtual Multi-Products for UI.
      */
     getProducts(): Observable<StripeProduct[]> {
         const productsRef = collection(this.firestore, 'products');
         const activeProductsQuery = query(productsRef, where('active', '==', true));
 
         return collectionData(activeProductsQuery, { idField: 'id' }).pipe(
+            map(docs => docs as StripeProduct[]),
             switchMap((products: StripeProduct[]) => {
                 // Fetch prices for each product
                 const productsWithPrices$ = products.map(async product => {
                     const p = await this.getProductWithPrices(product);
-                    // Fallback: If 'role' is missing, check 'firebaseRole'
-                    if (!p.metadata?.role && p.metadata?.firebaseRole) {
-                        p.metadata.role = p.metadata.firebaseRole;
-                    }
-
-                    // Specific fix for the Free plan if it's strictly 0.00 and has no metadata at all
-                    // (User mentioned "role like firebaseRole and role", so we prioritize those)
-                    if (!p.metadata?.role && p.prices?.some(price => price.unit_amount === 0)) {
-                        p.metadata = { ...p.metadata, role: 'free' };
-                    }
-
                     return p;
                 });
                 return from(Promise.all(productsWithPrices$));
+            }),
+            map((products: StripeProduct[]) => {
+                const virtualProducts: StripeProduct[] = [];
+
+                console.log('getProducts raw input:', products);
+
+                // Flatten/Split logic
+                for (const product of products) {
+                    console.log(`Processing product ${product.id}`, product);
+
+                    // Check if this product has prices with 'firebaseRole' metadata
+                    const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
+
+                    const basicPrices = product.prices?.filter(p => getRole(p) === 'basic');
+                    const proPrices = product.prices?.filter(p => getRole(p) === 'pro');
+
+                    console.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
+
+                    if ((basicPrices && basicPrices.length > 0) || (proPrices && proPrices.length > 0)) {
+                        // Split this product into virtual products per price/role
+
+                        if (basicPrices && basicPrices.length > 0) {
+                            virtualProducts.push({
+                                ...product,
+                                id: `${product.id}_basic`, // Virtual ID
+                                name: 'Basic', // Override name
+                                description: 'Essential features for everyday users.',
+                                role: 'basic',
+                                metadata: { ...product.metadata, role: 'basic' },
+                                prices: basicPrices
+                            });
+                        }
+
+                        if (proPrices && proPrices.length > 0) {
+                            virtualProducts.push({
+                                ...product,
+                                id: `${product.id}_pro`, // Virtual ID
+                                name: 'Pro', // Override name
+                                description: 'Advanced tools for power users.',
+                                role: 'pro',
+                                metadata: { ...product.metadata, role: 'pro' },
+                                prices: proPrices
+                            });
+                        }
+                    } else {
+                        // Legacy/Fallback behavior: Use product-level metadata
+                        if (!product.metadata?.role && product.metadata?.firebaseRole) {
+                            product.metadata.role = product.metadata.firebaseRole;
+                        }
+
+                        // Ignore strictly free products if we are killing the free tier? 
+                        // User said "We wont have a free tier anymore". 
+                        // So let's filter out anything that resolves to 'free' role.
+                        if (product.metadata?.role !== 'free') {
+                            virtualProducts.push(product);
+                        }
+                    }
+                }
+
+                console.log('getProducts virtual output:', virtualProducts);
+
+                // Sort: Basic first, then Pro
+                const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
+                return virtualProducts.sort((a, b) => {
+                    const rA = (a.role || a.metadata?.role || '') as string;
+                    const rB = (b.role || b.metadata?.role || '') as string;
+                    return (roleOrder[rA] || 99) - (roleOrder[rB] || 99);
+                });
             })
         );
     }
@@ -89,8 +149,8 @@ export class AppPaymentService {
         const activePricesQuery = query(pricesRef, where('active', '==', true));
 
         return new Promise((resolve) => {
-            collectionData(activePricesQuery, { idField: 'id' }).pipe(take(1)).subscribe((prices: StripePrice[]) => {
-                resolve({ ...product, prices });
+            collectionData(activePricesQuery, { idField: 'id' }).pipe(take(1)).subscribe((prices) => {
+                resolve({ ...product, prices: prices as StripePrice[] });
             });
         });
     }
@@ -239,6 +299,7 @@ export class AppPaymentService {
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
         return collectionData(activeQuery, { idField: 'id' }).pipe(
+            map(docs => docs as StripeSubscription[]),
             switchMap((subscriptions: StripeSubscription[]) => {
                 if (subscriptions.length === 0) return from([[]]);
 

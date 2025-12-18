@@ -31,39 +31,40 @@ class PermissionsService {
                 user.acceptedDiagnosticsPolicy === true;
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
+            const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
-            const hasPaidAccess = stripeRole === 'premium' || stripeRole === 'basic' || (user as any).isPremium === true;
+            const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
 
-            console.log('[PremiumGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
+            console.log('[ProGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
 
-            // If they have any level of premium access, they are always allowed
+            // If they have any level of paid access, they are always allowed
             if (hasPaidAccess) {
-                console.log('[PremiumGuard] Access GRANTED (Premium)');
+                console.log('[ProGuard] Access GRANTED (Pro/Basic)');
                 return true;
             }
 
-            // If they ARE NOT premium, but they ALSO HAVEN'T finished onboarding (terms OR initial sub),
+            // If they ARE NOT paid, but they ALSO HAVEN'T finished onboarding (terms OR initial sub),
             // then we should NOT redirect them to /pricing yet.
             // OnboardingGuard will catch them and send them to /onboarding.
             if (!termsAccepted || !hasSubscribedOnce) {
-                console.log('[PremiumGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
+                console.log('[ProGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
                 // We return false but do NOT navigate to /pricing, so OnboardingGuard can win.
                 return false;
             }
 
             // If we are here, it means they HAVE accepted terms and HAVE subscribed once before,
-            // but they are currently NOT premium. Land them on /pricing.
-            console.log('[PremiumGuard] Access DENIED. User is a lapsed premium member. Redirecting to /pricing');
+            // but they are currently NOT paid. Land them on /pricing.
+            console.log('[ProGuard] Access DENIED. User is a lapsed pro member. Redirecting to /pricing');
             this.router.navigate(['/pricing']);
             return false;
         } catch (error) {
-            console.error('[PremiumGuard] Error', error);
+            console.error('[ProGuard] Error', error);
             this.router.navigate(['/pricing']);
             return false;
         }
     }
 }
 
-export const premiumGuard: CanActivateFn = (route, state) => {
+export const proGuard: CanActivateFn = (route, state) => {
     return inject(PermissionsService).canActivate();
 };

@@ -7,7 +7,7 @@ import { Subscription } from 'rxjs';
     standalone: true
 })
 export class HasRoleDirective implements OnInit {
-    @Input('appHasRole') requiredRole: 'basic' | 'premium';
+    @Input('appHasRole') requiredRole: 'basic' | 'pro';
 
     constructor(
         private templateRef: TemplateRef<any>,
@@ -38,14 +38,17 @@ export class HasRoleDirective implements OnInit {
         }
 
         if (this.requiredRole === 'basic') {
-            // Basic role requirement is satisfied by 'basic' OR 'premium'
+            // Basic role requirement is satisfied by 'basic' OR 'pro'
             return this.userService.hasPaidAccess();
         }
 
-        if (this.requiredRole === 'premium') {
-            // Premium requirement is strict
-            return this.userService.isPremium();
+        if (this.requiredRole === 'pro') {
+            // Pro requirement is strict
+            return this.userService.isPro();
         }
+
+        return false;
+    }
 
         return false;
     }

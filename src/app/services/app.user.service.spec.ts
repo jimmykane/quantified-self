@@ -71,22 +71,22 @@ describe('AppUserService', () => {
             expect(hasAccess).toBe(true);
         });
 
-        it('isPremium should return false for basic', async () => {
-            const isPremium = await service.isPremium();
-            expect(isPremium).toBe(false);
+        it('isPro should return false for basic', async () => {
+            const isPro = await service.isPro();
+            expect(isPro).toBe(false);
         });
 
-        it('should return premium role', async () => {
+        it('should return pro role', async () => {
             mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
-                claims: { stripeRole: 'premium' }
+                claims: { stripeRole: 'pro' }
             }));
             const role = await service.getSubscriptionRole();
-            expect(role).toBe('premium');
+            expect(role).toBe('pro');
         });
 
-        it('hasPaidAccess should return true for premium', async () => {
+        it('hasPaidAccess should return true for pro', async () => {
             mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
-                claims: { stripeRole: 'premium' }
+                claims: { stripeRole: 'pro' }
             }));
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);

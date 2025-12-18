@@ -2,6 +2,8 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
+import { PRICE_TO_PLAN } from '../shared/pricing';
+
 export const restoreUserClaims = onCall({
     region: 'europe-west2',
     cors: ALLOWED_CORS_ORIGINS
@@ -25,10 +27,22 @@ export const restoreUserClaims = onCall({
     }
 
     const subData = snapshot.docs[0].data();
-    const role = subData.role;
+    let role = subData.role; // Default to metadata role
+
+    // Check items/price_id against hardcoded map
+    // Subscription items structure: items: [ { price: { id: "..." } } ]
+    if (subData.items && subData.items.length > 0) {
+        const priceId = subData.items[0].price.id;
+        if (PRICE_TO_PLAN[priceId]) {
+            role = PRICE_TO_PLAN[priceId];
+            console.log(`[restoreUserClaims] Mapped price ${priceId} to role ${role}`);
+        } else {
+            console.warn(`[restoreUserClaims] Price ${priceId} not found in PRICE_TO_PLAN. Using metadata role: ${role}`);
+        }
+    }
 
     if (!role) {
-        throw new HttpsError('failed-precondition', 'Subscription found but no role defined in metadata.');
+        throw new HttpsError('failed-precondition', 'Subscription found but no role defined/mapped.');
     }
 
     // Set custom user claims on this specific user

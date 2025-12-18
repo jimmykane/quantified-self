@@ -3,10 +3,10 @@ import { AppUserService } from '../services/app.user.service';
 import { Subscription } from 'rxjs';
 
 @Directive({
-    selector: '[appPremiumOnly]',
+    selector: '[appProOnly]',
     standalone: true
 })
-export class PremiumOnlyDirective implements OnInit {
+export class ProOnlyDirective implements OnInit {
 
     constructor(
         private templateRef: TemplateRef<any>,
@@ -18,15 +18,15 @@ export class PremiumOnlyDirective implements OnInit {
     async ngOnInit() {
         this.viewContainer.clear();
         try {
-            const isPremium = await this.userService.isPremium();
-            if (isPremium) {
+            const isPro = await this.userService.isPro();
+            if (isPro) {
                 this.viewContainer.createEmbeddedView(this.templateRef);
             } else {
                 this.viewContainer.clear();
             }
             this.cdr.markForCheck();
         } catch (e) {
-            console.error('Error in PremiumOnlyDirective', e);
+            console.error('Error in ProOnlyDirective', e);
             this.viewContainer.clear();
         }
     }

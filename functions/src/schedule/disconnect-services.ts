@@ -8,10 +8,10 @@ import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
 /**
- * Disconnects external services (Garmin, Suunto, COROS) for users who have no active premium subscription.
+ * Disconnects external services (Garmin, Suunto, COROS) for users who have no active pro subscription.
  * Iterates through all connected tokens to ensure strict enforcement.
  */
-export const disconnectServicesForNonPremium = functions.region('europe-west2').pubsub.schedule('every 24 hours').onRun(async (context) => {
+export const disconnectServicesForNonPro = functions.region('europe-west2').pubsub.schedule('every 24 hours').onRun(async (context) => {
     // 1. Identify all users with ANY connected service
     const userIDs = new Set<string>();
 
@@ -30,20 +30,20 @@ export const disconnectServicesForNonPremium = functions.region('europe-west2').
     console.log(`Found ${userIDs.size} users with connected services.`);
 
     for (const uid of userIDs) {
-        // 2. Check for ACTIVE premium subscription
-        // We check for 'active' or 'trialing' status AND 'premium' role.
-        const activePremiumSub = await admin.firestore().collection(`customers/${uid}/subscriptions`)
+        // 2. Check for ACTIVE pro subscription
+        // We check for 'active' or 'trialing' status AND 'pro' role.
+        const activeProSub = await admin.firestore().collection(`customers/${uid}/subscriptions`)
             .where('status', 'in', ['active', 'trialing'])
-            .where('role', '==', 'premium')
+            .where('role', '==', 'pro')
             .limit(1)
             .get();
 
-        if (!activePremiumSub.empty) {
-            // User has premium, skip
+        if (!activeProSub.empty) {
+            // User has pro, skip
             continue;
         }
 
-        console.log(`Disconnecting services for user ${uid} (No active premium subscription found).`);
+        console.log(`Disconnecting services for user ${uid} (No active pro subscription found).`);
 
         try {
             await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp);

@@ -28,6 +28,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppTokens: Auth2ServiceTokenInterface[];
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
+  public hasProAccess = false;
 
   private userSubscription: Subscription;
 
@@ -43,7 +44,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.isLoading = true;
-    this.userSubscription = this.authService.user$.subscribe(((user) => {
+    this.userSubscription = this.authService.user$.subscribe((async (user) => {
       this.user = user;
       this.isLoading = false;
       if (!user) {
@@ -59,6 +60,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
         });
         return;
       }
+
+      // Check for Pro Role via Claims (Force Refresh)
+      this.hasProAccess = await this.userService.isPro();
 
       const indexMap = {
         [ServiceNames.SuuntoApp]: 0,

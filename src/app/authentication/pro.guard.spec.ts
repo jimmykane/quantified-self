@@ -1,12 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { premiumGuard } from './premium.guard';
+import { proGuard } from './pro.guard';
 import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from './app.auth.service';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
 
-describe('premiumGuard', () => {
+describe('proGuard', () => {
     let router: Router;
     let authServiceStub: Partial<AppAuthService>;
     let userServiceStub: Partial<AppUserService>;
@@ -33,17 +33,17 @@ describe('premiumGuard', () => {
         router = TestBed.inject(Router);
     });
 
-    it('should allow access if user is premium', async () => {
+    it('should allow access if user is pro', async () => {
         authServiceStub.user$ = of({
             uid: '123',
-            stripeRole: 'premium',
+            stripeRole: 'pro',
             acceptedPrivacyPolicy: true,
             acceptedDataPolicy: true,
             acceptedTrackingPolicy: true,
             acceptedDiagnosticsPolicy: true
         } as any);
 
-        const result = await TestBed.runInInjectionContext(() => premiumGuard({} as any, {} as any));
+        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
         expect(result).toBe(true);
     });
 
@@ -57,7 +57,7 @@ describe('premiumGuard', () => {
             acceptedDiagnosticsPolicy: true
         } as any);
 
-        const result = await TestBed.runInInjectionContext(() => premiumGuard({} as any, {} as any));
+        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
         expect(result).toBe(true);
     });
 
@@ -72,7 +72,7 @@ describe('premiumGuard', () => {
             acceptedDiagnosticsPolicy: true
         } as any);
 
-        const result = await TestBed.runInInjectionContext(() => premiumGuard({} as any, {} as any));
+        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
         expect(result).toBe(false);
         expect(router.navigate).toHaveBeenCalledWith(['/pricing']);
     });

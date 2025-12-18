@@ -84,7 +84,7 @@ import { DataEPOC } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc, DocumentData } from '@angular/fire/firestore';
 import { getFunctions, httpsCallable, httpsCallableFromURL, Functions } from '@angular/fire/functions';
 
 
@@ -346,14 +346,15 @@ export class AppUserService implements OnDestroy {
 
   }
 
-  public getUserByID(userID: string): Observable<User> {
+  public getUserByID(userID: string): Observable<User | null> {
     const userDoc = doc(this.firestore, 'users', userID);
-    return docData(userDoc).pipe(map((user: User) => {
+    return docData(userDoc).pipe(map((user: DocumentData | undefined) => {
       if (!user) {
         return null;
       }
-      user.settings = this.fillMissingAppSettings(user);
-      return user;
+      const u = user as User;
+      u.settings = this.fillMissingAppSettings(u);
+      return u;
     }));
   }
 
@@ -390,7 +391,9 @@ export class AppUserService implements OnDestroy {
     if (!user || user.lastSeenPromo) {
       return false;
     }
-    return (+user.lastSignInDate - +user.creationDate) > 60 * 60 * 24 * 30 * 1000; // Bigger than 1 months
+    const lastSignIn = user.lastSignInDate ? +user.lastSignInDate : 0;
+    const creation = user.creationDate ? +user.creationDate : 0;
+    return (lastSignIn - creation) > 60 * 60 * 24 * 30 * 1000; // Bigger than 1 months
   }
 
   public async setLastSeenPromoToNow(user: User) {
@@ -556,17 +559,17 @@ export class AppUserService implements OnDestroy {
     return role === 'basic';
   }
 
-  public async isPremium(): Promise<boolean> {
+  public async isPro(): Promise<boolean> {
     const role = await this.getSubscriptionRole();
-    return role === 'premium';
+    return role === 'pro';
   }
 
   /**
-   * Returns true if the user has any level of paid access (basic or premium)
+   * Returns true if the user has any level of paid access (basic or pro)
    */
   public async hasPaidAccess(): Promise<boolean> {
     const role = await this.getSubscriptionRole();
-    return role === 'premium' || role === 'basic';
+    return role === 'pro' || role === 'basic';
   }
 
   public async deleteAllUserData(user: User) {
@@ -580,7 +583,10 @@ export class AppUserService implements OnDestroy {
     }
   }
   public getUserChartDataTypesToUse(user: User): string[] {
-    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+    if (!user.settings?.chartSettings?.dataTypeSettings) {
+      return [];
+    }
+    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce<string[]>((dataTypesToUse, dataTypeSettingsKey) => {
       if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
         dataTypesToUse.push(dataTypeSettingsKey);
       }
@@ -592,11 +598,14 @@ export class AppUserService implements OnDestroy {
   }
 
   private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
-    const serviceNamesToCollectionName = {
+    const serviceNamesToCollectionName: Partial<Record<ServiceNames, string>> = {
       [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
       [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
     };
-    const collectionRef = collection(this.firestore, serviceNamesToCollectionName[serviceName], user.uid, 'tokens');
+    const collectionName = serviceNamesToCollectionName[serviceName];
+    if (!collectionName) return from([]);
+
+    const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
     return collectionData(collectionRef).pipe(
       catchError(error => {
         return [];
