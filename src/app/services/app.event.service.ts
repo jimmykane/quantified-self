@@ -1,8 +1,8 @@
-import { inject, Injectable, OnDestroy } from '@angular/core';
+import { inject, Injectable, Injector, OnDestroy } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, DocumentData, CollectionReference } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, DocumentData, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
 import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -32,6 +32,9 @@ import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 
+import { AppUserService } from './app.user.service';
+import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
+
 @Injectable({
   providedIn: 'root',
 })
@@ -39,6 +42,7 @@ export class AppEventService implements OnDestroy {
 
   private firestore = inject(Firestore);
   private storage = inject(Storage);
+  private injector = inject(Injector);
   private static reportedUnknownTypes = new Set<string>();
 
   constructor(
@@ -221,6 +225,20 @@ export class AppEventService implements OnDestroy {
   }
 
   public async writeAllEventData(user: User, event: EventInterface, originalFile?: { data: any, extension: string }) {
+    // 1. Check Pro Status
+    const userService = this.injector.get(AppUserService);
+    const isPro = await userService.isPro();
+    if (!isPro) {
+      // 2. Check Limits
+      const role = await userService.getSubscriptionRole() || 'free';
+      const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
+      const currentCount = await this.getEventCount(user);
+
+      if (currentCount >= limit) {
+        throw new Error(`Upload limit reached for ${role} tier. You have ${currentCount} events. Limit is ${limit}. Please upgrade to upload more.`);
+      }
+    }
+
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
         // Construct the full path from the array parts
@@ -605,6 +623,11 @@ export class AppEventService implements OnDestroy {
       results.push(myArray.splice(0, chunk_size));
     }
     return results;
+  }
+  public async getEventCount(user: User): Promise<number> {
+    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const snapshot = await getCountFromServer(query(eventsRef));
+    return snapshot.data().count;
   }
 }
 

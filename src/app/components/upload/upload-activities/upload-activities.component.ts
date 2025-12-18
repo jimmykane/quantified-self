@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { AppEventService } from '../../../services/app.event.service';
+import { AppUserService } from '../../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
@@ -14,6 +15,7 @@ import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { Overlay } from '@angular/cdk/overlay';
+import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
 
 
 import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
@@ -26,6 +28,10 @@ import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective {
   private analytics = inject(Analytics);
+  public uploadCount: number | null = null;
+  public uploadLimit: number | null = null;
+  public isPro: boolean = false;
+  private userService = inject(AppUserService);
 
   constructor(
     protected snackBar: MatSnackBar,
@@ -35,6 +41,27 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected overlay: Overlay,
     private eventService: AppEventService) {
     super(snackBar, dialog, filesStatusService)
+  }
+
+  async ngOnInit() {
+    super.ngOnInit();
+    await this.calculateRemainingUploads();
+  }
+
+  async calculateRemainingUploads() {
+    if (!this.user) return;
+
+    // Fetch Role
+    this.isPro = await this.userService.isPro();
+    if (this.isPro) return; // Unlimited
+
+    // Fetch Count
+    this.uploadCount = await this.eventService.getEventCount(this.user);
+
+    // Get Limit
+    const role = await this.userService.getSubscriptionRole() || 'free';
+    // Import dynamically or use a known path if possible, but for now let's rely on the import I will add
+    this.uploadLimit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
   }
 
   processAndUploadFile(file): Promise<EventInterface> {
@@ -98,6 +125,8 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
             data: fileReaderResult as any, // ArrayBuffer or string
             extension: file.extension
           });
+          // Refresh count
+          await this.calculateRemainingUploads();
         } catch (e) {
           this.snackBar.open(`Could not upload ${file.filename}, reason: ${e.message}`);
           reject(e);

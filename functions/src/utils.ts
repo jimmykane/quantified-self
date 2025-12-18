@@ -214,18 +214,15 @@ export class UsageLimitExceededError extends Error {
   }
 }
 
+import { USAGE_LIMITS } from './shared/limits';
+
 export async function checkEventUsageLimit(userID: string): Promise<void> {
   const role = await getUserRole(userID);
 
   // Pro: Unlimited
   if (role === 'pro') return;
 
-  const limits: { [key: string]: number } = {
-    'free': 10,
-    'basic': 100
-  };
-
-  const limit = limits[role] || 10; // Default to free limit
+  const limit = USAGE_LIMITS[role] || 10; // Default to free limit
 
   // Efficiently count documents
   const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
