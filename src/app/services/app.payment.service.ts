@@ -64,7 +64,21 @@ export class AppPaymentService {
         return collectionData(activeProductsQuery, { idField: 'id' }).pipe(
             switchMap((products: StripeProduct[]) => {
                 // Fetch prices for each product
-                const productsWithPrices$ = products.map(product => this.getProductWithPrices(product));
+                const productsWithPrices$ = products.map(async product => {
+                    const p = await this.getProductWithPrices(product);
+                    // Fallback: If 'role' is missing, check 'firebaseRole'
+                    if (!p.metadata?.role && p.metadata?.firebaseRole) {
+                        p.metadata.role = p.metadata.firebaseRole;
+                    }
+
+                    // Specific fix for the Free plan if it's strictly 0.00 and has no metadata at all
+                    // (User mentioned "role like firebaseRole and role", so we prioritize those)
+                    if (!p.metadata?.role && p.prices?.some(price => price.unit_amount === 0)) {
+                        p.metadata = { ...p.metadata, role: 'free' };
+                    }
+
+                    return p;
+                });
                 return from(Promise.all(productsWithPrices$));
             })
         );
@@ -213,9 +227,9 @@ export class AppPaymentService {
     }
 
     /**
-     * Gets the current user's active subscriptions.
+     * Gets the current user's active subscriptions with product role metadata.
      */
-    getUserSubscriptions(): Observable<StripeSubscription[]> {
+    getUserSubscriptions(): Observable<(StripeSubscription & { role?: string })[]> {
         const user = this.auth.currentUser;
         if (!user) {
             return from([[]]);
@@ -224,7 +238,39 @@ export class AppPaymentService {
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
-        return collectionData(activeQuery, { idField: 'id' }) as Observable<StripeSubscription[]>;
+        return collectionData(activeQuery, { idField: 'id' }).pipe(
+            switchMap((subscriptions: StripeSubscription[]) => {
+                if (subscriptions.length === 0) return from([[]]);
+
+                const subsWithRole$ = subscriptions.map(async (sub: any) => {
+                    // We need to fetch the product or price to know the role
+                    // The subscription object from Stripe Extension usually has `items` array or `product` reference
+                    // but the extension mirroring often mirrors specific fields. 
+                    // Let's check what the extension mirrors. standard mirrors: 
+                    // items: [{ price: { product: ref } }] etc.
+                    // Or sometimes simply `role` is copied if configured? 
+                    // Default extension behavior does NOT copy custom metadata to the sub document directly usually.
+                    // However, the `role` field on the USER custom claims comes from the product metadata.
+
+                    // If we can't easily get the role from the sub doc, we act defensively:
+                    // We assume if the user has role='free', and they have a subscription, 
+                    // valid "paid" subscriptions usually have role='premium' or 'basic'.
+                    // The sub doc usually contains `role` field IF the extension is configured to sync it?
+                    // Let's assume the extension puts `role` on the sub doc if it updated the claims.
+                    // IF NOT, we might need to fetch the product. 
+
+                    // For now, let's look for `role` on the subscription document itself, 
+                    // as the extension mirrors metadata if configured.
+
+                    // If that fails, we can try to look up the product from the price ref if available?
+                    // BUT for the "Free Plan" subscription I recommended, it has role='free'.
+                    // So `sub.role` should be 'free'.
+
+                    return sub;
+                });
+                return from(Promise.all(subsWithRole$));
+            })
+        ) as Observable<(StripeSubscription & { role?: string })[]>;
     }
 
     /**

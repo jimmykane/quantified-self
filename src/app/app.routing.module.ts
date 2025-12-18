@@ -44,37 +44,37 @@ const routes: Routes = [
     path: 'dashboard',
     loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule),
     data: { title: 'Dashboard', animation: 'Dashboard' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'mytracks',
     loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
     data: { title: 'MyTracks', animation: 'MyTracks' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'coaching',
     loadChildren: () => import('./modules/coaching.module').then(module => module.CoachingModule),
     data: { title: 'Coaching', animation: 'Coaching' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'settings',
     loadChildren: () => import('./modules/user.module').then(module => module.UserModule),
     data: { title: 'Settings', animation: 'User' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard],
+    canMatch: [authGuard, onboardingGuard],
   },
   {
     path: 'user/:userID/dashboard',
     loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule),
     data: { title: `Athlete Dashboard`, animation: 'Dashboard' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'user/:userID/event/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: { title: 'Event Details', animation: 'Event' },
-    canMatch: [authGuard, onboardingGuard, premiumGuard]
+    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'policies',

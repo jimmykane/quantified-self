@@ -5,7 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppUserService } from '../../services/app.user.service';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 
 @Component({
@@ -36,7 +36,9 @@ export class PricingComponent implements OnInit {
             this.currentRole = 'free';
         }
 
-        this.activeSubscriptions$ = this.paymentService.getUserSubscriptions();
+        this.activeSubscriptions$ = this.paymentService.getUserSubscriptions().pipe(
+            map(subs => subs.filter(sub => sub.role !== 'free'))
+        );
     }
 
     async subscribe(price: any) {

@@ -32,11 +32,35 @@ import { Auth } from '@angular/fire/auth';
                 </svg>
               </div>
               
-              <h2 class="welcome-text">Welcome to Premium!</h2>
-              <p class="description">
-                Thank you for your purchase. Your subscription is now active. 
-                You now have full access to all premium features and performance analytics.
-              </p>
+              @switch (assignedRole) {
+                @case ('premium') {
+                  <h2 class="welcome-text">Welcome to Premium!</h2>
+                  <p class="description">
+                    Thank you for your purchase. Your subscription is now active. 
+                    You now have full access to all premium features and performance analytics.
+                  </p>
+                }
+                @case ('basic') {
+                  <h2 class="welcome-text">Welcome to Basic!</h2>
+                  <p class="description">
+                    Thank you for your purchase. Your plan is now active. 
+                    You have access to core features of the platform.
+                  </p>
+                }
+                @case ('free') {
+                   <h2 class="welcome-text">Welcome!</h2>
+                   <p class="description">
+                     Your account setup is complete. You are currently on the free plan.
+                   </p>
+                }
+                @default {
+                  <h2 class="welcome-text">Purchase Successful!</h2>
+                  <p class="description">
+                    Thank you for your purchase. Your account has been updated.
+                  </p>
+                }
+              }
+
             }
           </div>
         </mat-card-content>
@@ -155,6 +179,7 @@ import { Auth } from '@angular/fire/auth';
 export class PaymentSuccessComponent implements OnInit {
   private auth = inject(Auth);
   isRefreshing = true;
+  assignedRole: string | null = null;
 
   async ngOnInit(): Promise<void> {
     this.isRefreshing = true;
@@ -178,13 +203,14 @@ export class PaymentSuccessComponent implements OnInit {
         console.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
         // Force refresh
         const tokenResult = await user.getIdTokenResult(true);
-        const role = tokenResult.claims['stripeRole'];
+        const role = tokenResult.claims['stripeRole'] as string;
 
         console.log('PaymentSuccess: Claims:', tokenResult.claims);
 
         if (role) {
           console.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
           hasPremiumClaim = true;
+          this.assignedRole = role;
         } else {
           console.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try

@@ -40,7 +40,9 @@
     @for (product of products; track product.id) {
     <mat-card class="product-card" [class.current-plan]="product.metadata.role === currentRole">
       <mat-card-header>
-        <mat-card-title>{{ product.name }}</mat-card-title>
+        <mat-card-title>
+          {{ product.name }}
+        </mat-card-title>
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
@@ -52,9 +54,24 @@
             <span *ngIf="price.recurring">/ {{ price.recurring.interval }}</span>
           </h3>
 
+
+          <!-- Current Plan Check -->
           @if (product.metadata.role === currentRole) {
-          <button mat-stroked-button disabled>Current Plan</button>
-          } @else if (currentRole === 'basic' && product.metadata.role === 'premium') {
+          <button mat-stroked-button disabled class="current-plan-btn">Current Plan</button>
+          }
+
+          <!-- Upgrade Checks -->
+          @else if (currentRole === 'free' && (product.metadata.role === 'basic' || product.metadata.role ===
+          'premium')) {
+          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
+            @if (loadingPriceId === price.id) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            {{ price.recurring ? 'Upgrade' : 'Buy Now' }}
+            }
+          </button>
+          }
+          @else if (currentRole === 'basic' && product.metadata.role === 'premium') {
           <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
@@ -62,7 +79,18 @@
             Upgrade
             }
           </button>
-          } @else {
+          }
+
+          <!-- Downgrade / Other Checks -->
+          @else if (currentRole === 'premium' && (product.metadata.role === 'basic' || product.metadata.role ===
+          'free')) {
+          <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">Downgrade</button>
+          }
+          @else if (currentRole === 'basic' && product.metadata.role === 'free') {
+          <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">Downgrade</button>
+          }
+
+          @else {
           <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
