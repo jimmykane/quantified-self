@@ -1,6 +1,10 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
 import Stripe from 'stripe';
 
 /**
@@ -23,7 +27,12 @@ export const handleStripeWebhook = onRequest({
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     if (!sig || !webhookSecret) {
-        logger.error('Missing Stripe signature or webhook secret');
+        logger.error('Stripe webhook configuration missing', {
+            hasSignature: !!sig,
+            hasSecret: !!webhookSecret,
+            secretLength: webhookSecret ? webhookSecret.length : 0,
+            headers: req.headers
+        });
         res.status(400).send('Webhook Error: Missing signature or secret');
         return;
     }
