@@ -1,7 +1,7 @@
 <div class="pricing-container">
-  <h1>{{ isPremium ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
+  <h1>{{ currentRole === 'premium' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
 
-  <div *ngIf="!isPremium && (activeSubscriptions$ | async) as subs" class="restore-section">
+  <div *ngIf="currentRole === 'free' && (activeSubscriptions$ | async) as subs" class="restore-section">
     <div *ngIf="subs.length > 0" class="restore-alert">
       <p>We found an active subscription pending update.</p>
       <button mat-stroked-button color="accent" (click)="restorePurchases()" [disabled]="isLoading">
@@ -14,7 +14,7 @@
     </div>
   </div>
 
-  @if (isPremium) {
+  @if (currentRole === 'premium') {
   <div class="manage-subscription-container">
     <mat-card class="product-card">
       <mat-card-header>
@@ -24,13 +24,13 @@
       <mat-card-content class="manage-content">
         <p>Thank you for being a premium member. You have full access to all features.</p>
         <div class="price-section">
-            <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
+          <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
             Manage Subscription
             }
-            </button>
+          </button>
         </div>
       </mat-card-content>
     </mat-card>
@@ -38,19 +38,31 @@
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     @for (product of products; track product.id) {
-    <mat-card class="product-card">
+    <mat-card class="product-card" [class.current-plan]="product.metadata.role === currentRole">
       <mat-card-header>
         <mat-card-title>{{ product.name }}</mat-card-title>
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
         <!-- If there are features list, they would go here -->
-         <div style="flex-grow: 1;"></div>
+        <div style="flex-grow: 1;"></div>
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }}
             <span *ngIf="price.recurring">/ {{ price.recurring.interval }}</span>
           </h3>
+
+          @if (product.metadata.role === currentRole) {
+          <button mat-stroked-button disabled>Current Plan</button>
+          } @else if (currentRole === 'basic' && product.metadata.role === 'premium') {
+          <button mat-flat-button color="accent" (click)="subscribe(price.id)" [disabled]="isLoading">
+            @if (loadingPriceId === price.id) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Upgrade
+            }
+          </button>
+          } @else {
           <button mat-flat-button color="primary" (click)="subscribe(price.id)" [disabled]="isLoading">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
@@ -58,6 +70,8 @@
             {{ price.recurring ? 'Subscribe' : 'Buy Now' }}
             }
           </button>
+          }
+
         </div>
       </mat-card-content>
     </mat-card>
@@ -65,8 +79,8 @@
   </div>
   <ng-template #loading>
     <div class="loading-state">
-        <mat-spinner diameter="40"></mat-spinner>
-        <p>Loading plans...</p>
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading plans...</p>
     </div>
   </ng-template>
   }

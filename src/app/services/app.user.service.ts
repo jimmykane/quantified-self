@@ -547,12 +547,22 @@ export class AppUserService implements OnDestroy {
     }
   }
 
-  public async isPremium(): Promise<boolean> {
-    console.log('AppUserService: Checking isPremium...');
+  public async isBasic(): Promise<boolean> {
     const role = await this.getSubscriptionRole();
-    const isPremium = role === 'premium';
-    console.log(`AppUserService: isPremium result: ${isPremium} (Role: ${role})`);
-    return isPremium;
+    return role === 'basic';
+  }
+
+  public async isPremium(): Promise<boolean> {
+    const role = await this.getSubscriptionRole();
+    return role === 'premium';
+  }
+
+  /**
+   * Returns true if the user has any level of paid access (basic or premium)
+   */
+  public async hasPaidAccess(): Promise<boolean> {
+    const role = await this.getSubscriptionRole();
+    return role === 'premium' || role === 'basic';
   }
 
   public async deleteAllUserData(user: User) {

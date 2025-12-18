@@ -112,13 +112,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         user.acceptedDiagnosticsPolicy === true;
 
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
-      const isPremium = user.stripeRole === 'premium' || user.isPremium === true;
+      const stripeRole = user.stripeRole;
+      const hasPaidAccess = stripeRole === 'premium' || stripeRole === 'basic' || user.isPremium === true;
 
-      this.onboardingCompleted = termsAccepted && (isPremium || hasSubscribedOnce);
+      this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
-      // If user IS premium now, they definitely "subscribed once".
+      // If user HAS premium access now, they definitely "subscribed once".
       // Mark it persistently if not already marked.
-      if (isPremium && !hasSubscribedOnce) {
+      if (hasPaidAccess && !hasSubscribedOnce) {
         // Fire and forget update to persist this fact for future (e.g. if they cancel)
         this.userService.updateUserProperties(user, { hasSubscribedOnce: true }).catch(err => console.error('Failed to persist hasSubscribedOnce', err));
       }

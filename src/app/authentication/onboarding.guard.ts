@@ -25,16 +25,17 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 user.acceptedDiagnosticsPolicy === true;
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
-            const isPremium = (user as any).stripeRole === 'premium' || (user as any).isPremium === true;
+            const stripeRole = (user as any).stripeRole;
+            const hasPaidAccess = stripeRole === 'premium' || stripeRole === 'basic' || (user as any).isPremium === true;
 
             // User must have accepted terms AND (be premium OR have subscribed once)
-            const onboardingCompleted = termsAccepted && (isPremium || hasSubscribedOnce);
+            const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
             console.log('[OnboardingGuard] User Assessment:', {
                 uid: user.uid,
                 termsAccepted,
                 hasSubscribedOnce,
-                isPremium,
+                hasPaidAccess,
                 stripeRole: (user as any).stripeRole,
                 onboardingCompleted
             });

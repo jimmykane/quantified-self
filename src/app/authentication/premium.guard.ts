@@ -31,12 +31,13 @@ class PermissionsService {
                 user.acceptedDiagnosticsPolicy === true;
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
-            const isPremium = (user as any).stripeRole === 'premium' || (user as any).isPremium === true;
+            const stripeRole = (user as any).stripeRole;
+            const hasPaidAccess = stripeRole === 'premium' || stripeRole === 'basic' || (user as any).isPremium === true;
 
-            console.log('[PremiumGuard] Status:', { termsAccepted, hasSubscribedOnce, isPremium });
+            console.log('[PremiumGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
 
-            // If they are premium, they are always allowed
-            if (isPremium) {
+            // If they have any level of premium access, they are always allowed
+            if (hasPaidAccess) {
                 console.log('[PremiumGuard] Access GRANTED (Premium)');
                 return true;
             }

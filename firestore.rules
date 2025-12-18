@@ -9,10 +9,17 @@ service cloud.firestore {
        return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
       }
       
-      function isPremium() {
-        // Stripe extension adds 'stripeRole' claim. Adjust 'premium' to your specific role name.
+       function isBasic() {
+        return request.auth.token.stripeRole == 'basic';
+       }
+
+       function isPremium() {
         return request.auth.token.stripeRole == 'premium';
-      }
+       }
+
+       function hasPaidAccess() {
+        return request.auth.token.stripeRole in ['basic', 'premium'];
+       }
 
       allow read: if resource.data.privacy == 'public';
       allow read: if isCoach() == true;

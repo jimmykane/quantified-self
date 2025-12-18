@@ -16,7 +16,7 @@ import { Observable } from 'rxjs';
 })
 export class PricingComponent implements OnInit {
     products$: Observable<StripeProduct[]> | null = null;
-    isPremium = false;
+    currentRole: 'free' | 'basic' | 'premium' = 'free';
     isLoading = false;
     loadingPriceId: string | null = null;
 
@@ -27,7 +27,14 @@ export class PricingComponent implements OnInit {
 
     async ngOnInit(): Promise<void> {
         this.products$ = this.paymentService.getProducts();
-        this.isPremium = await this.userService.isPremium();
+
+        const role = await this.userService.getSubscriptionRole();
+        if (role === 'premium' || role === 'basic') {
+            this.currentRole = role;
+        } else {
+            this.currentRole = 'free';
+        }
+
         this.activeSubscriptions$ = this.paymentService.getUserSubscriptions();
     }
 
