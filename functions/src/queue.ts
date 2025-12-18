@@ -6,7 +6,7 @@ import {
   QueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent } from './utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './history';
 import {
@@ -280,6 +280,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     } catch (e: any) {
       // @todo should delete event  or separate catch
       console.error(e);
+      if (e instanceof UsageLimitExceededError) {
+        console.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
+        await increaseRetryCountForQueueItem(queueItem, serviceName, e, 20); // Stop retries
+        continue;
+      }
       console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, serviceName, e);
       continue;

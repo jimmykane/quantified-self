@@ -1,7 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertPremiumServiceAccess } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   deauthorizeServiceForUser,
@@ -32,6 +32,15 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-
   const userID = await getUserIDFromFirebaseToken(req);
   if (!userID) {
     res.status(403).send('Unauthorized');
+    return;
+  }
+
+  // Enforce Premium Access
+  try {
+    await assertPremiumServiceAccess(userID);
+  } catch (e: any) {
+    console.warn(`Blocking Suunto Auth for non-premium user ${userID}: ${e.message}`);
+    res.status(403).send(e.message);
     return;
   }
 
@@ -67,6 +76,15 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
   const userID = await getUserIDFromFirebaseToken(req);
   if (!userID) {
     res.status(403).send('Unauthorized');
+    return;
+  }
+
+  // Enforce Premium Access
+  try {
+    await assertPremiumServiceAccess(userID);
+  } catch (e: any) {
+    console.warn(`Blocking Suunto Token Set for non-premium user ${userID}: ${e.message}`);
+    res.status(403).send(e.message);
     return;
   }
 

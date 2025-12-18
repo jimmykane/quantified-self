@@ -88,6 +88,9 @@ export function isCorsAllowed(req: Request) {
 }
 
 export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string }) {
+  // Enforce Usage Limit
+  await checkEventUsageLimit(userID);
+
   event.setID(eventID);
 
   // Pre-assign Activity IDs to match legacy behavior (deterministic IDs)
@@ -189,6 +192,58 @@ export async function createFirebaseAccount(serviceUserID: string) {
   const token = await admin.auth().createCustomToken(uid);
   console.log('Created Custom token for UID "', uid, '" Token:', token);
   return token;
+}
+
+export async function getUserRole(userID: string): Promise<string> {
+  try {
+    const userRecord = await admin.auth().getUser(userID);
+    const role = userRecord.customClaims?.['stripeRole'] as string;
+    // Default to 'free' if no role or role is null
+    return role || 'free';
+  } catch (e) {
+    console.error(`Error fetching user role for ${userID}:`, e);
+    return 'free'; // Safe default
+  }
+}
+
+
+export class UsageLimitExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UsageLimitExceededError';
+  }
+}
+
+export async function checkEventUsageLimit(userID: string): Promise<void> {
+  const role = await getUserRole(userID);
+
+  // Premium: Unlimited
+  if (role === 'premium') return;
+
+  const limits: { [key: string]: number } = {
+    'free': 10,
+    'basic': 100
+  };
+
+  const limit = limits[role] || 10; // Default to free limit
+
+  // Efficiently count documents
+  const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
+  const snapshot = await eventsCollection.count().get();
+  const currentCount = snapshot.data().count;
+
+  console.log(`[UsageCheck] User: ${userID}, Role: ${role}, Count: ${currentCount}, Limit: ${limit}`);
+
+  if (currentCount >= limit) {
+    throw new UsageLimitExceededError(`Upload limit reached for ${role} tier. You have ${currentCount} events. Limit is ${limit}. Please upgrade to upload more.`);
+  }
+}
+
+export async function assertPremiumServiceAccess(userID: string): Promise<void> {
+  const role = await getUserRole(userID);
+  if (role !== 'premium') {
+    throw new Error(`Service sync is a Premium feature. Your current role is: ${role}. Please upgrade to Premium.`);
+  }
 }
 
 

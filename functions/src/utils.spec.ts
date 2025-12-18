@@ -118,5 +118,119 @@ describe('utils', () => {
         });
     });
 
+    describe('Role-Based Limits', () => {
+        // Use vi.hoisted to create mocks that can be referenced in vi.mock
+        const { mockGetUser, mockCollection, mockCountGet } = vi.hoisted(() => {
+            return {
+                mockGetUser: vi.fn(),
+                mockCollection: vi.fn(),
+                mockCountGet: vi.fn()
+            };
+        });
 
+        // Mock firebase-admin
+        vi.mock('firebase-admin', () => ({
+            auth: () => ({
+                getUser: mockGetUser
+            }),
+            firestore: () => ({
+                collection: mockCollection
+            })
+        }));
+
+        const mockDoc = vi.fn();
+
+        beforeEach(async () => {
+            vi.clearAllMocks();
+
+            // Setup Firestore Chain
+            mockCountGet.mockResolvedValue({ data: () => ({ count: 0 }) });
+            const mockCount = vi.fn().mockReturnValue({ get: mockCountGet });
+            const mockEventCollection = { count: mockCount };
+
+            mockDoc.mockReturnValue({ collection: vi.fn().mockReturnValue(mockEventCollection) });
+            mockCollection.mockReturnValue({ doc: mockDoc });
+        });
+
+        // We need to re-import the module to apply the mock
+        async function getUtils() {
+            return await import('./utils');
+        }
+
+        describe('checkEventUsageLimit', () => {
+            it('should allow premium users unlimited events', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'premium' } });
+                const { checkEventUsageLimit } = await getUtils();
+
+                await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
+                // Should not even check count for premium
+                expect(mockCollection).not.toHaveBeenCalled();
+            });
+
+            it('should enforce limit of 10 for free users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+                const { checkEventUsageLimit, UsageLimitExceededError } = await getUtils();
+
+                // Case: Under Limit (9)
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 9 }) });
+                await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
+
+                // Case: Over Limit (10)
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
+                await expect(checkEventUsageLimit('user1')).rejects.toThrow(UsageLimitExceededError);
+            });
+
+            it('should enforce limit of 100 for basic users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
+                const { checkEventUsageLimit, UsageLimitExceededError } = await getUtils();
+
+                // Case: Under Limit (99)
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
+                await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
+
+                // Case: Over Limit (100)
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 100 }) });
+                await expect(checkEventUsageLimit('user1')).rejects.toThrow(UsageLimitExceededError);
+            });
+
+            it('should iterate over users/uid/events', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+                const { checkEventUsageLimit } = await getUtils();
+
+                await tryCatch(() => checkEventUsageLimit('user123'));
+
+                expect(mockCollection).toHaveBeenCalledWith('users');
+                expect(mockDoc).toHaveBeenCalledWith('user123');
+                // The second collection call on the docRef
+                // We mocked: collection('users').doc('uid').collection('events')
+                // mockDoc returns object with .collection()
+                const docObj = mockDoc.mock.results[0].value;
+                expect(docObj.collection).toHaveBeenCalledWith('events');
+            });
+        });
+
+        describe('assertPremiumServiceAccess', () => {
+            it('should allow premium users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'premium' } });
+                const { assertPremiumServiceAccess } = await getUtils();
+                await expect(assertPremiumServiceAccess('user1')).resolves.not.toThrow();
+            });
+
+            it('should verify reject free users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+                const { assertPremiumServiceAccess } = await getUtils();
+                await expect(assertPremiumServiceAccess('user1')).rejects.toThrow('Service sync is a Premium feature');
+            });
+
+            it('should reject basic users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
+                const { assertPremiumServiceAccess } = await getUtils();
+                await expect(assertPremiumServiceAccess('user1')).rejects.toThrow('Service sync is a Premium feature');
+            });
+        });
+    });
 });
+
+async function tryCatch(fn: () => Promise<any>) {
+    try { await fn(); } catch (e) { }
+}

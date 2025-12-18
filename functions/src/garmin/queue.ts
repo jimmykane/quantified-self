@@ -7,7 +7,7 @@ import {
   updateToProcessed,
 } from '../queue';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { generateIDFromParts, setEvent } from '../utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
 import {
@@ -173,6 +173,11 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   } catch (e: any) {
     // @todo should delete meta etc
     console.error(e);
+    if (e instanceof UsageLimitExceededError) {
+      console.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
+      await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
+      return;
+    }
     console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${e.message}`));
     await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
   }
