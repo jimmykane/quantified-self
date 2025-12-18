@@ -168,9 +168,22 @@ export class AppPaymentService {
                 take(1),
                 timeout(15000) // Timeout after 15 seconds
             ).subscribe({
-                next: (session: any) => {
+                next: async (session: any) => {
                     if (session.error) {
                         console.error('Stripe extension returned an error:', session.error);
+
+                        // Self-healing: If customer not found, clear IDs and retry once
+                        if (session.error.message?.includes('No such customer')) {
+                            console.log('Detected stale Stripe customer ID. Clearing and retrying...');
+                            const customerRef = doc(this.firestore, `customers/${user.uid}`);
+                            const { updateDoc, deleteField } = await import('@angular/fire/firestore');
+                            await updateDoc(customerRef, {
+                                stripeId: deleteField(),
+                                stripeLink: deleteField()
+                            });
+                            // Retry the specific checkout session creation
+                            return this.appendCheckoutSession(priceId, success, cancel);
+                        }
                         alert(`Payment error: ${session.error.message}`);
                         return;
                     }

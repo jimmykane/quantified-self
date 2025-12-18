@@ -62,10 +62,12 @@ vi.mock('firebase-admin', () => {
         },
     };
 
-    const mockFirestore = () => ({
+    const mockFirestoreInstance = {
         collection: () => mockCollection,
         collectionGroup: () => mockCollection,
-    });
+    };
+
+    const mockFirestore = () => mockFirestoreInstance;
 
     return {
         default: {
@@ -86,6 +88,7 @@ vi.mock('firebase-admin', () => {
                 serverTimestamp: () => { },
                 arrayUnion: () => { },
                 arrayRemove: () => { },
+                delete: () => ({ __delete__: true }),
             },
         }),
         initializeApp: () => { },

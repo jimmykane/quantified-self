@@ -15,6 +15,7 @@
     "oauth-1.0a": "^2.2.6",
     "pako": "^2.0.3",
     "simple-oauth2": "^5.0.0",
+    "stripe": "^20.1.0",
     "xmldom": "^0.6.0"
   },
   "scripts": {
