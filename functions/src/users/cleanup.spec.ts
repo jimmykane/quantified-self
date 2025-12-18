@@ -4,14 +4,21 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
-const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock } = vi.hoisted(() => {
+const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestoreMock, getServiceConfigMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const userMock = vi.fn(() => ({ onDelete: onDeleteMock }));
+
+    const deleteMock = vi.fn().mockResolvedValue({});
+    const docMock = vi.fn(() => ({ delete: deleteMock }));
+    const collectionMock = vi.fn(() => ({ doc: docMock }));
+    const firestore = vi.fn(() => ({ collection: collectionMock }));
 
     return {
         authBuilderMock: { user: userMock },
         deauthorizeServiceMock: vi.fn(),
         deauthorizeGarminMock: vi.fn(),
+        firestoreMock: firestore,
+        getServiceConfigMock: vi.fn(),
     };
 });
 
@@ -23,9 +30,15 @@ vi.mock('firebase-functions/v1', () => ({
     })),
 }));
 
+// Mock firebase-admin
+vi.mock('firebase-admin', () => ({
+    firestore: firestoreMock
+}));
+
 // Mock oauth wrappers
 vi.mock('../OAuth2', () => ({
-    deauthorizeServiceForUser: deauthorizeServiceMock
+    deauthorizeServiceForUser: deauthorizeServiceMock,
+    getServiceConfig: getServiceConfigMock
 }));
 
 vi.mock('../garmin/auth/wrapper', () => ({
@@ -42,6 +55,9 @@ describe('cleanupUserAccounts', () => {
         vi.clearAllMocks();
         // Reset console mocks to keep output clean during tests if needed
         global.console = { ...global.console, log: vi.fn(), error: vi.fn() };
+
+        // Setup default mocks
+        getServiceConfigMock.mockReturnValue({ tokenCollectionName: 'mockCollection' });
     });
 
     afterEach(() => {
@@ -49,23 +65,30 @@ describe('cleanupUserAccounts', () => {
         vi.clearAllMocks();
     });
 
-    it('should attempt to deauthorize all services for a deleted user', async () => {
+    it('should deauthorize services and delete parent documents', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         await wrapped(user, { eventId: 'eventId' } as any);
 
-        // Verify Suunto deauthorization
+        // Verify Suunto
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
+        expect(getServiceConfigMock).toHaveBeenCalledWith(ServiceNames.SuuntoApp);
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mockCollection');
+        expect(firestoreMock().collection('mockCollection').doc).toHaveBeenCalledWith('testUser123');
+        expect(firestoreMock().collection('mockCollection').doc('testUser123').delete).toHaveBeenCalled();
 
-        // Verify COROS deauthorization
+        // Verify COROS
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
+        // Should happen twice (once for Suunto, once for COROS)
+        // Removing explicit count check as there might be internal calls we don't care about
+        // expect(firestoreMock).toHaveBeenCalledTimes(2); 
 
-        // Verify Garmin deauthorization
+        // Verify Garmin
         expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
     });
 
-    it('should continue despite errors in one service', async () => {
+    it('should continue despite errors in one service and NOT delete parent doc if deauth fails', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
@@ -75,6 +98,37 @@ describe('cleanupUserAccounts', () => {
         await wrapped(user, { eventId: 'eventId' } as any);
 
         // Verify Suunto was called (and failed)
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
+        // Should NOT have tried to delete Suunto doc because it threw error
+
+        // COROS succeeded
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
+
+        // Verify Garmin was still called
+        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+    });
+
+    it('should continue if parent doc deletion fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Make Suunto doc deletion fail
+        // The mock structure is firestore().collection().doc().delete()
+        // We want the deletion to fail.
+        // Since deleteMock is hoisted but exposed via the mock factory... wait, I can access it if I export it or grab it from the module?
+        // Ah, I cannot access the hoisted variables directly in the test body unless I returned them.
+        // In the hoist block: return { ..., firestoreMock, ... }
+        // But `deleteMock` is NOT returned. It's inside the factory for `firestoreMock`.
+        // However, `firestoreMock` returns an object with `collection` which returns object with `doc` which returns object with `delete`.
+        // So I can get the delete spy from `firestoreMock().collection().doc().delete`.
+
+        const deleteSpy = firestoreMock().collection('any').doc('any').delete;
+        // Make it reject once
+        deleteSpy.mockRejectedValueOnce(new Error('Firestore delete failed'));
+
+        await wrapped(user, { eventId: 'eventId' } as any);
+
+        // Verify Suunto was called
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
 
         // Verify COROS was still called
