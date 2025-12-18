@@ -112,10 +112,20 @@ countAll().catch(err => {
 });
 '
 
+
 if [ $? -ne 0 ]; then
     echo "Dry run analysis failed. Please fix the errors above."
     exit 1
 fi
+
+echo ""
+echo "--- Service Deauthorization Analysis ---"
+# Run deauthorization logic in dry-run mode
+# We are currently in 'functions' directory
+export NODE_PATH=./node_modules
+# Pass PROJECT_ID explicitly to the node process environment
+PROJECT_ID="$PROJECT_ID" node ../scripts/deauthorize_users.js --dry-run
+
 
 
 cd ..
@@ -140,6 +150,11 @@ fi
 echo ""
 echo "--- Phase 2: Execution (Bulk Delete) ---"
 echo "Starting deletion in Bottom-Up order..."
+
+echo "Performing Service Deauthorization..."
+export NODE_PATH=./functions/node_modules
+# Pass PROJECT_ID explicitly
+PROJECT_ID="$PROJECT_ID" node scripts/deauthorize_users.js
 
 for group in "${COLLECTION_GROUPS[@]}"; do
     echo "Deleting collection group: [$group]..."
