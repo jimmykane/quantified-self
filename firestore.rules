@@ -1,28 +1,32 @@
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isCoach(userID) {
+      return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
+    }
+    
+    function isBasic() {
+      return request.auth != null && request.auth.token.stripeRole == 'basic';
+    }
+
+    function isPremium() {
+      return request.auth != null && request.auth.token.stripeRole == 'premium';
+    }
+
+    function isSubscribed() {
+      return request.auth != null && request.auth.token.stripeRole in ['free', 'basic', 'premium'];
+    }
+
+    function isFree() {
+      return request.auth != null && request.auth.token.stripeRole == 'free';
+    }
+
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
     match /users/{userID} {
-
-     function isCoach() {
-       return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
-      }
-      
-       function isBasic() {
-        return request.auth.token.stripeRole == 'basic';
-       }
-
-       function isPremium() {
-        return request.auth.token.stripeRole == 'premium';
-       }
-
-       function hasPaidAccess() {
-        return request.auth.token.stripeRole in ['basic', 'premium'];
-       }
-
       allow read: if resource.data.privacy == 'public';
-      allow read: if isCoach() == true;
+      allow read: if isCoach(userID) == true;
       allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
       
@@ -39,10 +43,10 @@ service cloud.firestore {
 
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
-          allow read: if isCoach() == true;
-          // RESTRICTED ACCESS: Must be owner AND Premium (Example of Paywall)
+          allow read: if isCoach(userID) == true;
+          // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or Premium)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
-          // allow read, write: if request.auth.uid == userID && isPremium();
+          // allow read, write: if request.auth.uid == userID && isSubscribed();
           allow read, write: if request.auth.uid == userID;
           function eventData() {
             return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
@@ -50,11 +54,11 @@ service cloud.firestore {
 
           match /activities/{activityID} {
             allow read: if eventData().privacy == 'public'
-            allow read: if isCoach() == true;
+            allow read: if isCoach(userID) == true;
             allow read, write: if request.auth.uid == userID;
             match /streams/{streamID} {
               allow read: if eventData().privacy == 'public'
-              allow read: if isCoach() == true;
+              allow read: if isCoach(userID) == true;
               allow read, write: if request.auth.uid == userID;
             }
           }
@@ -71,6 +75,11 @@ service cloud.firestore {
     }
 
     match /customers/{userID} {
+      allow read: if request.auth.uid == userID;
+      allow update: if request.auth.uid == userID && 
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['stripeId', 'stripeLink']) || 
+         ((!('stripeId' in request.resource.data) || request.resource.data.stripeId == null) &&
+          (!('stripeLink' in request.resource.data) || request.resource.data.stripeLink == null)));
       match /checkout_sessions/{id} {
         allow read, write: if request.auth.uid == userID;
       }

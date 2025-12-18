@@ -39,7 +39,7 @@ export class PricingComponent implements OnInit {
         this.activeSubscriptions$ = this.paymentService.getUserSubscriptions();
     }
 
-    async subscribe(priceId: string) {
+    async subscribe(price: any) {
         if (this.currentRole === 'premium' || this.currentRole === 'basic') {
             // Usually this path is guarded by UI, but if they click "Upgrade" we shouldn't block them here
             // actually upgrades should proceed to checkout session.
@@ -47,9 +47,12 @@ export class PricingComponent implements OnInit {
             // for now let's just allow it call through, payment service handles the "you have a sub, manage it" flow.
         }
         this.isLoading = true;
+        // Handle both price object and legacy string ID for backward compatibility
+        const priceId = typeof price === 'string' ? price : price.id;
         this.loadingPriceId = priceId;
+
         try {
-            await this.paymentService.appendCheckoutSession(priceId);
+            await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
             if (error.message === 'User cancelled redirection to portal.') {
                 // User cancelled the dialog, just stop loading

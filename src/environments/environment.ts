@@ -42,6 +42,6 @@ export const environment = {
     requestAndSetCOROSAPIAccessToken: 'http://localhost:5000/quantified-self-io/europe-west2/requestAndSetCOROSAPIAccessToken',
     deauthorizeCOROSAPI: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeCOROSAPI',
     COROSAPIHistoryImportURI: 'http://localhost:5000/quantified-self-io/europe-west2/addCOROSAPIHistoryToQueue',
-    deleteSelf: 'http://localhost:5000/quantified-self-io/europe-west2/deleteSelf',
+    deleteSelf: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deleteSelf',
   }
 };

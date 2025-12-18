@@ -55,7 +55,7 @@
           @if (product.metadata.role === currentRole) {
           <button mat-stroked-button disabled>Current Plan</button>
           } @else if (currentRole === 'basic' && product.metadata.role === 'premium') {
-          <button mat-flat-button color="accent" (click)="subscribe(price.id)" [disabled]="isLoading">
+          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
@@ -63,7 +63,7 @@
             }
           </button>
           } @else {
-          <button mat-flat-button color="primary" (click)="subscribe(price.id)" [disabled]="isLoading">
+          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
