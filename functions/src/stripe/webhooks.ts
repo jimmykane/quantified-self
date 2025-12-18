@@ -18,7 +18,6 @@ import { PRICE_TO_PLAN } from '../shared/pricing';
  */
 export const handleStripeWebhook = onRequest({
     region: 'europe-west3', // Align with existing extension location
-    secrets: ['firestore-stripe-payments-STRIPE_WEBHOOK_SECRET', 'firestore-stripe-payments-STRIPE_API_KEY']
 }, async (req, res) => {
     const sig = req.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
