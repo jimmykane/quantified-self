@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PremiumOnlyDirective } from './premium-only.directive';
 import { AppUserService } from '../services/app.user.service';
 import { By } from '@angular/platform-browser';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 @Component({
     template: `<div *appPremiumOnly>Premium Content</div>`,
@@ -13,23 +14,25 @@ class TestComponent { }
 
 describe('PremiumOnlyDirective', () => {
     let fixture: ComponentFixture<TestComponent>;
-    let userServiceSpy: jasmine.SpyObj<AppUserService>;
+    let mockUserService: any;
 
-    beforeEach(() => {
-        userServiceSpy = jasmine.createSpyObj('AppUserService', ['isPremium']);
+    beforeEach(async () => {
+        mockUserService = {
+            isPremium: vi.fn()
+        };
 
-        TestBed.configureTestingModule({
+        await TestBed.configureTestingModule({
             imports: [TestComponent, PremiumOnlyDirective],
             providers: [
-                { provide: AppUserService, useValue: userServiceSpy }
+                { provide: AppUserService, useValue: mockUserService }
             ]
-        });
+        }).compileComponents();
 
         fixture = TestBed.createComponent(TestComponent);
     });
 
     it('should show content if user is premium', async () => {
-        userServiceSpy.isPremium.and.returnValue(Promise.resolve(true));
+        mockUserService.isPremium.mockReturnValue(Promise.resolve(true));
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async ngOnInit
         fixture.detectChanges(); // Update view with result
@@ -40,7 +43,7 @@ describe('PremiumOnlyDirective', () => {
     });
 
     it('should hide content if user is not premium', async () => {
-        userServiceSpy.isPremium.and.returnValue(Promise.resolve(false));
+        mockUserService.isPremium.mockReturnValue(Promise.resolve(false));
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();

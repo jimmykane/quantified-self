@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AppComponent } from './app.component';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
+import { AppUserService } from './services/app.user.service';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule } from '@angular/router';
@@ -31,7 +32,8 @@ describe('AppComponent', () => {
 
     const mockRouter = {
         events: new Subject(),
-        navigate: vi.fn()
+        navigate: vi.fn(),
+        url: '/'
     };
 
     const mockAppSideNavService = {
@@ -65,6 +67,12 @@ describe('AppComponent', () => {
                 { provide: MatIconRegistry, useValue: mockMatIconRegistry },
                 { provide: DomSanitizer, useValue: mockDomSanitizer },
                 { provide: Title, useValue: mockTitleService },
+                {
+                    provide: AppUserService, useValue: {
+                        updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
+                        getSubscriptionRole: vi.fn().mockReturnValue(Promise.resolve('free'))
+                    }
+                },
                 ChangeDetectorRef
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -77,5 +85,38 @@ describe('AppComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should hide navigation for free users on pricing page', () => {
+        // Mock user as free
+        component['currentUser'] = { stripeRole: undefined };
+        component.onboardingCompleted = true;
+
+        // Mock router URL
+        mockRouter.url = '/pricing';
+
+        expect(component.showNavigation).toBe(false);
+    });
+
+    it('should show navigation for free users on dashboard', () => {
+        // Mock user as free
+        component['currentUser'] = { stripeRole: undefined };
+        component.onboardingCompleted = true;
+
+        // Mock router URL
+        mockRouter.url = '/dashboard';
+
+        expect(component.showNavigation).toBe(true);
+    });
+
+    it('should show navigation for basic users on pricing page', () => {
+        // Mock user as basic
+        component['currentUser'] = { stripeRole: 'basic' };
+        component.onboardingCompleted = true;
+
+        // Mock router URL
+        mockRouter.url = '/pricing';
+
+        expect(component.showNavigation).toBe(true);
     });
 });

@@ -164,11 +164,16 @@ export class AppPaymentService {
             const sessionRef = doc(this.firestore, `customers/${user.uid}/checkout_sessions/${sessionDoc.id}`);
 
             docData(sessionRef).pipe(
-                filter((session: any) => session?.url),
+                filter((session: any) => session?.url || session?.error),
                 take(1),
-                timeout(10000) // Timeout after 10 seconds if extension doesn't respond
+                timeout(15000) // Timeout after 15 seconds
             ).subscribe({
                 next: (session: any) => {
+                    if (session.error) {
+                        console.error('Stripe extension returned an error:', session.error);
+                        alert(`Payment error: ${session.error.message}`);
+                        return;
+                    }
                     console.log('Redirecting to Stripe:', session.url);
                     window.location.assign(session.url);
                 },

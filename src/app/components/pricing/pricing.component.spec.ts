@@ -14,8 +14,8 @@ class MockAppPaymentService {
 }
 
 class MockAppUserService {
-    isPremium() {
-        return Promise.resolve(false);
+    getSubscriptionRole() {
+        return Promise.resolve('free');
     }
 }
 

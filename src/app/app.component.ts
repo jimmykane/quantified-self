@@ -130,6 +130,22 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.changeDetectorRef.detectChanges();
   }
 
+  get showNavigation(): boolean {
+    if (!this.onboardingCompleted) {
+      return false;
+    }
+    // Requirement: Hide sidenav/toolbar if user has NO product (undefined role) AND is on pricing page
+    // If they have 'free', 'basic', or 'premium', they are good.
+    if (this.currentUser && this.router.url.includes('pricing')) {
+      const stripeRole = (this.currentUser as any).stripeRole;
+      // If stripeRole is undefined or null, they haven't been assigned a product yet (even free).
+      if (!stripeRole) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private addIconsToRegistry() {
     this.matIconRegistry.addSvgIcon(
       'logo',

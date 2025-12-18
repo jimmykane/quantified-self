@@ -19,7 +19,7 @@
   </style>
 
   <!-- Only show navigation if onboarding is completed OR user is not logged in -->
-  <nav *ngIf="onboardingCompleted" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar">
+  <nav *ngIf="showNavigation" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar">
     <a matTabLink (click)="toggleSidenav()">
       <mat-icon class="larger_icon">menu</mat-icon>
     </a>
@@ -49,7 +49,7 @@
   </nav>
 
   <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted">
-    <mat-sidenav #sidenav [mode]="'over'" *ngIf="onboardingCompleted" [fixedInViewport]="true" [autoFocus]="false">
+    <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true" [autoFocus]="false">
       <app-sidenav></app-sidenav>
     </mat-sidenav>
 

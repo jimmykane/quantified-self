@@ -1,5 +1,6 @@
 import { inject, Injectable, OnDestroy } from '@angular/core';
 import { Observable, from, firstValueFrom } from 'rxjs';
+import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
@@ -529,180 +530,179 @@ export class AppUserService implements OnDestroy {
     })));
   }
 
-import { StripeRole } from '../models/stripe-role.model';
 
-// ...
+  // ...
 
-    public async getSubscriptionRole(): Promise < StripeRole | null > {
-  const user = await firstValueFrom(authState(this.auth).pipe(take(1)));
-  if(!user) {
-    console.warn('AppUserService: getSubscriptionRole - No current user');
-    return null;
+  public async getSubscriptionRole(): Promise<StripeRole | null> {
+    const user = await firstValueFrom(authState(this.auth).pipe(take(1)));
+    if (!user) {
+      console.warn('AppUserService: getSubscriptionRole - No current user');
+      return null;
+    }
+    try {
+      // Force refresh to ensure we have latest claims
+      const tokenResult = await user.getIdTokenResult(true);
+      const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
+      console.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}, Claims:`, tokenResult.claims);
+      return role;
+    } catch (e) {
+      console.error('AppUserService: getSubscriptionRole - Error getting token result', e);
+      return null;
+    }
   }
-        try {
-    // Force refresh to ensure we have latest claims
-    const tokenResult = await user.getIdTokenResult(true);
-    const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
-    console.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}, Claims:`, tokenResult.claims);
-    return role;
-  } catch(e) {
-    console.error('AppUserService: getSubscriptionRole - Error getting token result', e);
-    return null;
+
+  public async isBasic(): Promise<boolean> {
+    const role = await this.getSubscriptionRole();
+    return role === 'basic';
   }
-}
 
-  public async isBasic(): Promise < boolean > {
-  const role = await this.getSubscriptionRole();
-  return role === 'basic';
-}
-
-  public async isPremium(): Promise < boolean > {
-  const role = await this.getSubscriptionRole();
-  return role === 'premium';
-}
+  public async isPremium(): Promise<boolean> {
+    const role = await this.getSubscriptionRole();
+    return role === 'premium';
+  }
 
   /**
    * Returns true if the user has any level of paid access (basic or premium)
    */
-  public async hasPaidAccess(): Promise < boolean > {
-  const role = await this.getSubscriptionRole();
-  return role === 'premium' || role === 'basic';
-}
+  public async hasPaidAccess(): Promise<boolean> {
+    const role = await this.getSubscriptionRole();
+    return role === 'premium' || role === 'basic';
+  }
 
   public async deleteAllUserData(user: User) {
-  try {
-    const deleteSelf = httpsCallableFromURL(this.functions, environment.functions.deleteSelf);
-    await deleteSelf();
-    await this.auth.signOut();
-  } catch (e) {
-    Sentry.captureException(e);
-    throw e;
-  }
-}
-  public getUserChartDataTypesToUse(user: User): string[] {
-  return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
-    if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
-      dataTypesToUse.push(dataTypeSettingsKey);
+    try {
+      const deleteSelf = httpsCallableFromURL(this.functions, environment.functions.deleteSelf);
+      await deleteSelf();
+      await this.auth.signOut();
+    } catch (e) {
+      Sentry.captureException(e);
+      throw e;
     }
-    return dataTypesToUse;
-  }, [])
-}
+  }
+  public getUserChartDataTypesToUse(user: User): string[] {
+    return Object.keys(user.settings.chartSettings.dataTypeSettings).reduce((dataTypesToUse, dataTypeSettingsKey) => {
+      if (user.settings.chartSettings.dataTypeSettings[dataTypeSettingsKey].enabled === true) {
+        dataTypesToUse.push(dataTypeSettingsKey);
+      }
+      return dataTypesToUse;
+    }, [])
+  }
 
-ngOnDestroy() {
-}
+  ngOnDestroy() {
+  }
 
-  private getServiceTokens(user: User, serviceName: ServiceNames): Observable < any[] > {
-  const serviceNamesToCollectionName = {
-    [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
-    [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
-  };
-  const collectionRef = collection(this.firestore, serviceNamesToCollectionName[serviceName], user.uid, 'tokens');
-  return collectionData(collectionRef).pipe(
-    catchError(error => {
-      return [];
-    })
-  );
-}
+  private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
+    const serviceNamesToCollectionName = {
+      [ServiceNames.SuuntoApp]: 'suuntoAppAccessTokens',
+      [ServiceNames.COROSAPI]: 'COROSAPIAccessTokens'
+    };
+    const collectionRef = collection(this.firestore, serviceNamesToCollectionName[serviceName], user.uid, 'tokens');
+    return collectionData(collectionRef).pipe(
+      catchError(error => {
+        return [];
+      })
+    );
+  }
 
-  private getGarminHealthAPITokens(user: User): Observable < any[] > {
-  const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
-  return docData(docRef).pipe(
-    map(d => [d]),
-    catchError(error => {
-      return [];
-    })
-  );
-}
+  private getGarminHealthAPITokens(user: User): Observable<any[]> {
+    const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
+    return docData(docRef).pipe(
+      map(d => [d]),
+      catchError(error => {
+        return [];
+      })
+    );
+  }
 
   public fillMissingAppSettings(user: User): UserSettingsInterface {
-  const settings: UserSettingsInterface = user.settings || {};
-  // App
-  settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
-  settings.appSettings.theme = settings.appSettings.theme || AppUserService.getDefaultAppTheme();
-  // Chart
-  settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
-  settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserService.getDefaultUserChartSettingsDataTypeSettings();
-  settings.chartSettings.theme = settings.chartSettings.theme || AppUserService.getDefaultChartTheme();
-  settings.chartSettings.useAnimations = settings.chartSettings.useAnimations === true;
-  settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || AppUserService.getDefaultXAxisType();
-  settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
-  settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || AppUserService.getDefaultDownSamplingLevel();
-  settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || AppUserService.getDefaultChartCursorBehaviour();
-  settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || AppUserService.getDefaultChartStrokeWidth();
-  settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : AppUserService.getDefaultChartStrokeOpacity();
-  settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserService.getDefaultChartFillOpacity();
-  settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : AppUserService.getDefaultExtraMaxForPower();
-  settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserService.getDefaultExtraMaxForPace();
-  settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserService.getDefaultChartLapTypes();
-  settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
-  settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
-  settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
-  settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
-  settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
-  settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || AppUserService.getDefaultGainAndLossThreshold();
-  // Units
-  settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
-  settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || AppUserService.getDefaultSpeedUnits();
-  settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || AppUserService.getDefaultPaceUnits();
-  settings.unitSettings.gradeAdjustedSpeedUnits = settings.unitSettings.gradeAdjustedSpeedUnits || AppUserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(settings.unitSettings.speedUnits);
-  settings.unitSettings.gradeAdjustedPaceUnits = settings.unitSettings.gradeAdjustedPaceUnits || AppUserService.getGradeAdjustedPaceUnitsFromPaceUnits(settings.unitSettings.paceUnits);
-  settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || AppUserService.getDefaultSwimPaceUnits();
-  settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || AppUserService.getDefaultVerticalSpeedUnits()
-  settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserService.getDefaultStartOfTheWeek();
-  // Dashboard
-  settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
-  settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserService.getDefaultDateRange();
-  settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
-  settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
-  settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
-  settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserService.getDefaultUserDashboardTiles();
-  // Patch missing defaults
-  settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserService.getDefaultTableSettings();
-  settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserService.getDefaultSelectedTableColumns()
+    const settings: UserSettingsInterface = user.settings || {};
+    // App
+    settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
+    settings.appSettings.theme = settings.appSettings.theme || AppUserService.getDefaultAppTheme();
+    // Chart
+    settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
+    settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserService.getDefaultUserChartSettingsDataTypeSettings();
+    settings.chartSettings.theme = settings.chartSettings.theme || AppUserService.getDefaultChartTheme();
+    settings.chartSettings.useAnimations = settings.chartSettings.useAnimations === true;
+    settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || AppUserService.getDefaultXAxisType();
+    settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
+    settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || AppUserService.getDefaultDownSamplingLevel();
+    settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || AppUserService.getDefaultChartCursorBehaviour();
+    settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || AppUserService.getDefaultChartStrokeWidth();
+    settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : AppUserService.getDefaultChartStrokeOpacity();
+    settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserService.getDefaultChartFillOpacity();
+    settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : AppUserService.getDefaultExtraMaxForPower();
+    settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserService.getDefaultExtraMaxForPace();
+    settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserService.getDefaultChartLapTypes();
+    settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
+    settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
+    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
+    settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
+    settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
+    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || AppUserService.getDefaultGainAndLossThreshold();
+    // Units
+    settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
+    settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || AppUserService.getDefaultSpeedUnits();
+    settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || AppUserService.getDefaultPaceUnits();
+    settings.unitSettings.gradeAdjustedSpeedUnits = settings.unitSettings.gradeAdjustedSpeedUnits || AppUserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(settings.unitSettings.speedUnits);
+    settings.unitSettings.gradeAdjustedPaceUnits = settings.unitSettings.gradeAdjustedPaceUnits || AppUserService.getGradeAdjustedPaceUnitsFromPaceUnits(settings.unitSettings.paceUnits);
+    settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || AppUserService.getDefaultSwimPaceUnits();
+    settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || AppUserService.getDefaultVerticalSpeedUnits()
+    settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserService.getDefaultStartOfTheWeek();
+    // Dashboard
+    settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
+    settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserService.getDefaultDateRange();
+    settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
+    settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
+    settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
+    settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserService.getDefaultUserDashboardTiles();
+    // Patch missing defaults
+    settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserService.getDefaultTableSettings();
+    settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserService.getDefaultSelectedTableColumns()
 
-  // Summaries
-  settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
-  settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserService.getDefaultActivityTypesToRemoveAscentFromSummaries();
-  // Map
-  settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
-  settings.mapSettings.theme = settings.mapSettings.theme || AppUserService.getDefaultMapTheme();
-  settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
-  settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
-  settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
-  settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
-  settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();
-  settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserService.getDefaultMapStrokeWidth();
-  // MyTracks
-  settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
-  settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
-    ? settings.myTracksSettings.dateRange
-    : AppUserService.getDefaultMyTracksDateRange();
+    // Summaries
+    settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
+    settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserService.getDefaultActivityTypesToRemoveAscentFromSummaries();
+    // Map
+    settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
+    settings.mapSettings.theme = settings.mapSettings.theme || AppUserService.getDefaultMapTheme();
+    settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
+    settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
+    settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
+    settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
+    settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();
+    settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserService.getDefaultMapStrokeWidth();
+    // MyTracks
+    settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
+    settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
+      ? settings.myTracksSettings.dateRange
+      : AppUserService.getDefaultMyTracksDateRange();
 
-  // Export to CSV
-  settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
-  settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
-  settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
-  settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
-  settings.exportToCSVSettings.activityTypes = settings.exportToCSVSettings.activityTypes !== false;
-  settings.exportToCSVSettings.distance = settings.exportToCSVSettings.distance !== false;
-  settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
-  settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;
-  settings.exportToCSVSettings.descent = settings.exportToCSVSettings.descent !== false;
-  settings.exportToCSVSettings.calories = settings.exportToCSVSettings.calories !== false;
-  settings.exportToCSVSettings.feeling = settings.exportToCSVSettings.feeling !== false;
-  settings.exportToCSVSettings.rpe = settings.exportToCSVSettings.rpe !== false;
-  settings.exportToCSVSettings.averageSpeed = settings.exportToCSVSettings.averageSpeed !== false;
-  settings.exportToCSVSettings.averagePace = settings.exportToCSVSettings.averagePace !== false;
-  settings.exportToCSVSettings.averageSwimPace = settings.exportToCSVSettings.averageSwimPace !== false;
-  settings.exportToCSVSettings.averageGradeAdjustedPace = settings.exportToCSVSettings.averageGradeAdjustedPace !== false;
-  settings.exportToCSVSettings.averageHeartRate = settings.exportToCSVSettings.averageHeartRate !== false;
-  settings.exportToCSVSettings.maximumHeartRate = settings.exportToCSVSettings.maximumHeartRate !== false;
-  settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
-  settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
-  settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
-  settings.exportToCSVSettings.includeLink = settings.exportToCSVSettings.includeLink !== false;
+    // Export to CSV
+    settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
+    settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
+    settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
+    settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
+    settings.exportToCSVSettings.activityTypes = settings.exportToCSVSettings.activityTypes !== false;
+    settings.exportToCSVSettings.distance = settings.exportToCSVSettings.distance !== false;
+    settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
+    settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;
+    settings.exportToCSVSettings.descent = settings.exportToCSVSettings.descent !== false;
+    settings.exportToCSVSettings.calories = settings.exportToCSVSettings.calories !== false;
+    settings.exportToCSVSettings.feeling = settings.exportToCSVSettings.feeling !== false;
+    settings.exportToCSVSettings.rpe = settings.exportToCSVSettings.rpe !== false;
+    settings.exportToCSVSettings.averageSpeed = settings.exportToCSVSettings.averageSpeed !== false;
+    settings.exportToCSVSettings.averagePace = settings.exportToCSVSettings.averagePace !== false;
+    settings.exportToCSVSettings.averageSwimPace = settings.exportToCSVSettings.averageSwimPace !== false;
+    settings.exportToCSVSettings.averageGradeAdjustedPace = settings.exportToCSVSettings.averageGradeAdjustedPace !== false;
+    settings.exportToCSVSettings.averageHeartRate = settings.exportToCSVSettings.averageHeartRate !== false;
+    settings.exportToCSVSettings.maximumHeartRate = settings.exportToCSVSettings.maximumHeartRate !== false;
+    settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
+    settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
+    settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
+    settings.exportToCSVSettings.includeLink = settings.exportToCSVSettings.includeLink !== false;
 
-  // @warning !!!!!! Enums with 0 as start value default to the override
-  return settings;
-}
+    // @warning !!!!!! Enums with 0 as start value default to the override
+    return settings;
+  }
 }
