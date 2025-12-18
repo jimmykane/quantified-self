@@ -14,11 +14,11 @@ service cloud.firestore {
     }
 
     function isSubscribed() {
-      return request.auth != null && request.auth.token.stripeRole in ['free', 'basic', 'pro'];
+      return request.auth != null && request.auth.token.stripeRole in ['basic', 'pro'];
     }
 
     function isFree() {
-      return request.auth != null && request.auth.token.stripeRole == 'free';
+      return request.auth != null && !('stripeRole' in request.auth.token);
     }
 
     // Make sure the uid of the requesting user matches name of the user
