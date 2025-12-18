@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PaymentSuccessComponent } from './payment-success.component';
 import { ActivatedRoute } from '@angular/router';
+import { Auth } from '@angular/fire/auth';
 import { of } from 'rxjs';
 
 describe('PaymentSuccessComponent', () => {
@@ -14,6 +15,10 @@ describe('PaymentSuccessComponent', () => {
                 {
                     provide: ActivatedRoute,
                     useValue: { queryParams: of({}) }
+                },
+                {
+                    provide: Auth,
+                    useValue: { currentUser: { uid: 'test-uid' } }
                 }
             ]
         }).compileComponents();

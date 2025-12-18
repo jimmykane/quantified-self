@@ -3,7 +3,7 @@ export const PRICE_TO_PLAN: Record<string, 'basic' | 'pro'> = {
     'price_1SfikzE0SlTkOiD4pVkLN6IW': 'basic', // Monthly Basic
 
     // Pro
-    // 'price_PRO_ID_HERE': 'pro', 
+    'price_1SfimVE0SlTkOiD4UahUXFGP': 'pro',
     // Add your Pro Price IDs here found in your Stripe Dashboard or Logs
 };
 

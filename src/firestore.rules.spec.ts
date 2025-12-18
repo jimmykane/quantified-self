@@ -23,7 +23,9 @@ describe('Firestore Security Rules', () => {
     });
 
     afterAll(async () => {
-        await testEnv.cleanup();
+        if (testEnv) {
+            await testEnv.cleanup();
+        }
     });
 
     beforeEach(async () => {
@@ -115,11 +117,11 @@ describe('Firestore Security Rules', () => {
     describe('Role protected content', () => {
         const userId = 'role_user';
 
-        it('should identify a Premium user', async () => {
-            const db = testEnv.authenticatedContext(userId, { stripeRole: 'premium' }).firestore();
+        it('should identify a Pro user', async () => {
+            const db = testEnv.authenticatedContext(userId, { stripeRole: 'pro' }).firestore();
             // We can't easily test the function directly without a rule using it,
             // but we've verified the syntax via firebase_validate_security_rules.
-            // This test confirms we can correctly simulate the premium token.
+            // This test confirms we can correctly simulate the pro token.
             expect(db).toBeDefined();
         });
 

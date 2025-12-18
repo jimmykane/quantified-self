@@ -12,10 +12,35 @@ export const restoreUserClaims = onCall({
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
 
-    const uid = request.auth.uid;
+    try {
+        const { role } = await reconcileClaims(request.auth.uid);
+        return { success: true, role };
+    } catch (error: any) {
+        // Map known errors to HttpsError if needed, or rethrow if already HttpsError
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        // Generic handling
+        throw new HttpsError('internal', error.message || 'Failed to reconcile claims');
+    }
+});
+
+/**
+ * Reconciles the user's Stripe subscription status with their Firebase Auth custom claims.
+ * 
+ * Flow:
+ * 1. Checks for active or trialing subscriptions in Firestore.
+ * 2. Determines the role based on PRICE_TO_PLAN mapping or subscription metadata.
+ * 3. Sets the `stripeRole` custom claim.
+ * 
+ * @param uid The usage ID to reconcile.
+ * @returns The reconciled role.
+ */
+export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     const subscriptionsRef = admin.firestore().collection(`customers/${uid}/subscriptions`);
 
     // Check for any active or trialing subscription
+    // We only take the most recent one created
     const snapshot = await subscriptionsRef
         .where('status', 'in', ['active', 'trialing'])
         .orderBy('created', 'desc')
@@ -23,6 +48,9 @@ export const restoreUserClaims = onCall({
         .get();
 
     if (snapshot.empty) {
+        // No active subscription? remove claims or set to free?
+        // Current logic implies "restore" failed if found nothing, but reconcilliation might mean "set to free"
+        // Following original "restore" behavior: throw error if nothing found.
         throw new HttpsError('not-found', 'No active subscription found.');
     }
 
@@ -35,9 +63,9 @@ export const restoreUserClaims = onCall({
         const priceId = subData.items[0].price.id;
         if (PRICE_TO_PLAN[priceId]) {
             role = PRICE_TO_PLAN[priceId];
-            console.log(`[restoreUserClaims] Mapped price ${priceId} to role ${role}`);
+            console.log(`[reconcileClaims] Mapped price ${priceId} to role ${role}`);
         } else {
-            console.warn(`[restoreUserClaims] Price ${priceId} not found in PRICE_TO_PLAN. Using metadata role: ${role}`);
+            console.warn(`[reconcileClaims] Price ${priceId} not found in PRICE_TO_PLAN. Using metadata role: ${role}`);
         }
     }
 
@@ -48,7 +76,7 @@ export const restoreUserClaims = onCall({
     // Set custom user claims on this specific user
     await admin.auth().setCustomUserClaims(uid, { stripeRole: role });
 
-    console.log(`Manually restored claims for user ${uid} to active role: ${role}`);
+    console.log(`[reconcileClaims] Reconciled claims for user ${uid} to active role: ${role}`);
 
-    return { success: true, role };
-});
+    return { role };
+}

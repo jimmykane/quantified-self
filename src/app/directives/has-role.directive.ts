@@ -47,9 +47,5 @@ export class HasRoleDirective implements OnInit {
             return this.userService.isPro();
         }
 
-        return false;
-    }
-
-        return false;
     }
 }

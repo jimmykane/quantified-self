@@ -67,11 +67,36 @@ export const handleStripeWebhook = onRequest({
         } else {
             logger.info(`No user found with Stripe ID: ${stripeId}`);
         }
-    } else if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
+    } else if (
+        event.type === 'customer.subscription.created' ||
+        event.type === 'customer.subscription.updated' ||
+        event.type === 'customer.subscription.deleted' ||
+        event.type === 'customer.subscription.paused' ||
+        event.type === 'customer.subscription.resumed'
+    ) {
         const subscription = event.data.object as Stripe.Subscription;
         const stripeCustomerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
 
         logger.info(`Processing subscription event ${event.type} for customer ${stripeCustomerId}`);
+
+        const validStatuses = ['active', 'trialing'];
+        if (!validStatuses.includes(subscription.status)) {
+            logger.info(`Subscription status is ${subscription.status}, removing claims for customer ${stripeCustomerId}`);
+            // Find user and remove claims
+            const usersSnapshot = await admin.firestore()
+                .collection('customers')
+                .where('stripeId', '==', stripeCustomerId)
+                .limit(1)
+                .get();
+
+            if (!usersSnapshot.empty) {
+                const uid = usersSnapshot.docs[0].id;
+                await admin.auth().setCustomUserClaims(uid, { stripeRole: null });
+                logger.info(`Removed claims for user ${uid} due to non-active status: ${subscription.status}`);
+            }
+            res.status(200).send({ received: true });
+            return;
+        }
 
         // Find matches in PRICE_TO_PLAN
         let mappedRole: string | null = null;
@@ -98,6 +123,11 @@ export const handleStripeWebhook = onRequest({
                 logger.warn(`No user found for Stripe Customer ${stripeCustomerId} to set claims.`);
             }
         }
+    } else if (event.type === 'invoice.payment_failed') {
+        const invoice = event.data.object as Stripe.Invoice;
+        const stripeCustomerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+        logger.warn(`Invoice payment failed for customer ${stripeCustomerId}. Invoice ID: ${invoice.id}`);
+        // Core access logic is handled by subscription status updates, so we just log here.
     }
 
     res.status(200).send({ received: true });

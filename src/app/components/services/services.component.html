@@ -1,6 +1,6 @@
 <section class="component-container">
   <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex">
-    <mat-tab label="Suunto" [disabled]="!user || isGuest || !hasPremiumAccess">
+    <mat-tab label="Suunto" [disabled]="!user || isGuest || !hasProAccess">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon" svgIcon="suunto"></mat-icon>
       </ng-template>
@@ -8,7 +8,7 @@
         <app-services-suunto [user]="user" [isGuest]="isGuest"></app-services-suunto>
       </ng-template>
     </mat-tab>
-    <mat-tab label="Garmin" [disabled]="!user || isGuest || !hasPremiumAccess">
+    <mat-tab label="Garmin" [disabled]="!user || isGuest || !hasProAccess">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
       </ng-template>
@@ -17,7 +17,7 @@
       </ng-template>
     </mat-tab>
 
-    <mat-tab label="COROS" [disabled]="!user || isGuest || !hasPremiumAccess">
+    <mat-tab label="COROS" [disabled]="!user || isGuest || !hasProAccess">
       <ng-template matTabLabel>
         <mat-icon class="large-svg-icon-coros" svgIcon="coros"></mat-icon>
       </ng-template>

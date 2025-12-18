@@ -9,7 +9,7 @@ import { vi, describe, it, expect } from 'vitest';
     standalone: true,
     template: `
     <div class="basic-content" *appHasRole="'basic'">Basic Content</div>
-    <div class="premium-content" *appHasRole="'premium'">Premium Content</div>
+    <div class="pro-content" *appHasRole="'pro'">Pro Content</div>
   `,
     imports: [HasRoleDirective]
 })
@@ -22,7 +22,7 @@ describe('HasRoleDirective', () => {
     beforeEach(async () => {
         userServiceStub = {
             hasPaidAccess: vi.fn(),
-            isPremium: vi.fn()
+            isPro: vi.fn()
         };
 
         await TestBed.configureTestingModule({
@@ -37,46 +37,46 @@ describe('HasRoleDirective', () => {
 
     it('should display basic content for Basic user', async () => {
         userServiceStub.hasPaidAccess.mockResolvedValue(true); // Basic satisfies hasPaidAccess
-        userServiceStub.isPremium.mockResolvedValue(false);
+        userServiceStub.isPro.mockResolvedValue(false);
 
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
 
         const basicEl = fixture.debugElement.query(By.css('.basic-content'));
-        const premiumEl = fixture.debugElement.query(By.css('.premium-content'));
+        const proEl = fixture.debugElement.query(By.css('.pro-content'));
 
         expect(basicEl).toBeTruthy();
-        expect(premiumEl).toBeNull();
+        expect(proEl).toBeNull();
     });
 
-    it('should display all content for Premium user', async () => {
+    it('should display all content for Pro user', async () => {
         userServiceStub.hasPaidAccess.mockResolvedValue(true);
-        userServiceStub.isPremium.mockResolvedValue(true);
+        userServiceStub.isPro.mockResolvedValue(true);
 
         fixture.detectChanges();
         await fixture.whenStable(); // Wait for async ngOnInit
         fixture.detectChanges();
 
         const basicEl = fixture.debugElement.query(By.css('.basic-content'));
-        const premiumEl = fixture.debugElement.query(By.css('.premium-content'));
+        const proEl = fixture.debugElement.query(By.css('.pro-content'));
 
-        expect(basicEl).toBeTruthy(); // Premium satisfies 'basic' requirement too
-        expect(premiumEl).toBeTruthy();
+        expect(basicEl).toBeTruthy(); // Pro satisfies 'basic' requirement too
+        expect(proEl).toBeTruthy();
     });
 
     it('should hide all content for Free user', async () => {
         userServiceStub.hasPaidAccess.mockResolvedValue(false);
-        userServiceStub.isPremium.mockResolvedValue(false);
+        userServiceStub.isPro.mockResolvedValue(false);
 
         fixture.detectChanges();
         await fixture.whenStable();
         fixture.detectChanges();
 
         const basicEl = fixture.debugElement.query(By.css('.basic-content'));
-        const premiumEl = fixture.debugElement.query(By.css('.premium-content'));
+        const proEl = fixture.debugElement.query(By.css('.pro-content'));
 
         expect(basicEl).toBeNull();
-        expect(premiumEl).toBeNull();
+        expect(proEl).toBeNull();
     });
 });

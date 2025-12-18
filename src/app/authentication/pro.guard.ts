@@ -31,7 +31,6 @@ class PermissionsService {
                 user.acceptedDiagnosticsPolicy === true;
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
-            const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
             const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
 

@@ -18,13 +18,13 @@ vi.mock('firebase-functions/v1', () => ({
 const testEnv = { cleanup: () => { } };
 
 // Import AFTER mocks
-import { disconnectServicesForNonPremium } from './disconnect-services';
+import { disconnectServicesForNonPro } from './disconnect-services';
 import * as OAuth2 from '../OAuth2';
 import * as GarminWrapper from '../garmin/auth/wrapper';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
-describe('disconnectServicesForNonPremium', () => {
+describe('disconnectServicesForNonPro', () => {
     let deauthorizeServiceSpy: any;
     let deauthorizeGarminSpy: any;
     let firestoreSpy: any;
@@ -82,8 +82,8 @@ describe('disconnectServicesForNonPremium', () => {
         vi.restoreAllMocks();
     });
 
-    it('should iterate all token collections and disconnect if NO premium', async () => {
-        // Mock active premium sub check to return EMPTY for all users
+    it('should iterate all token collections and disconnect if NO pro', async () => {
+        // Mock active pro sub check to return EMPTY for all users
         collectionSpy.mockImplementation((path: string) => {
             if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return { get: vi.fn().mockResolvedValue({ forEach: (cb: any) => cb({ id: 'garminUser' }) }) };
             if (path === 'suuntoAppAccessTokens') return { get: vi.fn().mockResolvedValue({ forEach: (cb: any) => cb({ id: 'suuntoUser' }) }) };
@@ -97,7 +97,7 @@ describe('disconnectServicesForNonPremium', () => {
             };
         });
 
-        const wrapped = disconnectServicesForNonPremium as any;
+        const wrapped = disconnectServicesForNonPro as any;
         await wrapped({});
 
         // Expect disconnection calls for all 3 found users
@@ -106,8 +106,8 @@ describe('disconnectServicesForNonPremium', () => {
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('corosUser', ServiceNames.COROSAPI);
     });
 
-    it('should NOT disconnect if user has active premium', async () => {
-        // Mock active premium sub check to return FOUND for 'garminUser'
+    it('should NOT disconnect if user has active pro', async () => {
+        // Mock active pro sub check to return FOUND for 'garminUser'
         collectionSpy.mockImplementation((path: string) => {
             if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return { get: vi.fn().mockResolvedValue({ forEach: (cb: any) => cb({ id: 'garminUser' }) }) };
             if (path === 'suuntoAppAccessTokens') return { get: vi.fn().mockResolvedValue({ forEach: (cb: any) => [] }) };
@@ -121,7 +121,7 @@ describe('disconnectServicesForNonPremium', () => {
             };
         });
 
-        const wrapped = disconnectServicesForNonPremium as any;
+        const wrapped = disconnectServicesForNonPro as any;
         await wrapped({});
 
         // Expect NO disconnection calls for garminUser

@@ -1,5 +1,5 @@
 <div class="pricing-container">
-  <h1>{{ currentRole === 'premium' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
+  <h1>{{ currentRole === 'pro' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
 
   <div *ngIf="currentRole === 'free' && (activeSubscriptions$ | async) as subs" class="restore-section">
     <div *ngIf="subs.length > 0" class="restore-alert">
@@ -14,15 +14,15 @@
     </div>
   </div>
 
-  @if (currentRole === 'premium') {
+  @if (currentRole === 'pro') {
   <div class="manage-subscription-container">
     <mat-card class="product-card">
       <mat-card-header>
-        <mat-card-title>Premium Membership</mat-card-title>
+        <mat-card-title>Pro Membership</mat-card-title>
         <mat-card-subtitle>Active & Verified</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content class="manage-content">
-        <p>Thank you for being a premium member. You have full access to all features.</p>
+        <p>Thank you for being a pro member. You have full access to all features.</p>
         <div class="price-section">
           <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
@@ -59,15 +59,15 @@
           <button mat-stroked-button disabled class="current-plan-btn">Current Plan</button>
           }
 
-          <!-- Manage/Downgrade for Premium Users looking at Basic -->
-          @else if (currentRole === 'premium' && product.metadata.role === 'basic') {
+          <!-- Manage/Downgrade for Pro Users looking at Basic -->
+          @else if (currentRole === 'pro' && product.metadata.role === 'basic') {
           <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">Downgrade</button>
           }
 
           <!-- Upgrade/Buy Logic -->
           @else {
-          <!-- Use 'Upgrade' if we are Basic looking at Premium -->
-          @if (currentRole === 'basic' && product.metadata.role === 'premium') {
+          <!-- Use 'Upgrade' if we are Basic looking at Pro -->
+          @if (currentRole === 'basic' && product.metadata.role === 'pro') {
           <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading">Upgrade</button>
           }
           <!-- Otherwise 'Subscribe' (for new users or Free users upgrading to anything) -->

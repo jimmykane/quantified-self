@@ -40,7 +40,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     @ViewChild('stepper') stepper: MatStepper;
 
     termsFormGroup: FormGroup;
-    isPremium = false;
+    isPro = false;
 
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
@@ -61,7 +61,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
         }
 
         this.initForm();
-        this.checkPremiumStatus();
+        this.checkProStatus();
     }
 
     private initForm() {
@@ -87,7 +87,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     private async checkAndAdvance() {
         if (this.user) {
             // Re-check premium status whenever user data changes
-            this.isPremium = await this.userService.isPremium();
+            this.isPro = await this.userService.isPro();
 
             const termsAccepted = this.user.acceptedPrivacyPolicy === true &&
                 this.user.acceptedDataPolicy === true &&
@@ -96,7 +96,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
             console.log('[OnboardingComponent] checkAndAdvance:', {
                 termsAccepted,
-                isPremium: this.isPremium,
+                isPro: this.isPro,
                 selectedIndex: this.stepper?.selectedIndex
             });
 
@@ -110,8 +110,8 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
         }
     }
 
-    async checkPremiumStatus() {
-        this.isPremium = await this.userService.isPremium();
+    async checkProStatus() {
+        this.isPro = await this.userService.isPro();
     }
 
     async onTermsSubmit() {
