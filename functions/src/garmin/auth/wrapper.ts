@@ -12,6 +12,7 @@ import * as crypto from 'crypto';
 // const OAUTH_SCOPES = 'workout';
 const REQUEST_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/request_token';
 const REQUEST_TOKEN_CONFIRMATION_URI = 'https://connect.garmin.com/oauthConfirm';
+import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../constants';
 const ACCESS_TOKEN_URI = 'https://connectapi.garmin.com/oauth-service/oauth/access_token';
 const DEREGISTRATION_URI = 'https://healthapi.garmin.com/wellness-api/rest/user/registration';
 
@@ -56,7 +57,7 @@ export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('e
   const urlParams = new URLSearchParams(result);
 
   const state = crypto.randomBytes(20).toString('hex');
-  await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
+  await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).set({
     oauthToken: urlParams.get('oauth_token'),
     oauthTokenSecret: urlParams.get('oauth_token_secret'),
     state: state,
@@ -103,7 +104,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
     return;
   }
 
-  const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
+  const tokensDocumentSnapshotData = (await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.state || !tokensDocumentSnapshotData.oauthToken || !tokensDocumentSnapshotData.oauthTokenSecret) {
     res.status(500).send('Bad request');
     console.error('No token/state found');
@@ -159,7 +160,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
     return;
   }
 
-  await admin.firestore().collection('garminHealthAPITokens').doc(userID).set({
+  await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).set({
     accessToken: urlParams.get('oauth_token'),
     accessTokenSecret: urlParams.get('oauth_token_secret'),
     dateCreated: (new Date()).getTime(),
@@ -205,7 +206,7 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 });
 
 export async function deauthorizeGarminHealthAPIForUser(userID: string) {
-  const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
+  const tokensDocumentSnapshotData = (await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
     console.error('No token found');
     throw new Error('No token found');
@@ -231,7 +232,7 @@ export async function deauthorizeGarminHealthAPIForUser(userID: string) {
       throw e;
     }
   }
-  await admin.firestore().collection('garminHealthAPITokens').doc(userID).delete();
+  await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).delete();
 }
 
 
@@ -247,7 +248,7 @@ export const deauthorizeGarminHealthAPIUsers = functions.region('europe-west2').
   for (const deregistration of deregistrations) {
     try {
       const tokenQuerySnapshots = await admin.firestore()
-        .collection('garminHealthAPITokens')
+        .collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME)
         .where('userID', '==', deregistration.userId)
         .where('accessToken', '==', deregistration.userAccessToken)
         .get();

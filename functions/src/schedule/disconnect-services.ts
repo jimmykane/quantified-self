@@ -3,34 +3,34 @@ import * as admin from 'firebase-admin';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
+import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
+import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
+import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
 /**
- * Disconnects external services (Garmin, Suunto, COROS) for users who have no active premium subscription
- * and whose last premium subscription ended > 10 days ago.
+ * Disconnects external services (Garmin, Suunto, COROS) for users who have no active premium subscription.
+ * Iterates through all connected tokens to ensure strict enforcement.
  */
 export const disconnectServicesForNonPremium = functions.region('europe-west2').pubsub.schedule('every 24 hours').onRun(async (context) => {
-    const expiredDate = new Date();
-    expiredDate.setDate(expiredDate.getDate() - 10);
-
-    // 1. Identify users with subscriptions that ended more than 10 days ago
-    // query "subscriptions" collection group where ...
-    const subscriptionsSnapshot = await admin.firestore().collectionGroup('subscriptions')
-        .where('status', 'in', ['canceled', 'unpaid', 'past_due'])
-        .where('ended_at', '<', admin.firestore.Timestamp.fromDate(expiredDate))
-        .get();
-
+    // 1. Identify all users with ANY connected service
     const userIDs = new Set<string>();
-    subscriptionsSnapshot.forEach(doc => {
-        const uid = doc.ref.parent.parent?.id; // customers/{uid}/subscriptions/{subId}
-        if (uid) {
-            userIDs.add(uid);
-        }
-    });
 
-    console.log(`Found ${userIDs.size} potential users for service disconnection (expired subscription > 10 days).`);
+    // Garmin Tokens
+    const garminSnapshot = await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).get();
+    garminSnapshot.forEach(doc => userIDs.add(doc.id));
+
+    // Suunto Tokens
+    const suuntoSnapshot = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).get();
+    suuntoSnapshot.forEach(doc => userIDs.add(doc.id));
+
+    // COROS Tokens
+    const corosSnapshot = await admin.firestore().collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).get();
+    corosSnapshot.forEach(doc => userIDs.add(doc.id));
+
+    console.log(`Found ${userIDs.size} users with connected services.`);
 
     for (const uid of userIDs) {
-        // 2. Safety Check: Verify if the user has ANY active premium subscription
+        // 2. Check for ACTIVE premium subscription
         // We check for 'active' or 'trialing' status AND 'premium' role.
         const activePremiumSub = await admin.firestore().collection(`customers/${uid}/subscriptions`)
             .where('status', 'in', ['active', 'trialing'])
@@ -39,7 +39,7 @@ export const disconnectServicesForNonPremium = functions.region('europe-west2').
             .get();
 
         if (!activePremiumSub.empty) {
-            console.log(`User ${uid} has an active premium subscription. Skipping service disconnection.`);
+            // User has premium, skip
             continue;
         }
 
