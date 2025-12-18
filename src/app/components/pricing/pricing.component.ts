@@ -6,6 +6,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Observable } from 'rxjs';
+import { StripeRole } from '../../models/stripe-role.model';
 
 @Component({
     selector: 'app-pricing',
@@ -16,7 +17,7 @@ import { Observable } from 'rxjs';
 })
 export class PricingComponent implements OnInit {
     products$: Observable<StripeProduct[]> | null = null;
-    currentRole: 'free' | 'basic' | 'premium' = 'free';
+    currentRole: StripeRole = 'free';
     isLoading = false;
     loadingPriceId: string | null = null;
 
@@ -39,9 +40,11 @@ export class PricingComponent implements OnInit {
     }
 
     async subscribe(priceId: string) {
-        if (this.isPremium) {
-            alert('You are already subscribed!');
-            return;
+        if (this.currentRole === 'premium' || this.currentRole === 'basic') {
+            // Usually this path is guarded by UI, but if they click "Upgrade" we shouldn't block them here
+            // actually upgrades should proceed to checkout session.
+            // The check for existing subscription is done in paymentService.appendCheckoutSession specific logic.
+            // for now let's just allow it call through, payment service handles the "you have a sub, manage it" flow.
         }
         this.isLoading = true;
         this.loadingPriceId = priceId;
