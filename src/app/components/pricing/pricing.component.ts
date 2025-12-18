@@ -17,7 +17,7 @@ import { StripeRole } from '../../models/stripe-role.model';
 })
 export class PricingComponent implements OnInit {
     products$: Observable<StripeProduct[]> | null = null;
-    currentRole: StripeRole = 'free';
+    currentRole: StripeRole | null = null;
     isLoading = false;
     loadingPriceId: string | null = null;
 
@@ -30,11 +30,8 @@ export class PricingComponent implements OnInit {
         this.products$ = this.paymentService.getProducts();
 
         const role = await this.userService.getSubscriptionRole();
-        if (role === 'premium' || role === 'basic') {
-            this.currentRole = role;
-        } else {
-            this.currentRole = 'free';
-        }
+        // Strict assignment: We trust the backend. If it's null, it's null (No Plan).
+        this.currentRole = role;
 
         this.activeSubscriptions$ = this.paymentService.getUserSubscriptions().pipe(
             map(subs => subs.filter(sub => sub.role !== 'free'))
@@ -42,12 +39,14 @@ export class PricingComponent implements OnInit {
     }
 
     async subscribe(price: any) {
+        // Double-Billing Protection:
+        // If user already has a Paid Role (Basic/Premium), they CANNOT checkout again.
+        // They must manage/swap their existing subscription via the Portal.
         if (this.currentRole === 'premium' || this.currentRole === 'basic') {
-            // Usually this path is guarded by UI, but if they click "Upgrade" we shouldn't block them here
-            // actually upgrades should proceed to checkout session.
-            // The check for existing subscription is done in paymentService.appendCheckoutSession specific logic.
-            // for now let's just allow it call through, payment service handles the "you have a sub, manage it" flow.
+            await this.manageSubscription();
+            return;
         }
+
         this.isLoading = true;
         // Handle both price object and legacy string ID for backward compatibility
         const priceId = typeof price === 'string' ? price : price.id;
