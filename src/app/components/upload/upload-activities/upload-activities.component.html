@@ -1,21 +1,16 @@
-<div class="usage-limit" *ngIf="user">
-  <ng-container *ngIf="isPro; else limited">
-    <p class="limit-text success">Unlimited uploads (Pro)</p>
-  </ng-container>
-  <ng-template #limited>
-    <p class="limit-text" *ngIf="uploadCount < uploadLimit">
-      Remaining uploads: {{ (uploadLimit - uploadCount) > 0 ? (uploadLimit - uploadCount) : 0 }} / {{ uploadLimit }}
-    </p>
-    <p *ngIf="uploadCount >= uploadLimit" class="error-text">
-      Upload limit reached. <a routerLink="/pricing">Upgrade to Pro</a> for unlimited uploads.
-    </p>
-  </ng-template>
-</div>
-<button mat-flat-button color="accent" [disabled]="!isPro && uploadCount >= uploadLimit" (drop)="getFiles($event);"
-  (drop)="getFiles($event);" (click)="inputFile.click()" ondragenter="event.stopPropagation(); event.preventDefault();"
-  ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
-  ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-  Upload
-</button>
+<ng-container *ngIf="isPro || uploadCount < uploadLimit">
+  <button mat-flat-button color="accent" (drop)="getFiles($event);" (click)="inputFile.click()"
+    ondragenter="event.stopPropagation(); event.preventDefault();"
+    ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
+    ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
+    <span *ngIf="isPro">Upload</span>
+    <span *ngIf="!isPro">Upload ({{ (uploadLimit - uploadCount) > 0 ? (uploadLimit - uploadCount) : 0}}
+      remaining)</span>
+  </button>
+</ng-container>
+
+<a mat-flat-button color="accent" routerLink="/pricing" *ngIf="!isPro && uploadCount >= uploadLimit">
+  Upgrade to Pro
+</a>
 <input #inputFile type="file" accept=".json, .tcx, .fit, .gpx, .sml" multiple style="display: none;"
   (change)="getFiles($event)" />
