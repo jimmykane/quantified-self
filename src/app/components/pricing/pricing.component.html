@@ -44,7 +44,13 @@
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     @for (product of products; track product.id) {
-    <mat-card class="product-card" [class.current-plan]="product.metadata.role === currentRole">
+    <mat-card class="product-card" [class.current-plan]="product.metadata.role === currentRole"
+      [class.pro-card]="product.metadata.role === 'pro'" [class.basic-card]="product.metadata.role === 'basic'">
+
+      @if (product.metadata.role === 'pro') {
+      <div class="popular-ribbon">Best Value</div>
+      }
+
       <mat-card-header>
         <mat-card-title>
           {{ product.name }}
@@ -52,12 +58,26 @@
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
+        <div class="features-list">
+          @if (product.metadata.role === 'basic') {
+          <ul>
+            <li><mat-icon color="accent">check</mat-icon> Up to 100 Activities</li>
+            <li><mat-icon color="warn">close</mat-icon> No Device Sync</li>
+          </ul>
+          } @else if (product.metadata.role === 'pro') {
+          <ul>
+            <li><mat-icon color="primary">check_circle</mat-icon> <strong>Unlimited</strong> Activities</li>
+            <li><mat-icon color="primary">check_circle</mat-icon> Sync Garmin, Suunto, COROS</li>
+          </ul>
+          }
+        </div>
+
         <div style="flex-grow: 1;"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
-            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() }}
-            <span *ngIf="price.recurring">/ {{ price.recurring.interval }}</span>
+            {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : '1.0-0' }}
+            <span *ngIf="price.recurring" class="interval">/ {{ price.recurring.interval }}</span>
           </h3>
 
           <!-- Current Plan Indicator -->
@@ -74,15 +94,17 @@
           @else {
           <!-- Use 'Upgrade' if we are Basic looking at Pro -->
           @if (currentRole === 'basic' && product.metadata.role === 'pro') {
-          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading">Upgrade</button>
+          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading"
+            class="upgrade-btn">Upgrade to Pro</button>
           }
           <!-- Otherwise 'Subscribe' (for new users or Free users upgrading to anything) -->
           @else {
-          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading">
+          <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading"
+            class="subscribe-btn">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            {{ price.recurring ? 'Subscribe' : 'Buy Now' }}
+            {{ price.recurring ? 'Start ' + product.name : 'Buy Now' }}
             }
           </button>
           }

@@ -19,7 +19,7 @@
     width: 100%;
     max-width: 600px;
     margin-bottom: 30px;
-    
+
     .restore-alert {
       background: rgba(var(--accent-rgb), 0.1);
       border: 1px solid rgba(var(--accent-rgb), 0.3);
@@ -37,7 +37,8 @@
     }
   }
 
-  .products-grid, .manage-subscription-container {
+  .products-grid,
+  .manage-subscription-container {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -45,90 +46,236 @@
     width: 100%;
     max-width: 1200px;
   }
-  
+
   /* Use grid for products if we want stricer columns, but flex is good for centering few items */
   .products-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 350px));
+    /* Grid responsive: min 300px, max 400px cards */
+    grid-template-columns: repeat(auto-fit, minmax(300px, 400px));
     justify-content: center;
+    gap: 40px;
   }
 
   .product-card {
     display: flex;
     flex-direction: column;
     height: 100%;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    border-radius: 16px;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    border-radius: 20px;
     overflow: hidden;
-    /* ensure mat-card has some depth */
-    
+    position: relative;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: #fff;
+    /* Ensure strict background */
+
+    /* Hover effect */
     &:hover {
       transform: translateY(-8px);
-      box-shadow: 0 12px 24px rgba(0,0,0,0.15);
-      z-index: 1;
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
+      z-index: 2;
+    }
+
+    /* Basic Card - Subtle */
+    &.basic-card {
+      border-top: 6px solid #607d8b;
+      /* Blue-grey for Basic */
+    }
+
+    /* Pro Card - Primary Highlight */
+    &.pro-card {
+      border-top: 6px solid #3f51b5;
+      /* Primary color usually */
+      box-shadow: 0 8px 24px rgba(63, 81, 181, 0.15);
+
+      /* Make it pop slightly more */
+      transform: scale(1.02);
+
+      &:hover {
+        transform: scale(1.02) translateY(-8px);
+        box-shadow: 0 20px 40px rgba(63, 81, 181, 0.2);
+      }
+    }
+
+    /* Ribbon for Pro */
+    .popular-ribbon {
+      position: absolute;
+      top: 20px;
+      right: -30px;
+      background: #ff4081;
+      /* Accent color */
+      color: white;
+      padding: 6px 40px;
+      transform: rotate(45deg);
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      z-index: 10;
     }
 
     mat-card-header {
-      padding: 24px 24px 0;
-      flex-direction: column; /* Center header content */
+      padding: 32px 24px 16px;
+      flex-direction: column;
       align-items: center;
       text-align: center;
-      margin-bottom: 16px;
 
       mat-card-title {
-        font-size: 1.5rem;
-        font-weight: 600;
+        font-size: 1.7rem;
+        font-weight: 700;
         margin-bottom: 8px;
+        letter-spacing: -0.5px;
       }
 
       mat-card-subtitle {
-        font-size: 0.9rem;
-        opacity: 0.8;
+        font-size: 0.95rem;
+        opacity: 0.7;
+        line-height: 1.4;
+        max-width: 80%;
       }
     }
 
     mat-card-content {
-      padding: 0 24px 24px;
+      padding: 0 32px 32px;
       flex-grow: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between; /* Push button to bottom if content varies */
-      text-align: center;
+    }
+
+    .features-list {
+      margin: 24px 0;
+      width: 100%;
+      text-align: left;
+
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+
+        li {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          font-size: 0.95rem;
+          color: rgba(0, 0, 0, 0.87);
+          line-height: 1.4;
+
+          mat-icon {
+            margin-right: 12px;
+            font-size: 20px;
+            width: 20px;
+            height: 20px;
+          }
+
+          strong {
+            font-weight: 600;
+          }
+        }
+      }
     }
 
     .price-section {
-      margin-top: auto; /* force to bottom of content area */
+      margin-top: auto;
       width: 100%;
       text-align: center;
-      padding-top: 20px;
-      border-top: 1px solid rgba(0,0,0,0.05);
+      padding-top: 24px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
 
       .price {
-        font-size: 2.2rem;
-        font-weight: 700;
-        margin: 0 0 16px;
-        color: var(--primary-color, inherit); 
+        font-size: 2.8rem;
+        font-weight: 800;
+        margin: 0 0 20px;
+        color: rgba(0, 0, 0, 0.87);
+        letter-spacing: -1px;
+        display: flex;
+        justify-content: center;
+        align-items: baseline;
 
-        span {
+        .interval {
           font-size: 1rem;
-          font-weight: 400;
-          opacity: 0.7;
+          font-weight: 500;
+          opacity: 0.6;
+          margin-left: 4px;
         }
       }
 
       button {
         width: 100%;
-        padding: 8px 0;
-        border-radius: 24px;
-        font-size: 1rem;
-        letter-spacing: 0.5px;
+        padding: 24px 0;
+        /* Taller buttons */
+        border-radius: 8px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        line-height: 0;
+        /* Center text vertically in tall button */
+
+        &.subscribe-btn {
+          /* Pro button style can be enhanced if needed */
+        }
+
+        &.upgrade-btn {
+          /* Specific upgrade style */
+        }
       }
     }
   }
 
+  /* Current plan styling override */
+  .current-plan {
+    /* Ensure no weird background leaks */
+    background-color: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.12) !important;
+    position: relative;
+
+    &.basic-card {
+      border-top: 6px solid #607d8b !important;
+    }
+
+    &.pro-card {
+      border-top: 6px solid #3f51b5 !important;
+    }
+
+    /* Badge styling */
+    &::after {
+      content: 'Current Plan';
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 4px 16px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border-bottom-left-radius: 8px;
+      border-bottom-right-radius: 8px;
+      z-index: 1;
+      /* Low z-index */
+      pointer-events: none;
+      /* Don't block clicks */
+    }
+
+    /* Ensure content is above the badge if overlapping */
+    mat-card-header,
+    mat-card-content {
+      z-index: 2;
+      position: relative;
+      background: transparent;
+      /* allow verify */
+    }
+  }
+
   .manage-subscription-container .product-card {
-    max-width: 400px;
-    border: 2px solid rgba(var(--primary-rgb), 0.5);
+    max-width: 450px;
+    /* Reuse pro styling */
+    @extend .pro-card;
+    transform: none !important;
+    /* Disable scale for manage card */
+
+    &:hover {
+      transform: translateY(-4px) !important;
+    }
   }
 }

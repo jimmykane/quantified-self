@@ -3,15 +3,20 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
 import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Observable, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 
+import { MatDialog } from '@angular/material/dialog';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { firstValueFrom } from 'rxjs';
+
 @Component({
     selector: 'app-pricing',
     standalone: true,
-    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule],
+    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, MatIconModule],
     templateUrl: './pricing.component.html',
     styleUrls: ['./pricing.component.scss']
 })
@@ -23,7 +28,8 @@ export class PricingComponent implements OnInit {
 
     constructor(
         private paymentService: AppPaymentService,
-        private userService: AppUserService
+        private userService: AppUserService,
+        private dialog: MatDialog
     ) { }
 
     isLoadingRole = true;
@@ -71,6 +77,22 @@ export class PricingComponent implements OnInit {
     }
 
     async manageSubscription() {
+        if (this.currentRole === 'pro') {
+            const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+                data: {
+                    title: 'Downgrading?',
+                    message: 'If you downgrade to Basic, any accounts connected beyond the limit (1) will be disconnected after 10 days.',
+                    confirmText: 'Continue to Portal',
+                    cancelText: 'Cancel'
+                }
+            });
+
+            const confirmed = await firstValueFrom(dialogRef.afterClosed());
+            if (!confirmed) {
+                return;
+            }
+        }
+
         this.isLoading = true;
         try {
             await this.paymentService.manageSubscriptions();

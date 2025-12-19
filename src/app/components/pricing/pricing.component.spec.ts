@@ -19,6 +19,16 @@ class MockAppUserService {
     }
 }
 
+import { MatDialog } from '@angular/material/dialog';
+
+class MockMatDialog {
+    open() {
+        return {
+            afterClosed: () => of(true)
+        };
+    }
+}
+
 describe('PricingComponent', () => {
     let component: PricingComponent;
     let fixture: ComponentFixture<PricingComponent>;
@@ -28,7 +38,8 @@ describe('PricingComponent', () => {
             imports: [PricingComponent],
             providers: [
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
-                { provide: AppUserService, useClass: MockAppUserService }
+                { provide: AppUserService, useClass: MockAppUserService },
+                { provide: MatDialog, useClass: MockMatDialog }
             ]
         }).compileComponents();
 

@@ -15,6 +15,7 @@ import { PricingComponent } from '../pricing/pricing.component';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
+import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 
 @Component({
     selector: 'app-onboarding',
@@ -39,6 +40,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     @Input() user: User;
     @ViewChild('stepper') stepper: MatStepper;
 
+    policies: PolicyItem[] = POLICY_CONTENT.filter(p => !!p.checkboxLabel);
     termsFormGroup: FormGroup;
     isPro = false;
 
@@ -66,12 +68,38 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
     private initForm() {
         const user = this.user || {} as User;
-        this.termsFormGroup = this._formBuilder.group({
-            acceptPrivacyPolicy: [user.acceptedPrivacyPolicy || false, Validators.requiredTrue],
-            acceptDataPolicy: [user.acceptedDataPolicy || false, Validators.requiredTrue],
-            acceptTrackingPolicy: [user.acceptedTrackingPolicy || false, Validators.requiredTrue],
-            acceptDiagnosticsPolicy: [user.acceptedDiagnosticsPolicy || false, Validators.requiredTrue],
+        const group: any = {};
+
+        this.policies.forEach(policy => {
+            if (policy.formControlName) {
+                // Determine initial value from user object dynamically if possible, or default to false.
+                // Since user properties match formControlName map (e.g. acceptPrivacyPolicy -> acceptedPrivacyPolicy),
+                // mapping is: acceptX -> acceptedX.
+                // Let's rely on manual mapping or just use the known keys if we want to be safe, 
+                // OR just loop. For now, let's look at the property mapping:
+                // formControlName: 'acceptPrivacyPolicy' -> user.acceptedPrivacyPolicy
+                // So replacing 'accept' with 'accepted' seems to be the pattern.
+                // But honestly, explicit is safer given the small number.
+                // However, for strict reusability, let's try to find the key.
+
+                // Let's stick to the previous hardcoded initial values logic BUT loop for creation if we want dynamic,
+                // or just leave initForm hardcoded if we don't assume the keys change often.
+                // User asked for text reusability.
+                // But if I loop in HTML, I must have controls in FormGroup.
+                // Creating controls dynamically ensures they exist.
+
+                let initialValue = false;
+                if (policy.formControlName === 'acceptPrivacyPolicy') initialValue = user.acceptedPrivacyPolicy;
+                else if (policy.formControlName === 'acceptDataPolicy') initialValue = user.acceptedDataPolicy;
+                else if (policy.formControlName === 'acceptTrackingPolicy') initialValue = user.acceptedTrackingPolicy;
+                else if (policy.formControlName === 'acceptDiagnosticsPolicy') initialValue = user.acceptedDiagnosticsPolicy;
+                else if (policy.formControlName === 'acceptTos') initialValue = (user as any).acceptedTos;
+
+                group[policy.formControlName] = [initialValue || false, Validators.requiredTrue];
+            }
         });
+
+        this.termsFormGroup = this._formBuilder.group(group);
     }
 
     ngAfterViewInit() {
@@ -92,7 +120,8 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             const termsAccepted = this.user.acceptedPrivacyPolicy === true &&
                 this.user.acceptedDataPolicy === true &&
                 this.user.acceptedTrackingPolicy === true &&
-                this.user.acceptedDiagnosticsPolicy === true;
+                this.user.acceptedDiagnosticsPolicy === true &&
+                (this.user as any).acceptedTos === true;
 
             console.log('[OnboardingComponent] checkAndAdvance:', {
                 termsAccepted,
@@ -120,6 +149,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             this.user.acceptedDataPolicy = true;
             this.user.acceptedTrackingPolicy = true;
             this.user.acceptedDiagnosticsPolicy = true;
+            (this.user as any).acceptedTos = true;
 
             // Don't save to DB yet, just update local state and move to next step.
             // If we save now, AppComponent might hide the onboarding flow prematurely
