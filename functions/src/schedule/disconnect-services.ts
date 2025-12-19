@@ -1,4 +1,4 @@
-import * as functions from 'firebase-functions/v1';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -11,7 +11,10 @@ import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
  * Disconnects external services (Garmin, Suunto, COROS) for users who have no active pro subscription.
  * Iterates through all connected tokens to ensure strict enforcement.
  */
-export const disconnectServicesForNonPro = functions.region('europe-west2').pubsub.schedule('every 24 hours').onRun(async (context) => {
+export const disconnectServicesForNonPro = onSchedule({
+    region: 'europe-west2',
+    schedule: 'every 24 hours',
+}, async (_event) => {
     // 1. Identify all users with ANY connected service
     const userIDs = new Set<string>();
 

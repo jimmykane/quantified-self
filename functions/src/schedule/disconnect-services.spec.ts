@@ -2,17 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
 
 // Mock firebase-functions BEFORE imports
-vi.mock('firebase-functions/v1', () => ({
-    region: () => ({
-        pubsub: {
-            schedule: () => ({
-                onRun: (handler: any) => handler
-            })
-        },
-        https: {
-            onRequest: () => { }
-        }
-    })
+vi.mock('firebase-functions/v2/scheduler', () => ({
+    onSchedule: (opts: any, handler: any) => handler
 }));
 
 const testEnv = { cleanup: () => { } };
