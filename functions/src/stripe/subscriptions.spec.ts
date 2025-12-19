@@ -152,4 +152,142 @@ describe('onSubscriptionUpdated', () => {
         // Should call reconcileClaims again to be sure
         expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
     });
+
+    // --------------------------------------------------------------------------------
+    // Email Trigger Tests
+    // --------------------------------------------------------------------------------
+    describe('Welcome Email Trigger', () => {
+        let authSpy: any;
+        let getUserSpy: any;
+
+        beforeEach(() => {
+            getUserSpy = vi.fn();
+            authSpy = vi.spyOn(admin, 'auth').mockReturnValue({
+                getUser: getUserSpy,
+                setCustomUserClaims: vi.fn(),
+            } as any);
+        });
+
+        it('should queue a welcome email if active subscription found and not already sent', async () => {
+            const uid = 'user_email_test';
+            const subId = 'sub_active_1';
+            const event = { params: { uid, subscriptionId: subId } } as any;
+
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            // Mock active subscription with firebaseRole
+            collectionSpy.mockImplementation((path: string) => {
+                if (path === `customers/${uid}/subscriptions`) {
+                    return {
+                        where: vi.fn().mockReturnThis(),
+                        orderBy: vi.fn().mockReturnThis(),
+                        limit: vi.fn().mockReturnThis(),
+                        get: vi.fn().mockResolvedValue({
+                            empty: false,
+                            docs: [{
+                                id: subId,
+                                data: () => ({ firebaseRole: 'pro' })
+                            }]
+                        })
+                    };
+                }
+                if (path === 'mail') {
+                    // Mock mail collection check
+                    return {
+                        doc: (docId: string) => ({
+                            get: vi.fn().mockResolvedValue({ exists: false }),
+                            set: setSpy
+                        })
+                    };
+                }
+                return { where: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ empty: true }) };
+            });
+
+            // Mock user email
+            getUserSpy.mockResolvedValue({ email: 'test@example.com' });
+
+            await onSubscriptionUpdated(event);
+
+            // Expect mail set to be called
+            expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+                to: 'test@example.com',
+                template: expect.objectContaining({
+                    name: 'welcome_email',
+                    data: { role: 'pro' }
+                })
+            }));
+        });
+
+        it('should NOT queue email if it was already sent', async () => {
+            const uid = 'user_email_sent';
+            const subId = 'sub_active_2';
+            const event = { params: { uid, subscriptionId: subId } } as any;
+
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            collectionSpy.mockImplementation((path: string) => {
+                if (path === `customers/${uid}/subscriptions`) {
+                    return {
+                        where: vi.fn().mockReturnThis(),
+                        limit: vi.fn().mockReturnThis(),
+                        get: vi.fn().mockResolvedValue({
+                            empty: false,
+                            docs: [{ id: subId, data: () => ({ firebaseRole: 'pro' }) }]
+                        })
+                    };
+                }
+                if (path === 'mail') {
+                    return {
+                        doc: (docId: string) => ({
+                            get: vi.fn().mockResolvedValue({ exists: true }),
+                            set: setSpy
+                        })
+                    };
+                }
+                return { doc: () => ({ get: vi.fn(), set: vi.fn() }) };
+            });
+
+            await onSubscriptionUpdated(event);
+
+            // Expect mail set NOT to be called
+            expect(setSpy).not.toHaveBeenCalled();
+        });
+
+        it('should NOT queue email if user has no email address', async () => {
+            const uid = 'user_no_email';
+            const subId = 'sub_active_3';
+            const event = { params: { uid, subscriptionId: subId } } as any;
+
+            mockReconcileClaims.mockResolvedValue({ role: 'pro' });
+
+            collectionSpy.mockImplementation((path: string) => {
+                if (path === `customers/${uid}/subscriptions`) {
+                    return {
+                        where: vi.fn().mockReturnThis(),
+                        limit: vi.fn().mockReturnThis(),
+                        get: vi.fn().mockResolvedValue({
+                            empty: false,
+                            docs: [{ id: subId, data: () => ({ firebaseRole: 'pro' }) }]
+                        })
+                    };
+                }
+                if (path === 'mail') {
+                    return {
+                        doc: () => ({
+                            get: vi.fn().mockResolvedValue({ exists: false }),
+                            set: setSpy
+                        })
+                    };
+                }
+                return { doc: () => ({ get: vi.fn(), set: vi.fn() }) };
+            });
+
+            getUserSpy.mockResolvedValue({ email: null });
+
+            await onSubscriptionUpdated(event);
+
+            expect(setSpy).not.toHaveBeenCalled();
+        });
+    });
 });
+

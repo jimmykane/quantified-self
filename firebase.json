@@ -61,6 +61,7 @@
   },
   "extensions": {
     "delete-user-data": "firebase/delete-user-data@0.1.25",
-    "firestore-stripe-payments": "invertase/firestore-stripe-payments@0.3.12"
+    "firestore-stripe-payments": "invertase/firestore-stripe-payments@0.3.12",
+    "firestore-send-email": "firebase/firestore-send-email@0.1.35"
   }
 }
