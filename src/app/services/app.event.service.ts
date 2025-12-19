@@ -57,7 +57,6 @@ export class AppEventService implements OnDestroy {
       docData(eventDoc).pipe(
         map(eventSnapshot => {
           if (!eventSnapshot) return null;
-          console.log('[AppEventService] getEventAndActivities snapshot:', JSON.stringify(eventSnapshot));
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
           if (unknownTypes.length > 0) {
             const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
@@ -490,7 +489,6 @@ export class AppEventService implements OnDestroy {
 
     return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.map((eventSnapshot) => {
-        console.log('[AppEventService] _getEvents snapshot:', JSON.stringify(eventSnapshot));
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
           const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
@@ -504,7 +502,6 @@ export class AppEventService implements OnDestroy {
           // Force assignment using Object.assign or defineProperty in case of sealed keys?
           // (event as any).originalFile = (eventSnapshot as any).originalFile;
           Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
-          console.log('[AppEventService] Patch applied in _getEvents for', eventSnapshot.id, 'Has it?', !!(event as any).originalFile);
         }
         return event;
       })
@@ -527,13 +524,11 @@ export class AppEventService implements OnDestroy {
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
         if ((eventSnapshot as any).originalFile) {
           Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
-          console.log('[AppEventService] Patch applied in _getEvents for', eventSnapshot.id, 'Has it?', !!(event as any).originalFile);
         }
         events.push(event);
         return events;
       }, []);
     })).pipe(switchMap((events: EventInterface[]) => {
-      console.log('[AppEventService] _getEventsAndActivities events:', events.length);
       if (events.length === 0) {
         return of([]);
       }

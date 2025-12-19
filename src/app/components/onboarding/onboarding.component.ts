@@ -86,7 +86,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
     private async checkAndAdvance() {
         if (this.user) {
-            // Re-check premium status whenever user data changes
+            // Re-check pro status whenever user data changes
             this.isPro = await this.userService.isPro();
 
             const termsAccepted = this.user.acceptedPrivacyPolicy === true &&

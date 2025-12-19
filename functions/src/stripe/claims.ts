@@ -61,12 +61,18 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     // Subscription items structure: items: [ { price: { id: "..." } } ]
     if (subData.items && subData.items.length > 0) {
         const priceId = subData.items[0].price.id;
+
+        console.log(`[reconcileClaims] Found subscription items. PriceID: ${priceId}`);
+        console.log(`[reconcileClaims] Raw metadata role from Firestore doc: ${role}`);
+
         if (PRICE_TO_PLAN[priceId]) {
             role = PRICE_TO_PLAN[priceId];
             console.log(`[reconcileClaims] Mapped price ${priceId} to role ${role}`);
         } else {
             console.warn(`[reconcileClaims] Price ${priceId} not found in PRICE_TO_PLAN. Using metadata role: ${role}`);
         }
+    } else {
+        console.warn(`[reconcileClaims] No items found in subscription document. Using metadata role: ${role}`);
     }
 
     if (!role) {
@@ -74,9 +80,8 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     }
 
     // Set custom user claims on this specific user
+    console.log(`[reconcileClaims] Final decision - Setting claims for user ${uid} to role: ${role}`);
     await admin.auth().setCustomUserClaims(uid, { stripeRole: role });
-
-    console.log(`[reconcileClaims] Reconciled claims for user ${uid} to active role: ${role}`);
 
     return { role };
 }

@@ -315,7 +315,7 @@ export class AppPaymentService {
 
                     // If we can't easily get the role from the sub doc, we act defensively:
                     // We assume if the user has role='free', and they have a subscription, 
-                    // valid "paid" subscriptions usually have role='premium' or 'basic'.
+                    // valid "paid" subscriptions usually have role='pro' or 'basic'.
                     // The sub doc usually contains `role` field IF the extension is configured to sync it?
                     // Let's assume the extension puts `role` on the sub doc if it updated the claims.
                     // IF NOT, we might need to fetch the product. 
