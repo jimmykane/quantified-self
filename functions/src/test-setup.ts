@@ -19,12 +19,12 @@ process.env.GARMINHEALTHAPI_CONSUMER_SECRET = 'test-garmin-consumer-secret';
 // Mock firebase-functions - this will be hoisted
 vi.mock('firebase-functions/v1', () => {
     const regionFn = () => ({
-        https: { onRequest: () => { } },
+        https: { onRequest: (handler: any) => handler },
         runWith: () => ({
-            https: { onRequest: () => { } },
+            https: { onRequest: (handler: any) => handler },
             pubsub: {
                 schedule: () => ({
-                    onRun: () => { },
+                    onRun: (handler: any) => handler,
                 }),
             },
         }),

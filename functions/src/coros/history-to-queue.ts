@@ -40,7 +40,7 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
   const startDate = new Date(req.body.startDate);
   const endDate = new Date(req.body.endDate);
 
-  if (!startDate || !endDate) {
+  if (!startDate || isNaN(startDate.getTime()) || !endDate || isNaN(endDate.getTime())) {
     res.status(500).send('No start and/or end date');
     return;
   }
