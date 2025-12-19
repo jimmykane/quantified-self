@@ -129,11 +129,17 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             });
 
             if (termsAccepted && this.stepper && this.stepper.selectedIndex === 0) {
-                console.log('[OnboardingComponent] Terms accepted, auto-advancing to pricing step.');
-                // Use setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
-                setTimeout(() => {
-                    this.stepper.selectedIndex = 1;
-                });
+                const isSubscribed = await this.userService.hasPaidAccess();
+                if (isSubscribed) {
+                    console.log('[OnboardingComponent] Terms accepted and user is subscribed, finishing onboarding.');
+                    this.finishOnboarding();
+                } else {
+                    console.log('[OnboardingComponent] Terms accepted, auto-advancing to pricing step.');
+                    // Use setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
+                    setTimeout(() => {
+                        this.stepper.selectedIndex = 1;
+                    });
+                }
             }
         }
     }
@@ -171,7 +177,14 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
                 // Because we updated AppComponent to check for 'onboardingCompleted', 
                 // this save will NOT cause the component to disappear.
                 await this.userService.updateUser(this.user);
-                this.stepper.next();
+
+                const isSubscribed = await this.userService.hasPaidAccess();
+                if (isSubscribed) {
+                    console.log('[OnboardingComponent] User is subscribed, finishing onboarding directly.');
+                    this.finishOnboarding();
+                } else {
+                    this.stepper.next();
+                }
             } catch (error) {
                 console.error('Error updating user terms:', error);
             }
