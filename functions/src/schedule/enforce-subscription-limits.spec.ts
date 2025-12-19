@@ -197,4 +197,29 @@ describe('enforceSubscriptionLimits', () => {
         // Verify pruning (12 - 10 = 2 excess)
         expect(mockRecursiveDelete).toHaveBeenCalledTimes(2);
     });
+
+    it('should NOT prune if count is within limits', async () => {
+        const pastDate = new Date(Date.now() - 100000);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path.includes('subscriptions')) return mockQuery([]); // No active pros
+            if (path.includes('events')) {
+                // Return exactly 10 events (Limit is 10)
+                return mockQuery([], 10);
+            }
+            return mockQuery([]);
+        });
+
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path === 'users/user1') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+            return mockDoc({});
+        });
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        // Verify pruning does NOT happen
+        expect(mockRecursiveDelete).not.toHaveBeenCalled();
+    });
 });

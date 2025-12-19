@@ -15,7 +15,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
     console.log(`[onSubscriptionUpdated] Change detected for user ${uid}. Reconciling claims...`);
 
     try {
-        const { role } = await reconcileClaims(uid);
+        await reconcileClaims(uid);
 
         // If the role is now 'free' (no active sub found in reconcileClaims), 
         // find if they WERE pro/basic and set the grace period.
