@@ -1,9 +1,9 @@
 <div class="pricing-container">
   <h1>{{ currentRole === 'pro' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
 
-  <div *ngIf="currentRole === 'free' && (activeSubscriptions$ | async) as subs" class="restore-section">
-    <div *ngIf="subs.length > 0" class="restore-alert">
-      <p>We found an active subscription pending update.</p>
+  <div *ngIf="!currentRole || currentRole === 'free'" class="restore-section">
+    <div class="restore-alert">
+      <p>Already have an active subscription?</p>
       <button mat-stroked-button color="accent" (click)="restorePurchases()" [disabled]="isLoading">
         @if (isLoading) {
         <mat-spinner diameter="20"></mat-spinner>
