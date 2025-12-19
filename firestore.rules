@@ -44,7 +44,7 @@ service cloud.firestore {
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
           allow read: if isCoach(userID) == true;
-          // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or Premium)
+          // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
           allow read, write: if request.auth.uid == userID;
