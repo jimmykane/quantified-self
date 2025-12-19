@@ -30,16 +30,16 @@ export const disconnectServicesForNonPro = functions.region('europe-west2').pubs
     console.log(`Found ${userIDs.size} users with connected services.`);
 
     for (const uid of userIDs) {
-        // 2. Check for ACTIVE pro subscription
-        // We check for 'active' or 'trialing' status AND 'pro' role.
-        const activeProSub = await admin.firestore().collection(`customers/${uid}/subscriptions`)
+        // 2. Check for ACTIVE subscription with VALID role
+        // We check for 'active' or 'trialing' status AND 'pro' OR 'basic' role.
+        const activeSubSnapshot = await admin.firestore().collection(`customers/${uid}/subscriptions`)
             .where('status', 'in', ['active', 'trialing'])
-            .where('role', '==', 'pro')
+            .where('firebaseRole', 'in', ['pro', 'basic'])
             .limit(1)
             .get();
 
-        if (!activeProSub.empty) {
-            // User has pro, skip
+        if (!activeSubSnapshot.empty) {
+            // User has valid subscription, skip
             continue;
         }
 

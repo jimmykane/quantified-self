@@ -97,7 +97,7 @@ export { importActivityToSuuntoApp } from './suunto/activities';
 // Events
 export { cleanupEventFile } from './events/cleanup';
 export { restoreUserClaims } from './stripe/claims';
-export { handleStripeWebhook } from './stripe/webhooks';
+
 export { disconnectServicesForNonPro } from './schedule/disconnect-services';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';

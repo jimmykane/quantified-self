@@ -1,1 +1,2 @@
 - Fix environtment  files develope has live apis 
+- Delete products from testing and customers

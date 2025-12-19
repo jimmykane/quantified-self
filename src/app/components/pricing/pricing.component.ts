@@ -26,12 +26,15 @@ export class PricingComponent implements OnInit {
         private userService: AppUserService
     ) { }
 
+    isLoadingRole = true;
+
     async ngOnInit(): Promise<void> {
         this.products$ = this.paymentService.getProducts();
 
         const role = await this.userService.getSubscriptionRole();
         // Strict assignment: We trust the backend. If it's null, it's null (No Plan).
         this.currentRole = role;
+        this.isLoadingRole = false;
 
         this.activeSubscriptions$ = this.paymentService.getUserSubscriptions().pipe(
             map(subs => subs.filter(sub => sub.role !== 'free'))

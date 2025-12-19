@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PRICE_TO_PLAN } from '../shared/pricing';
 
 // Mock dependencies
 const mockSetCustomUserClaims = vi.fn();
@@ -49,17 +48,15 @@ describe('reconcileClaims', () => {
         await expect(reconcileClaims('user1')).rejects.toThrow('No active subscription found');
     });
 
-    it('should set claims based on PRICE_TO_PLAN mapping', async () => {
-        const priceId = 'price_1SfikzE0SlTkOiD4pVkLN6IW';
-        const expectedRole = 'basic'; // As per pricing.ts mock in mind
+    it('should set claims based on firebaseRole metadata', async () => {
+        const expectedRole = 'pro';
 
         mockGet.mockResolvedValue({
             empty: false,
             docs: [{
                 data: () => ({
                     status: 'active',
-                    items: [{ price: { id: priceId } }],
-                    role: 'old_role' // Should be overridden by map
+                    firebaseRole: 'pro'
                 })
             }]
         });
@@ -70,21 +67,18 @@ describe('reconcileClaims', () => {
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: expectedRole });
     });
 
-    it('should fallback to metadata role if price not in map', async () => {
+    it('should throw failed-precondition if no firebaseRole found', async () => {
         mockGet.mockResolvedValue({
             empty: false,
             docs: [{
                 data: () => ({
                     status: 'active',
                     items: [{ price: { id: 'unknown_price' } }],
-                    role: 'manual_role'
+                    // No firebaseRole
                 })
             }]
         });
 
-        const result = await reconcileClaims('user1');
-
-        expect(result.role).toBe('manual_role');
-        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'manual_role' });
+        await expect(reconcileClaims('user1')).rejects.toThrow('Subscription found but no role (firebaseRole) defined in metadata');
     });
 });

@@ -1,4 +1,10 @@
 <div class="pricing-container">
+  @if (isLoadingRole) {
+  <div class="loading-state">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Verifying subscription...</p>
+  </div>
+  } @else {
   <h1>{{ currentRole === 'pro' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
 
   <div *ngIf="!currentRole || currentRole === 'free'" class="restore-section">
@@ -93,5 +99,6 @@
       <p>Loading plans...</p>
     </div>
   </ng-template>
+  }
   }
 </div>

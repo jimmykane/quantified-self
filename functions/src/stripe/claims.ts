@@ -2,8 +2,6 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
-import { PRICE_TO_PLAN } from '../shared/pricing';
-
 export const restoreUserClaims = onCall({
     region: 'europe-west2',
     cors: ALLOWED_CORS_ORIGINS
@@ -30,7 +28,7 @@ export const restoreUserClaims = onCall({
  * 
  * Flow:
  * 1. Checks for active or trialing subscriptions in Firestore.
- * 2. Determines the role based on PRICE_TO_PLAN mapping or subscription metadata.
+ * 2. Determines the role based on subscription metadata.
  * 3. Sets the `stripeRole` custom claim.
  * 
  * @param uid The usage ID to reconcile.
@@ -55,28 +53,15 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     }
 
     const subData = snapshot.docs[0].data();
-    let role = subData.role; // Default to metadata role
 
-    // Check items/price_id against hardcoded map
-    // Subscription items structure: items: [ { price: { id: "..." } } ]
-    if (subData.items && subData.items.length > 0) {
-        const priceId = subData.items[0].price.id;
+    // Priority:
+    // 1. `firebaseRole` (Standard Stripe Extension metadata)
+    const role = subData.firebaseRole;
 
-        console.log(`[reconcileClaims] Found subscription items. PriceID: ${priceId}`);
-        console.log(`[reconcileClaims] Raw metadata role from Firestore doc: ${role}`);
-
-        if (PRICE_TO_PLAN[priceId]) {
-            role = PRICE_TO_PLAN[priceId];
-            console.log(`[reconcileClaims] Mapped price ${priceId} to role ${role}`);
-        } else {
-            console.warn(`[reconcileClaims] Price ${priceId} not found in PRICE_TO_PLAN. Using metadata role: ${role}`);
-        }
-    } else {
-        console.warn(`[reconcileClaims] No items found in subscription document. Using metadata role: ${role}`);
-    }
+    console.log(`[reconcileClaims] Metadata check - firebaseRole: ${subData.firebaseRole}`);
 
     if (!role) {
-        throw new HttpsError('failed-precondition', 'Subscription found but no role defined/mapped.');
+        throw new HttpsError('failed-precondition', 'Subscription found but no role (firebaseRole) defined in metadata.');
     }
 
     // Set custom user claims on this specific user
