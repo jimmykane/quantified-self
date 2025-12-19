@@ -3,7 +3,7 @@
         <mat-horizontal-stepper [linear]="true" #stepper>
             <!-- Step 1: Terms & Conditions -->
             <mat-step [stepControl]="termsFormGroup" label="Agreements">
-                <form [formGroup]="termsFormGroup">
+                <form [formGroup]="termsFormGroup" class="qs-form">
                     <div class="step-content">
                         <h2>Welcome to Quantified Self</h2>
                         <p>Please review and accept our policies to continue.</p>
@@ -27,7 +27,7 @@
                             </ng-container>
                         </div>
 
-                        <div class="actions">
+                        <div class="qs-form-actions">
                             <button mat-flat-button color="primary" [disabled]="!termsFormGroup.valid"
                                 (click)="onTermsSubmit()">Next</button>
                             <button mat-stroked-button color="warn" (click)="logout()">Logout</button>

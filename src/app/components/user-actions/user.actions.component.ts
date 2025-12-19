@@ -1,21 +1,21 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit} from '@angular/core';
-import {Router} from '@angular/router';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import {Privacy} from '@sports-alliance/sports-lib';
-import {AppSharingService} from '../../services/app.sharing.service';
-import {User} from '@sports-alliance/sports-lib';
-import {AppUserService} from '../../services/app.user.service';
-import {UserFormComponent} from '../user-forms/user.form.component';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { AppSharingService } from '../../services/app.sharing.service';
+import { User } from '@sports-alliance/sports-lib';
+import { AppUserService } from '../../services/app.user.service';
+
 import { Clipboard } from '@angular/cdk/clipboard';
 
 @Component({
-    selector: 'app-user-actions',
-    templateUrl: './user.actions.component.html',
-    styleUrls: ['./user.actions.component.css'],
-    providers: [],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-user-actions',
+  templateUrl: './user.actions.component.html',
+  styleUrls: ['./user.actions.component.css'],
+  providers: [],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class UserActionsComponent implements OnInit {
   @Input() user: User;
@@ -26,8 +26,7 @@ export class UserActionsComponent implements OnInit {
     private router: Router,
     private snackBar: MatSnackBar,
     private clipboardService: Clipboard,
-    private sharingService: AppSharingService,
-    private dialog: MatDialog) {
+    private sharingService: AppSharingService) {
   }
 
   ngOnInit(): void {
@@ -46,16 +45,5 @@ export class UserActionsComponent implements OnInit {
     });
   }
 
-  edit() {
-    const dialogRef = this.dialog.open(UserFormComponent, {
-      width: '75vw',
-      disableClose: false,
-      data: {
-        user: this.user
-      },
-    });
 
-    // dialogRef.afterClosed().subscribe(result => {
-    // });
-  }
 }

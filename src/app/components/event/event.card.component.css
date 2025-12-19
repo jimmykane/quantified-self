@@ -11,12 +11,7 @@
   margin: 0 auto;
 }
 
-.dashboard-card {
-  /* Restore standard padding for content readability */
-  padding: 16px;
-  border-radius: 4px;
-  overflow: hidden;
-}
+
 
 /* Specific section tweaks if needed */
 .header-section {

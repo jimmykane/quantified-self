@@ -15,206 +15,164 @@
 
 
   @if (exportFromGroup) {
-    <form [formGroup]="exportFromGroup" (ngSubmit)="onSubmit($event)">
-      <section>
-        <span class="mat-subheading-2">Select the data you want to include</span>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="startDate">
-          <span matTooltip="Include the start date in the export">
-            Start date
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="name">
-          <span matTooltip="Include name in the export">
-            Name
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="description">
-          <span matTooltip="Include description in the export">
-            Description
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="activityTypes">
-          <span matTooltip="Include activity types in the export">
-            Activity types
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="distance">
-          <span matTooltip="Include distance in the export">
-            Distance
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="duration">
-          <span matTooltip="Include duration in the export">
-            Duration
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="ascent">
-          <span matTooltip="Include ascent in the export">
-            Ascent
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="descent">
-          <span matTooltip="Include descent in the export">
-            Descent
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="calories">
-          <span matTooltip="Include calories in the export">
-            Calories
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="feeling">
-          <span matTooltip="Include feeling in the export">
-            Feeling
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="rpe">
-          <span matTooltip="Include RPE in the export">
-            RPE
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="averageSpeed">
-          <span matTooltip="Include average speed in the export">
-            Average speed
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="averagePace">
-          <span matTooltip="Include average pace in the export">
-            Average pace
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="averageSwimPace">
-          <span matTooltip="Include average swim pace in the export">
-            Average swim pace
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="averageGradeAdjustedPace">
-          <span matTooltip="Include average grade adjusted pace in the export">
-            Average grade adjusted pace
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="averageHeartRate">
-          <span matTooltip="Include average heart rate in the export">
-            Average heart rate
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="maximumHeartRate">
-          <span matTooltip="Include maximum heart rate in the export">
-            Maximum heart rate
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="averagePower">
-          <span matTooltip="Include average power in the export">
-            Average power
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="maximumPower">
-          <span matTooltip="Include maximum power in the export">
-            Maximum power
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="vO2Max">
-          <span matTooltip="Include VO2Max in the export">
-            VO2Max
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <mat-slide-toggle
-          [color]="'accent'"
-          formControlName="includeLink">
-          <span matTooltip="Include link to Quantified Self event">
-            Include link
-          </span>
-        </mat-slide-toggle>
-      </section>
-      <section>
-        <button mat-stroked-button (click)="close($event)">Cancel</button>
-        @if (!hasError(exportFromGroup)) {
-          <button mat-flat-button color="primary" (click)="onSubmit($event)">Export
-          </button>
-        }
-      </section>
-    </form>
+  <form [formGroup]="exportFromGroup" (ngSubmit)="onSubmit($event)" class="qs-form">
+    <section>
+      <span class="mat-subheading-2">Select the data you want to include</span>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="startDate">
+        <span matTooltip="Include the start date in the export">
+          Start date
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="name">
+        <span matTooltip="Include name in the export">
+          Name
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="description">
+        <span matTooltip="Include description in the export">
+          Description
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="activityTypes">
+        <span matTooltip="Include activity types in the export">
+          Activity types
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="distance">
+        <span matTooltip="Include distance in the export">
+          Distance
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="duration">
+        <span matTooltip="Include duration in the export">
+          Duration
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="ascent">
+        <span matTooltip="Include ascent in the export">
+          Ascent
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="descent">
+        <span matTooltip="Include descent in the export">
+          Descent
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="calories">
+        <span matTooltip="Include calories in the export">
+          Calories
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="feeling">
+        <span matTooltip="Include feeling in the export">
+          Feeling
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="rpe">
+        <span matTooltip="Include RPE in the export">
+          RPE
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="averageSpeed">
+        <span matTooltip="Include average speed in the export">
+          Average speed
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="averagePace">
+        <span matTooltip="Include average pace in the export">
+          Average pace
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="averageSwimPace">
+        <span matTooltip="Include average swim pace in the export">
+          Average swim pace
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="averageGradeAdjustedPace">
+        <span matTooltip="Include average grade adjusted pace in the export">
+          Average grade adjusted pace
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="averageHeartRate">
+        <span matTooltip="Include average heart rate in the export">
+          Average heart rate
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="maximumHeartRate">
+        <span matTooltip="Include maximum heart rate in the export">
+          Maximum heart rate
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="averagePower">
+        <span matTooltip="Include average power in the export">
+          Average power
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="maximumPower">
+        <span matTooltip="Include maximum power in the export">
+          Maximum power
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="vO2Max">
+        <span matTooltip="Include VO2Max in the export">
+          VO2Max
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <section>
+      <mat-slide-toggle [color]="'accent'" formControlName="includeLink">
+        <span matTooltip="Include link to Quantified Self event">
+          Include link
+        </span>
+      </mat-slide-toggle>
+    </section>
+    <div class="qs-form-actions">
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
+      @if (!hasError(exportFromGroup)) {
+      <button mat-flat-button color="primary" (click)="onSubmit($event)">Export
+      </button>
+      }
+    </div>
+  </form>
   }
 </mat-dialog-content>

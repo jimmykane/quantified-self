@@ -49,6 +49,8 @@ $app-dark-theme: mat.m2-define-dark-theme((color: (primary: $app-primary,
 
 
 // ... (existing imports)
+@import 'styles/forms';
+
 
 // Apply global background and color based on theme
 html,
@@ -223,9 +225,7 @@ section.component-container {
   // background: white; // Removed to allow theme inheritance
 }
 
-mat-card.component-container {
-  border-radius: 0;
-}
+
 
 .avatar {
   background-size: cover;

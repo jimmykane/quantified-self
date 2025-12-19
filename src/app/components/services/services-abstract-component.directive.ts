@@ -35,6 +35,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   @Input() user: User;
   @Input() isGuest: boolean;
+  @Input() hasProAccess: boolean;
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[];
   public serviceMeta: UserServiceMetaInterface
@@ -146,6 +147,16 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       });
     }
     this.isLoading = false;
+  }
+
+  triggerUpsell() {
+    logEvent(this.analytics, 'upsell_triggered', { serviceName: this.serviceName, source: 'locked_card' });
+    const snackBarRef = this.snackBar.open('This feature is available for Pro users.', 'UPGRADE', {
+      duration: 5000,
+    });
+    snackBarRef.onAction().subscribe(() => {
+      this.router.navigate(['/settings']);
+    });
   }
 
   ngOnDestroy(): void {

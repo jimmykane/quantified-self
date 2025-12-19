@@ -1,28 +1,8 @@
-form {
-  width: 100%;
-  /*padding: 1%;*/
-  position: relative;
-}
+/* Global .qs-form styles handle width and spacing now. */
 
-mat-form-field {
-  width: 100%;
-  margin-top: 1em;
-  margin-bottom: 1em;
-}
+/* Kept specific button margin if needed, but .qs-form-actions handles valid buttons usually. */
+/* If there are specific buttons outside actions, they might strictly need this, but best to remove generic overrides. */
 
-.radio-container {
-  margin-bottom: 1em;
-}
-
-.mat-radio-button {
-  margin-top: 1em;
-  margin-right: 1em;
-}
-
-button {
-  width: 100%;
-  margin-top: 1em;
-}
 
 /* Removed ::ng-deep .mat-checkbox-layout override */
 
@@ -31,8 +11,6 @@ button {
 }
 
 mat-card {
-  padding-left: 0;
-  padding-right: 0;
   /*margin-bottom: 1em;*/
 }
 

@@ -48,18 +48,24 @@ export class PricingComponent implements OnInit {
     }
 
     async subscribe(price: any) {
+        // Handle both price object and legacy string ID for backward compatibility
+        const priceId = typeof price === 'string' ? price : price.id;
+        this.loadingPriceId = priceId;
+
         // Double-Billing Protection:
         // If user already has a Paid Role (Basic/Pro), they CANNOT checkout again.
         // They must manage/swap their existing subscription via the Portal.
         if (this.currentRole === 'pro' || this.currentRole === 'basic') {
             await this.manageSubscription();
+            // If we are back here, it means manageSubscription failed or was cancelled/completed
+            // (though success usually redirects). We must clear the local loading state if isLoading is false.
+            if (!this.isLoading) {
+                this.loadingPriceId = null;
+            }
             return;
         }
 
         this.isLoading = true;
-        // Handle both price object and legacy string ID for backward compatibility
-        const priceId = typeof price === 'string' ? price : price.id;
-        this.loadingPriceId = priceId;
 
         try {
             await this.paymentService.appendCheckoutSession(price);

@@ -4,33 +4,36 @@
       Garmin designs and builds products that enhance people’s lives. Since the company’s inception, the Garmin brand
       has been defined by its products.
     </p>
-  </mat-card-content>
 
-  <mat-tab-group [dynamicHeight]="true">
-    <mat-tab label="Sync" [disabled]="!user || isGuest">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Sync settings">sync</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            @if (!isConnectedToService()) {
-            <mat-card-subtitle class="tab-subtitle">
-              <span>Connect to Garmin Health API</span>
-              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                info
-              </mat-icon>
-            </mat-card-subtitle>
-            }
-            @if (isConnectedToService()) {
-            <mat-card-subtitle>Connected</mat-card-subtitle>
-            }
-          </mat-card-header>
-          <mat-divider></mat-divider>
+    <div class="service-container">
+
+      <!-- 1. Connectivity Section -->
+      <mat-card class="connectivity-card" [class.locked]="!hasProAccess" (click)="!hasProAccess && triggerUpsell()">
+        @if (!hasProAccess) {
+        <div class="lock-overlay">
+          <mat-icon class="lock-icon-large">lock</mat-icon>
+          <span class="pro-badge">PRO</span>
+        </div>
+        }
+        <mat-card-header>
+          @if (!isConnectedToService()) {
+          <mat-card-subtitle class="tab-subtitle">
+            <span>Connect to Garmin Health API</span>
+            <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+              info
+            </mat-icon>
+          </mat-card-subtitle>
+          }
+          @if (isConnectedToService()) {
+          <mat-card-subtitle>Connected</mat-card-subtitle>
+          }
+        </mat-card-header>
+        <mat-divider></mat-divider>
+        <mat-card-content class="feature-card-content" style="align-items: flex-start; text-align: left;">
+          <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
 
           @if (isConnectedToService()) {
-          <mat-list>
+          <mat-list style="width: 100%">
             <div mat-subheader>Accounts</div>
             <mat-list-item style="text-align: left">
               <mat-icon mat-list-icon>account_circle</mat-icon>
@@ -52,30 +55,40 @@
             Connect with Garmin
           </button>
           }
-        </mat-card>
-      </ng-template>
-    </mat-tab>
+        </mat-card-content>
+      </mat-card>
 
-    <mat-tab label="History import" [disabled]="isGuest || !isConnectedToService()">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="History import">history</mat-icon>
-      </ng-template>
+      <!-- 2. Pro Features Grid -->
+      <h3 class="section-title">Pro Tools</h3>
+      <div class="features-grid">
 
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
+        <!-- History Import Card -->
+        <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+          (click)="!hasProAccess && triggerUpsell()">
+          @if (!hasProAccess) {
+          <div class="lock-overlay">
+            <mat-icon class="lock-icon-large">lock</mat-icon>
+            <span class="pro-badge">PRO</span>
+          </div>
+          }
           <mat-card-header>
-            <mat-card-subtitle>
-              Import your Garmin Connect activity history
+            <mat-card-subtitle class="tab-subtitle">
+              <mat-icon>history</mat-icon>
+              <span>History Import</span>
             </mat-card-subtitle>
           </mat-card-header>
           <mat-divider></mat-divider>
-          <app-history-import-form [serviceName]="serviceName"
-            [userMetaForService]="serviceMeta"></app-history-import-form>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
 
-  </mat-tab-group>
+          <div class="feature-card-content">
+            <p class="feature-description" *ngIf="!hasProAccess">Import your full activity history from Garmin Connect.
+            </p>
+            <app-history-import-form [serviceName]="serviceName"
+              [userMetaForService]="serviceMeta"></app-history-import-form>
+          </div>
+        </mat-card>
+
+      </div>
+    </div>
+  </mat-card-content>
 </mat-card>
 <app-shade [isActive]="isLoading"></app-shade>

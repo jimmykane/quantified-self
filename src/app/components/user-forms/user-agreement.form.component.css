@@ -1,33 +1,24 @@
-form {
-  width: 100%;
-}
+/* Global .qs-form styles handle width and spacing. */
 
-mat-form-field {
-  width: 100%;
-}
-
+/* Mat-checkbox layout override needs to stay if necessary, but others can go. */
 ::ng-deep .mat-checkbox-layout {
   white-space: normal !important;
 }
 
-button{
-  width: 100%;
-  margin-bottom: 0.5em;
-}
 
 /*mat-checkbox{*/
-  /*margin-bottom: 0.5em;*/
+/*margin-bottom: 0.5em;*/
 /*}*/
-mat-checkbox{
+mat-checkbox {
   /*width: 100%;*/
   /*min-width: 100%;*/
 
 }
-mat-card{
+
+mat-card {
   margin-bottom: 0.5em;
   font-size: 0.85em;
   line-height: 1.5em;
   /*width: 100%;*/
   /*min-width: 100%;*/
 }
-

@@ -94,8 +94,13 @@
           @else {
           <!-- Use 'Upgrade' if we are Basic looking at Pro -->
           @if (currentRole === 'basic' && product.metadata.role === 'pro') {
-          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading"
-            class="upgrade-btn">Upgrade to Pro</button>
+          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading" class="upgrade-btn">
+            @if (loadingPriceId === price.id) {
+            <mat-spinner diameter="20"></mat-spinner>
+            } @else {
+            Upgrade to Pro
+            }
+          </button>
           }
           <!-- Otherwise 'Subscribe' (for new users or Free users upgrading to anything) -->
           @else {

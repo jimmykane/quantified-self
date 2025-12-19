@@ -41,10 +41,9 @@ mat-dialog-content {
   overflow-x: hidden;
 }
 
-.auth-form {
-  display: flex;
-  flex-direction: column;
-}
+/* Global .qs-form styles handle flex layout now. */
+/* .auth-form replaced by .qs-form */
+
 
 .full-width {
   width: 100%;

@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { AppWindowService } from '../../services/app.window.service';
 import { User } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -8,7 +9,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import * as Sentry from '@sentry/browser';
-import { UserSettingsInterface } from '@sports-alliance/sports-lib';
+import { Privacy, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   ChartThemes,
@@ -43,7 +44,11 @@ import {
 export class UserSettingsComponent implements OnChanges {
 
   @Input() user: User;
+  public privacy = Privacy;
   public isSaving: boolean;
+  public isDeleting: boolean;
+  public consentToDelete: boolean;
+  public errorDeleting;
   public errorSaving;
 
   public xAxisTypes = XAxisTypes;
@@ -86,6 +91,7 @@ export class UserSettingsComponent implements OnChanges {
     private userService: AppUserService,
     private router: Router,
     private snackBar: MatSnackBar,
+    private windowService: AppWindowService,
     private dialog: MatDialog) {
   }
 
@@ -98,6 +104,20 @@ export class UserSettingsComponent implements OnChanges {
     });
 
     this.userSettingsFormGroup = new UntypedFormGroup({
+      displayName: new UntypedFormControl(this.user.displayName, [
+        Validators.required,
+        // Validators.minLength(4),
+      ]),
+      privacy: new UntypedFormControl(this.user.privacy, [
+        Validators.required,
+        // Validators.minLength(4),
+      ]),
+      description: new UntypedFormControl(this.user.description, [
+        // Validators.required,
+        // Validators.minLength(4),
+      ]),
+      brandText: new UntypedFormControl({ value: this.user.brandText, disabled: true }, [
+      ]),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
         // Validators.minLength(1),
@@ -266,6 +286,12 @@ export class UserSettingsComponent implements OnChanges {
       ]),
 
     });
+
+    this.userService.isBranded(this.user).then((isBranded) => {
+      if (isBranded) {
+        this.userSettingsFormGroup.get('brandText').enable();
+      }
+    });
   }
 
   hasError(field?: string) {
@@ -310,6 +336,10 @@ export class UserSettingsComponent implements OnChanges {
       });
 
       await this.userService.updateUserProperties(this.user, {
+        displayName: this.userSettingsFormGroup.get('displayName').value,
+        privacy: this.userSettingsFormGroup.get('privacy').value,
+        description: this.userSettingsFormGroup.get('description').value,
+        brandText: this.userSettingsFormGroup.get('brandText').value || null,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
@@ -373,5 +403,25 @@ export class UserSettingsComponent implements OnChanges {
         this.validateAllFormFields(control);
       }
     });
+  }
+
+  public async deleteUser(event) {
+    event.preventDefault();
+    this.isDeleting = true;
+    try {
+      await this.userService.deleteAllUserData(this.user);
+      logEvent(this.analytics, 'user_delete', {});
+      await this.authService.signOut();
+      await this.router.navigate(['/']);
+      this.snackBar.open('Account deleted! You are now logged out.', null, {
+        duration: 5000,
+      });
+      localStorage.clear();
+      this.windowService.windowRef.location.reload();
+    } catch (e) {
+      Sentry.captureException(e);
+      this.errorDeleting = e;
+      this.isDeleting = false;
+    }
   }
 }

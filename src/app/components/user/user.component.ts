@@ -6,7 +6,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { UserFormComponent } from '../user-forms/user.form.component';
+
 
 @Component({
   selector: 'app-user',
@@ -23,8 +23,7 @@ export class UserComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private userService: AppUserService,
     private router: Router,
-    private snackBar: MatSnackBar,
-    private dialog: MatDialog) {
+    private snackBar: MatSnackBar) {
   }
 
   ngOnInit(): void {
@@ -39,18 +38,7 @@ export class UserComponent implements OnInit, OnDestroy {
     })
   }
 
-  edit() {
-    const dialogRef = this.dialog.open(UserFormComponent, {
-      width: '75vw',
-      disableClose: false,
-      data: {
-        user: this.user,
-      },
-    });
 
-    // dialogRef.afterClosed().subscribe(result => {
-    // });
-  }
 
   ngOnDestroy(): void {
     if (this.userSubscription) {

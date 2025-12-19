@@ -1,8 +1,8 @@
 <mat-dialog-content>
-  <form [formGroup]="userFormGroup" (submit)="onSubmit($event)">
-    <span class="mat-headline">Hi there {{ user.displayName || 'guest'  }},</span>
+  <form [formGroup]="userFormGroup" (submit)="onSubmit($event)" class="qs-form">
+    <span class="mat-headline">Hi there {{ user.displayName || 'guest' }},</span>
     <span class="mat-subheader">Let's agree on a few things before we proceed</span>
-    <mat-checkbox formControlName="acceptPrivacyPolicy" >
+    <mat-checkbox formControlName="acceptPrivacyPolicy">
       <mat-card class="mat-elevation-z0">
         <b>You accept that: </b>
         <ul>
@@ -11,7 +11,8 @@
           <li>We provide all default privacy settings to private, only seen by you and you can choose what to make
             public
           </li>
-          <li>We don't sell or send your data to any other 3rd party nor do we process your private data in any other way rather than allowing you to visualize them</li>
+          <li>We don't sell or send your data to any other 3rd party nor do we process your private data in any other
+            way rather than allowing you to visualize them</li>
         </ul>
       </mat-card>
     </mat-checkbox>
@@ -34,7 +35,8 @@
       <mat-card class="mat-elevation-z0">
         <b>You accept that: </b>
         <ul>
-          <li>Your IP and user id is anonymised and is used to determine visits by country, monthly active users (MAU) etc
+          <li>Your IP and user id is anonymised and is used to determine visits by country, monthly active users (MAU)
+            etc
             via Google Analytics
           </li>
           <li>We don't allow Google or any other 3rd party to access these data</li>
@@ -56,9 +58,12 @@
       </mat-card>
     </mat-checkbox>
 
-    <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button [disabled]="!this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My Account
-    </button>
+    <div class="qs-form-actions">
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
+      <button [disabled]="!this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My
+        Account
+      </button>
+    </div>
 
   </form>
 </mat-dialog-content>

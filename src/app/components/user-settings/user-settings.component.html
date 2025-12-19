@@ -1,13 +1,103 @@
-<mat-card class="mat-elevation-z0" style="position: relative">
-  <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)">
+<div class="qs-form-container" style="position: relative">
+  <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
     <mat-tab-group [dynamicHeight]="true">
+
+      <mat-tab label="Profile Settings">
+        <app-shade [isActive]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
+          [errorMessage]="errorSaving || errorDeleting"></app-shade>
+        <ng-template matTabLabel>
+          <mat-icon matTooltip="Profile Settings">person</mat-icon>
+        </ng-template>
+
+        <mat-card class="mat-elevation-z0 qs-form-section">
+          <mat-card-header>
+            <mat-card-subtitle>
+              Profile settings
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+
+          <mat-form-field>
+            <input matInput placeholder="Name" formControlName="displayName">
+            <mat-hint>Quite apparent, the name you would like to use</mat-hint>
+            @if (hasError('displayName')) {
+            <mat-error>
+              Name must not be empty
+            </mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-select placeholder="Privacy" formControlName="privacy">
+              <mat-option [value]="privacy.Public">Public</mat-option>
+              <mat-option [value]="privacy.Private">Private</mat-option>
+            </mat-select>
+            <mat-hint><b>Tip:</b> Public profiles can be shared</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field>
+            <input matInput placeholder="Your bio, description or anything you want to share..."
+              formControlName="description">
+            <mat-hint>This can be something that if your profile is public other users can see</mat-hint>
+            @if (hasError('description')) {
+            <mat-error>
+              Description must not be empty
+            </mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field>
+            <input matInput
+              placeholder="A brand text that will appear in places that 'quantified-Self.io' appears at the moment"
+              formControlName="brandText">
+            <mat-hint>Contact us for a branded account</mat-hint>
+            @if (hasError('brandText')) {
+            <mat-error>
+              Brand text error
+            </mat-error>
+            }
+          </mat-form-field>
+
+          <br>
+          <br>
+          <br>
+
+          <mat-accordion>
+            <mat-expansion-panel class="mat-elevation-z0"
+              style="border: 1px solid red; background: rgba(255, 0, 0, 0.05);">
+              <mat-expansion-panel-header>
+                <mat-panel-title style="color: red;">
+                  Danger Zone
+                </mat-panel-title>
+                <mat-panel-description style="color: red;">
+                  Delete account
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+
+              <p>Once you delete your account, there is no going back. Please be certain.</p>
+
+              @if (!consentToDelete) {
+              <button mat-flat-button color="warn" (click)="$event.preventDefault(); consentToDelete = true">
+                DELETE MY ACCOUNT
+              </button>
+              }
+              @if (consentToDelete) {
+              <button mat-flat-button color="warn" (click)="deleteUser($event)">I am sure, Yes delete it
+              </button>
+              }
+
+            </mat-expansion-panel>
+          </mat-accordion>
+
+        </mat-card>
+      </mat-tab>
 
       <mat-tab label="App settings">
         <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
         <ng-template matTabLabel>
           <mat-icon matTooltip="General Settings">change_history</mat-icon>
         </ng-template>
-        <mat-card class="mat-elevation-z0">
+        <mat-card class="mat-elevation-z0 qs-form-section">
           <mat-card-header>
             <mat-card-subtitle>
               App settings
@@ -33,7 +123,7 @@
           <mat-icon matTooltip="Dashboard settings">dashboard</mat-icon>
         </ng-template>
 
-        <mat-card class="mat-elevation-z0">
+        <mat-card class="mat-elevation-z0 qs-form-section">
 
           <mat-card-header>
             <mat-card-subtitle>
@@ -103,7 +193,7 @@
           <mat-icon matTooltip="Map settings">map</mat-icon>
         </ng-template>
 
-        <mat-card class="mat-elevation-z0">
+        <mat-card class="mat-elevation-z0 qs-form-section">
 
           <mat-card-header>
             <mat-card-subtitle>
@@ -183,7 +273,7 @@
           <mat-icon matTooltip="Chart settings">show_chart</mat-icon>
         </ng-template>
 
-        <mat-card class="mat-elevation-z0">
+        <mat-card class="mat-elevation-z0 qs-form-section">
 
           <mat-card-header>
             <mat-card-subtitle>
@@ -387,7 +477,7 @@
           <mat-icon matTooltip="Unit settings">multiline_chart</mat-icon>
         </ng-template>
 
-        <mat-card class="mat-elevation-z0">
+        <mat-card class="mat-elevation-z0 qs-form-section">
 
           <mat-card-header>
             <mat-card-subtitle>
@@ -447,9 +537,11 @@
     </mat-tab-group>
 
     @if (!hasError()) {
-    <button mat-flat-button [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
-      Save
-    </button>
+    <div class="qs-form-actions">
+      <button mat-flat-button [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
+        Save
+      </button>
+    </div>
     }
   </form>
-</mat-card>
+</div>

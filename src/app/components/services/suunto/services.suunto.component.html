@@ -1,36 +1,39 @@
 <mat-card class="mat-elevation-z0 service-card">
   <mat-card-content>
     <p class="description-text">
-      Suunto is a trusted companion for athletes and adventurers. The durable and precise sports watches are tested in the toughest conditions and built to last in adventures from the deepest oceans to the highest mountains.
+      Suunto is a trusted companion for athletes and adventurers. The durable and precise sports watches are tested in
+      the toughest conditions and built to last in adventures from the deepest oceans to the highest mountains.
     </p>
-  </mat-card-content>
 
-  <mat-tab-group [dynamicHeight]="true">
+    <div class="service-container">
 
-    @if (user && !isGuest) {
-    <mat-tab label="Sync" [disabled]="!user || isGuest">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Sync settings">sync</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            @if (!isConnectedToService()) {
-            <mat-card-subtitle class="tab-subtitle">
-              <span>Connect to Suunto app</span>
-              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                info
-              </mat-icon>
-            </mat-card-subtitle>
-            }
-            @if (isConnectedToService()) {
-            <mat-card-subtitle>Connected</mat-card-subtitle>
-            }
-          </mat-card-header>
-          <mat-divider></mat-divider>
+      <!-- 1. Connectivity Section (Formerly Sync Tab) -->
+      <mat-card class="connectivity-card" [class.locked]="!hasProAccess" (click)="!hasProAccess && triggerUpsell()">
+        @if (!hasProAccess) {
+        <div class="lock-overlay">
+          <mat-icon class="lock-icon-large">lock</mat-icon>
+          <span class="pro-badge">PRO</span>
+        </div>
+        }
+        <mat-card-header>
+          @if (!isConnectedToService()) {
+          <mat-card-subtitle class="tab-subtitle">
+            <span>Connect to Suunto app</span>
+            <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
+              info
+            </mat-icon>
+          </mat-card-subtitle>
+          }
           @if (isConnectedToService()) {
-          <mat-list>
+          <mat-card-subtitle>Connected</mat-card-subtitle>
+          }
+        </mat-card-header>
+        <mat-divider></mat-divider>
+        <mat-card-content class="feature-card-content" style="align-items: flex-start; text-align: left;">
+          <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
+
+          @if (isConnectedToService()) {
+          <mat-list style="width: 100%">
             <div mat-subheader>Accounts</div>
             @for (serviceToken of serviceTokens; track serviceToken; let i = $index) {
             <mat-list-item>
@@ -41,127 +44,149 @@
             }
           </mat-list>
           }
+
           @if (!isConnectedToService() || clicks > 10) {
-          <button mat-stroked-button class="big" mat-flat-button color="primary" [disabled]="!user || this.isGuest || isLoading"
-            (click)="connectWithService($event)">Connect
+          <button mat-stroked-button class="big" mat-flat-button color="primary"
+            [disabled]="!user || this.isGuest || isLoading" (click)="connectWithService($event)">Connect
           </button>
           }
+
           @if (isConnectedToService()) {
-          <button class="big" mat-flat-button color="warn" [disabled]="isLoading" (click)="deauthorizeService($event)">Diconnect
+          <button class="big" mat-flat-button color="warn" [disabled]="isLoading"
+            (click)="deauthorizeService($event)">Disconnect
           </button>
           }
-        </mat-card>
-      </ng-template>
-    </mat-tab>
-    }
+        </mat-card-content>
+      </mat-card>
 
-    <mat-tab label="History import" [disabled]="!isConnectedToService()">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="History import">history</mat-icon>
-      </ng-template>
+      <!-- 2. Pro Features Grid -->
+      <h3 class="section-title">Pro Tools</h3>
+      <div class="features-grid">
 
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              Import your Suunto app activity history
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <app-history-import-form [serviceName]="serviceName"
-            [userMetaForService]="serviceMeta"></app-history-import-form>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
+        <!-- History Import Card -->
+        <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+          (click)="!hasProAccess && triggerUpsell()">
+          <!-- Lock Overlay -->
+          @if (!hasProAccess) {
+          <div class="lock-overlay">
+            <mat-icon class="lock-icon-large">lock</mat-icon>
+            <span class="pro-badge">PRO</span>
+          </div>
+          }
 
-    <mat-tab label="Download">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Download">cloud_download</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              Download or import a FIT file from a Suunto app link
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <form style="margin-top: 1em;" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off">
-            <mat-form-field>
-              <label>
-                <input matInput placeholder="Link" formControlName="input">
-              </label>
-              <mat-hint>Paste a Suunto app link that is public</mat-hint>
-              @if (hasError('input')) {
-              <mat-error>
-                This cannot be empty
-              </mat-error>
-              }
-            </mat-form-field>
-            <section>
-              <button class="big" mat-flat-button color="primary" [disabled]="isLoading" (click)="onSubmit()">
-                Download
-              </button>
-              @if (user) {
-              <button class="big" mat-flat-button color="accent" [disabled]="isLoading" (click)="onImportAndOpen()">
-                Import
-              </button>
-              }
-            </section>
-          </form>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
-
-    <mat-tab label="FIT Upload" [disabled]="isGuest || !isConnectedToService()">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Upload a FIT file to your Suunto app">cloud_upload</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              You can upload a FIT file to your Suunto app as an activity<br />
-              You will receive a notification at your Suunto app.
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <app-upload-activity-to-service [user]="user"></app-upload-activity-to-service>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
-
-    <mat-tab label="GPX Upload" [disabled]="isGuest || !isConnectedToService()">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Upload a route to your Suunto app" svgIcon="route"></mat-icon>
-      </ng-template>
-
-      <ng-template matTabContent>
-        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-        <mat-card class="mat-elevation-z0">
           <mat-card-header>
             <mat-card-subtitle class="tab-subtitle">
-              <span>You can upload a GPX file to your Suunto app</span>
-              <mat-icon
-                matTooltip="NOTE: Route sync needs Suunto app Android 4.20 and higher. For iOS there is no Suunto app version that supports this">
-                info
-              </mat-icon>
+              <mat-icon>history</mat-icon>
+              <span>History Import</span>
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+
+          <!-- Content (Blurred if locked) -->
+          <div class="feature-card-content">
+            <p class="feature-description" *ngIf="!hasProAccess">Import your full activity history from Suunto.</p>
+            <app-history-import-form [serviceName]="serviceName"
+              [userMetaForService]="serviceMeta"></app-history-import-form>
+          </div>
+        </mat-card>
+
+        <!-- Download Card -->
+        <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+          (click)="!hasProAccess && triggerUpsell()">
+          @if (!hasProAccess) {
+          <div class="lock-overlay">
+            <mat-icon class="lock-icon-large">lock</mat-icon>
+            <span class="pro-badge">PRO</span>
+          </div>
+          }
+          <mat-card-header>
+            <mat-card-subtitle class="tab-subtitle">
+              <mat-icon>cloud_download</mat-icon>
+              <span>Download FIT</span>
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+
+          <div class="feature-card-content">
+            <p class="feature-description" *ngIf="!hasProAccess">Download FIT files directly from Suunto links.</p>
+            <form style="width: 100%" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off"
+              class="qs-form">
+              <mat-form-field>
+                <label>
+                  <input matInput placeholder="App Link" formControlName="input">
+                </label>
+                @if (hasError('input')) {
+                <mat-error>Link Required</mat-error>
+                }
+              </mat-form-field>
+              <div class="qs-form-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button mat-flat-button color="primary" [disabled]="isLoading" (click)="onSubmit()">
+                  Download
+                </button>
+                @if (user) {
+                <button mat-flat-button color="accent" [disabled]="isLoading" (click)="onImportAndOpen()">
+                  Import
+                </button>
+                }
+              </div>
+            </form>
+          </div>
+        </mat-card>
+
+        <!-- FIT Upload Card -->
+        <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+          (click)="!hasProAccess && triggerUpsell()">
+          @if (!hasProAccess) {
+          <div class="lock-overlay">
+            <mat-icon class="lock-icon-large">lock</mat-icon>
+            <span class="pro-badge">PRO</span>
+          </div>
+          }
+          <mat-card-header>
+            <mat-card-subtitle class="tab-subtitle">
+              <mat-icon>cloud_upload</mat-icon>
+              <span>FIT Upload</span>
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+
+          <div class="feature-card-content">
+            <p class="feature-description" *ngIf="!hasProAccess">Upload standard FIT files to Suunto.</p>
+            <app-upload-activity-to-service [user]="user"></app-upload-activity-to-service>
+          </div>
+        </mat-card>
+
+        <!-- GPX Upload Card -->
+        <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+          (click)="!hasProAccess && triggerUpsell()">
+          @if (!hasProAccess) {
+          <div class="lock-overlay">
+            <mat-icon class="lock-icon-large">lock</mat-icon>
+            <span class="pro-badge">PRO</span>
+          </div>
+          }
+          <mat-card-header>
+            <mat-card-subtitle class="tab-subtitle">
+              <mat-icon svgIcon="route"></mat-icon>
+              <span>GPX Upload</span>
             </mat-card-subtitle>
             @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 3) {
-            <mat-card-subtitle>
-              {{serviceMeta.uploadedRoutesCount}} routes uploaded
+            <mat-card-subtitle class="smaller">
+              {{serviceMeta.uploadedRoutesCount}} uploaded
             </mat-card-subtitle>
             }
           </mat-card-header>
           <mat-divider></mat-divider>
-          <app-upload-route-to-service [user]="user"></app-upload-route-to-service>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
 
-  </mat-tab-group>
+          <div class="feature-card-content">
+            <p class="feature-description" *ngIf="!hasProAccess">Upload GPX routes to Suunto.</p>
+            <app-upload-route-to-service [user]="user"></app-upload-route-to-service>
+          </div>
+        </mat-card>
+
+      </div>
+    </div>
+
+  </mat-card-content>
 </mat-card>
 <app-shade [isActive]="isLoading"></app-shade>

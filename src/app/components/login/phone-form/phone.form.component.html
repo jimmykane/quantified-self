@@ -10,7 +10,7 @@
   <mat-dialog-content>
     <!-- Step 1: Phone Number -->
     @if (!windowRef.confirmationResult) {
-    <form [formGroup]="phoneNumberFormGroup" (submit)="sendLoginCode($event)" class="auth-form">
+    <form [formGroup]="phoneNumberFormGroup" (submit)="sendLoginCode($event)" class="qs-form">
       <p class="instruction-text">
         Enter your phone number to receive a verification code.
       </p>
@@ -34,7 +34,7 @@
 
     <!-- Step 2: Verification Code -->
     @if (windowRef.confirmationResult) {
-    <form [formGroup]="verificationCodeFormGroup" (submit)="verifyLoginCode($event)" class="auth-form">
+    <form [formGroup]="verificationCodeFormGroup" (verifyLoginCode)="verifyLoginCode($event)" class="qs-form">
       <p class="instruction-text">
         Enter the 6-digit code sent to <strong>{{ phoneNumberFormGroup.get('phoneNumber').value }}</strong>
       </p>
@@ -52,7 +52,7 @@
     }
   </mat-dialog-content>
 
-  <mat-dialog-actions align="end">
+  <div class="qs-form-actions" style="padding: 16px 24px 24px;">
     <button mat-button (click)="close($event)" [disabled]="isLoading">Cancel</button>
 
     @if (!windowRef.confirmationResult) {
@@ -66,5 +66,5 @@
       Verify
     </button>
     }
-  </mat-dialog-actions>
+  </div>
 </div>

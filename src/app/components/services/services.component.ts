@@ -46,8 +46,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.userSubscription = this.authService.user$.subscribe((async (user) => {
       this.user = user;
-      this.isLoading = false;
       if (!user) {
+        this.isLoading = false;
         this.snackBar.open('You must login if you want to use the service features', 'OK', {
           duration: null,
         });
@@ -55,6 +55,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
       }
       this.isGuest = !!(user as any)?.isAnonymous;
       if (this.isGuest) {
+        this.isLoading = false;
         this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
           duration: null,
         });
@@ -70,6 +71,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
         [ServiceNames.COROSAPI]: 2,
       }
       this.selectedTabIndex = indexMap[this.route.snapshot.queryParamMap.get('serviceName')] || 0;
+      this.isLoading = false;
     }))
 
   }

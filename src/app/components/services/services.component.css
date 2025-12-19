@@ -14,3 +14,7 @@ mat-icon.large-svg-icon-coros {
   height: 36px;
   font-size: 36px;
 }
+
+.service-tab-padding {
+  padding: 16px;
+}
