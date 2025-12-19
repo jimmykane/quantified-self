@@ -25,7 +25,7 @@ export const environment = {
   },
   functions: {
     createPortalLink: 'https://europe-west3-quantified-self-io.cloudfunctions.net/ext-firestore-stripe-payments-createPortalLink',
-    restoreUserClaims: 'http://localhost:5000/quantified-self-io/europe-west2/restoreUserClaims',
+    restoreUserClaims: 'https://europe-west2-quantified-self-io.cloudfunctions.net/restoreUserClaims',
     deauthorizeSuuntoApp: 'http://localhost:5000/quantified-self-io/europe-west2/deauthorizeSuuntoApp',
     uploadRoute: 'http://localhost:5000/quantified-self-io/europe-west2/importRouteToSuuntoApp',
     uploadActivity: 'http://localhost:5000/quantified-self-io/europe-west2/importActivityToSuuntoApp',

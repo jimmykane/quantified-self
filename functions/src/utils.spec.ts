@@ -232,5 +232,8 @@ describe('utils', () => {
 });
 
 async function tryCatch(fn: () => Promise<any>) {
-    try { await fn(); } catch (e) { }
+    try { await fn(); } catch (e) {
+        // ignore error
+        void e;
+    }
 }

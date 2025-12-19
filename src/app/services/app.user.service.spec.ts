@@ -1,20 +1,29 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
 import { Auth, authState } from '@angular/fire/auth';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore, doc, docData } from '@angular/fire/firestore';
 import { Functions } from '@angular/fire/functions';
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
-import { of } from 'rxjs';
+import { AppWindowService } from './app.window.service';
+import { of, firstValueFrom } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Mock authState
 vi.mock('@angular/fire/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
         ...actual,
         authState: vi.fn(),
+    };
+});
+
+vi.mock('@angular/fire/firestore', async (importOriginal) => {
+    const actual: any = await importOriginal();
+    return {
+        ...actual,
+        doc: vi.fn(),
+        docData: vi.fn(),
     };
 });
 
@@ -90,6 +99,32 @@ describe('AppUserService', () => {
             }));
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);
+        });
+    });
+
+    describe('getGracePeriodUntil', () => {
+        it('should return null if user is not logged in', async () => {
+            mockAuth.currentUser = null;
+            const res = await firstValueFrom(service.getGracePeriodUntil());
+            expect(res).toBeNull();
+        });
+
+        it('should return null if no grace period is set', async () => {
+            mockAuth.currentUser = { uid: 'u1' };
+            (docData as any).mockReturnValue(of({}));
+            const res = await firstValueFrom(service.getGracePeriodUntil());
+            expect(res).toBeNull();
+        });
+
+        it('should return Date if grace period is set', async () => {
+            const mockDate = new Date();
+            mockAuth.currentUser = { uid: 'u1' };
+            (docData as any).mockReturnValue(of({
+                gracePeriodUntil: { toDate: () => mockDate }
+            }));
+
+            const res = await firstValueFrom(service.getGracePeriodUntil());
+            expect(res).toEqual(mockDate);
         });
     });
 });

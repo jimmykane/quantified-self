@@ -97,8 +97,8 @@ export { importActivityToSuuntoApp } from './suunto/activities';
 // Events
 export { cleanupEventFile } from './events/cleanup';
 export { restoreUserClaims } from './stripe/claims';
-
-export { disconnectServicesForNonPro } from './schedule/disconnect-services';
+export { onSubscriptionUpdated } from './stripe/subscriptions';
+export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 

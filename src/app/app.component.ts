@@ -55,6 +55,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
+  public gracePeriodUntil$: Observable<Date | null>;
   private currentUser: any = null;
 
   constructor(
@@ -71,6 +72,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
+    this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
     this.authService.user$.subscribe(user => {
       this.authState = !!user;
       this.currentUser = user;

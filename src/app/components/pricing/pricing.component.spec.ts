@@ -11,6 +11,9 @@ class MockAppPaymentService {
     getUserSubscriptions() {
         return of([]);
     }
+    manageSubscriptions() {
+        return Promise.resolve();
+    }
 }
 
 class MockAppUserService {
@@ -28,6 +31,8 @@ class MockMatDialog {
         };
     }
 }
+
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 describe('PricingComponent', () => {
     let component: PricingComponent;
@@ -50,5 +55,20 @@ describe('PricingComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should show downgrade warning for pro users', async () => {
+        component.currentRole = 'pro';
+        const dialog = TestBed.inject(MatDialog);
+        const dialogSpy = vi.spyOn(dialog, 'open');
+
+        await component.manageSubscription();
+
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Downgrade Warning',
+                message: expect.stringContaining('30-day grace period')
+            })
+        }));
     });
 });

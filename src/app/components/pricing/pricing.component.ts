@@ -78,16 +78,16 @@ export class PricingComponent implements OnInit {
 
     async manageSubscription() {
         if (this.currentRole === 'pro') {
-            const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-                data: {
-                    title: 'Downgrading?',
-                    message: 'If you downgrade to Basic, any accounts connected beyond the limit (1) will be disconnected after 10 days.',
-                    confirmText: 'Continue to Portal',
-                    cancelText: 'Cancel'
-                }
-            });
-
-            const confirmed = await firstValueFrom(dialogRef.afterClosed());
+            const confirmed = await firstValueFrom(
+                this.dialog.open(ConfirmationDialogComponent, {
+                    data: {
+                        title: 'Downgrade Warning',
+                        message: 'You are about to downgrade your plan. You will keep your Pro features for a 30-day grace period. After that, your device sync will be disconnected, and any activities exceeding your new plan\'s limit (starting with the newest ones) will be permanently deleted.',
+                        confirmText: 'Manage Subscription',
+                        cancelText: 'Cancel'
+                    }
+                }).afterClosed()
+            );
             if (!confirmed) {
                 return;
             }

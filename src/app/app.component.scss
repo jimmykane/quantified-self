@@ -111,3 +111,53 @@ mat-progress-bar {
     border-right: 1px solid rgba(255, 255, 255, 0.12);
   }
 }
+
+.grace-period-banner {
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #ffeeba;
+  z-index: 10002;
+  position: relative;
+  font-size: 14px;
+  line-height: 1.4;
+
+  mat-icon {
+    color: #856404;
+    font-size: 20px;
+    height: 20px;
+    width: 20px;
+  }
+
+  a {
+    color: #856404;
+    font-weight: 600;
+    text-decoration: underline;
+    cursor: pointer;
+
+    &:hover {
+      color: #533f03;
+    }
+  }
+}
+
+:host-context(.dark-theme) .grace-period-banner {
+  background-color: #332b00;
+  color: #ffda6a;
+  border-bottom: 1px solid #4d4100;
+
+  mat-icon {
+    color: #ffda6a;
+  }
+
+  a {
+    color: #ffda6a;
+
+    &:hover {
+      color: #fff;
+    }
+  }
+}

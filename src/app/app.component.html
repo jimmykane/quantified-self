@@ -1,4 +1,12 @@
 <ng-container *ngIf="authState !== null; else loadingApp">
+  <div *ngIf="gracePeriodUntil$ | async as gracePeriodUntil" class="grace-period-banner mat-typography">
+    <mat-icon inline>warning</mat-icon>
+    <span>
+      Your Pro plan has ended. You have until <strong>{{ gracePeriodUntil | date }}</strong> before your device sync is
+      disconnected and newest activities are deleted.
+      <a routerLink="/pricing" color="accent">Upgrade now</a> to keep your data.
+    </span>
+  </div>
 
   @if (loading) {
   <mat-progress-bar mode="indeterminate" color="accent"></mat-progress-bar>

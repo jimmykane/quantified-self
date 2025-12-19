@@ -572,6 +572,23 @@ export class AppUserService implements OnDestroy {
     return role === 'pro' || role === 'basic';
   }
 
+  public getGracePeriodUntil(): Observable<Date | null> {
+    const user = this.auth.currentUser;
+    if (!user) return from([null]);
+
+    const userDoc = doc(this.firestore, 'users', user.uid);
+    return docData(userDoc).pipe(
+      map((userData: any) => {
+        if (userData?.gracePeriodUntil) {
+          // Firebase Timestamp to Date
+          return (userData.gracePeriodUntil as any).toDate();
+        }
+        return null;
+      }),
+      catchError(() => from([null]))
+    );
+  }
+
   public async deleteAllUserData(user: User) {
     try {
       const deleteSelf = httpsCallableFromURL(this.functions, environment.functions.deleteSelf);
