@@ -22,12 +22,9 @@ const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestor
     };
 });
 
-// Mock firebase-functions
-vi.mock('firebase-functions/v1', () => ({
-    auth: authBuilderMock,
-    region: vi.fn().mockImplementation(() => ({
-        auth: authBuilderMock
-    })),
+// Mock firebase-functions v2
+vi.mock('firebase-functions/v2/identity', () => ({
+    onUserDeleted: (opts: any, handler: any) => handler,
 }));
 
 // Mock firebase-admin
@@ -66,10 +63,10 @@ describe('cleanupUserAccounts', () => {
     });
 
     it('should deauthorize services and delete parent documents', async () => {
-        const wrapped = cleanupUserAccounts;
+        const wrapped = cleanupUserAccounts as any;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped({ data: user });
 
         // Verify Suunto
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
@@ -89,13 +86,13 @@ describe('cleanupUserAccounts', () => {
     });
 
     it('should continue despite errors in one service and NOT delete parent doc if deauth fails', async () => {
-        const wrapped = cleanupUserAccounts;
+        const wrapped = cleanupUserAccounts as any;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         // Make Suunto fail
         deauthorizeServiceMock.mockRejectedValueOnce(new Error('Suunto failed'));
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped({ data: user });
 
         // Verify Suunto was called (and failed)
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
@@ -109,7 +106,7 @@ describe('cleanupUserAccounts', () => {
     });
 
     it('should continue if parent doc deletion fails', async () => {
-        const wrapped = cleanupUserAccounts;
+        const wrapped = cleanupUserAccounts as any;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         // Make Suunto doc deletion fail
@@ -126,7 +123,7 @@ describe('cleanupUserAccounts', () => {
         // Make it reject once
         deleteSpy.mockRejectedValueOnce(new Error('Firestore delete failed'));
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped({ data: user });
 
         // Verify Suunto was called
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);

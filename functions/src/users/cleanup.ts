@@ -1,10 +1,17 @@
-import * as functions from 'firebase-functions/v1';
+import { onUserDeleted } from 'firebase-functions/v2/identity';
 import * as admin from 'firebase-admin';
 import { deauthorizeServiceForUser, getServiceConfig } from '../OAuth2';
 import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
-export const cleanupUserAccounts = functions.region('europe-west2').auth.user().onDelete(async (user) => {
+export const cleanupUserAccounts = onUserDeleted({
+    region: 'europe-west2',
+}, async (event) => {
+    const user = event.data;
+    if (!user) {
+        console.log('[Cleanup] No user data found in event.');
+        return;
+    }
     const uid = user.uid;
     console.log(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
 
