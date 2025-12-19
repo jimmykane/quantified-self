@@ -31,11 +31,9 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock } = vi.hoiste
     };
 });
 
-vi.mock('firebase-functions/v1', () => ({
-    firestore: firestoreBuilderMock,
-    region: vi.fn().mockImplementation(() => ({
-        firestore: firestoreBuilderMock
-    })),
+// Mock firebase-functions v2
+vi.mock('firebase-functions/v2/firestore', () => ({
+    onDocumentDeleted: (opts: any, handler: any) => handler,
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -76,20 +74,21 @@ describe('cleanupEventFile', () => {
 
     it('should recursively delete activities and delete the original file', async () => {
         // Since we mocked the builder to just return the handler, cleanupEventFile IS the handler
-        const wrapped = cleanupEventFile;
+        const wrapped = cleanupEventFile as any;
 
         const snap = testEnv.firestore.makeDocumentSnapshot({
             originalFile: { path: 'path/to/file.fit' }
         }, 'users/testUser/events/testEvent');
 
-        const context = {
+        const event = {
+            data: snap,
             params: {
                 userId: 'testUser',
                 eventId: 'testEvent',
             },
-        } as any;
+        };
 
-        await wrapped(snap, context);
+        await wrapped(event);
 
         // Check recursive delete
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/events/testEvent/activities');
@@ -100,18 +99,19 @@ describe('cleanupEventFile', () => {
     });
 
     it('should delete activities even if no original file exists', async () => {
-        const wrapped = cleanupEventFile;
+        const wrapped = cleanupEventFile as any;
 
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
 
-        const context = {
+        const event = {
+            data: snap,
             params: {
                 userId: 'testUser',
                 eventId: 'testEvent',
             },
-        } as any;
+        };
 
-        await wrapped(snap, context);
+        await wrapped(event);
 
         // Check recursive delete called
         expect(mocks.recursiveDelete).toHaveBeenCalled();
