@@ -28,7 +28,8 @@
                         </div>
 
                         <div class="actions">
-                            <button mat-flat-button color="primary" (click)="onTermsSubmit()">Next</button>
+                            <button mat-flat-button color="primary" [disabled]="!termsFormGroup.valid"
+                                (click)="onTermsSubmit()">Next</button>
                             <button mat-stroked-button color="warn" (click)="logout()">Logout</button>
                         </div>
                     </div>

@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { Router, CanMatchFn } from '@angular/router';
 import { map, take, tap } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
+import { POLICY_CONTENT } from '../shared/policies.content';
 
 /**
  * Guard to ensure user has completed onboarding (terms + subscription).
@@ -11,6 +12,11 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
     const authService = inject(AppAuthService);
     const router = inject(Router);
 
+    const mapFormControlNameToUserProperty = (formControlName: string): string => {
+        if (!formControlName) return '';
+        return formControlName.replace(/^accept/, 'accepted');
+    };
+
     return authService.user$.pipe(
         take(1),
         map(user => {
@@ -19,10 +25,12 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 return true; // Let authGuard handle unauthenticated users
             }
 
-            const termsAccepted = user.acceptedPrivacyPolicy === true &&
-                user.acceptedDataPolicy === true &&
-                user.acceptedTrackingPolicy === true &&
-                user.acceptedDiagnosticsPolicy === true;
+            // Dynamically check all policies that require acceptance
+            const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel);
+            const termsAccepted = requiredPolicies.every(policy => {
+                const userProperty = mapFormControlNameToUserProperty(policy.formControlName);
+                return (user as any)[userProperty] === true;
+            });
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;

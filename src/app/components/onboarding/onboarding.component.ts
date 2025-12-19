@@ -117,11 +117,10 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             // Re-check pro status whenever user data changes
             this.isPro = await this.userService.isPro();
 
-            const termsAccepted = this.user.acceptedPrivacyPolicy === true &&
-                this.user.acceptedDataPolicy === true &&
-                this.user.acceptedTrackingPolicy === true &&
-                this.user.acceptedDiagnosticsPolicy === true &&
-                (this.user as any).acceptedTos === true;
+            const termsAccepted = this.policies.every(policy => {
+                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName);
+                return (this.user as any)[userProperty] === true;
+            });
 
             console.log('[OnboardingComponent] checkAndAdvance:', {
                 termsAccepted,
@@ -139,17 +138,25 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
         }
     }
 
+    private mapFormControlNameToUserProperty(formControlName: string): string {
+        // e.g. acceptPrivacyPolicy -> acceptedPrivacyPolicy
+        // e.g. acceptTos -> acceptedTos
+        if (!formControlName) return '';
+        return formControlName.replace(/^accept/, 'accepted');
+    }
+
     async checkProStatus() {
         this.isPro = await this.userService.isPro();
     }
 
     async onTermsSubmit() {
         if (this.termsFormGroup.valid) {
-            this.user.acceptedPrivacyPolicy = true;
-            this.user.acceptedDataPolicy = true;
-            this.user.acceptedTrackingPolicy = true;
-            this.user.acceptedDiagnosticsPolicy = true;
-            (this.user as any).acceptedTos = true;
+            this.policies.forEach(policy => {
+                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName);
+                if (userProperty) {
+                    (this.user as any)[userProperty] = true;
+                }
+            });
 
             // Don't save to DB yet, just update local state and move to next step.
             // If we save now, AppComponent might hide the onboarding flow prematurely
