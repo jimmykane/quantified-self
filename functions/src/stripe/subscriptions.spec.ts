@@ -186,7 +186,7 @@ describe('onSubscriptionUpdated', () => {
                             empty: false,
                             docs: [{
                                 id: subId,
-                                data: () => ({ firebaseRole: 'pro' })
+                                data: () => ({ role: 'pro' })
                             }]
                         })
                     };
@@ -232,7 +232,7 @@ describe('onSubscriptionUpdated', () => {
                         limit: vi.fn().mockReturnThis(),
                         get: vi.fn().mockResolvedValue({
                             empty: false,
-                            docs: [{ id: subId, data: () => ({ firebaseRole: 'pro' }) }]
+                            docs: [{ id: subId, data: () => ({ role: 'pro' }) }]
                         })
                     };
                 }
@@ -267,7 +267,7 @@ describe('onSubscriptionUpdated', () => {
                         limit: vi.fn().mockReturnThis(),
                         get: vi.fn().mockResolvedValue({
                             empty: false,
-                            docs: [{ id: subId, data: () => ({ firebaseRole: 'pro' }) }]
+                            docs: [{ id: subId, data: () => ({ role: 'pro' }) }]
                         })
                     };
                 }

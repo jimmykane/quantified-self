@@ -42,7 +42,7 @@ export const enforceSubscriptionLimits = onSchedule({
         // 2. Check for ACTIVE Pro status
         const activeSubSnapshot = await admin.firestore().collection(`customers/${uid}/subscriptions`)
             .where('status', 'in', ['active', 'trialing'])
-            .where('firebaseRole', '==', 'pro') // Sync is PRO only
+            .where('role', '==', 'pro') // Sync is PRO only
             .limit(1)
             .get();
 
@@ -87,7 +87,7 @@ export const enforceSubscriptionLimits = onSchedule({
         // Check role again for limits (Free=10, Basic=100)
         const subSnapshot = await admin.firestore().collection(`customers/${uid}/subscriptions`)
             .where('status', 'in', ['active', 'trialing'])
-            .where('firebaseRole', '==', 'basic')
+            .where('role', '==', 'basic')
             .limit(1)
             .get();
 

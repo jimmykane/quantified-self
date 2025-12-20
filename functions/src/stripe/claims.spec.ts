@@ -48,7 +48,7 @@ describe('reconcileClaims', () => {
         await expect(reconcileClaims('user1')).rejects.toThrow('No active subscription found');
     });
 
-    it('should set claims based on firebaseRole metadata', async () => {
+    it('should set claims based on role field', async () => {
         const expectedRole = 'pro';
 
         mockGet.mockResolvedValue({
@@ -56,7 +56,7 @@ describe('reconcileClaims', () => {
             docs: [{
                 data: () => ({
                     status: 'active',
-                    firebaseRole: 'pro'
+                    role: 'pro'
                 })
             }]
         });
@@ -67,25 +67,7 @@ describe('reconcileClaims', () => {
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: expectedRole });
     });
 
-    it('should fallback to role field if firebaseRole is missing', async () => {
-        const expectedRole = 'basic';
 
-        mockGet.mockResolvedValue({
-            empty: false,
-            docs: [{
-                data: () => ({
-                    status: 'active',
-                    role: 'basic'
-                    // No firebaseRole
-                })
-            }]
-        });
-
-        const result = await reconcileClaims('user1');
-
-        expect(result.role).toBe(expectedRole);
-        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: expectedRole });
-    });
 
     it('should throw failed-precondition if no firebaseRole OR role found', async () => {
         mockGet.mockResolvedValue({
@@ -99,6 +81,6 @@ describe('reconcileClaims', () => {
             }]
         });
 
-        await expect(reconcileClaims('user1')).rejects.toThrow('Subscription found but no role (firebaseRole or role) defined in metadata');
+        await expect(reconcileClaims('user1')).rejects.toThrow('Subscription found but no role defined in document');
     });
 });

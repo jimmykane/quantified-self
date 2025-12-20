@@ -67,7 +67,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
             if (activeSnapshot?.docs && activeSnapshot.docs.length > 0) {
                 const subData = activeSnapshot.docs[0].data();
                 // Ensure we only welcome them for the role they just bought
-                const role = subData.firebaseRole;
+                const role = subData.role;
 
                 if (role) {
                     // Use a deterministic ID so we don't send this email multiple times for the same subscription
